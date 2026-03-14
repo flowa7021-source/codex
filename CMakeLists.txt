@@ -27,7 +27,12 @@ add_library(ods_core
 
 target_include_directories(ods_core PUBLIC src)
 
-add_executable(offline_doc_studio src/main.cpp)
+set(ODS_WIN_RESOURCES)
+if (WIN32)
+    list(APPEND ODS_WIN_RESOURCES resources/offline_doc_studio.rc)
+endif()
+
+add_executable(offline_doc_studio src/main.cpp ${ODS_WIN_RESOURCES})
 target_link_libraries(offline_doc_studio PRIVATE ods_core)
 
 add_executable(core_smoke_tests tests/core_smoke_tests.cpp)

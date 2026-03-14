@@ -60,3 +60,11 @@ cpack --config build/CPackConfig.cmake
 - Никаких сетевых запросов.
 - Никаких проверок обновлений.
 - Все данные и настройки — в portable-структуре рядом с приложением.
+
+
+## Подготовка portable release-бандла (Windows)
+```powershell
+./scripts/build_windows_release_bundle.ps1
+```
+
+Скрипт создаёт `dist/OfflineDocStudio-1.0.0-portable` и файл `SHA256SUMS.txt`.

@@ -25,6 +25,7 @@ Name: "russian"; MessagesFile: "compiler:Languages\Russian.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "registerassoc"; Description: "Register file associations (.pdf/.djvu/.djv/.cbz/.epub) for current user"; Flags: unchecked
 
 [Files]
 Source: "..\build\Release\offline_doc_studio.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -32,10 +33,12 @@ Source: "..\config\hotkeys.json"; DestDir: "{app}\config"; Flags: ignoreversion
 Source: "..\samples\session.ods"; DestDir: "{app}\samples"; Flags: ignoreversion
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\UserGuide_ru.md"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\scripts\register_file_associations.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File "{app}\scripts\register_file_associations.ps1" -AppPath "{app}\{#MyAppExeName}""; Tasks: registerassoc; Flags: postinstall runhidden
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

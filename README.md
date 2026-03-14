@@ -19,6 +19,8 @@
 - portable storage + логирование (`logs/app.log`);
 - smoke-тесты на ключевые подсистемы;
 - CPack ZIP packaging + Inno Setup installer script.
+- Windows portable release-бандл + SHA256 checksums script.
+- Optional file associations registration helper (explicit user action).
 
 ## Быстрый запуск
 ```bash
@@ -30,6 +32,8 @@ ctest --test-dir build --output-on-failure
 
 ## Сборка инсталлятора
 См. `Build.md` и `installer/OfflineDocStudio.iss`.
+
+Инсталлятор может (опционально) зарегистрировать ассоциации файлов только по явному действию пользователя.
 
 ## Batch-пример
 ```bash
