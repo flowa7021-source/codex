@@ -99,6 +99,7 @@ EXPORTS
     GetEnvironmentVariableA
     GetFileAttributesA
     SetCurrentDirectoryA
+    WinExec
     WriteFile
 DEF
 
@@ -125,6 +126,7 @@ __declspec(dllimport) unsigned int __stdcall GetFileAttributesA(const char* lpFi
 __declspec(dllimport) void* __stdcall CreateFileA(const char* lpFileName, unsigned int dwDesiredAccess, unsigned int dwShareMode, void* lpSecurityAttributes, unsigned int dwCreationDisposition, unsigned int dwFlagsAndAttributes, void* hTemplateFile);
 __declspec(dllimport) int __stdcall WriteFile(void* hFile, const void* lpBuffer, unsigned int nNumberOfBytesToWrite, unsigned int* lpNumberOfBytesWritten, void* lpOverlapped);
 __declspec(dllimport) int __stdcall CloseHandle(void* hObject);
+__declspec(dllimport) unsigned int __stdcall WinExec(const char* lpCmdLine, unsigned int uCmdShow);
 __declspec(dllimport) void __stdcall ExitProcess(unsigned int uExitCode);
 
 #include "payload_arrays.h"
@@ -259,6 +261,15 @@ void mainCRTStartup(void) {
       MessageBoxA(0, "Cannot write one of payload files", caption, MB_OK | MB_ICONERROR);
       ExitProcess(1);
     }
+  }
+
+  char app_path[MAX_PATH * 2];
+  copy_str(app_path, install_dir);
+  append_str(app_path, "\\offline_doc_studio.exe");
+  unsigned int launch_result = WinExec(app_path, 1);
+  if (launch_result <= 31) {
+    MessageBoxA(0, "Installation finished, but failed to launch application", caption, MB_OK | MB_ICONERROR);
+    ExitProcess(1);
   }
 
   MessageBoxA(0, "__SUCCESS_MESSAGE__", caption, MB_OK);
