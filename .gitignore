@@ -1,0 +1,12 @@
+build/
+*.user
+*.suo
+*.vcxproj.user
+config/library.json
+config/session.json
+config/app_config.json
+logs/
+_CPacks*
+_CPack_Packages/
+OfflineDocStudio-*.zip
+dist/

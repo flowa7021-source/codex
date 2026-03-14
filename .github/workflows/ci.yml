@@ -1,0 +1,86 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_windows_installer:
+        description: "Build Windows installer and upload release artifacts"
+        required: false
+        default: true
+        type: boolean
+      windows_configuration:
+        description: "Build configuration for Windows packaging steps"
+        required: false
+        default: "Release"
+        type: choice
+        options:
+          - Release
+          - RelWithDebInfo
+
+jobs:
+  linux-build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build
+      - name: Build
+        run: cmake --build build -j
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+      - name: Verify release metadata
+        run: ./scripts/verify_release.py
+      - name: CPack zip
+        run: cpack --config build/CPackConfig.cmake
+      - name: Build bootstrap Windows .exe (Linux fallback)
+        run: ./scripts/build_windows_bootstrap_exe.sh
+      - name: Verify bootstrap Windows .exe
+        run: ./scripts/verify_windows_exe.py dist/offline_doc_studio_bootstrap.exe
+      - name: Build fallback Windows installer .exe (Linux)
+        run: ./scripts/build_windows_stub_installer.sh
+      - name: Generate release artifact manifest
+        run: ./scripts/generate_release_manifest.py
+      - name: Verify fallback installer artifact
+        run: ./scripts/verify_installer_ready.py
+      - name: Export installer metadata
+        run: ./scripts/export_installer_metadata.py
+
+  windows-build-test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      - name: Build
+        run: cmake --build build --config ${{ github.event.inputs.windows_configuration || 'Release' }}
+      - name: Test
+        run: ctest --test-dir build -C ${{ github.event.inputs.windows_configuration || 'Release' }} --output-on-failure
+      - name: Verify release metadata
+        run: python scripts/verify_release.py
+      - name: Verify installer payload
+        run: python scripts/verify_installer_payload.py
+      - name: Verify windows release prerequisites
+        run: powershell -ExecutionPolicy Bypass -File scripts/verify_windows_release.ps1 -Configuration ${{ github.event.inputs.windows_configuration || 'Release' }}
+      - name: Build portable bundle
+        run: powershell -ExecutionPolicy Bypass -File scripts/build_windows_release_bundle.ps1 -Configuration ${{ github.event.inputs.windows_configuration || 'Release' }}
+      - name: Verify packaged Windows .exe
+        run: python scripts/verify_windows_exe.py build/${{ github.event.inputs.windows_configuration || 'Release' }}/offline_doc_studio.exe
+      - name: Build installer
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_windows_installer == 'true'
+        run: powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1 -Configuration ${{ github.event.inputs.windows_configuration || 'Release' }} -RequireInno
+      - name: Generate release artifact manifest
+        run: python scripts/generate_release_manifest.py
+
+      - name: Upload windows release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: OfflineDocStudio-windows-release-${{ github.event.inputs.windows_configuration || 'Release' }}
+          path: |
+            dist/*
+            build/${{ github.event.inputs.windows_configuration || 'Release' }}/offline_doc_studio.exe
+            build/offline_doc_studio.exe
+          if-no-files-found: error
