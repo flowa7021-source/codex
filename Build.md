@@ -150,7 +150,7 @@ Installer: `dist/windows-ci/.../dist/OfflineDocStudio-Setup-<version>.exe`.
 ./scripts/build_windows_stub_installer.sh
 ```
 
-Создаёт `dist/OfflineDocStudio-Setup-<version>.exe` (fallback self-contained installer, который копирует payload в `%LOCALAPPDATA%\OfflineDocStudio`).
+Создаёт `dist/OfflineDocStudio-Setup-<version>.exe` (fallback self-contained installer, который копирует payload в `%LOCALAPPDATA%\OfflineDocStudio`; путь установки можно переопределить при запуске инсталлятора через `/D=<путь>`).
 Для production payload используйте артефакт Windows CI `OfflineDocStudio-windows-release-<Configuration>`.
 
 

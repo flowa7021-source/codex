@@ -21,8 +21,9 @@ while [[ $# -gt 0 ]]; do
       cat <<'USAGE'
 Usage: scripts/build_windows_stub_installer.sh [--output <path>] [--title <caption>] [--success-message <text>]
 
-Build a fallback Windows .exe installer that writes OfflineDocStudio files into
-%LOCALAPPDATA%\\OfflineDocStudio.
+Build a fallback Windows .exe installer that writes OfflineDocStudio files.
+By default installs into %LOCALAPPDATA%\\OfflineDocStudio.
+At runtime on Windows you can override target path with /D=<absolute_path>.
 USAGE
       exit 0 ;;
     *)
@@ -94,6 +95,7 @@ EXPORTS
     CreateFileA
     CloseHandle
     ExitProcess
+    GetCommandLineA
     GetEnvironmentVariableA
     GetFileAttributesA
     SetCurrentDirectoryA
@@ -116,6 +118,7 @@ cat > "$TMP_DIR/setup_installer.c" <<'C'
 #define MAX_PATH 260
 
 __declspec(dllimport) int __stdcall MessageBoxA(void* hWnd, const char* lpText, const char* lpCaption, unsigned int uType);
+__declspec(dllimport) char* __stdcall GetCommandLineA(void);
 __declspec(dllimport) unsigned int __stdcall GetEnvironmentVariableA(const char* lpName, char* lpBuffer, unsigned int nSize);
 __declspec(dllimport) int __stdcall CreateDirectoryA(const char* lpPathName, void* lpSecurityAttributes);
 __declspec(dllimport) unsigned int __stdcall GetFileAttributesA(const char* lpFileName);
@@ -182,18 +185,61 @@ static int write_payload_file(const char* base_dir, const struct PayloadFile* fi
   return ok != 0 && written == file->size;
 }
 
+static int extract_install_dir_arg(const char* cmd, char* out, unsigned int out_size) {
+  const char* p = cmd;
+  while (*p) {
+    while (*p == ' ' || *p == '\t') {
+      ++p;
+    }
+
+    if ((*p == '/' || *p == '-') && (p[1] == 'D' || p[1] == 'd') && p[2] == '=') {
+      p += 3;
+      unsigned int i = 0;
+      int quoted = 0;
+      if (*p == '"') {
+        quoted = 1;
+        ++p;
+      }
+      while (*p && ((quoted && *p != '"') || (!quoted && *p != ' ' && *p != '\t'))) {
+        if (i + 1 >= out_size) {
+          return 0;
+        }
+        out[i++] = *p++;
+      }
+      out[i] = 0;
+      return i > 0;
+    }
+
+    while (*p && *p != ' ' && *p != '\t') {
+      if (*p == '"') {
+        ++p;
+        while (*p && *p != '"') {
+          ++p;
+        }
+        if (*p == '"') {
+          ++p;
+        }
+      } else {
+        ++p;
+      }
+    }
+  }
+  return 0;
+}
+
 void mainCRTStartup(void) {
   const char* caption = "__WINDOW_TITLE__";
-  char local_app_data[MAX_PATH * 2];
-  unsigned int len = GetEnvironmentVariableA("LOCALAPPDATA", local_app_data, sizeof(local_app_data));
-  if (len == 0 || len >= sizeof(local_app_data) - 32) {
-    MessageBoxA(0, "Cannot resolve LOCALAPPDATA", caption, MB_OK | MB_ICONERROR);
-    ExitProcess(1);
-  }
-
   char install_dir[MAX_PATH * 2];
-  copy_str(install_dir, local_app_data);
-  append_str(install_dir, "\\OfflineDocStudio");
+  if (!extract_install_dir_arg(GetCommandLineA(), install_dir, sizeof(install_dir))) {
+    char local_app_data[MAX_PATH * 2];
+    unsigned int len = GetEnvironmentVariableA("LOCALAPPDATA", local_app_data, sizeof(local_app_data));
+    if (len == 0 || len >= sizeof(local_app_data) - 32) {
+      MessageBoxA(0, "Cannot resolve LOCALAPPDATA", caption, MB_OK | MB_ICONERROR);
+      ExitProcess(1);
+    }
+    copy_str(install_dir, local_app_data);
+    append_str(install_dir, "\\OfflineDocStudio");
+  }
 
   if (!ensure_directory(install_dir)) {
     MessageBoxA(0, "Cannot create install directory", caption, MB_OK | MB_ICONERROR);

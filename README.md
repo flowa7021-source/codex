@@ -71,7 +71,7 @@ ctest --test-dir build --output-on-failure
 ./scripts/build_installer_now.sh --force
 ```
 
-Для Linux-окружения без Windows toolchain доступны fallback-скрипты: `scripts/build_windows_bootstrap_exe.sh` (создаёт `dist/offline_doc_studio_bootstrap.exe`), `scripts/build_windows_stub_installer.sh` (Inno-совместимый self-contained `dist/OfflineDocStudio-Setup-<version>.exe`) и `scripts/build_windows_nsis_installer.sh` (NSIS-совместимый self-contained `dist/OfflineDocStudio-NSIS-Setup-<version>.exe`). Эти fallback `.exe` при запуске на Windows устанавливают payload в `%LOCALAPPDATA%\OfflineDocStudio` (app exe + базовые конфиги/пример).
+Для Linux-окружения без Windows toolchain доступны fallback-скрипты: `scripts/build_windows_bootstrap_exe.sh` (создаёт `dist/offline_doc_studio_bootstrap.exe`), `scripts/build_windows_stub_installer.sh` (Inno-совместимый self-contained `dist/OfflineDocStudio-Setup-<version>.exe`) и `scripts/build_windows_nsis_installer.sh` (NSIS-совместимый self-contained `dist/OfflineDocStudio-NSIS-Setup-<version>.exe`). Эти fallback `.exe` при запуске на Windows устанавливают payload в `%LOCALAPPDATA%\OfflineDocStudio` (app exe + базовые конфиги/пример); путь можно переопределить параметром запуска `/D=<путь>`.
 PE-валидность такого файла можно проверить через `scripts/verify_windows_exe.py`, а целостность installer + manifest — через `scripts/verify_installer_ready.py`.
 
 Инсталлятор может (опционально) зарегистрировать ассоциации файлов только по явному действию пользователя.

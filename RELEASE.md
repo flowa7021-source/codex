@@ -60,7 +60,7 @@ cpack --config build/CPackConfig.cmake
 
 - Автоматизированная выгрузка Windows installer: `scripts/fetch_windows_release.sh --repo <owner/repo> --configuration Release --build-installer true` (через `gh` или через `GITHUB_TOKEN` API fallback).
 
-- Linux fallback installer build: `./scripts/build_windows_stub_installer.sh` -> `dist/OfflineDocStudio-Setup-<version>.exe` (self-contained installer, устанавливающий payload в `%LOCALAPPDATA%\OfflineDocStudio`).
+- Linux fallback installer build: `./scripts/build_windows_stub_installer.sh` -> `dist/OfflineDocStudio-Setup-<version>.exe` (self-contained installer, устанавливающий payload в `%LOCALAPPDATA%\OfflineDocStudio` или в путь из параметра запуска `/D=<путь>`).
 
 - One-shot release+installer: `./scripts/release_with_installer.sh`.
 
