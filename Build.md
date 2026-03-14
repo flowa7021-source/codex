@@ -18,6 +18,13 @@ ctest --test-dir build -C Release --output-on-failure
 ./build/Release/offline_doc_studio.exe --interactive --import-folder .\samples --list-library
 ```
 
+
+## Быстрый релизный прогон
+
+```bash
+./scripts/release.sh
+```
+
 ## Сборка ZIP-пакета через CPack
 
 ```bash
@@ -26,7 +33,7 @@ cmake --build build -j
 cpack --config build/CPackConfig.cmake
 ```
 
-Готовый архив появится в корне проекта (например, `OfflineDocStudio-0.3.0-Linux.zip`).
+Готовый архив появится в корне проекта (например, `OfflineDocStudio-1.0.0-Linux.zip`).
 
 ## Сборка Windows-инсталлятора (Inno Setup)
 1. Установите **Inno Setup 6**.
