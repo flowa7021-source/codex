@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
 OUT_OVERRIDE=""
 WINDOW_TITLE="OfflineDocStudio Setup"
 SUCCESS_MESSAGE="OfflineDocStudio has been installed to %LOCALAPPDATA%\\OfflineDocStudio"
@@ -40,7 +44,10 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 PAYLOAD_DIR="$TMP_DIR/payload"
-mkdir -p "$PAYLOAD_DIR"
+if ! mkdir -p "$PAYLOAD_DIR"; then
+  echo "ERROR: unable to create payload directory: $PAYLOAD_DIR" >&2
+  exit 1
+fi
 
 APP_SRC="build/Release/offline_doc_studio.exe"
 if [[ ! -f "$APP_SRC" ]]; then
