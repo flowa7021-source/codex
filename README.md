@@ -25,7 +25,7 @@
 cmake -S . -B build
 cmake --build build -j
 ctest --test-dir build --output-on-failure
-./build/offline_doc_studio --interactive --import-folder ./samples --list-library --theme dark --fit width --zoom 125
+./build/offline_doc_studio --interactive --init-layout --import-folder ./samples --list-library --theme dark --fit width --zoom 125
 ```
 
 ## Сборка инсталлятора

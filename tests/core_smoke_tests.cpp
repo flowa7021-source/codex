@@ -1,4 +1,5 @@
 #include "core/annotation_store.h"
+#include "core/app_config.h"
 #include "core/cli_options.h"
 #include "core/command_palette.h"
 #include "core/document_model.h"
@@ -24,7 +25,7 @@ int main() {
             "--hotkeys", "--mode", "continuous", "--overview", "--ocr-page", "--copy-image", "--rotate", "90", "--delete-page", "2",
             "--crop-page", "1", "--print-range", "1-2", "--print-no-annotations", "--hide-annotations", "--command", "overview",
             "--back", "--forward", "--interactive", "--list-library", "--import-folder", "/tmp", "--pin", "a.pdf", "--unpin", "a.pdf",
-            "--script", "a.txt", "--export-hotkeys", "hk1.json", "--import-hotkeys", "hk2.json"
+            "--script", "a.txt", "--export-hotkeys", "hk1.json", "--import-hotkeys", "hk2.json", "--doctor", "--init-layout"
         };
         const int argc = static_cast<int>(sizeof(argv) / sizeof(argv[0]));
         auto options = ods::CliOptions::Parse(argc, const_cast<char**>(argv));
@@ -34,6 +35,8 @@ int main() {
         assert(options.script_file.value() == "a.txt");
         assert(options.export_hotkeys_path.value() == "hk1.json");
         assert(options.import_hotkeys_path.value() == "hk2.json");
+        assert(options.doctor);
+        assert(options.init_layout);
     }
 
     {
@@ -117,6 +120,24 @@ int main() {
         const int id = notes.Add(1, "note", "test");
         assert(notes.ToggleHidden(id));
         assert(notes.ToggleLocked(id));
+    }
+
+    {
+        const auto tmp = std::filesystem::temp_directory_path() / "ods_config_test";
+        std::filesystem::remove_all(tmp);
+        ods::AppConfigStore cfg(tmp.string());
+        ods::AppConfig data;
+        data.debug_logs = true;
+        data.reading.theme = "dark";
+        data.reading.fit_mode = ods::FitMode::FitWidth;
+        data.reading.zoom_percent = 130;
+        cfg.Save(data);
+
+        auto loaded = cfg.Load();
+        assert(loaded.debug_logs);
+        assert(loaded.reading.theme == "dark");
+        assert(loaded.reading.fit_mode == ods::FitMode::FitWidth);
+        assert(loaded.reading.zoom_percent == 130);
     }
 
     return 0;

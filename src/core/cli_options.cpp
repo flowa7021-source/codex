@@ -29,6 +29,8 @@ CliOptions CliOptions::Parse(int argc, char** argv) {
         if (arg == "--fit" && i + 1 < argc) { options.fit_mode = ParseFitMode(argv[++i]); continue; }
         if (arg == "--zoom" && i + 1 < argc) { options.zoom_percent = std::atoi(argv[++i]); continue; }
         if (arg == "--interactive") { options.interactive = true; continue; }
+        if (arg == "--doctor") { options.doctor = true; continue; }
+        if (arg == "--init-layout") { options.init_layout = true; continue; }
         if (arg == "--list-library") { options.list_library = true; continue; }
         if (arg == "--back") { options.nav_back = true; continue; }
         if (arg == "--forward") { options.nav_forward = true; continue; }

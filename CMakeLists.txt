@@ -8,6 +8,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 enable_testing()
 
 add_library(ods_core
+    src/core/app_config.cpp
     src/core/annotation_store.cpp
     src/core/application.cpp
     src/core/cli_options.cpp

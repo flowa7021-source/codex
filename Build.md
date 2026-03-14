@@ -6,7 +6,7 @@
 cmake -S . -B build
 cmake --build build -j
 ctest --test-dir build --output-on-failure
-./build/offline_doc_studio --interactive --import-folder ./samples --list-library
+./build/offline_doc_studio --interactive --init-layout --doctor --import-folder ./samples --list-library
 ```
 
 ## Windows 10/11 (Visual Studio 2022)

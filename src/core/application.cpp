@@ -1,6 +1,7 @@
 #include "application.h"
 
 #include "annotation_store.h"
+#include "app_config.h"
 #include "cli_options.h"
 #include "command_palette.h"
 #include "document_session.h"
@@ -23,6 +24,23 @@
 namespace ods {
 
 namespace {
+
+void EnsureRuntimeLayout(const std::string& root) {
+    namespace fs = std::filesystem;
+    fs::create_directories(fs::path(root) / "config");
+    fs::create_directories(fs::path(root) / "cache");
+    fs::create_directories(fs::path(root) / "logs");
+}
+
+void PrintDoctor(const std::string& root) {
+    namespace fs = std::filesystem;
+    std::cout << "Doctor report:" << std::endl;
+    std::cout << "  cwd=" << root << std::endl;
+    std::cout << "  config=" << (fs::exists(fs::path(root)/"config") ? "ok" : "missing") << std::endl;
+    std::cout << "  cache=" << (fs::exists(fs::path(root)/"cache") ? "ok" : "missing") << std::endl;
+    std::cout << "  logs=" << (fs::exists(fs::path(root)/"logs") ? "ok" : "missing") << std::endl;
+    std::cout << "  network_policy=offline-only" << std::endl;
+}
 
 void PrintLibrary(const LibraryManager& library) {
     const auto& data = library.Data();
@@ -60,13 +78,16 @@ void PrintStatus(const DocumentSession& session, const FormatRegistry& formats, 
 int Application::Run(int argc, char** argv) {
     CliOptions options = CliOptions::Parse(argc, argv);
     const std::string root = std::filesystem::current_path().string();
+    if (options.init_layout) { EnsureRuntimeLayout(root); }
     PortableStore store(root);
     Logger log(root);
     FormatRegistry formats;
     OcrIndex ocr;
     NavigationHistory nav;
     LibraryManager library(store, formats);
-    ReadingSettings settings;
+    AppConfigStore config_store(root);
+    AppConfig config = config_store.Load();
+    ReadingSettings settings = config.reading;
 
     auto hotkeys = store.LoadHotkeys();
     if (options.import_hotkeys_path.has_value()) {
@@ -183,6 +204,7 @@ int Application::Run(int argc, char** argv) {
     }
 
     if (options.list_library) PrintLibrary(library);
+    if (options.doctor) PrintDoctor(root);
 
     if (options.interactive) {
         std::cout << "OfflineDocStudio interactive shell" << std::endl;
@@ -262,6 +284,8 @@ int Application::Run(int argc, char** argv) {
     for (const auto& tab : session.Tabs()) persist_session.tabs.push_back(tab.document.path);
     persist_session.active_index = persist_session.tabs.empty() ? 0 : static_cast<int>(persist_session.tabs.size() - 1);
 
+    config.reading = settings;
+    config_store.Save(config);
     library.Persist();
     store.SaveSession(persist_session);
     store.SaveHotkeys(hotkeys);

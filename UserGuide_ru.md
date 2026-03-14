@@ -26,6 +26,10 @@ OfflineDocStudio — офлайн-ридер/аннотатор документ
 - Импорт: `--import-hotkeys <json>`
 - Экспорт: `--export-hotkeys <json>`
 
+## Диагностика
+- Инициализация структуры данных (`config/cache/logs`): `--init-layout`
+- Отчёт о состоянии среды: `--doctor`
+
 ## Интерактивные команды
 `open`, `find`, `mode`, `fit`, `zoom`, `overview`, `rotate`, `crop`, `delete`, `ocr`, `screenshot`, `print`, `library`, `pin`, `unpin`, `searchlib`, `back`, `forward`, `hotkeys`, `help`, `quit`.
 

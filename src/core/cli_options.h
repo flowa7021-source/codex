@@ -29,6 +29,8 @@ struct CliOptions {
     std::optional<FitMode> fit_mode;
     std::optional<int> zoom_percent;
     bool interactive = false;
+    bool doctor = false;
+    bool init_layout = false;
     bool list_library = false;
     bool nav_back = false;
     bool nav_forward = false;
