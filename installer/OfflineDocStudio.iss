@@ -1,6 +1,6 @@
 ; Inno Setup script for OfflineDocStudio
 #define MyAppName "OfflineDocStudio"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "OfflineDocStudio Project"
 #define MyAppExeName "offline_doc_studio.exe"
 

@@ -1,5 +1,5 @@
 !define APP_NAME "OfflineDocStudio"
-!define APP_VERSION "1.0.0"
+!define APP_VERSION "2.0.0"
 !define APP_EXE "offline_doc_studio.exe"
 
 Name "${APP_NAME} ${APP_VERSION}"
