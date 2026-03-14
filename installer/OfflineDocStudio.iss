@@ -40,5 +40,5 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File "{app}\scripts\register_file_associations.ps1" -AppPath "{app}\{#MyAppExeName}""; Tasks: registerassoc; Flags: postinstall runhidden
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\scripts\register_file_associations.ps1"" -AppPath ""{app}\{#MyAppExeName}"""; Tasks: registerassoc; Flags: postinstall runhidden
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
