@@ -5,3 +5,7 @@ build/
 config/library.json
 config/session.json
 logs/
+_CPacks*
+_CPack_Packages/
+OfflineDocStudio-*.zip
+dist/

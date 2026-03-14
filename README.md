@@ -3,7 +3,7 @@
 Офлайн-ридер/аннотатор (PDF/DjVu/CBZ/EPUB) для Windows 10–11.
 
 ## Текущий статус
-Реализовано запускаемое MVP-приложение (CLI + интерактивный shell + сценарии автозапуска):
+Реализовано запускаемое MVP-приложение (CLI + интерактивный shell + сценарии автозапуска + упаковка/инсталлятор):
 
 - форматный реестр `pdf|djvu|djv|cbz|epub`;
 - сессии вкладок и режимы чтения;
@@ -17,7 +17,8 @@
 - hotkeys import/export (`--import-hotkeys`, `--export-hotkeys`);
 - интерактивный режим (`--interactive`);
 - portable storage + логирование (`logs/app.log`);
-- smoke-тесты на ключевые подсистемы.
+- smoke-тесты на ключевые подсистемы;
+- CPack ZIP packaging + Inno Setup installer script.
 
 ## Быстрый запуск
 ```bash
@@ -26,6 +27,9 @@ cmake --build build -j
 ctest --test-dir build --output-on-failure
 ./build/offline_doc_studio --interactive --import-folder ./samples --list-library --theme dark --fit width --zoom 125
 ```
+
+## Сборка инсталлятора
+См. `Build.md` и `installer/OfflineDocStudio.iss`.
 
 ## Batch-пример
 ```bash

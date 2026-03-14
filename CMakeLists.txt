@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(OfflineDocStudio LANGUAGES CXX)
+project(OfflineDocStudio VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,3 +33,22 @@ add_executable(core_smoke_tests tests/core_smoke_tests.cpp)
 target_link_libraries(core_smoke_tests PRIVATE ods_core)
 
 add_test(NAME core_smoke_tests COMMAND core_smoke_tests)
+
+include(GNUInstallDirs)
+install(TARGETS offline_doc_studio RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES
+    README.md
+    UserGuide_ru.md
+    Build.md
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/offline_doc_studio
+)
+install(FILES config/hotkeys.json DESTINATION ${CMAKE_INSTALL_DATADIR}/offline_doc_studio/config)
+install(FILES samples/session.ods DESTINATION ${CMAKE_INSTALL_DATADIR}/offline_doc_studio/samples)
+
+set(CPACK_PACKAGE_NAME "OfflineDocStudio")
+set(CPACK_PACKAGE_VENDOR "OfflineDocStudio Project")
+set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Offline document reader/annotator MVP shell")
+set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
+set(CPACK_GENERATOR "ZIP")
+include(CPack)
