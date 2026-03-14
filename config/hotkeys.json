@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "bindings": {
+    "find": "Ctrl+F",
+    "fit_page": "Ctrl+0",
+    "fullscreen": "F11",
+    "ocr_selection": "Ctrl+Shift+O",
+    "open_file": "Ctrl+O",
+    "screenshot": "Ctrl+Alt+X"
+  }
+}

@@ -1,0 +1,7 @@
+build/
+*.user
+*.suo
+*.vcxproj.user
+config/library.json
+config/session.json
+logs/
