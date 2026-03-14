@@ -8,24 +8,17 @@ cd "$REPO_ROOT"
 VERSION="$(python3 scripts/verify_release.py --print-version)"
 OUT="dist/OfflineDocStudio-NSIS-Setup-${VERSION}.exe"
 
-# Native NSIS path if available.
-if command -v makensis >/dev/null 2>&1; then
-  if [[ ! -f build/Release/offline_doc_studio.exe ]]; then
-    echo "ERROR: build/Release/offline_doc_studio.exe is required for native NSIS build" >&2
-    exit 1
-  fi
-  mkdir -p dist
-  makensis installer/OfflineDocStudio.nsi
-  python3 scripts/verify_windows_exe.py "$OUT"
-  echo "OK: generated NSIS installer: $OUT"
-  exit 0
+if ! command -v makensis >/dev/null 2>&1; then
+  echo "ERROR: makensis is required for NSIS installer build" >&2
+  exit 1
 fi
 
-# Fallback in non-Windows/non-NSIS environments: build self-contained PE installer.
-./scripts/build_windows_stub_installer.sh \
-  --output "$OUT" \
-  --title "OfflineDocStudio NSIS Setup" \
-  --success-message "OfflineDocStudio (NSIS fallback) has been installed to %LOCALAPPDATA%\\OfflineDocStudio"
+if [[ ! -f build/Release/offline_doc_studio.exe ]]; then
+  echo "ERROR: build/Release/offline_doc_studio.exe is required for NSIS build" >&2
+  exit 1
+fi
 
+mkdir -p dist
+makensis installer/OfflineDocStudio.nsi
 python3 scripts/verify_windows_exe.py "$OUT"
-echo "OK: generated NSIS-format installer executable (fallback): $OUT"
+echo "OK: generated NSIS installer: $OUT"

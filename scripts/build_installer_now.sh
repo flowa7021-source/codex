@@ -2,7 +2,6 @@
 set -euo pipefail
 
 FORCE="false"
-REQUIRE_NATIVE="false"
 PRINT_PATH="false"
 FORMAT="inno"
 MIN_SIZE_BYTES=2048
@@ -11,24 +10,16 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --force)
       FORCE="true"; shift ;;
-    --require-native)
-      REQUIRE_NATIVE="true"; shift ;;
     --print-path)
       PRINT_PATH="true"; shift ;;
     --format)
       FORMAT="$2"; shift 2 ;;
     -h|--help)
-      cat <<'EOF'
-Usage: scripts/build_installer_now.sh [--force] [--require-native] [--print-path] [--format inno|nsis]
+      cat <<'USAGE'
+Usage: scripts/build_installer_now.sh [--force] [--print-path] [--format inno|nsis]
 
-Build OfflineDocStudio installer executable now.
-
-Options:
-  --force          rebuild even if installer already exists
-  --require-native fail if native Inno Setup path is unavailable
-  --print-path     print installer path only on success
-  --format          installer format: inno (default) or nsis
-EOF
+Build OfflineDocStudio Windows installer (native Windows toolchain only).
+USAGE
       exit 0 ;;
     *)
       echo "Unknown option: $1" >&2
@@ -53,47 +44,18 @@ if [[ "$FORCE" == "true" && -f "$TARGET" ]]; then
   rm -f "$TARGET"
 fi
 
-old_mtime="0"
-if [[ -f "$TARGET" ]]; then
-  old_mtime="$(stat -c %Y "$TARGET" 2>/dev/null || echo 0)"
-fi
-
-native_ok="false"
 if [[ "$FORMAT" == "inno" ]]; then
-  if command -v powershell >/dev/null 2>&1; then
-    echo "Using PowerShell installer pipeline..."
-    if powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1; then
-      native_ok="true"
-    fi
+  if ! command -v powershell >/dev/null 2>&1; then
+    echo "ERROR: powershell is required for native Inno installer build" >&2
+    exit 1
   fi
+  powershell -ExecutionPolicy Bypass -File scripts/build_windows_installer.ps1
 else
-  if ./scripts/build_windows_nsis_installer.sh; then
-    native_ok="true"
-  fi
-fi
-
-if [[ "$REQUIRE_NATIVE" == "true" && "$native_ok" != "true" ]]; then
-  echo "ERROR: native installer path failed or unavailable (--require-native set)" >&2
-  exit 1
-fi
-
-if [[ ! -f "$TARGET" ]]; then
-  echo "Falling back to LLVM-based installer stub builder..."
-  if [[ "$FORMAT" == "nsis" ]]; then
-    ./scripts/build_windows_nsis_installer.sh
-  else
-    ./scripts/build_windows_stub_installer.sh
-  fi
+  ./scripts/build_windows_nsis_installer.sh
 fi
 
 if [[ ! -f "$TARGET" ]]; then
   echo "ERROR: failed to produce installer: $TARGET" >&2
-  exit 1
-fi
-
-new_mtime="$(stat -c %Y "$TARGET" 2>/dev/null || echo 0)"
-if [[ "$FORCE" == "true" && "$new_mtime" -le "$old_mtime" ]]; then
-  echo "ERROR: installer timestamp did not change after forced rebuild" >&2
   exit 1
 fi
 

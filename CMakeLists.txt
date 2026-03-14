@@ -51,10 +51,3 @@ install(FILES
 install(FILES config/hotkeys.json DESTINATION ${CMAKE_INSTALL_DATADIR}/offline_doc_studio/config)
 install(FILES samples/session.ods DESTINATION ${CMAKE_INSTALL_DATADIR}/offline_doc_studio/samples)
 
-set(CPACK_PACKAGE_NAME "OfflineDocStudio")
-set(CPACK_PACKAGE_VENDOR "OfflineDocStudio Project")
-set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Offline document reader/annotator MVP shell")
-set(CPACK_RESOURCE_FILE_README "${CMAKE_CURRENT_SOURCE_DIR}/README.md")
-set(CPACK_GENERATOR "ZIP")
-include(CPack)
