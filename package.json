@@ -13,6 +13,7 @@
     "build:win:installer:nosign": "electron-builder --win nsis --config.win.signAndEditExecutable=false --config.win.artifactName=NovaReader-Setup-\\${version}.\\${ext}"
   },
   "devDependencies": {
+    "djvujs-dist": "^0.5.4",
     "electron": "30.5.1",
     "electron-builder": "24.13.3",
     "pdfjs-dist": "^4.4.168"

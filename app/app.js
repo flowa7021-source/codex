@@ -1,4 +1,5 @@
 let pdfjsLib = null;
+let djvuLib = null;
 
 async function ensurePdfJs() {
   if (pdfjsLib) return pdfjsLib;
@@ -15,6 +16,39 @@ async function ensurePdfJs() {
   } catch {
     throw new Error('PDF.js недоступен в локальном runtime пакете');
   }
+}
+
+async function ensureDjVuJs() {
+  if (djvuLib) return djvuLib;
+
+  const url = new URL('./vendor/djvu.js', import.meta.url).href;
+  await new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-djvu-runtime="1"]');
+    if (existing) {
+      if (window.DjVu) {
+        resolve();
+      } else {
+        existing.addEventListener('load', () => resolve(), { once: true });
+        existing.addEventListener('error', () => reject(new Error('DjVu runtime load error')), { once: true });
+      }
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = url;
+    script.async = true;
+    script.dataset.djvuRuntime = '1';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('DjVu runtime load error'));
+    document.head.appendChild(script);
+  });
+
+  if (!window.DjVu) {
+    throw new Error('DjVu runtime не инициализирован');
+  }
+
+  djvuLib = window.DjVu;
+  return djvuLib;
 }
 
 
@@ -303,6 +337,7 @@ class DjVuAdapter {
   constructor(fileName, data = null) {
     this.fileName = fileName;
     this.type = 'djvu';
+    this.mode = 'compat';
     this.setData(data);
   }
 
@@ -401,6 +436,88 @@ class DjVuAdapter {
 
   async getOutline() {
     return this.outline;
+  }
+
+  async resolveDestToPage(dest) {
+    const n = Number(dest);
+    if (!Number.isInteger(n) || n < 1 || n > this.pageCount) return null;
+    return n;
+  }
+}
+
+
+class DjVuNativeAdapter {
+  constructor(doc, fileName) {
+    this.doc = doc;
+    this.fileName = fileName;
+    this.type = 'djvu';
+    this.mode = 'native';
+    this.pageSizes = Array.isArray(doc?.getPagesSizes?.()) ? doc.getPagesSizes() : [];
+    this.pageCount = Number(doc?.getPagesQuantity?.() || this.pageSizes.length || 1);
+  }
+
+  getPageCount() {
+    return this.pageCount;
+  }
+
+  async getPageViewport(pageNumber, scale, rotation) {
+    const size = this.pageSizes[pageNumber - 1] || {};
+    const baseW = Number(size.width) > 0 ? Number(size.width) : 1200;
+    const baseH = Number(size.height) > 0 ? Number(size.height) : 1600;
+    const w = baseW * scale;
+    const h = baseH * scale;
+    if (rotation % 180 === 0) return { width: w, height: h };
+    return { width: h, height: w };
+  }
+
+  async renderPage(pageNumber, canvas, { zoom, rotation }) {
+    const page = await this.doc.getPage(pageNumber);
+    const imageData = page.getImageData(true);
+    page.reset?.();
+
+    const tmp = document.createElement('canvas');
+    tmp.width = imageData.width;
+    tmp.height = imageData.height;
+    tmp.getContext('2d').putImageData(imageData, 0, 0);
+
+    const rad = (rotation * Math.PI) / 180;
+    const w = tmp.width * zoom;
+    const h = tmp.height * zoom;
+
+    if (rotation % 180 === 0) {
+      canvas.width = w;
+      canvas.height = h;
+    } else {
+      canvas.width = h;
+      canvas.height = w;
+    }
+
+    const ctx = canvas.getContext('2d');
+    ctx.save();
+    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.rotate(rad);
+    ctx.drawImage(tmp, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  }
+
+  async getText(pageNumber) {
+    const page = await this.doc.getPage(pageNumber);
+    const text = page.getText() || '';
+    page.reset?.();
+    return text;
+  }
+
+  async getOutline() {
+    const raw = this.doc.getContents?.() || [];
+    const mapItems = (items) => (Array.isArray(items) ? items.map((item) => {
+      const page = item?.url ? this.doc.getPageNumberByUrl(item.url) : null;
+      return {
+        title: item?.description || '(без названия)',
+        dest: Number.isInteger(page) ? page : null,
+        items: mapItems(item?.children || []),
+      };
+    }) : []);
+    return mapItems(raw);
   }
 
   async resolveDestToPage(dest) {
@@ -2261,28 +2378,40 @@ async function openFile(file) {
     const djvuData = loadDjvuData();
     state.djvuBinaryDetected = await isLikelyDjvuFile(file);
 
-    const hasPageData = Array.isArray(djvuData?.pagesImages) && djvuData.pagesImages.length > 0;
-    let effectiveDjvuData = djvuData;
+    let openedByNative = false;
+    try {
+      const DjVu = await ensureDjVuJs();
+      const data = await file.arrayBuffer();
+      const doc = new DjVu.Document(data);
+      state.adapter = new DjVuNativeAdapter(doc, file.name);
+      openedByNative = true;
+      els.searchStatus.textContent = 'DjVu файл открыт встроенным runtime.';
+    } catch {
+      const hasPageData = Array.isArray(djvuData?.pagesImages) && djvuData.pagesImages.length > 0;
+      let effectiveDjvuData = djvuData;
 
-    if (!hasPageData) {
-      const fallbackText = await extractDjvuFallbackText(file);
-      if (fallbackText) {
-        effectiveDjvuData = {
-          ...(djvuData || {}),
-          pageCount: Math.max(1, Number(djvuData?.pageCount) || 1),
-          pagesText: [fallbackText],
-        };
+      if (!hasPageData) {
+        const fallbackText = await extractDjvuFallbackText(file);
+        if (fallbackText) {
+          effectiveDjvuData = {
+            ...(djvuData || {}),
+            pageCount: Math.max(1, Number(djvuData?.pageCount) || 1),
+            pagesText: [fallbackText],
+          };
+        }
+      }
+
+      state.adapter = new DjVuAdapter(file.name, effectiveDjvuData);
+
+      if (!hasPageData) {
+        els.searchStatus.textContent = effectiveDjvuData?.pagesText?.[0]
+          ? 'DjVu открыт в режиме совместимости. Для полного рендера нужен встроенный runtime файл app/vendor/djvu.js.'
+          : 'DjVu-данные не найдены. Проверьте наличие app/vendor/djvu.js в поставке.';
       }
     }
 
-    state.adapter = new DjVuAdapter(file.name, effectiveDjvuData);
-
-    if (!hasPageData) {
-      els.searchStatus.textContent = effectiveDjvuData?.pagesText?.[0]
-        ? 'DjVu файл загружен. Текстовый слой восстановлен частично, для полного рендера импортируйте DjVu data JSON.'
-        : (state.djvuBinaryDetected
-          ? 'DjVu файл загружен. Для рендера страниц импортируйте DjVu data JSON.'
-          : 'DjVu-данные не найдены. Импортируйте DjVu data JSON.');
+    if (openedByNative) {
+      saveDjvuData({});
     }
   } else if (/\.(png|jpe?g|webp|gif|bmp)$/i.test(lower)) {
     const url = URL.createObjectURL(file);
@@ -3221,7 +3350,11 @@ async function refreshPageText() {
   }
   els.pageText.value = text || '(На этой странице не найден текстовый слой)';
   if (!text && state.adapter?.type === 'djvu') {
-    els.searchStatus.textContent = 'Для полного текста DjVu импортируйте DjVu data JSON или OCR JSON.';
+    if (state.adapter?.mode === 'compat') {
+      els.searchStatus.textContent = 'Для расширенного текста DjVu можно импортировать DjVu data JSON или OCR JSON.';
+    } else {
+      els.searchStatus.textContent = 'В этом DjVu-документе текстовый слой отсутствует.';
+    }
   }
 }
 
