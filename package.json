@@ -14,7 +14,8 @@
   },
   "devDependencies": {
     "electron": "30.5.1",
-    "electron-builder": "24.13.3"
+    "electron-builder": "24.13.3",
+    "pdfjs-dist": "^4.4.168"
   },
   "build": {
     "appId": "com.novareader.desktop",

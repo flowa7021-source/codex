@@ -2,11 +2,26 @@ let pdfjsLib = null;
 
 async function ensurePdfJs() {
   if (pdfjsLib) return pdfjsLib;
+
+  const localPdfUrl = new URL('./vendor/pdf.min.mjs', import.meta.url).href;
+  const localWorkerUrl = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
+
   try {
-    pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
+    pdfjsLib = await import(localPdfUrl);
+    if (pdfjsLib?.GlobalWorkerOptions) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = localWorkerUrl;
+    }
     return pdfjsLib;
   } catch {
-    throw new Error('PDF.js CDN недоступен');
+    try {
+      pdfjsLib = await import('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs');
+      if (pdfjsLib?.GlobalWorkerOptions) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+      }
+      return pdfjsLib;
+    } catch {
+      throw new Error('PDF.js недоступен (ни локально, ни через CDN)');
+    }
   }
 }
 
@@ -2188,6 +2203,35 @@ async function isLikelyDjvuFile(file) {
   }
 }
 
+async function extractDjvuFallbackText(file) {
+  try {
+    const sampleSize = Math.min(file.size, 2 * 1024 * 1024);
+    const bytes = new Uint8Array(await file.slice(0, sampleSize).arrayBuffer());
+    const latin = new TextDecoder('latin1', { fatal: false }).decode(bytes);
+    const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    const merged = `${latin}\n${utf8}`;
+    const chunks = merged.match(/[A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9 ,.:;!?()\-]{20,}/g) || [];
+    let text = chunks
+      .map((x) => x.replace(/\s+/g, ' ').trim())
+      .filter((x) => x.length >= 20)
+      .slice(0, 40)
+      .join('\n');
+
+    if (!text) {
+      const normalized = utf8
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      text = normalized.length >= 20 ? normalized : '';
+    }
+
+    return text.slice(0, 5000);
+  } catch {
+    return '';
+  }
+}
+
+
 async function openFile(file) {
   revokeCurrentObjectUrl();
   state.file = file;
@@ -2221,12 +2265,29 @@ async function openFile(file) {
   } else if (lower.endsWith('.djvu') || lower.endsWith('.djv')) {
     const djvuData = loadDjvuData();
     state.djvuBinaryDetected = await isLikelyDjvuFile(file);
-    state.adapter = new DjVuAdapter(file.name, djvuData);
+
     const hasPageData = Array.isArray(djvuData?.pagesImages) && djvuData.pagesImages.length > 0;
+    let effectiveDjvuData = djvuData;
+
     if (!hasPageData) {
-      els.searchStatus.textContent = state.djvuBinaryDetected
-        ? 'DjVu файл загружен. Для рендера страниц импортируйте DjVu data JSON.'
-        : 'DjVu-данные не найдены. Импортируйте DjVu data JSON.';
+      const fallbackText = await extractDjvuFallbackText(file);
+      if (fallbackText) {
+        effectiveDjvuData = {
+          ...(djvuData || {}),
+          pageCount: Math.max(1, Number(djvuData?.pageCount) || 1),
+          pagesText: [fallbackText],
+        };
+      }
+    }
+
+    state.adapter = new DjVuAdapter(file.name, effectiveDjvuData);
+
+    if (!hasPageData) {
+      els.searchStatus.textContent = effectiveDjvuData?.pagesText?.[0]
+        ? 'DjVu файл загружен. Текстовый слой восстановлен частично, для полного рендера импортируйте DjVu data JSON.'
+        : (state.djvuBinaryDetected
+          ? 'DjVu файл загружен. Для рендера страниц импортируйте DjVu data JSON.'
+          : 'DjVu-данные не найдены. Импортируйте DjVu data JSON.');
     }
   } else if (/\.(png|jpe?g|webp|gif|bmp)$/i.test(lower)) {
     const url = URL.createObjectURL(file);
@@ -3322,8 +3383,7 @@ function applyLayoutState() {
 
   const sidebarHidden = sidebarRaw === '1';
   const toolsHidden = toolsRaw === '1';
-  // By default hide text tools until user explicitly expands.
-  const textHidden = textRaw === null ? true : textRaw === '1';
+  const textHidden = textRaw === null ? false : textRaw === '1';
   const searchToolsHidden = searchToolsRaw === null ? false : searchToolsRaw === '1';
   const annotToolsHidden = annotToolsRaw === null ? false : annotToolsRaw === '1';
 
