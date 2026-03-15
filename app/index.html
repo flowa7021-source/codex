@@ -80,13 +80,31 @@
 
           <div class="divider"></div>
 
+          <button id="annotateToggle">Аннотации: off</button>
+          <select id="drawTool">
+            <option value="pen">Перо</option>
+            <option value="highlighter">Маркер</option>
+            <option value="eraser">Ластик</option>
+          </select>
+          <input id="drawColor" type="color" value="#ffd84d" />
+          <label for="drawSize">Размер</label>
+          <input id="drawSize" type="range" min="2" max="24" value="6" />
+          <button id="undoStroke">Undo</button>
+          <button id="clearStrokes">Очистить стр.</button>
+          <button id="exportAnnotated">Экспорт PNG</button>
+
+          <div class="divider"></div>
+
           <button id="downloadFile">Скачать</button>
           <button id="printPage">Печать страницы</button>
           <span id="docInfo"></span>
         </header>
 
         <section class="canvas-wrap" id="canvasWrap">
-          <canvas id="viewerCanvas"></canvas>
+          <div class="canvas-stack" id="canvasStack">
+            <canvas id="viewerCanvas"></canvas>
+            <canvas id="annotationCanvas"></canvas>
+          </div>
           <p id="emptyState">Откройте PDF, DjVu или изображение для начала работы</p>
         </section>
 

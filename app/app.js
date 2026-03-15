@@ -11,6 +11,9 @@ const state = {
   searchResults: [],
   searchCursor: -1,
   outline: [],
+  drawEnabled: false,
+  isDrawing: false,
+  currentStroke: null,
 };
 
 const els = {
@@ -31,6 +34,7 @@ const els = {
   zoomStatus: document.getElementById('zoomStatus'),
   rotate: document.getElementById('rotate'),
   canvas: document.getElementById('viewerCanvas'),
+  annotationCanvas: document.getElementById('annotationCanvas'),
   emptyState: document.getElementById('emptyState'),
   searchInput: document.getElementById('searchInput'),
   searchBtn: document.getElementById('searchBtn'),
@@ -51,6 +55,13 @@ const els = {
   copyText: document.getElementById('copyText'),
   exportText: document.getElementById('exportText'),
   pageText: document.getElementById('pageText'),
+  annotateToggle: document.getElementById('annotateToggle'),
+  drawTool: document.getElementById('drawTool'),
+  drawColor: document.getElementById('drawColor'),
+  drawSize: document.getElementById('drawSize'),
+  undoStroke: document.getElementById('undoStroke'),
+  clearStrokes: document.getElementById('clearStrokes'),
+  exportAnnotated: document.getElementById('exportAnnotated'),
 };
 
 class PDFAdapter {
@@ -88,22 +99,18 @@ class PDFAdapter {
   }
 
   async resolveDestToPage(dest) {
-    try {
-      let targetDest = dest;
-      if (typeof targetDest === 'string') {
-        targetDest = await this.pdfDoc.getDestination(targetDest);
-      }
+    let targetDest = dest;
+    if (typeof targetDest === 'string') {
+      targetDest = await this.pdfDoc.getDestination(targetDest);
+    }
 
-      if (!targetDest || !Array.isArray(targetDest) || targetDest.length === 0) {
-        return null;
-      }
-
-      const pageRef = targetDest[0];
-      const pageIndex = await this.pdfDoc.getPageIndex(pageRef);
-      return pageIndex + 1;
-    } catch {
+    if (!targetDest || !Array.isArray(targetDest) || targetDest.length === 0) {
       return null;
     }
+
+    const pageRef = targetDest[0];
+    const pageIndex = await this.pdfDoc.getPageIndex(pageRef);
+    return pageIndex + 1;
   }
 }
 
@@ -204,6 +211,161 @@ function bookmarkKey() {
   return `novareader-bookmarks:${state.docName || 'global'}`;
 }
 
+function annotationKey(page) {
+  return `novareader-annotations:${state.docName || 'global'}:${page}`;
+}
+
+function getCurrentAnnotationCtx() {
+  return els.annotationCanvas.getContext('2d');
+}
+
+function loadStrokes(page = state.currentPage) {
+  return JSON.parse(localStorage.getItem(annotationKey(page)) || '[]');
+}
+
+function saveStrokes(strokes, page = state.currentPage) {
+  localStorage.setItem(annotationKey(page), JSON.stringify(strokes));
+}
+
+function setDrawMode(enabled) {
+  state.drawEnabled = enabled;
+  els.annotationCanvas.classList.toggle('drawing-enabled', enabled);
+  els.annotateToggle.textContent = `Аннотации: ${enabled ? 'on' : 'off'}`;
+}
+
+function normalizePoint(x, y) {
+  return {
+    x: x / Math.max(1, els.annotationCanvas.width),
+    y: y / Math.max(1, els.annotationCanvas.height),
+  };
+}
+
+function denormalizePoint(point) {
+  return {
+    x: point.x * els.annotationCanvas.width,
+    y: point.y * els.annotationCanvas.height,
+  };
+}
+
+function applyStrokeStyle(ctx, stroke) {
+  if (stroke.tool === 'highlighter') {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.size * 2;
+  } else if (stroke.tool === 'eraser') {
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(0,0,0,1)';
+    ctx.lineWidth = stroke.size * 2;
+  } else {
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = stroke.size;
+  }
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+}
+
+function drawStroke(ctx, stroke) {
+  if (!stroke.points?.length) return;
+  ctx.save();
+  applyStrokeStyle(ctx, stroke);
+
+  const start = denormalizePoint(stroke.points[0]);
+  ctx.beginPath();
+  ctx.moveTo(start.x, start.y);
+
+  for (let i = 1; i < stroke.points.length; i += 1) {
+    const p = denormalizePoint(stroke.points[i]);
+    ctx.lineTo(p.x, p.y);
+  }
+
+  if (stroke.points.length === 1) {
+    ctx.lineTo(start.x + 0.1, start.y + 0.1);
+  }
+
+  ctx.stroke();
+  ctx.restore();
+}
+
+function renderAnnotations() {
+  const ctx = getCurrentAnnotationCtx();
+  ctx.clearRect(0, 0, els.annotationCanvas.width, els.annotationCanvas.height);
+  const strokes = loadStrokes();
+  strokes.forEach((stroke) => drawStroke(ctx, stroke));
+}
+
+function getCanvasPointFromEvent(e) {
+  const rect = els.annotationCanvas.getBoundingClientRect();
+  const x = ((e.clientX - rect.left) / rect.width) * els.annotationCanvas.width;
+  const y = ((e.clientY - rect.top) / rect.height) * els.annotationCanvas.height;
+  return { x, y };
+}
+
+function beginStroke(e) {
+  if (!state.drawEnabled || !state.adapter) return;
+  state.isDrawing = true;
+  const p = getCanvasPointFromEvent(e);
+  state.currentStroke = {
+    tool: els.drawTool.value,
+    color: els.drawColor.value,
+    size: Number(els.drawSize.value),
+    points: [normalizePoint(p.x, p.y)],
+  };
+  renderAnnotations();
+  const ctx = getCurrentAnnotationCtx();
+  drawStroke(ctx, state.currentStroke);
+}
+
+function moveStroke(e) {
+  if (!state.isDrawing || !state.currentStroke) return;
+  const p = getCanvasPointFromEvent(e);
+  state.currentStroke.points.push(normalizePoint(p.x, p.y));
+  renderAnnotations();
+  const ctx = getCurrentAnnotationCtx();
+  drawStroke(ctx, state.currentStroke);
+}
+
+function endStroke() {
+  if (!state.isDrawing || !state.currentStroke) return;
+  const strokes = loadStrokes();
+  strokes.push(state.currentStroke);
+  saveStrokes(strokes);
+  state.isDrawing = false;
+  state.currentStroke = null;
+  renderAnnotations();
+}
+
+function undoStroke() {
+  const strokes = loadStrokes();
+  if (!strokes.length) return;
+  strokes.pop();
+  saveStrokes(strokes);
+  renderAnnotations();
+}
+
+function clearStrokes() {
+  saveStrokes([]);
+  renderAnnotations();
+}
+
+function exportAnnotatedPng() {
+  if (!state.adapter) return;
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = els.canvas.width;
+  exportCanvas.height = els.canvas.height;
+  const ctx = exportCanvas.getContext('2d');
+  ctx.drawImage(els.canvas, 0, 0);
+  ctx.drawImage(els.annotationCanvas, 0, 0);
+  const url = exportCanvas.toDataURL('image/png');
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotated.png`;
+  a.click();
+}
+
 async function openFile(file) {
   state.file = file;
   state.docName = file.name;
@@ -251,6 +413,13 @@ async function renderCurrentPage() {
     zoom: state.zoom,
     rotation: state.rotation,
   });
+
+  els.annotationCanvas.width = els.canvas.width;
+  els.annotationCanvas.height = els.canvas.height;
+  els.annotationCanvas.style.width = `${els.canvas.width}px`;
+  els.annotationCanvas.style.height = `${els.canvas.height}px`;
+
+  renderAnnotations();
 
   els.pageStatus.textContent = `Страница ${state.currentPage} / ${state.pageCount}`;
   els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
@@ -355,17 +524,28 @@ function renderDocInfo() {
   els.docInfo.textContent = `${ext} • ${sizeMb} MB • ${state.pageCount} стр.`;
 }
 
-async function buildOutlineItems(items = []) {
+async function buildOutlineItems(items = [], level = 0) {
   if (!state.adapter || state.adapter.type !== 'pdf') return [];
   const result = [];
+
   for (const item of items) {
-    const page = item.dest ? await state.adapter.resolveDestToPage(item.dest) : null;
-    result.push({ title: item.title || '(без названия)', page, level: 0 });
+    let page = null;
+    if (item.dest) {
+      try {
+        page = await state.adapter.resolveDestToPage(item.dest);
+      } catch {
+        page = null;
+      }
+    }
+
+    result.push({ title: item.title || '(без названия)', page, level });
+
     if (item.items?.length) {
-      const childItems = await buildOutlineItems(item.items);
-      childItems.forEach((entry) => result.push({ ...entry, level: entry.level + 1 }));
+      const children = await buildOutlineItems(item.items, level + 1);
+      result.push(...children);
     }
   }
+
   return result;
 }
 
@@ -390,7 +570,7 @@ async function renderOutline() {
     return;
   }
 
-  state.outline = await buildOutlineItems(raw);
+  state.outline = await buildOutlineItems(raw, 0);
 
   state.outline.forEach((entry) => {
     const li = document.createElement('li');
@@ -423,8 +603,17 @@ async function copyPageText() {
   if (!els.pageText.value) {
     await refreshPageText();
   }
+
   if (!els.pageText.value) return;
-  await navigator.clipboard.writeText(els.pageText.value);
+
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(els.pageText.value);
+    return;
+  }
+
+  els.pageText.focus();
+  els.pageText.select();
+  document.execCommand('copy');
 }
 
 function exportPageText() {
@@ -510,7 +699,14 @@ function downloadCurrentFile() {
 
 function printCanvasPage() {
   if (!state.adapter) return;
-  const dataUrl = els.canvas.toDataURL('image/png');
+  const exportCanvas = document.createElement('canvas');
+  exportCanvas.width = els.canvas.width;
+  exportCanvas.height = els.canvas.height;
+  const ctx = exportCanvas.getContext('2d');
+  ctx.drawImage(els.canvas, 0, 0);
+  ctx.drawImage(els.annotationCanvas, 0, 0);
+
+  const dataUrl = exportCanvas.toDataURL('image/png');
   const win = window.open('', '_blank');
   if (!win) return;
   win.document.write(`<!doctype html><title>Print</title><img src="${dataUrl}" style="width:100%;"/>`);
@@ -533,6 +729,14 @@ function setupDragAndDrop() {
     const file = e.dataTransfer?.files?.[0];
     if (file) await openFile(file);
   });
+}
+
+function setupAnnotationEvents() {
+  const target = els.annotationCanvas;
+  target.addEventListener('pointerdown', beginStroke);
+  target.addEventListener('pointermove', moveStroke);
+  target.addEventListener('pointerup', endStroke);
+  target.addEventListener('pointerleave', endStroke);
 }
 
 els.fileInput.addEventListener('change', async (e) => {
@@ -586,6 +790,10 @@ els.printPage.addEventListener('click', printCanvasPage);
 els.refreshText.addEventListener('click', refreshPageText);
 els.copyText.addEventListener('click', copyPageText);
 els.exportText.addEventListener('click', exportPageText);
+els.annotateToggle.addEventListener('click', () => setDrawMode(!state.drawEnabled));
+els.undoStroke.addEventListener('click', undoStroke);
+els.clearStrokes.addEventListener('click', clearStrokes);
+els.exportAnnotated.addEventListener('click', exportAnnotatedPng);
 
 els.searchBtn.addEventListener('click', async () => {
   await searchInPdf(els.searchInput.value);
@@ -636,3 +844,5 @@ loadNotes();
 renderBookmarks();
 renderOutline();
 setupDragAndDrop();
+setupAnnotationEvents();
+setDrawMode(false);
