@@ -153,6 +153,9 @@ const TOOLBAR_SECTION_CONFIG = [
   { key: 'tools', label: 'Панель инструментов' },
 ];
 
+const OCR_MIN_DPI = 1500;
+const CSS_BASE_DPI = 96;
+
 const els = {
   fileInput: document.getElementById('fileInput'),
   appVersion: document.getElementById('appVersion'),
@@ -886,8 +889,9 @@ function getOcrLang() {
 
 function getOcrScale() {
   const lang = getOcrLang();
-  if (lang === 'rus') return 3;
-  return 2;
+  const langScale = lang === 'rus' ? 3 : 2;
+  const dpiScale = OCR_MIN_DPI / CSS_BASE_DPI;
+  return Math.max(langScale, dpiScale);
 }
 
 function preprocessOcrCanvas(inputCanvas, thresholdBias = 0) {
@@ -1018,6 +1022,7 @@ function applyAppLanguage() {
       pageTextPlaceholder: 'Здесь появится извлечённый текст текущей страницы',
       settingsTitle: 'Настройки приложения',
       saveSettings: 'Сохранить',
+      ocrQualityHint: `OCR DPI: не ниже ${OCR_MIN_DPI}`,
     },
     en: {
       openSettings: 'Settings',
@@ -1035,6 +1040,7 @@ function applyAppLanguage() {
       pageTextPlaceholder: 'Extracted text for current page appears here',
       settingsTitle: 'Application settings',
       saveSettings: 'Save',
+      ocrQualityHint: `OCR DPI: not lower than ${OCR_MIN_DPI}`,
     },
   }[lang] || {};
 
@@ -1050,6 +1056,7 @@ function applyAppLanguage() {
   if (els.downloadFile) els.downloadFile.textContent = t.downloadFile;
   if (els.pageText) els.pageText.placeholder = t.pageTextPlaceholder;
   if (els.saveSettingsModal) els.saveSettingsModal.textContent = t.saveSettings;
+  if (els.ocrStatus && !state.adapter) els.ocrStatus.textContent = t.ocrQualityHint || '';
   const modalTitle = document.querySelector('#settingsModal .modal-head h3');
   if (modalTitle) modalTitle.textContent = t.settingsTitle;
 
@@ -4207,11 +4214,13 @@ function toggleLayoutState(name) {
 
 function applyResizableLayoutState() {
   const sidebarWidth = Number(localStorage.getItem(uiLayoutKey('sidebarWidth')) || 360);
-  const pageAreaPercent = Number(localStorage.getItem(uiLayoutKey('pageAreaPercent')) || 72);
+  const pageAreaPx = Number(localStorage.getItem(uiLayoutKey('pageAreaPx')) || 0);
   const safeSidebar = Math.max(260, Math.min(560, sidebarWidth));
-  const safePage = Math.max(40, Math.min(88, pageAreaPercent));
+  const safePage = Math.max(220, Math.min(2400, pageAreaPx || 0));
   document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${safeSidebar}px`);
-  document.querySelector('.viewer-area')?.style.setProperty('--page-area-fr', `${safePage}fr`);
+  if (pageAreaPx > 0) {
+    document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${safePage}px`);
+  }
 }
 
 function setupResizableLayout() {
@@ -4238,12 +4247,17 @@ function setupResizableLayout() {
     const onMove = (e) => {
       if (!active) return;
       const viewerArea = document.querySelector('.viewer-area');
+      const toolbarBottom = document.querySelector('.toolbar-bottom');
+      const textTools = document.getElementById('textToolsSection');
       if (!viewerArea) return;
+      if (!toolbarBottom) return;
       const rect = viewerArea.getBoundingClientRect();
-      const offset = e.clientY - rect.top;
-      const percent = (offset / Math.max(1, rect.height)) * 100;
-      const safePercent = Math.max(40, Math.min(88, percent));
-      localStorage.setItem(uiLayoutKey('pageAreaPercent'), String(Math.round(safePercent)));
+      const minTextHeight = textTools && !viewerArea.classList.contains('texttools-hidden') ? 140 : 0;
+      const topOffset = toolbarBottom.getBoundingClientRect().bottom - rect.top;
+      const maxPageHeight = Math.max(220, rect.height - topOffset - minTextHeight - 8);
+      const pageHeight = e.clientY - rect.top - topOffset;
+      const safePageHeight = Math.max(220, Math.min(maxPageHeight, pageHeight));
+      localStorage.setItem(uiLayoutKey('pageAreaPx'), String(Math.round(safePageHeight)));
       applyResizableLayoutState();
     };
     els.canvasResizeHandle.addEventListener('pointerdown', (e) => {

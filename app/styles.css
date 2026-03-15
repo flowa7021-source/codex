@@ -41,7 +41,7 @@ body {
 .app-shell {
   display: grid;
   --sidebar-width: 360px;
-  --page-area-fr: 1fr;
+  --page-area-height: 1fr;
   grid-template-columns: var(--sidebar-width) 8px 1fr;
   height: 100vh;
   max-width: 100vw;
@@ -177,7 +177,7 @@ input:focus, select:focus, textarea:focus {
 
 .viewer-area {
   display: grid;
-  grid-template-rows: auto auto var(--page-area-fr) 8px auto;
+  grid-template-rows: auto auto minmax(220px, var(--page-area-height)) 8px minmax(140px, auto);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
