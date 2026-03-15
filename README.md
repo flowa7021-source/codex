@@ -56,10 +56,10 @@ npm install
 3. Собрать portable `.exe`:
 
 ```bash
-npm run build:win
+npm run build:win:nosign
 ```
 
-После сборки готовый файл будет в папке `dist/` (например, `NovaReader-1.0.0-portable.exe`).
+После сборки готовый файл будет в папке `dist/` (например, `NovaReader-1.0.0.exe`).
 
 Для установщика (NSIS):
 
