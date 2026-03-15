@@ -9,7 +9,8 @@
     "start:desktop": "electron .",
     "build:win": "electron-builder --win portable",
     "build:win:installer": "electron-builder --win nsis",
-    "build:win:nosign": "electron-builder --win portable --config.win.signAndEditExecutable=false"
+    "build:win:nosign": "electron-builder --win portable --config.win.signAndEditExecutable=false",
+    "build:win:installer:nosign": "electron-builder --win nsis --config.win.signAndEditExecutable=false --config.win.artifactName=NovaReader-Setup-\\${version}.\\${ext}"
   },
   "devDependencies": {
     "electron": "30.5.1",

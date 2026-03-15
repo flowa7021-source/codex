@@ -61,10 +61,10 @@ npm run build:win:nosign
 
 После сборки готовый файл будет в папке `dist/` (например, `NovaReader-1.0.0.exe`).
 
-Для установщика (NSIS):
+Для установщика (NSIS, без signing):
 
 ```bash
-npm run build:win:installer
+npm run build:win:installer:nosign
 ```
 
 Для локального desktop-запуска без сборки:
