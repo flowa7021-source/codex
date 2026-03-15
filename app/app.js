@@ -53,7 +53,12 @@ async function ensureDjVuJs() {
 }
 
 async function ensureOcrad() {
-  if (ocradReady && typeof window.OCRAD === 'function') return;
+  if (ocradReady && typeof (globalThis.OCRAD || window.OCRAD) === 'function') {
+    if (!window.OCRAD && typeof globalThis.OCRAD === 'function') {
+      window.OCRAD = globalThis.OCRAD;
+    }
+    return;
+  }
 
   const url = new URL('./vendor/ocrad.js', import.meta.url).href;
   await new Promise((resolve, reject) => {
@@ -76,6 +81,22 @@ async function ensureOcrad() {
     script.onerror = () => reject(new Error('OCR runtime load error'));
     document.head.appendChild(script);
   });
+
+  if (typeof window.OCRAD !== 'function') {
+    try {
+      const code = await fetch(url, { cache: 'force-cache' }).then((r) => {
+        if (!r.ok) throw new Error('fetch failed');
+        return r.text();
+      });
+      // eslint-disable-next-line no-eval
+      eval(code);
+      if (!window.OCRAD && typeof globalThis.OCRAD === 'function') {
+        window.OCRAD = globalThis.OCRAD;
+      }
+    } catch {
+      throw new Error('OCR runtime не инициализирован');
+    }
+  }
 
   if (typeof window.OCRAD !== 'function') {
     throw new Error('OCR runtime не инициализирован');
@@ -1006,6 +1027,80 @@ function medianDenoiseMonochrome(imageData) {
   }
 }
 
+function estimateSkewAngleFromBinary(imageData) {
+  const { width, height, data } = imageData;
+  const darkPoints = [];
+  const step = Math.max(1, Math.floor(Math.max(width, height) / 900));
+  for (let y = 0; y < height; y += step) {
+    for (let x = 0; x < width; x += step) {
+      const idx = (y * width + x) * 4;
+      if (data[idx] < 128) darkPoints.push([x, y]);
+    }
+  }
+  if (darkPoints.length < 200) return 0;
+
+  let bestAngle = 0;
+  let bestScore = -Infinity;
+  for (let deg = -6; deg <= 6; deg += 0.5) {
+    const rad = (deg * Math.PI) / 180;
+    const s = Math.sin(rad);
+    const c = Math.cos(rad);
+    const bins = new Map();
+    for (const [x, y] of darkPoints) {
+      const yy = Math.round((x * s) + (y * c));
+      bins.set(yy, (bins.get(yy) || 0) + 1);
+    }
+    let mean = 0;
+    for (const v of bins.values()) mean += v;
+    mean /= Math.max(1, bins.size);
+    let variance = 0;
+    for (const v of bins.values()) variance += (v - mean) * (v - mean);
+    variance /= Math.max(1, bins.size);
+    if (variance > bestScore) {
+      bestScore = variance;
+      bestAngle = deg;
+    }
+  }
+  return bestAngle;
+}
+
+function rotateCanvas(source, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  const cos = Math.abs(Math.cos(rad));
+  const sin = Math.abs(Math.sin(rad));
+  const w = source.width;
+  const h = source.height;
+  const out = document.createElement('canvas');
+  out.width = Math.max(1, Math.round((w * cos) + (h * sin)));
+  out.height = Math.max(1, Math.round((w * sin) + (h * cos)));
+  const ctx = out.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.translate(out.width / 2, out.height / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(source, -w / 2, -h / 2);
+  return out;
+}
+
+async function buildOcrSourceCanvas(pageNumber) {
+  const canvas = document.createElement('canvas');
+  const fixedZoom = state.settings?.ocrQualityMode === 'accurate' ? 1.7 : 1.35;
+  await state.adapter.renderPage(pageNumber, canvas, { zoom: fixedZoom, rotation: state.rotation || 0 });
+  return canvas;
+}
+
+function cropCanvasByRelativeRect(sourceCanvas, relativeRect) {
+  const sx = Math.max(0, Math.floor(sourceCanvas.width * relativeRect.x));
+  const sy = Math.max(0, Math.floor(sourceCanvas.height * relativeRect.y));
+  const sw = Math.max(1, Math.floor(sourceCanvas.width * relativeRect.w));
+  const sh = Math.max(1, Math.floor(sourceCanvas.height * relativeRect.h));
+  const out = document.createElement('canvas');
+  out.width = sw;
+  out.height = sh;
+  out.getContext('2d').drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+  return out;
+}
+
 function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean', invert = false, extraScale = 1) {
   const canvas = document.createElement('canvas');
   const scale = getOcrScale() * Math.max(0.8, Math.min(1.8, extraScale));
@@ -1072,9 +1167,10 @@ function scoreOcrTextByLang(text, lang) {
   return Math.max(cyr, lat) * 2 + digits;
 }
 
-function runOcrOnPreparedCanvas(canvas) {
+async function runOcrOnPreparedCanvas(canvas, options = {}) {
+  const fast = !!options.fast;
   const isAccurate = state.settings?.ocrQualityMode === 'accurate';
-  const variants = isAccurate
+  const baseVariants = isAccurate
     ? [
       preprocessOcrCanvas(canvas, -32, 'mean', false),
       preprocessOcrCanvas(canvas, -16, 'mean', false),
@@ -1090,15 +1186,30 @@ function runOcrOnPreparedCanvas(canvas) {
       preprocessOcrCanvas(canvas, 0, 'otsu', false),
       preprocessOcrCanvas(canvas, 20, 'otsu', false),
     ];
+
+  let variants = baseVariants;
+  if (!fast) {
+    const probe = variants[Math.min(2, variants.length - 1)];
+    const probeImg = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
+    const skew = estimateSkewAngleFromBinary(probeImg);
+    if (Math.abs(skew) >= 0.35) {
+      variants = variants.flatMap((v) => [v, rotateCanvas(v, -skew)]);
+    }
+  }
+
   const lang = getOcrLang();
   let best = '';
   let bestScore = -Infinity;
-  for (const variant of variants) {
+  for (let i = 0; i < variants.length; i += 1) {
+    const variant = variants[i];
     const candidate = normalizeOcrTextByLang(window.OCRAD(variant));
     const score = scoreOcrTextByLang(candidate, lang);
     if (score > bestScore) {
       best = candidate;
       bestScore = score;
+    }
+    if (i % 2 === 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
     }
   }
   return best;
@@ -1346,18 +1457,16 @@ async function runOcrOnRect(rect) {
   if (!state.adapter || !rect) return;
   try {
     await ensureOcrad();
-    const sx = Math.max(0, Math.floor(rect.x));
-    const sy = Math.max(0, Math.floor(rect.y));
-    const sw = Math.max(1, Math.floor(rect.w));
-    const sh = Math.max(1, Math.floor(rect.h));
+    const rel = {
+      x: rect.x / Math.max(1, els.canvas.width),
+      y: rect.y / Math.max(1, els.canvas.height),
+      w: rect.w / Math.max(1, els.canvas.width),
+      h: rect.h / Math.max(1, els.canvas.height),
+    };
 
-    const src = document.createElement('canvas');
-    src.width = sw;
-    src.height = sh;
-    const sctx = src.getContext('2d');
-    sctx.drawImage(els.canvas, sx, sy, sw, sh, 0, 0, sw, sh);
-
-    const text = runOcrOnPreparedCanvas(src);
+    const ocrPageCanvas = await buildOcrSourceCanvas(state.currentPage);
+    const src = cropCanvasByRelativeRect(ocrPageCanvas, rel);
+    const text = await runOcrOnPreparedCanvas(src);
     if (text) {
       els.pageText.value = text;
       setOcrStatus(`OCR: распознано ${text.length} символов`);
@@ -1391,9 +1500,8 @@ async function extractTextForPage(pageNumber) {
 
   try {
     await ensureOcrad();
-    const canvas = document.createElement('canvas');
-    await state.adapter.renderPage(pageNumber, canvas, { zoom: 1, rotation: 0 });
-    return runOcrOnPreparedCanvas(canvas);
+    const canvas = await buildOcrSourceCanvas(pageNumber);
+    return await runOcrOnPreparedCanvas(canvas, { fast: true });
   } catch {
     return '';
   }
