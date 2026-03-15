@@ -484,6 +484,24 @@ body.advanced-hidden .advanced-section { display: none; }
   margin-bottom: 8px;
 }
 
+.modal-body label.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.modal-body label.checkbox-row input[type='checkbox'] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.modal-body label.checkbox-row span {
+  line-height: 1.35;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

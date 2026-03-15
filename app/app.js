@@ -1004,6 +1004,17 @@ function scoreRussianBigrams(text) {
   return score;
 }
 
+function scoreEnglishBigrams(text) {
+  const normalized = String(text || '').toLowerCase().replace(/[^a-z\s]/g, ' ');
+  const pairs = ['th', 'he', 'in', 'er', 'an', 're', 'on', 'at', 'en', 'nd', 'ti', 'es', 'or', 'te', 'of', 'ed', 'is', 'it'];
+  let score = 0;
+  for (const pair of pairs) {
+    const hits = normalized.split(pair).length - 1;
+    score += Math.min(5, hits);
+  }
+  return score;
+}
+
 function medianDenoiseMonochrome(imageData) {
   const { width, height, data } = imageData;
   if (width < 3 || height < 3) return;
@@ -1115,14 +1126,18 @@ function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean', inve
   const d = img.data;
   const hist = new Uint32Array(256);
   let mean = 0;
+  let sqMean = 0;
   for (let i = 0; i < d.length; i += 4) {
     const gray = (d[i] * 0.299) + (d[i + 1] * 0.587) + (d[i + 2] * 0.114);
     const g = Math.max(0, Math.min(255, Math.round(gray)));
     d[i] = d[i + 1] = d[i + 2] = g;
     hist[g] += 1;
     mean += g;
+    sqMean += g * g;
   }
   mean /= Math.max(1, d.length / 4);
+  sqMean /= Math.max(1, d.length / 4);
+  const stdDev = Math.sqrt(Math.max(0, sqMean - (mean * mean)));
 
   const totalPx = d.length / 4;
   const p5 = countHistogramPercentile(hist, 0.05, totalPx);
@@ -1130,7 +1145,9 @@ function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean', inve
   const spread = Math.max(1, p95 - p5);
   for (let i = 0; i < d.length; i += 4) {
     const stretched = ((d[i] - p5) * 255) / spread;
-    const g = Math.max(0, Math.min(255, Math.round(stretched)));
+    const contrastBoost = stdDev < 36 ? 1.18 : 1.0;
+    const centered = (stretched - 127) * contrastBoost + 127;
+    const g = Math.max(0, Math.min(255, Math.round(centered)));
     d[i] = d[i + 1] = d[i + 2] = g;
   }
 
@@ -1163,8 +1180,9 @@ function scoreOcrTextByLang(text, lang) {
   if (lang === 'rus') {
     return (cyr * 4) - (lat * 3) + digits - mixedPenalty + scoreCyrillicWordQuality(s) + scoreRussianBigrams(s);
   }
-  if (lang === 'eng') return (lat * 4) - (cyr * 3) + digits - mixedPenalty;
-  return Math.max(cyr, lat) * 2 + digits;
+  if (lang === 'eng') return (lat * 4) - (cyr * 3) + digits - mixedPenalty + scoreEnglishBigrams(s);
+  const autoLangBonus = cyr >= lat ? (scoreRussianBigrams(s) + scoreCyrillicWordQuality(s)) : scoreEnglishBigrams(s);
+  return Math.max(cyr, lat) * 2 + digits - mixedPenalty + autoLangBonus;
 }
 
 async function runOcrOnPreparedCanvas(canvas, options = {}) {
@@ -1280,7 +1298,11 @@ function applyAppLanguage() {
     },
   }[lang] || {};
 
-  if (els.openSettingsModal) els.openSettingsModal.textContent = t.openSettings;
+  if (els.openSettingsModal) {
+    els.openSettingsModal.textContent = '⚙️';
+    els.openSettingsModal.title = t.openSettings || 'Settings';
+    els.openSettingsModal.setAttribute('aria-label', t.openSettings || 'Settings');
+  }
   if (els.ocrCurrentPage) els.ocrCurrentPage.textContent = t.ocrPage;
   if (els.copyOcrText) els.copyOcrText.textContent = t.copyOcr;
   if (els.searchBtn) els.searchBtn.textContent = t.searchBtn;
@@ -4699,7 +4721,7 @@ els.copySearchResults.addEventListener('click', async () => {
 });
 els.saveReadingGoal.addEventListener('click', saveReadingGoal);
 els.clearReadingGoal.addEventListener('click', clearReadingGoal);
-els.themeToggle.addEventListener('click', toggleTheme);
+els.themeToggle?.addEventListener('click', toggleTheme);
 els.addBookmark.addEventListener('click', addBookmark);
 els.clearBookmarks.addEventListener('click', clearBookmarks);
 els.exportBookmarks.addEventListener('click', exportBookmarksJson);

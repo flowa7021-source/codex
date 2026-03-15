@@ -246,15 +246,9 @@
           <div class="divider" data-toolbar-section="zoom"></div>
 
           <div class="toolbar-group" data-toolbar-section="view">
-            <button id="themeToggle">Тема</button>
-          <button id="fullscreen">Экран</button>
+                      <button id="fullscreen">Экран</button>
           <button id="shortcutsHelp">Клавиши</button>
-          <button id="openSettingsModal">Настройки</button>
-          <button id="toggleSidebar">Сайдбар: on</button>
-          <button id="toggleToolsBar">Панель инструментов: on</button>
-          <button id="toggleTextTools">Текстовый блок: on</button>
-          <button id="toggleSearchTools">Поиск-панель: on</button>
-          <button id="toggleAnnotTools">Панель инструментов: on</button>
+          <button id="openSettingsModal" aria-label="Настройки" title="Настройки">⚙️</button>
           </div>
         </header>
 
@@ -350,10 +344,10 @@
         <div class="modal-body">
           <section>
             <h4>Отображение инструментов</h4>
-            <label><input id="cfgShowSidebar" type="checkbox" checked /> Сайдбар</label>
-            <label><input id="cfgShowSearch" type="checkbox" checked /> Панель поиска</label>
-            <label><input id="cfgShowAnnot" type="checkbox" checked /> Панель инструментов</label>
-            <label><input id="cfgShowText" type="checkbox" checked /> Текстовый блок</label>
+            <label class="checkbox-row"><input id="cfgShowSidebar" type="checkbox" checked /> <span>Сайдбар</span></label>
+            <label class="checkbox-row"><input id="cfgShowSearch" type="checkbox" checked /> <span>Панель поиска</span></label>
+            <label class="checkbox-row"><input id="cfgShowAnnot" type="checkbox" checked /> <span>Панель инструментов</span></label>
+            <label class="checkbox-row"><input id="cfgShowText" type="checkbox" checked /> <span>Текстовый блок</span></label>
           </section>
           <section>
             <h4>Точечная видимость разделов</h4>
@@ -381,7 +375,7 @@
                 <option value="eng">English</option>
               </select>
             </label>
-            <label><input id="cfgOcrCyrillicOnly" type="checkbox" checked /> Принудительно очищать латиницу в кириллице</label>
+            <label class="checkbox-row"><input id="cfgOcrCyrillicOnly" type="checkbox" checked /> <span>Принудительно очищать латиницу в кириллице</span></label>
             <label>Точность OCR
               <select id="cfgOcrQualityMode">
                 <option value="balanced">Сбалансированный режим</option>
@@ -391,7 +385,7 @@
           </section>
           <section>
             <h4>OCR область</h4>
-            <label><input id="cfgBackgroundOcr" type="checkbox" /> Фоновое OCR при открытии файла</label>
+            <label class="checkbox-row"><input id="cfgBackgroundOcr" type="checkbox" /> <span>Фоновое OCR при открытии файла</span></label>
             <label>Мин. ширина (px)<input id="cfgOcrMinW" type="number" min="8" value="24" /></label>
             <label>Мин. высота (px)<input id="cfgOcrMinH" type="number" min="8" value="24" /></label>
           </section>
