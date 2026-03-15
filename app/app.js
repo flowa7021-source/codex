@@ -1328,6 +1328,7 @@ function renderSectionVisibilityControls() {
     els.cfgSidebarSections.innerHTML = '<h5>Сайдбар</h5>';
     SIDEBAR_SECTION_CONFIG.forEach((cfg) => {
       const label = document.createElement('label');
+      label.className = 'checkbox-row';
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.dataset.sectionType = 'sidebar';
@@ -1343,6 +1344,7 @@ function renderSectionVisibilityControls() {
     els.cfgToolbarSections.innerHTML = '<h5>Тулбар</h5>';
     TOOLBAR_SECTION_CONFIG.forEach((cfg) => {
       const label = document.createElement('label');
+      label.className = 'checkbox-row';
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.dataset.sectionType = 'toolbar';
