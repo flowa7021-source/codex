@@ -917,7 +917,62 @@ function hasMixedCyrillicLatinToken(text) {
   return /(?=.*[A-Za-z])(?=.*[А-Яа-яЁё])[A-Za-zА-Яа-яЁё]{2,}/.test(text || '');
 }
 
-function preprocessOcrCanvas(inputCanvas, thresholdBias = 0) {
+function computeOtsuThreshold(data) {
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < data.length; i += 4) {
+    hist[data[i]] += 1;
+  }
+
+  const total = data.length / 4;
+  let sum = 0;
+  for (let i = 0; i < 256; i += 1) sum += i * hist[i];
+
+  let sumB = 0;
+  let wB = 0;
+  let best = 127;
+  let maxVar = 0;
+
+  for (let t = 0; t < 256; t += 1) {
+    wB += hist[t];
+    if (!wB) continue;
+    const wF = total - wB;
+    if (!wF) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB;
+    const mF = (sum - sumB) / wF;
+    const between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > maxVar) {
+      maxVar = between;
+      best = t;
+    }
+  }
+  return best;
+}
+
+function countHistogramPercentile(hist, percentile, total) {
+  const target = total * percentile;
+  let acc = 0;
+  for (let i = 0; i < hist.length; i += 1) {
+    acc += hist[i];
+    if (acc >= target) return i;
+  }
+  return hist.length - 1;
+}
+
+function scoreCyrillicWordQuality(text) {
+  const words = String(text || '').toLowerCase().split(/\s+/).filter(Boolean);
+  let score = 0;
+  for (const word of words) {
+    if (!/[а-яё]/.test(word)) continue;
+    if (/([а-яё])\1{3,}/.test(word)) score -= 4;
+    if (!/[аеёиоуыэюя]/.test(word) && word.length >= 4) score -= 3;
+    if (/[бвгджзйклмнпрстфхцчшщ]{5,}/.test(word)) score -= 2;
+    if (word.length >= 3 && /^[а-яё]+$/.test(word)) score += 1;
+  }
+  return score;
+}
+
+function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean', invert = false) {
   const canvas = document.createElement('canvas');
   const scale = getOcrScale();
   canvas.width = Math.max(1, Math.floor(inputCanvas.width * scale));
@@ -929,18 +984,35 @@ function preprocessOcrCanvas(inputCanvas, thresholdBias = 0) {
 
   const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const d = img.data;
+  const hist = new Uint32Array(256);
   let mean = 0;
   for (let i = 0; i < d.length; i += 4) {
     const gray = (d[i] * 0.299) + (d[i + 1] * 0.587) + (d[i + 2] * 0.114);
-    d[i] = d[i + 1] = d[i + 2] = gray;
-    mean += gray;
+    const g = Math.max(0, Math.min(255, Math.round(gray)));
+    d[i] = d[i + 1] = d[i + 2] = g;
+    hist[g] += 1;
+    mean += g;
   }
   mean /= Math.max(1, d.length / 4);
+
+  const totalPx = d.length / 4;
+  const p5 = countHistogramPercentile(hist, 0.05, totalPx);
+  const p95 = Math.max(p5 + 1, countHistogramPercentile(hist, 0.95, totalPx));
+  const spread = Math.max(1, p95 - p5);
+  for (let i = 0; i < d.length; i += 4) {
+    const stretched = ((d[i] - p5) * 255) / spread;
+    const g = Math.max(0, Math.min(255, Math.round(stretched)));
+    d[i] = d[i + 1] = d[i + 2] = g;
+  }
+
   const thresholdShift = state.settings?.ocrQualityMode === 'accurate' ? 8 : 0;
-  const threshold = Math.max(70, Math.min(200, mean + thresholdBias + thresholdShift));
+  const otsu = computeOtsuThreshold(d);
+  const thresholdBase = mode === 'otsu' ? otsu : mean;
+  const threshold = Math.max(50, Math.min(220, thresholdBase + thresholdBias + thresholdShift));
 
   for (let i = 0; i < d.length; i += 4) {
-    const v = d[i] > threshold ? 255 : 0;
+    let v = d[i] > threshold ? 255 : 0;
+    if (invert) v = 255 - v;
     d[i] = d[i + 1] = d[i + 2] = v;
     d[i + 3] = 255;
   }
@@ -955,7 +1027,7 @@ function scoreOcrTextByLang(text, lang) {
   const lat = (s.match(/[A-Za-z]/g) || []).length;
   const digits = (s.match(/[0-9]/g) || []).length;
   const mixedPenalty = hasMixedCyrillicLatinToken(s) ? 120 : 0;
-  if (lang === 'rus') return (cyr * 4) - (lat * 3) + digits - mixedPenalty;
+  if (lang === 'rus') return (cyr * 4) - (lat * 3) + digits - mixedPenalty + scoreCyrillicWordQuality(s);
   if (lang === 'eng') return (lat * 4) - (cyr * 3) + digits - mixedPenalty;
   return Math.max(cyr, lat) * 2 + digits;
 }
@@ -964,16 +1036,17 @@ function runOcrOnPreparedCanvas(canvas) {
   const isAccurate = state.settings?.ocrQualityMode === 'accurate';
   const variants = isAccurate
     ? [
-      preprocessOcrCanvas(canvas, -28),
-      preprocessOcrCanvas(canvas, -14),
-      preprocessOcrCanvas(canvas, 0),
-      preprocessOcrCanvas(canvas, 14),
-      preprocessOcrCanvas(canvas, 28),
+      preprocessOcrCanvas(canvas, -32, 'mean', false),
+      preprocessOcrCanvas(canvas, -16, 'mean', false),
+      preprocessOcrCanvas(canvas, 0, 'mean', false),
+      preprocessOcrCanvas(canvas, 16, 'otsu', false),
+      preprocessOcrCanvas(canvas, 28, 'otsu', false),
+      preprocessOcrCanvas(canvas, 10, 'otsu', true),
     ]
     : [
-      preprocessOcrCanvas(canvas, -20),
-      preprocessOcrCanvas(canvas, 0),
-      preprocessOcrCanvas(canvas, 20),
+      preprocessOcrCanvas(canvas, -20, 'mean', false),
+      preprocessOcrCanvas(canvas, 0, 'otsu', false),
+      preprocessOcrCanvas(canvas, 20, 'otsu', false),
     ];
   const lang = getOcrLang();
   let best = '';
