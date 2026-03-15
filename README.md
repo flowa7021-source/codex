@@ -73,6 +73,15 @@ npm run build:win:installer:nosign
 npm run start:desktop
 ```
 
+## CI workflow (GitHub Actions)
+
+В репозитории добавлен workflow: `.github/workflows/build-windows-exe.yml`.
+
+Как запустить на GitHub:
+1. Открыть **Actions** → **Build Windows EXE**.
+2. Нажать **Run workflow**.
+3. Скачать артефакт `novareader-windows-exe` (внутри `.exe` и `SHA256SUMS.txt`).
+
 ## Запуск
 
 ```bash
