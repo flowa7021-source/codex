@@ -82,6 +82,11 @@ npm run start:desktop
 2. Нажать **Run workflow**.
 3. Скачать артефакт `novareader-windows-exe` (внутри `.exe` и `SHA256SUMS.txt`).
 
+Если workflow "не видно" или "скрипт не видит GitHub Actions":
+- убедиться, что файл `.github/workflows/build-windows-exe.yml` находится в репозитории на default branch;
+- в репозитории включены Actions (Settings → Actions → Allow all actions);
+- посмотреть шаг **Show CI context**: там должны быть `GITHUB_ACTIONS=true` и `CI=true`.
+
 ## Запуск
 
 ```bash
