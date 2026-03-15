@@ -1,0 +1,59 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: build-windows-exe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Show CI context
+        shell: pwsh
+        run: |
+          Write-Host "GITHUB_ACTIONS=$env:GITHUB_ACTIONS"
+          Write-Host "CI=$env:CI"
+          Write-Host "GITHUB_REF=$env:GITHUB_REF"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build portable EXE
+        env:
+          GITHUB_ACTIONS: 'true'
+          CI: 'true'
+        run: npm run build:win:nosign
+
+      - name: Generate SHA256
+        shell: pwsh
+        run: |
+          $file = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
+          if (-not $file) { throw "EXE artifact not found" }
+          $hash = Get-FileHash $file.FullName -Algorithm SHA256
+          "${($file.Name)}  ${($hash.Hash)}" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding ascii
+          Get-Content dist/SHA256SUMS.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: novareader-windows-exe
+          path: |
+            dist/*.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
