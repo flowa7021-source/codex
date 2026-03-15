@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NovaReader</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <h1>NovaReader</h1>
+        <p id="appVersion" class="muted tiny">Version: —</p>
+
+        <label class="upload-btn">
+          Открыть файл
+          <input id="fileInput" type="file" accept=".pdf,.djvu,.png,.jpg,.jpeg,.webp,.gif,.bmp" />
+        </label>
+        <div class="inline-actions compact-actions">
+          <button id="toggleAdvancedPanels">Расширенные панели: off</button>
+        </div>
+
+        <section>
+          <h2>Недавние файлы</h2>
+          <div class="inline-actions">
+            <button id="clearRecent">Очистить список</button>
+          </div>
+          <ul id="recentList"></ul>
+        </section>
+
+        <section>
+          <h2>Закладки</h2>
+          <div class="inline-actions">
+            <button id="addBookmark">+ Добавить</button>
+            <button id="clearBookmarks">Очистить</button>
+            <button id="exportBookmarks">Экспорт .json</button>
+            <label class="upload-btn import-mini">Импорт .json
+              <input id="importBookmarks" type="file" accept="application/json,.json" />
+            </label>
+          </div>
+          <div class="inline-actions">
+            <input id="bookmarkFilter" type="text" placeholder="Фильтр закладок" />
+            <button id="clearBookmarkFilter">Сброс фильтра</button>
+          </div>
+          <p id="bookmarksStatus" class="muted tiny">Нет действий</p>
+          <ul id="bookmarkList"></ul>
+        </section>
+
+        <section>
+          <h2>Оглавление PDF</h2>
+          <ul id="outlineList"></ul>
+        </section>
+
+        <section>
+          <h2>Быстрые превью страниц</h2>
+          <ul id="pagePreviewList"></ul>
+        </section>
+
+        <section>
+          <h2>Прогресс чтения</h2>
+          <p id="progressStatus" class="muted tiny">Нет открытого документа</p>
+          <p id="readingTimeStatus" class="muted tiny">Время чтения: 00:00:00</p>
+          <p id="etaStatus" class="muted tiny">ETA завершения: —</p>
+          <div class="inline-actions">
+            <label for="readingGoalPage" class="muted tiny">Цель (стр.)</label>
+            <input id="readingGoalPage" type="number" min="1" value="" />
+            <button id="saveReadingGoal">Сохранить цель</button>
+            <button id="clearReadingGoal">Сбросить цель</button>
+          </div>
+          <p id="readingGoalStatus" class="muted tiny">Цель чтения не задана</p>
+          <div class="inline-actions">
+            <button id="resetProgress">Сбросить прогресс</button>
+            <button id="resetReadingTime">Сбросить время</button>
+          </div>
+        </section>
+
+
+
+
+
+        <section class="advanced-section">
+          <h2>Результаты поиска</h2>
+          <div class="inline-actions">
+            <button id="clearSearchResults">Очистить</button>
+            <button id="exportSearchResults">Экспорт .json</button>
+            <button id="exportSearchResultsCsv">Экспорт .csv</button>
+            <button id="exportSearchSummaryTxt">Экспорт summary .txt</button>
+            <label class="inline-file-btn">
+              Импорт .json
+              <input id="importSearchResultsJson" type="file" accept=".json,application/json" />
+            </label>
+            <label class="inline-file-btn">
+              Импорт .csv
+              <input id="importSearchResultsCsv" type="file" accept=".csv,text/csv" />
+            </label>
+            <label class="inline-file-btn">
+              DjVu data .json
+              <input id="importDjvuDataJson" type="file" accept=".json,application/json" />
+            </label>
+            <button id="copySearchResults">Копировать список</button>
+          </div>
+          <ul id="searchResultsList"></ul>
+        </section>
+
+        <section class="advanced-section">
+          <h2>История поиска</h2>
+          <div class="inline-actions">
+            <button id="clearSearchHistory">Очистить</button>
+            <button id="exportSearchHistory">Экспорт .json</button>
+            <button id="exportSearchHistoryTxt">Экспорт .txt</button>
+            <button id="copySearchHistory">Копировать</button>
+            <label class="inline-file-btn">
+              Импорт .json
+              <input id="importSearchHistoryJson" type="file" accept=".json,application/json" />
+            </label>
+          </div>
+          <ul id="searchHistoryList"></ul>
+        </section>
+
+        <section class="advanced-section">
+          <h2>Статистика документа</h2>
+          <p id="docStats" class="muted tiny">Откройте документ для статистики</p>
+        </section>
+
+        <section class="advanced-section">
+          <h2>Недавние переходы</h2>
+          <div class="inline-actions">
+            <button id="clearVisitTrail">Очистить</button>
+          </div>
+          <ul id="visitTrailList"></ul>
+        </section>
+
+        <section class="advanced-section">
+          <h2>Комментарии (текущая страница)</h2>
+          <div class="inline-actions"><button id="clearComments">Очистить комментарии</button></div>
+          <ul id="commentList"></ul>
+        </section>
+
+        <section id="settingsSection">
+          <h2>Настройки</h2>
+          <div class="inline-actions">
+            <button id="applyCommonHotkeys">Стандартные hotkeys</button>
+            <button id="toggleSidebarCompact">Компактная панель: off</button>
+            <button id="collapseSidebarSections">Свернуть разделы</button>
+            <button id="expandSidebarSections">Развернуть разделы</button>
+          </div>
+          <p id="settingsStatus" class="muted tiny">Настройки не изменялись.</p>
+        </section>
+
+        <section>
+          <h2>Горячие клавиши</h2>
+          <div class="shortcut-grid">
+            <label>След. стр.<input id="hkNext" type="text" maxlength="32" value="pagedown" /><small id="hkNextHint" class="hotkey-hint"></small></label>
+            <label>Пред. стр.<input id="hkPrev" type="text" maxlength="32" value="pageup" /><small id="hkPrevHint" class="hotkey-hint"></small></label>
+            <label>Zoom +<input id="hkZoomIn" type="text" maxlength="32" value="ctrl+=" /><small id="hkZoomInHint" class="hotkey-hint"></small></label>
+            <label>Zoom -<input id="hkZoomOut" type="text" maxlength="32" value="ctrl+-" /><small id="hkZoomOutHint" class="hotkey-hint"></small></label>
+            <label>Аннотации<input id="hkAnnotate" type="text" maxlength="32" value="ctrl+shift+a" /><small id="hkAnnotateHint" class="hotkey-hint"></small></label>
+          </div>
+          <div class="inline-actions">
+            <button id="saveHotkeys">Сохранить hotkeys</button>
+            <button id="resetHotkeys">Сбросить</button>
+            <button id="autoFixHotkeys">Авто-фикс</button>
+            <span id="hotkeysStatus"></span>
+          </div>
+        </section>
+        <section>
+          <h2>Резерв документа</h2>
+          <div class="inline-actions">
+            <button id="exportWorkspace">Экспорт workspace .json</button>
+            <label class="upload-btn import-mini">Импорт workspace .json
+              <input id="importWorkspace" type="file" accept="application/json,.json" />
+            </label>
+            <span id="workspaceStatus"></span>
+          </div>
+        </section>
+
+        <section class="advanced-section">
+          <h2>OCR / Sync / Collaboration</h2>
+          <label class="upload-btn import-mini">Импорт OCR .json
+            <input id="importOcrJson" type="file" accept="application/json,.json" />
+          </label>
+          <div class="inline-actions">
+            <input id="cloudSyncUrl" type="url" placeholder="Cloud endpoint URL" />
+            <button id="saveCloudSyncUrl">Сохранить URL</button>
+          </div>
+          <div class="inline-actions">
+            <button id="pushCloudSync">Push cloud</button>
+            <button id="pullCloudSync">Pull cloud</button>
+          </div>
+          <div class="inline-actions">
+            <button id="toggleCollab">Collab: off</button>
+            <button id="broadcastCollab">Отправить snapshot</button>
+          </div>
+          <p id="stage4Status" class="muted tiny">Stage 4: idle</p>
+        </section>
+        <section>
+          <h2>Заметки</h2>
+          <input id="notesTitle" type="text" placeholder="Заголовок заметки" />
+          <input id="notesTags" type="text" placeholder="Теги (через запятую)" />
+          <textarea id="notes" placeholder="Ваши заметки по документу..."></textarea>
+          <p id="notesStatus" class="muted tiny">Заметки не изменялись</p>
+          <div class="inline-actions">
+            <button id="saveNotes">Сохранить</button>
+            <button id="exportNotes">Экспорт .txt</button>
+            <button id="exportNotesMd">Экспорт .md</button>
+            <button id="exportNotesJson">Экспорт .json</button>
+            <select id="notesImportMode">
+              <option value="replace">Импорт: заменить</option>
+              <option value="append">Импорт: добавить</option>
+            </select>
+            <label class="upload-btn import-mini">Импорт .json
+              <input id="importNotesJson" type="file" accept="application/json,.json" />
+            </label>
+            <button id="insertTimestamp">+ Timestamp</button>
+          </div>
+        </section>
+      </aside>
+
+      <main class="viewer-area">
+        <header class="toolbar toolbar-top">
+          <button id="historyBack" title="Назад по истории страниц">↶</button>
+          <button id="historyForward" title="Вперёд по истории страниц">↷</button>
+          <button id="prevPage">←</button>
+          <span id="pageStatus">Страница 0 / 0</span>
+          <button id="nextPage">→</button>
+
+          <label for="pageInput">К стр.</label>
+          <input id="pageInput" type="number" min="1" value="1" />
+          <button id="goToPage">Перейти</button>
+
+          <div class="divider"></div>
+
+          <button id="zoomOut">−</button>
+          <span id="zoomStatus">100%</span>
+          <button id="zoomIn">+</button>
+          <button id="fitWidth">Fit width</button>
+          <button id="fitPage">Fit page</button>
+          <button id="rotate">↻</button>
+
+          <div class="divider"></div>
+
+          <button id="themeToggle">Тема</button>
+          <button id="fullscreen">Экран</button>
+          <button id="shortcutsHelp">Клавиши</button>
+          <button id="toggleSidebar">Сайдбар: on</button>
+          <button id="toggleToolsBar">Панель инструментов: on</button>
+          <button id="toggleTextTools">Текстовый блок: on</button>
+          <button id="toggleSearchTools">Поиск-панель: on</button>
+          <button id="toggleAnnotTools">Аннотации-панель: on</button>
+        </header>
+
+        <header class="toolbar toolbar-bottom">
+          <div class="toolbar-group toolbar-group-search" id="searchToolsGroup">
+            <input id="searchInput" type="text" placeholder="Поиск по PDF/DjVu" />
+            <select id="searchScope">
+              <option value="all">По всему документу</option>
+              <option value="current">Только текущая страница</option>
+            </select>
+            <button id="searchBtn">Найти</button>
+            <button id="searchPrev">↑ Совпадение</button>
+            <button id="searchNext">↓ Совпадение</button>
+            <span id="searchStatus"></span>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="toolbar-group toolbar-group-annot" id="annotToolsGroup">
+            <button id="annotateToggle">Аннотации: off</button>
+            <select id="drawTool">
+              <option value="pen">Перо</option>
+              <option value="highlighter">Маркер</option>
+              <option value="eraser">Ластик</option>
+              <option value="comment">Комментарий</option>
+              <option value="rect">Прямоугольник</option>
+              <option value="arrow">Стрелка</option>
+              <option value="line">Линия</option>
+              <option value="circle">Окружность</option>
+            </select>
+            <input id="drawColor" type="color" value="#ffd84d" />
+            <label for="drawSize">Размер</label>
+            <input id="drawSize" type="range" min="2" max="24" value="6" />
+            <button id="undoStroke">Undo</button>
+            <button id="clearStrokes">Очистить стр.</button>
+            <button id="exportAnnotated">Экспорт PNG</button>
+            <button id="exportAnnJson">Экспорт стр. JSON</button>
+            <label class="upload-btn import-mini">Импорт стр. JSON
+              <input id="importAnnJson" type="file" accept="application/json,.json" />
+            </label>
+            <button id="exportAnnBundle">Экспорт документа JSON</button>
+            <label class="upload-btn import-mini">Импорт документа JSON
+              <input id="importAnnBundle" type="file" accept="application/json,.json" />
+            </label>
+            <span id="annStats"></span>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="toolbar-group toolbar-group-utils" id="utilityToolsGroup">
+            <button id="downloadFile">Скачать</button>
+            <button id="printPage">Печать страницы</button>
+            <button id="importDjvuDataQuick" class="is-hidden">Импорт DjVu data</button>
+            <span id="docInfo"></span>
+          </div>
+        </header>
+
+        <section class="canvas-wrap" id="canvasWrap">
+          <div class="canvas-stack" id="canvasStack">
+            <canvas id="viewerCanvas"></canvas>
+            <canvas id="annotationCanvas"></canvas>
+          </div>
+          <p id="emptyState">Откройте PDF, DjVu или изображение для начала работы</p>
+        </section>
+
+        <section class="text-tools" id="textToolsSection">
+          <div class="text-tools-head">
+            <h3>Текстовые инструменты</h3>
+            <button id="toggleTextToolsInline">Свернуть</button>
+          </div>
+          <div class="inline-actions">
+            <button id="refreshText">Текст текущей страницы</button>
+            <button id="copyText">Копировать текст</button>
+            <button id="exportText">Экспорт текста .txt</button>
+          </div>
+          <textarea id="pageText" readonly placeholder="Здесь появится извлечённый текст текущей страницы (для PDF)"></textarea>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
