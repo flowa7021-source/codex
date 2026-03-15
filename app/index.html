@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NovaReader</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <h1>NovaReader</h1>
+        <p class="muted">Современный аналог DjVuReader</p>
+
+        <label class="upload-btn">
+          Открыть файл
+          <input id="fileInput" type="file" accept=".pdf,.djvu,.png,.jpg,.jpeg,.webp,.gif,.bmp" />
+        </label>
+
+        <section>
+          <h2>Недавние файлы</h2>
+          <ul id="recentList"></ul>
+        </section>
+
+        <section>
+          <h2>Закладки</h2>
+          <div class="inline-actions">
+            <button id="addBookmark">+ Добавить</button>
+            <button id="clearBookmarks">Очистить</button>
+          </div>
+          <ul id="bookmarkList"></ul>
+        </section>
+
+        <section>
+          <h2>Оглавление PDF</h2>
+          <ul id="outlineList"></ul>
+        </section>
+
+        <section>
+          <h2>Заметки</h2>
+          <textarea id="notes" placeholder="Ваши заметки по документу..."></textarea>
+          <div class="inline-actions">
+            <button id="saveNotes">Сохранить</button>
+            <button id="exportNotes">Экспорт .txt</button>
+          </div>
+        </section>
+      </aside>
+
+      <main class="viewer-area">
+        <header class="toolbar toolbar-top">
+          <button id="prevPage">←</button>
+          <span id="pageStatus">Страница 0 / 0</span>
+          <button id="nextPage">→</button>
+
+          <label for="pageInput">К стр.</label>
+          <input id="pageInput" type="number" min="1" value="1" />
+          <button id="goToPage">Перейти</button>
+
+          <div class="divider"></div>
+
+          <button id="zoomOut">−</button>
+          <span id="zoomStatus">100%</span>
+          <button id="zoomIn">+</button>
+          <button id="fitWidth">Fit width</button>
+          <button id="fitPage">Fit page</button>
+          <button id="rotate">↻</button>
+
+          <div class="divider"></div>
+
+          <button id="themeToggle">Тема</button>
+          <button id="fullscreen">Fullscreen</button>
+        </header>
+
+        <header class="toolbar toolbar-bottom">
+          <input id="searchInput" type="text" placeholder="Поиск по PDF" />
+          <button id="searchBtn">Найти</button>
+          <button id="searchPrev">↑ Совпадение</button>
+          <button id="searchNext">↓ Совпадение</button>
+          <span id="searchStatus"></span>
+
+          <div class="divider"></div>
+
+          <button id="downloadFile">Скачать</button>
+          <button id="printPage">Печать страницы</button>
+          <span id="docInfo"></span>
+        </header>
+
+        <section class="canvas-wrap" id="canvasWrap">
+          <canvas id="viewerCanvas"></canvas>
+          <p id="emptyState">Откройте PDF, DjVu или изображение для начала работы</p>
+        </section>
+
+        <section class="text-tools">
+          <div class="inline-actions">
+            <button id="refreshText">Текст текущей страницы</button>
+            <button id="copyText">Копировать текст</button>
+            <button id="exportText">Экспорт текста .txt</button>
+          </div>
+          <textarea id="pageText" readonly placeholder="Здесь появится извлечённый текст текущей страницы (для PDF)"></textarea>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
