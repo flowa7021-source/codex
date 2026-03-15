@@ -266,6 +266,44 @@ input:focus, select:focus, textarea:focus {
 }
 .preview-label { font-size: 12px; color: var(--muted); }
 
+
+.section-toggle {
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 18px;
+}
+.section-toggle::after {
+  content: '▾';
+  position: absolute;
+  right: 0;
+  top: 0;
+  color: var(--muted);
+}
+.sidebar > section.collapsed > *:not(h2) {
+  display: none;
+}
+.sidebar > section.collapsed .section-toggle::after {
+  content: '▸';
+}
+
+body.sidebar-compact .sidebar {
+  padding: 12px;
+}
+body.sidebar-compact .sidebar > section {
+  margin-top: 10px;
+  padding: 8px;
+}
+body.sidebar-compact #recentList,
+body.sidebar-compact #bookmarkList,
+body.sidebar-compact #outlineList,
+body.sidebar-compact #commentList,
+body.sidebar-compact #visitTrailList,
+body.sidebar-compact #searchHistoryList,
+body.sidebar-compact #searchResultsList {
+  max-height: 120px;
+}
+
 @media (max-width: 1360px) {
   .app-shell { grid-template-columns: 330px 1fr; }
 }

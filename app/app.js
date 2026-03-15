@@ -32,11 +32,11 @@ const state = {
 };
 
 const defaultHotkeys = {
-  next: 'arrowright',
-  prev: 'arrowleft',
-  zoomIn: '+',
-  zoomOut: '-',
-  annotate: 'a',
+  next: 'pagedown',
+  prev: 'pageup',
+  zoomIn: 'ctrl+=',
+  zoomOut: 'ctrl+-',
+  annotate: 'ctrl+shift+a',
 };
 
 let hotkeys = { ...defaultHotkeys };
@@ -71,6 +71,11 @@ const els = {
   resetHotkeys: document.getElementById('resetHotkeys'),
   autoFixHotkeys: document.getElementById('autoFixHotkeys'),
   hotkeysStatus: document.getElementById('hotkeysStatus'),
+  settingsStatus: document.getElementById('settingsStatus'),
+  applyCommonHotkeys: document.getElementById('applyCommonHotkeys'),
+  toggleSidebarCompact: document.getElementById('toggleSidebarCompact'),
+  collapseSidebarSections: document.getElementById('collapseSidebarSections'),
+  expandSidebarSections: document.getElementById('expandSidebarSections'),
   exportWorkspace: document.getElementById('exportWorkspace'),
   importWorkspace: document.getElementById('importWorkspace'),
   workspaceStatus: document.getElementById('workspaceStatus'),
@@ -2597,7 +2602,10 @@ const hotkeyFieldMeta = {
 };
 
 function normalizeHotkeyForDisplay(value) {
-  return value === 'arrowright' ? '>' : (value === 'arrowleft' ? '<' : value);
+  const v = (value || '').toLowerCase();
+  if (v === 'arrowright') return '>';
+  if (v === 'arrowleft') return '<';
+  return value;
 }
 
 function setHotkeysInputErrors(fields = [], details = {}) {
@@ -2664,11 +2672,11 @@ function renderHotkeyInputs() {
 
 function saveHotkeys() {
   const candidate = {
-    next: normalizeHotkey(els.hkNext.value === '>' ? 'arrowright' : els.hkNext.value, 'arrowright'),
-    prev: normalizeHotkey(els.hkPrev.value === '<' ? 'arrowleft' : els.hkPrev.value, 'arrowleft'),
-    zoomIn: normalizeHotkey(els.hkZoomIn.value, '+'),
-    zoomOut: normalizeHotkey(els.hkZoomOut.value, '-'),
-    annotate: normalizeHotkey(els.hkAnnotate.value, 'a'),
+    next: normalizeHotkey(els.hkNext.value === '>' ? 'arrowright' : els.hkNext.value, defaultHotkeys.next),
+    prev: normalizeHotkey(els.hkPrev.value === '<' ? 'arrowleft' : els.hkPrev.value, defaultHotkeys.prev),
+    zoomIn: normalizeHotkey(els.hkZoomIn.value, defaultHotkeys.zoomIn),
+    zoomOut: normalizeHotkey(els.hkZoomOut.value, defaultHotkeys.zoomOut),
+    annotate: normalizeHotkey(els.hkAnnotate.value, defaultHotkeys.annotate),
   };
 
   const validation = validateHotkeys(candidate);
@@ -3348,6 +3356,23 @@ els.insertTimestamp.addEventListener('click', insertTimestamp);
 els.saveHotkeys.addEventListener('click', saveHotkeys);
 els.resetHotkeys.addEventListener('click', resetHotkeys);
 els.autoFixHotkeys.addEventListener('click', autoFixHotkeys);
+els.applyCommonHotkeys?.addEventListener('click', () => {
+  applyCommonHotkeys();
+  setSettingsStatus('Применены стандартные hotkeys.');
+});
+els.toggleSidebarCompact?.addEventListener('click', () => {
+  const enabled = !document.body.classList.contains('sidebar-compact');
+  setSidebarCompactMode(enabled);
+  setSettingsStatus(enabled ? 'Включён компактный режим панели.' : 'Компактный режим отключён.');
+});
+els.collapseSidebarSections?.addEventListener('click', () => {
+  setSidebarSectionsCollapsed(true);
+  setSettingsStatus('Разделы панели свернуты.');
+});
+els.expandSidebarSections?.addEventListener('click', () => {
+  setSidebarSectionsCollapsed(false);
+  setSettingsStatus('Разделы панели развернуты.');
+});
 els.exportWorkspace.addEventListener('click', exportWorkspaceBundleJson);
 els.importWorkspace.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
@@ -3497,8 +3522,56 @@ els.canvasWrap.addEventListener('wheel', async (e) => {
   await renderCurrentPage();
 }, { passive: false });
 
+
+function setSettingsStatus(message) {
+  if (!els.settingsStatus) return;
+  els.settingsStatus.textContent = message;
+}
+
+function uiSidebarCompactKey() {
+  return 'novareader-ui-compact-sidebar';
+}
+
+function setSidebarCompactMode(enabled) {
+  document.body.classList.toggle('sidebar-compact', !!enabled);
+  if (els.toggleSidebarCompact) {
+    els.toggleSidebarCompact.textContent = `Компактная панель: ${enabled ? 'on' : 'off'}`;
+  }
+  localStorage.setItem(uiSidebarCompactKey(), enabled ? '1' : '0');
+}
+
+function loadSidebarCompactMode() {
+  const enabled = localStorage.getItem(uiSidebarCompactKey()) === '1';
+  setSidebarCompactMode(enabled);
+}
+
+function setSidebarSectionsCollapsed(collapsed) {
+  document.querySelectorAll('.sidebar > section').forEach((section) => {
+    section.classList.toggle('collapsed', collapsed);
+  });
+}
+
+function initSidebarSections() {
+  document.querySelectorAll('.sidebar > section > h2').forEach((title) => {
+    title.classList.add('section-toggle');
+    title.title = 'Клик: свернуть/развернуть';
+    title.addEventListener('click', () => {
+      title.parentElement?.classList.toggle('collapsed');
+    });
+  });
+}
+
+function applyCommonHotkeys() {
+  hotkeys = { ...defaultHotkeys };
+  localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
+  renderHotkeyInputs();
+  setHotkeysInputErrors([]);
+  setHotkeysStatus('Применены стандартные hotkeys.', 'success');
+}
+
 document.addEventListener('keydown', async (e) => {
   const key = e.key.toLowerCase();
+  const combo = stringifyHotkeyEvent(e);
   if (e.altKey && key === 'arrowleft') {
     e.preventDefault();
     await navigateHistoryBack();
@@ -3510,10 +3583,10 @@ document.addEventListener('keydown', async (e) => {
     return;
   }
 
-  if (key === hotkeys.next) els.nextPage.click();
-  if (key === hotkeys.prev) els.prevPage.click();
-  if (key === hotkeys.zoomIn) els.zoomIn.click();
-  if (key === hotkeys.zoomOut) els.zoomOut.click();
+  if (combo && combo === hotkeys.next) els.nextPage.click();
+  if (combo && combo === hotkeys.prev) els.prevPage.click();
+  if (combo && combo === hotkeys.zoomIn) els.zoomIn.click();
+  if (combo && combo === hotkeys.zoomOut) els.zoomOut.click();
   if (key === 'b' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     addBookmark();
@@ -3528,7 +3601,7 @@ document.addEventListener('keydown', async (e) => {
       undoStroke();
     }
   }
-  if (key === hotkeys.annotate && !e.ctrlKey && !e.metaKey) {
+  if (combo && combo === hotkeys.annotate) {
     e.preventDefault();
     setDrawMode(!state.drawEnabled);
   }
@@ -3561,6 +3634,8 @@ renderVisitTrail();
 renderSearchHistory();
 renderSearchResultsList();
 renderDocStats();
+initSidebarSections();
+loadSidebarCompactMode();
 initReleaseGuards();
 renderEtaStatus();
 renderReadingGoalStatus();

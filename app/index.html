@@ -135,16 +135,27 @@
           <ul id="commentList"></ul>
         </section>
 
+        <section id="settingsSection">
+          <h2>Настройки</h2>
+          <div class="inline-actions">
+            <button id="applyCommonHotkeys">Стандартные hotkeys</button>
+            <button id="toggleSidebarCompact">Компактная панель: off</button>
+            <button id="collapseSidebarSections">Свернуть разделы</button>
+            <button id="expandSidebarSections">Развернуть разделы</button>
+          </div>
+          <p id="settingsStatus" class="muted tiny">Настройки не изменялись.</p>
+        </section>
+
         <section>
           <h2>Горячие клавиши</h2>
           <div class="shortcut-grid">
-            <label>След. стр.<input id="hkNext" type="text" maxlength="32" value=">" /><small id="hkNextHint" class="hotkey-hint"></small></label>
-            <label>Пред. стр.<input id="hkPrev" type="text" maxlength="32" value="<" /><small id="hkPrevHint" class="hotkey-hint"></small></label>
-            <label>Zoom +<input id="hkZoomIn" type="text" maxlength="32" value="+" /><small id="hkZoomInHint" class="hotkey-hint"></small></label>
-            <label>Zoom -<input id="hkZoomOut" type="text" maxlength="32" value="-" /><small id="hkZoomOutHint" class="hotkey-hint"></small></label>
-            <label>Аннотации<input id="hkAnnotate" type="text" maxlength="32" value="a" /><small id="hkAnnotateHint" class="hotkey-hint"></small></label>
+            <label>След. стр.<input id="hkNext" type="text" maxlength="32" value="pagedown" /><small id="hkNextHint" class="hotkey-hint"></small></label>
+            <label>Пред. стр.<input id="hkPrev" type="text" maxlength="32" value="pageup" /><small id="hkPrevHint" class="hotkey-hint"></small></label>
+            <label>Zoom +<input id="hkZoomIn" type="text" maxlength="32" value="ctrl+=" /><small id="hkZoomInHint" class="hotkey-hint"></small></label>
+            <label>Zoom -<input id="hkZoomOut" type="text" maxlength="32" value="ctrl+-" /><small id="hkZoomOutHint" class="hotkey-hint"></small></label>
+            <label>Аннотации<input id="hkAnnotate" type="text" maxlength="32" value="ctrl+shift+a" /><small id="hkAnnotateHint" class="hotkey-hint"></small></label>
           </div>
-          <p class="muted tiny">Совет: кликните по полю и нажмите сочетание (например, Ctrl+K). Backspace — очистить.</p>
+          <p class="muted tiny">Совет: используйте распространённые бинды (PgDown/PgUp, Ctrl+=, Ctrl+-, Ctrl+Shift+A). Backspace — очистить.</p>
           <div class="inline-actions">
             <button id="saveHotkeys">Сохранить hotkeys</button>
             <button id="resetHotkeys">Сбросить</button>
@@ -257,7 +268,6 @@
             <option value="arrow">Стрелка</option>
             <option value="line">Линия</option>
             <option value="circle">Окружность</option>
-          </select>
           <input id="drawColor" type="color" value="#ffd84d" />
           <label for="drawSize">Размер</label>
           <input id="drawSize" type="range" min="2" max="24" value="6" />
