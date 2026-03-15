@@ -16,6 +16,10 @@
 - Добавлен `GET /api/health` для быстрой диагностики релизного запуска.
 - Добавлено ограничение размера payload для `PUT /api/workspace` (по умолчанию 5 MB).
 
+## Desktop .exe build (Windows)
+- Добавлена Electron-обёртка (`electron/main.js`) для запуска без Python/PowerShell/серверов.
+- Добавлена сборка `.exe` через `electron-builder` (`npm run build:win`).
+
 ## Запуск release-версии
 - `python3 dev_server.py`
 - Приложение: `http://localhost:4173/app/`

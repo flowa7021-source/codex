@@ -103,3 +103,7 @@
   - redirect `/` → `/app/` для быстрого старта;
   - встроенный endpoint `GET/PUT /api/workspace` для Stage-4 cloud sync без внешнего backend;
   - endpoint `GET /api/health` для проверок запуска/мониторинга.
+
+- Desktop runtime (без сервера):
+  - `electron/main.js` загружает `app/index.html` напрямую из файловой системы;
+  - сборка Windows `.exe` выполняется через `electron-builder` (`package.json`).

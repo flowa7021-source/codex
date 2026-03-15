@@ -999,10 +999,13 @@ function cloudSyncUrlKey() {
 function loadCloudSyncUrl() {
   const saved = localStorage.getItem(cloudSyncUrlKey());
   if (saved) return saved;
-  if (typeof location !== 'undefined' && location.origin) {
-    return `${location.origin}/api/workspace`;
+  if (typeof location !== 'undefined') {
+    const isHttp = location.protocol === 'http:' || location.protocol === 'https:';
+    if (isHttp && location.origin) {
+      return `${location.origin}/api/workspace`;
+    }
   }
-  return '/api/workspace';
+  return '';
 }
 
 function saveCloudSyncUrl() {
