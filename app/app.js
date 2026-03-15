@@ -139,6 +139,11 @@ const els = {
   themeToggle: document.getElementById('themeToggle'),
   fullscreen: document.getElementById('fullscreen'),
   shortcutsHelp: document.getElementById('shortcutsHelp'),
+  toggleSidebar: document.getElementById('toggleSidebar'),
+  toggleToolsBar: document.getElementById('toggleToolsBar'),
+  toggleTextTools: document.getElementById('toggleTextTools'),
+  toggleTextToolsInline: document.getElementById('toggleTextToolsInline'),
+  textToolsSection: document.getElementById('textToolsSection'),
   canvasWrap: document.getElementById('canvasWrap'),
   addBookmark: document.getElementById('addBookmark'),
   clearBookmarks: document.getElementById('clearBookmarks'),
@@ -3256,6 +3261,33 @@ function printCanvasPage() {
   win.print();
 }
 
+
+function uiLayoutKey(name) {
+  return `novareader-ui-layout:${name}`;
+}
+
+function applyLayoutState() {
+  const sidebarHidden = localStorage.getItem(uiLayoutKey('sidebarHidden')) === '1';
+  const toolsHidden = localStorage.getItem(uiLayoutKey('toolsHidden')) === '1';
+  const textHidden = localStorage.getItem(uiLayoutKey('textHidden')) === '1';
+
+  document.querySelector('.app-shell')?.classList.toggle('sidebar-hidden', sidebarHidden);
+  document.querySelector('.viewer-area')?.classList.toggle('toolsbar-hidden', toolsHidden);
+  document.querySelector('.viewer-area')?.classList.toggle('texttools-hidden', textHidden);
+
+  if (els.toggleSidebar) els.toggleSidebar.textContent = `Сайдбар: ${sidebarHidden ? 'off' : 'on'}`;
+  if (els.toggleToolsBar) els.toggleToolsBar.textContent = `Панель инструментов: ${toolsHidden ? 'off' : 'on'}`;
+  if (els.toggleTextTools) els.toggleTextTools.textContent = `Текстовый блок: ${textHidden ? 'off' : 'on'}`;
+  if (els.toggleTextToolsInline) els.toggleTextToolsInline.textContent = textHidden ? 'Развернуть' : 'Свернуть';
+}
+
+function toggleLayoutState(name) {
+  const key = uiLayoutKey(name);
+  const next = localStorage.getItem(key) === '1' ? '0' : '1';
+  localStorage.setItem(key, next);
+  applyLayoutState();
+}
+
 function setupDragAndDrop() {
   ['dragenter', 'dragover'].forEach((evt) => {
     window.addEventListener(evt, (e) => {
@@ -3505,6 +3537,10 @@ els.searchNext.addEventListener('click', async () => {
 });
 
 els.shortcutsHelp.addEventListener('click', showShortcutsHelp);
+els.toggleSidebar?.addEventListener('click', () => toggleLayoutState('sidebarHidden'));
+els.toggleToolsBar?.addEventListener('click', () => toggleLayoutState('toolsHidden'));
+els.toggleTextTools?.addEventListener('click', () => toggleLayoutState('textHidden'));
+els.toggleTextToolsInline?.addEventListener('click', () => toggleLayoutState('textHidden'));
 
 els.fullscreen.addEventListener('click', async () => {
   if (!document.fullscreenElement) {
@@ -3641,4 +3677,5 @@ renderEtaStatus();
 renderReadingGoalStatus();
 setupDragAndDrop();
 setupAnnotationEvents();
+applyLayoutState();
 setDrawMode(false);

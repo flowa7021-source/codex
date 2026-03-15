@@ -243,6 +243,9 @@
           <button id="themeToggle">Тема</button>
           <button id="fullscreen">Fullscreen</button>
           <button id="shortcutsHelp">Shortcuts</button>
+          <button id="toggleSidebar">Сайдбар: on</button>
+          <button id="toggleToolsBar">Панель инструментов: on</button>
+          <button id="toggleTextTools">Текстовый блок: on</button>
         </header>
 
         <header class="toolbar toolbar-bottom">
@@ -268,6 +271,7 @@
             <option value="arrow">Стрелка</option>
             <option value="line">Линия</option>
             <option value="circle">Окружность</option>
+          </select>
           <input id="drawColor" type="color" value="#ffd84d" />
           <label for="drawSize">Размер</label>
           <input id="drawSize" type="range" min="2" max="24" value="6" />
@@ -299,7 +303,11 @@
           <p id="emptyState">Откройте PDF, DjVu или изображение для начала работы</p>
         </section>
 
-        <section class="text-tools">
+        <section class="text-tools" id="textToolsSection">
+          <div class="text-tools-head">
+            <h3>Текстовые инструменты</h3>
+            <button id="toggleTextToolsInline">Свернуть</button>
+          </div>
           <div class="inline-actions">
             <button id="refreshText">Текст текущей страницы</button>
             <button id="copyText">Копировать текст</button>
