@@ -1,4 +1,4 @@
-name: Build Windows Portable App
+name: Build Windows Portable EXE
 
 on:
   workflow_dispatch:
@@ -16,104 +16,62 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: windows-portable-${{ github.ref }}
-  cancel-in-progress: true
-
 env:
   SOURCE_PROJECT_DIR: G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z
-  SHORT_DRIVE: "X:"
 
 jobs:
-  build-portable:
+  build-exe:
     runs-on: windows-2022
     timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ github.workspace }}/${{ env.SOURCE_PROJECT_DIR }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify nested source app directory
-        shell: pwsh
-        run: |
-          if (!(Test-Path "${{ env.SOURCE_PROJECT_DIR }}/package.json")) { throw "package.json not found in nested app directory" }
-          if (!(Test-Path "${{ env.SOURCE_PROJECT_DIR }}/app")) { throw "app directory not found in nested app directory" }
-          if (!(Test-Path "${{ env.SOURCE_PROJECT_DIR }}/electron")) { throw "electron directory not found in nested app directory" }
-
-      - name: Map nested project to short drive path
-        shell: pwsh
-        run: |
-          cmd /c "subst ${{ env.SHORT_DRIVE }} /d" 2>$null
-          cmd /c "subst ${{ env.SHORT_DRIVE }} ${{ github.workspace }}\${{ env.SOURCE_PROJECT_DIR }}"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to map short drive path" }
-
-      - name: Setup Node.js
+      - name: setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: ${{ env.SOURCE_PROJECT_DIR }}/package-lock.json
 
-      - name: Install dependencies (retry for Windows lock issues)
-        shell: pwsh
-        working-directory: ${{ env.SHORT_DRIVE }}
+      - name: Show CI context
+        run: |
+          Write-Host "GITHUB_ACTIONS=$env:GITHUB_ACTIONS"
+          Write-Host "CI=$env:CI"
+          Write-Host "GITHUB_REF=$env:GITHUB_REF"
+
+      - name: Install dependencies
         env:
-          CYPRESS_INSTALL_BINARY: "0"
           npm_config_audit: "false"
           npm_config_fund: "false"
-          npm_config_progress: "false"
-        run: |
-          $maxAttempts = 3
-          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
-            Write-Host "npm ci attempt $attempt/$maxAttempts"
-            npm ci --no-audit --no-fund
-            if ($LASTEXITCODE -eq 0) { break }
+        run: npm ci
 
-            if ($attempt -eq $maxAttempts) {
-              throw "npm ci failed after $maxAttempts attempts"
-            }
-
-            Write-Warning "npm ci failed (attempt $attempt). Cleaning node_modules + npm cache and retrying..."
-            if (Test-Path node_modules) {
-              Remove-Item node_modules -Recurse -Force -ErrorAction SilentlyContinue
-            }
-            npm cache clean --force
-            Start-Sleep -Seconds 5
-          }
-
-      - name: Build portable EXE
-        shell: pwsh
-        working-directory: ${{ env.SHORT_DRIVE }}
+      - name: build portable EXE
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run build:win:nosign
 
-      - name: Validate portable output
-        shell: pwsh
-        working-directory: ${{ env.SHORT_DRIVE }}
+      - name: Generate SHA256
         run: |
-          $portable = Get-ChildItem dist -Filter 'NovaReader-*.exe' -File | Where-Object { $_.Name -notlike 'NovaReader-Setup-*' }
-          if (!$portable) { throw 'Portable EXE not found' }
-          if (!(Test-Path 'dist/win-unpacked/NovaReader.exe')) { throw 'win-unpacked/NovaReader.exe not found' }
-
-      - name: Archive ready-to-run folder
-        shell: pwsh
-        working-directory: ${{ env.SHORT_DRIVE }}
-        run: |
-          Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/NovaReader-win-unpacked.zip' -Force
+          $file = Get-ChildItem dist -Filter 'NovaReader-*.exe' -File |
+            Where-Object { $_.Name -notlike 'NovaReader-Setup-*' } |
+            Select-Object -First 1
+          if (-not $file) { throw 'Portable EXE was not generated' }
+          $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLower()
+          "$hash *$($file.Name)" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding ascii
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: novareader-windows-portable
+          name: novareader-windows-exe
           path: |
             ${{ env.SOURCE_PROJECT_DIR }}/dist/NovaReader-*.exe
-            ${{ env.SOURCE_PROJECT_DIR }}/dist/NovaReader-win-unpacked.zip
+            ${{ env.SOURCE_PROJECT_DIR }}/dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
-
-      - name: Cleanup short drive mapping
-        if: always()
-        shell: pwsh
-        run: |
-          cmd /c "subst ${{ env.SHORT_DRIVE }} /d" 2>$null
