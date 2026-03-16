@@ -50,21 +50,57 @@ jobs:
         env:
           npm_config_audit: "false"
           npm_config_fund: "false"
-        run: npm ci
+          CYPRESS_INSTALL_BINARY: "0"
+        run: |
+          $projectPath = (Get-Location).Path
+          cmd /c "subst X: /d" 2>$null
+          cmd /c "subst X: \"$projectPath\""
+          if ($LASTEXITCODE -ne 0) { throw "Failed to map X: for npm ci" }
+          try {
+            Set-Location X:\
+            npm ci --no-audit --no-fund
+          }
+          finally {
+            Set-Location $projectPath
+            cmd /c "subst X: /d" 2>$null
+          }
 
       - name: build portable EXE
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run build:win:nosign
+        run: |
+          $projectPath = (Get-Location).Path
+          cmd /c "subst X: /d" 2>$null
+          cmd /c "subst X: \"$projectPath\""
+          if ($LASTEXITCODE -ne 0) { throw "Failed to map X: for build" }
+          try {
+            Set-Location X:\
+            npm run build:win:nosign
+          }
+          finally {
+            Set-Location $projectPath
+            cmd /c "subst X: /d" 2>$null
+          }
 
       - name: Generate SHA256
         run: |
-          $file = Get-ChildItem dist -Filter 'NovaReader-*.exe' -File |
-            Where-Object { $_.Name -notlike 'NovaReader-Setup-*' } |
-            Select-Object -First 1
-          if (-not $file) { throw 'Portable EXE was not generated' }
-          $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLower()
-          "$hash *$($file.Name)" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding ascii
+          $projectPath = (Get-Location).Path
+          cmd /c "subst X: /d" 2>$null
+          cmd /c "subst X: \"$projectPath\""
+          if ($LASTEXITCODE -ne 0) { throw "Failed to map X: for hashing" }
+          try {
+            Set-Location X:\
+            $file = Get-ChildItem dist -Filter 'NovaReader-*.exe' -File |
+              Where-Object { $_.Name -notlike 'NovaReader-Setup-*' } |
+              Select-Object -First 1
+            if (-not $file) { throw 'Portable EXE was not generated' }
+            $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLower()
+            "$hash *$($file.Name)" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding ascii
+          }
+          finally {
+            Set-Location $projectPath
+            cmd /c "subst X: /d" 2>$null
+          }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
