@@ -3,7 +3,12 @@ name: Build Windows EXE
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "master", "work", "исправленный-код" ]
+    branches:
+      - main
+      - master
+      - work
+      - исправленный-код
+      - Исправленный-код
     paths:
       - "G-claude-repair-ocr-bugs-gQxxl/**"
       - ".github/workflows/main.yml"
@@ -31,8 +36,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: npm
           cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
 
       - name: Install dependencies
@@ -42,18 +47,27 @@ jobs:
         run: npm run build:win:nosign
 
       - name: List dist files
-        run: Get-ChildItem dist | Format-Table Name, Length
+        run: Get-ChildItem dist -File | Format-Table Name, Length
 
       - name: Generate SHA256 checksums
         run: |
-          $artifacts = Get-ChildItem dist -File -Include *.exe,*.7z,*.blockmap,latest*.yml
-          if (-not $artifacts) { throw "Build artifacts not found in dist" }
+          $artifacts = Get-ChildItem dist -File | Where-Object {
+            $_.Extension -in @('.exe', '.7z', '.blockmap', '.yml')
+          }
 
-          foreach ($artifact in $artifacts) {
-            if ($artifact.Extension -eq '.exe') {
-              $hash = Get-FileHash $artifact.FullName -Algorithm SHA256
-              "${($artifact.Name)}  ${($hash.Hash)}" | Out-File -FilePath (Join-Path dist "$($artifact.Name).sha256") -Encoding ascii
-            }
+          if (-not $artifacts) {
+            throw "Build artifacts not found in dist"
+          }
+
+          $exeArtifacts = $artifacts | Where-Object { $_.Extension -eq '.exe' }
+          if (-not $exeArtifacts) {
+            throw "EXE artifact not found in dist"
+          }
+
+          foreach ($artifact in $exeArtifacts) {
+            $hash = Get-FileHash $artifact.FullName -Algorithm SHA256
+            "${($artifact.Name)}  ${($hash.Hash)}" |
+              Out-File -FilePath (Join-Path dist "$($artifact.Name).sha256") -Encoding ascii
           }
 
       - name: Upload artifacts
