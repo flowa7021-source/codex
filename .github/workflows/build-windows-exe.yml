@@ -34,12 +34,19 @@ jobs:
 
       - name: Prepare short build path (avoid Windows MAX_PATH issues)
         run: |
-          if (Test-Path "${{ env.BUILD_DIR }}") {
-            Remove-Item -Recurse -Force "${{ env.BUILD_DIR }}"
-          }
-          New-Item -ItemType Directory -Path "${{ env.BUILD_DIR }}" | Out-Null
+          $sourceDir = Join-Path $env:GITHUB_WORKSPACE "${{ env.PROJECT_DIR }}"
+          $buildDir = "${{ env.BUILD_DIR }}"
 
-          robocopy "${{ github.workspace }}\${{ env.PROJECT_DIR }}" "${{ env.BUILD_DIR }}" /E /NFL /NDL /NJH /NJS /NC /NS
+          if (-not (Test-Path $sourceDir)) {
+            throw "Source project dir not found: $sourceDir"
+          }
+
+          if (Test-Path $buildDir) {
+            Remove-Item -Recurse -Force $buildDir
+          }
+          New-Item -ItemType Directory -Path $buildDir | Out-Null
+
+          robocopy $sourceDir $buildDir /E /R:2 /W:2 /NFL /NDL /NJH /NJS /NC /NS
           if ($LASTEXITCODE -gt 7) {
             throw "robocopy failed with exit code $LASTEXITCODE"
           }
@@ -49,7 +56,14 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
+          cache-dependency-path: C:/nr/package-lock.json
+
+      - name: Show build environment
+        working-directory: ${{ env.BUILD_DIR }}
+        run: |
+          node -v
+          npm -v
+          npm pkg get name version
 
       - name: Install dependencies
         working-directory: ${{ env.BUILD_DIR }}
@@ -57,6 +71,8 @@ jobs:
 
       - name: Build portable EXE (all app resources bundled)
         working-directory: ${{ env.BUILD_DIR }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run build:win:nosign
 
       - name: Validate build output
@@ -66,14 +82,13 @@ jobs:
             throw "dist folder not found after build"
           }
 
+          Write-Host "dist contents:"
+          Get-ChildItem -Path dist -File | Format-Table Name, Length
+
           $exeFiles = Get-ChildItem -Path dist -File -Filter *.exe
           if (-not $exeFiles) {
-            Write-Host "dist contents for debugging:"
-            Get-ChildItem -Path dist -File | Format-Table Name, Length
             throw "EXE artifact not found in dist"
           }
-
-          $exeFiles | Format-Table Name, Length
 
       - name: Generate SHA256SUMS.txt
         working-directory: ${{ env.BUILD_DIR }}
