@@ -22,7 +22,6 @@ concurrency:
 
 env:
   SOURCE_PROJECT_DIR: G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z
-  BUILD_DIR: C:/nr-build
 
 jobs:
   build-portable:
@@ -40,17 +39,6 @@ jobs:
           if (!(Test-Path "${{ env.SOURCE_PROJECT_DIR }}/app")) { throw "app directory not found in nested app directory" }
           if (!(Test-Path "${{ env.SOURCE_PROJECT_DIR }}/electron")) { throw "electron directory not found in nested app directory" }
 
-      - name: Prepare short build path
-        shell: pwsh
-        run: |
-          if (Test-Path "${{ env.BUILD_DIR }}") {
-            Remove-Item "${{ env.BUILD_DIR }}" -Recurse -Force
-          }
-          New-Item -ItemType Directory -Path "${{ env.BUILD_DIR }}" -Force | Out-Null
-
-          robocopy "${{ env.SOURCE_PROJECT_DIR }}" "${{ env.BUILD_DIR }}" /MIR /NFL /NDL /NJH /NJS /NP /XD node_modules dist
-          if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -60,21 +48,21 @@ jobs:
 
       - name: Install dependencies
         shell: pwsh
-        working-directory: ${{ env.BUILD_DIR }}
+        working-directory: ${{ env.SOURCE_PROJECT_DIR }}
         env:
           CYPRESS_INSTALL_BINARY: "0"
         run: npm ci --no-audit --no-fund
 
       - name: Build portable EXE
         shell: pwsh
-        working-directory: ${{ env.BUILD_DIR }}
+        working-directory: ${{ env.SOURCE_PROJECT_DIR }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run build:win:nosign
 
       - name: Validate portable output
         shell: pwsh
-        working-directory: ${{ env.BUILD_DIR }}
+        working-directory: ${{ env.SOURCE_PROJECT_DIR }}
         run: |
           $portable = Get-ChildItem dist -Filter 'NovaReader-*.exe' -File | Where-Object { $_.Name -notlike 'NovaReader-Setup-*' }
           if (!$portable) { throw 'Portable EXE not found' }
@@ -82,7 +70,7 @@ jobs:
 
       - name: Archive ready-to-run folder
         shell: pwsh
-        working-directory: ${{ env.BUILD_DIR }}
+        working-directory: ${{ env.SOURCE_PROJECT_DIR }}
         run: |
           Compress-Archive -Path 'dist/win-unpacked/*' -DestinationPath 'dist/NovaReader-win-unpacked.zip' -Force
 
@@ -91,7 +79,7 @@ jobs:
         with:
           name: novareader-windows-portable
           path: |
-            ${{ env.BUILD_DIR }}/dist/NovaReader-*.exe
-            ${{ env.BUILD_DIR }}/dist/NovaReader-win-unpacked.zip
+            ${{ env.SOURCE_PROJECT_DIR }}/dist/NovaReader-*.exe
+            ${{ env.SOURCE_PROJECT_DIR }}/dist/NovaReader-win-unpacked.zip
           if-no-files-found: error
           retention-days: 14
