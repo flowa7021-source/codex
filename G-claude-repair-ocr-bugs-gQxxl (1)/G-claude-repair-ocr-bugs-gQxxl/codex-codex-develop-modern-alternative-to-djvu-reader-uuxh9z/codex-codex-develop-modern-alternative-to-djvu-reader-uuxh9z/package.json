@@ -8,9 +8,7 @@
   "scripts": {
     "start:desktop": "electron .",
     "build:win": "electron-builder --win portable",
-    "build:win:installer": "electron-builder --win nsis",
-    "build:win:nosign": "electron-builder --win portable --config.win.signAndEditExecutable=false",
-    "build:win:installer:nosign": "electron-builder --win nsis --config.win.signAndEditExecutable=false --config.win.artifactName=NovaReader-Setup-\\${version}.\\${ext}"
+    "build:win:nosign": "electron-builder --win portable --config.win.signAndEditExecutable=false"
   },
   "devDependencies": {
     "djvujs-dist": "^0.5.4",
@@ -32,16 +30,12 @@
     ],
     "win": {
       "target": [
-        "portable",
-        "nsis"
+        "portable"
       ],
       "artifactName": "NovaReader-${version}.${ext}"
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
     }
+  },
+  "engines": {
+    "node": ">=22 <23"
   }
 }
