@@ -2514,10 +2514,11 @@ async function runOcrOnRectNow(rect) {
       setOcrStatus(`OCR: текст не найден (${totalMs}мс)`);
       pushDiagnosticEvent('ocr.manual.empty', { taskId, totalMs, page: state.currentPage }, 'warn');
     }
-  } catch {
+  } catch (error) {
     const totalMs = Math.round(performance.now() - taskStartedAt);
-    setOcrStatus('OCR: встроенный runtime недоступен');
-    pushDiagnosticEvent('ocr.manual.error', { taskId, totalMs, page: state.currentPage }, 'error');
+    const message = String(error?.message || 'unknown error');
+    setOcrStatus(`OCR: ошибка (${message})`);
+    pushDiagnosticEvent('ocr.manual.error', { taskId, totalMs, page: state.currentPage, message }, 'error');
   } finally {
     if (hangWarnTimer) clearTimeout(hangWarnTimer);
   }
