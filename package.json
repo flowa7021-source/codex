@@ -1,0 +1,47 @@
+{
+  "name": "novareader-desktop",
+  "version": "1.0.0",
+  "description": "NovaReader desktop build (no Python/server runtime)",
+  "main": "electron/main.js",
+  "author": "NovaReader",
+  "license": "MIT",
+  "scripts": {
+    "start:desktop": "electron .",
+    "build:win": "electron-builder --win portable",
+    "build:win:installer": "electron-builder --win nsis",
+    "build:win:nosign": "electron-builder --win portable --config.win.signAndEditExecutable=false",
+    "build:win:installer:nosign": "electron-builder --win nsis --config.win.signAndEditExecutable=false --config.win.artifactName=NovaReader-Setup-\\${version}.\\${ext}"
+  },
+  "devDependencies": {
+    "djvujs-dist": "^0.5.4",
+    "electron": "30.5.1",
+    "electron-builder": "24.13.3",
+    "ocrad.js": "^0.0.1",
+    "pdfjs-dist": "^4.4.168"
+  },
+  "build": {
+    "appId": "com.novareader.desktop",
+    "productName": "NovaReader",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "app/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ],
+      "artifactName": "NovaReader-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
