@@ -1,4 +1,4 @@
-name: Build Windows App
+name: Build Windows Portable App
 
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-build-${{ github.ref }}
+  group: windows-portable-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -25,7 +25,7 @@ env:
   BUILD_DIR: C:/nr-build
 
 jobs:
-  build:
+  build-portable:
     runs-on: windows-2022
     timeout-minutes: 60
 
@@ -40,6 +40,7 @@ jobs:
             Remove-Item "${{ env.BUILD_DIR }}" -Recurse -Force
           }
           New-Item -ItemType Directory -Path "${{ env.BUILD_DIR }}" -Force | Out-Null
+
           robocopy "${{ env.SOURCE_PROJECT_DIR }}" "${{ env.BUILD_DIR }}" /MIR /NFL /NDL /NJH /NJS /NP /XD node_modules dist
           if ($LASTEXITCODE -gt 7) { throw "robocopy failed with exit code $LASTEXITCODE" }
 
@@ -55,8 +56,7 @@ jobs:
         working-directory: ${{ env.BUILD_DIR }}
         env:
           CYPRESS_INSTALL_BINARY: "0"
-        run: |
-          npm ci --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Build portable EXE
         shell: pwsh
@@ -65,21 +65,12 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run build:win:nosign
 
-      - name: Build installer EXE
-        shell: pwsh
-        working-directory: ${{ env.BUILD_DIR }}
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npm run build:win:installer:nosign
-
-      - name: Validate build output
+      - name: Validate portable output
         shell: pwsh
         working-directory: ${{ env.BUILD_DIR }}
         run: |
           $portable = Get-ChildItem dist -Filter 'NovaReader-*.exe' -File | Where-Object { $_.Name -notlike 'NovaReader-Setup-*' }
-          $installer = Get-ChildItem dist -Filter 'NovaReader-Setup-*.exe' -File
           if (!$portable) { throw 'Portable EXE not found' }
-          if (!$installer) { throw 'Installer EXE not found' }
           if (!(Test-Path 'dist/win-unpacked/NovaReader.exe')) { throw 'win-unpacked/NovaReader.exe not found' }
 
       - name: Archive ready-to-run folder
@@ -91,7 +82,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: novareader-windows-app
+          name: novareader-windows-portable
           path: |
             ${{ env.BUILD_DIR }}/dist/NovaReader-*.exe
             ${{ env.BUILD_DIR }}/dist/NovaReader-win-unpacked.zip
