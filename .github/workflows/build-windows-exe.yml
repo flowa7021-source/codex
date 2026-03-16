@@ -33,6 +33,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify nested source app directory
+        shell: pwsh
+        run: |
+          if (!(Test-Path "${{ env.SOURCE_PROJECT_DIR }}/package.json")) { throw "package.json not found in nested app directory" }
+          if (!(Test-Path "${{ env.SOURCE_PROJECT_DIR }}/app")) { throw "app directory not found in nested app directory" }
+          if (!(Test-Path "${{ env.SOURCE_PROJECT_DIR }}/electron")) { throw "electron directory not found in nested app directory" }
+
       - name: Prepare short build path
         shell: pwsh
         run: |
