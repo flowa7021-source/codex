@@ -53,8 +53,8 @@ jobs:
           CYPRESS_INSTALL_BINARY: "0"
         run: |
           $projectPath = (Get-Location).Path
-          cmd /c "subst X: /d" 2>$null
-          cmd /c "subst X: \"$projectPath\""
+          subst X: /d 2>$null
+          subst X: "$projectPath"
           if ($LASTEXITCODE -ne 0) { throw "Failed to map X: for npm ci" }
           try {
             Set-Location X:\
@@ -62,7 +62,7 @@ jobs:
           }
           finally {
             Set-Location $projectPath
-            cmd /c "subst X: /d" 2>$null
+            subst X: /d 2>$null
           }
 
       - name: build portable EXE
@@ -70,8 +70,8 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: |
           $projectPath = (Get-Location).Path
-          cmd /c "subst X: /d" 2>$null
-          cmd /c "subst X: \"$projectPath\""
+          subst X: /d 2>$null
+          subst X: "$projectPath"
           if ($LASTEXITCODE -ne 0) { throw "Failed to map X: for build" }
           try {
             Set-Location X:\
@@ -79,14 +79,14 @@ jobs:
           }
           finally {
             Set-Location $projectPath
-            cmd /c "subst X: /d" 2>$null
+            subst X: /d 2>$null
           }
 
       - name: Generate SHA256
         run: |
           $projectPath = (Get-Location).Path
-          cmd /c "subst X: /d" 2>$null
-          cmd /c "subst X: \"$projectPath\""
+          subst X: /d 2>$null
+          subst X: "$projectPath"
           if ($LASTEXITCODE -ne 0) { throw "Failed to map X: for hashing" }
           try {
             Set-Location X:\
@@ -99,7 +99,7 @@ jobs:
           }
           finally {
             Set-Location $projectPath
-            cmd /c "subst X: /d" 2>$null
+            subst X: /d 2>$null
           }
 
       - name: Upload artifacts
