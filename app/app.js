@@ -4886,7 +4886,7 @@ function applyResizableLayoutState() {
   const sidebarWidth = Number(localStorage.getItem(uiLayoutKey('sidebarWidth')) || 260);
   const pageAreaPx = Number(localStorage.getItem(uiLayoutKey('pageAreaPx')) || 0);
   const safeSidebar = Math.max(200, Math.min(420, sidebarWidth));
-  const safePage = Math.max(300, Math.min(3200, pageAreaPx || 0));
+  const safePage = Math.max(420, Math.min(3200, pageAreaPx || 0));
   document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${safeSidebar}px`);
   if (pageAreaPx > 0) {
     document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${safePage}px`);
@@ -4895,12 +4895,14 @@ function applyResizableLayoutState() {
 
 function ensureDefaultPageAreaHeight() {
   const raw = Number(localStorage.getItem(uiLayoutKey('pageAreaPx')) || 0);
-  if (raw > 0) return;
   const viewerArea = document.querySelector('.viewer-area');
   if (!viewerArea) return;
-  const preferred = Math.max(460, Math.floor(viewerArea.clientHeight * 0.72));
-  localStorage.setItem(uiLayoutKey('pageAreaPx'), String(preferred));
-  applyResizableLayoutState();
+
+  const preferred = Math.max(560, Math.floor(viewerArea.clientHeight * 0.82));
+  if (raw <= 0 || raw < 420) {
+    localStorage.setItem(uiLayoutKey('pageAreaPx'), String(preferred));
+    applyResizableLayoutState();
+  }
 }
 
 function setupResizableLayout() {
@@ -4937,12 +4939,12 @@ function setupResizableLayout() {
       const viewerRect = viewerArea.getBoundingClientRect();
       const canvasRect = els.canvasWrap.getBoundingClientRect();
       const textHidden = viewerArea.classList.contains('texttools-hidden');
-      const minTextHeight = textTools && !textHidden ? 72 : 0;
+      const minTextHeight = textTools && !textHidden ? 56 : 0;
       const paddingReserve = 14;
 
-      const maxPageHeight = Math.max(300, viewerRect.height - minTextHeight - paddingReserve);
+      const maxPageHeight = Math.max(420, viewerRect.height - minTextHeight - paddingReserve);
       const rawPageHeight = e.clientY - canvasRect.top;
-      const safePageHeight = Math.max(300, Math.min(maxPageHeight, rawPageHeight));
+      const safePageHeight = Math.max(420, Math.min(maxPageHeight, rawPageHeight));
       localStorage.setItem(uiLayoutKey('pageAreaPx'), String(Math.round(safePageHeight)));
       applyResizableLayoutState();
     };
