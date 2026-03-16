@@ -72,15 +72,36 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ env.SOURCE_PROJECT_DIR }}/package-lock.json
 
-      - name: Install dependencies (clean)
+      - name: Install dependencies (clean, with retry for Windows file locks)
         shell: pwsh
         working-directory: ${{ env.BUILD_DIR }}
         env:
           npm_config_audit: "false"
           npm_config_fund: "false"
+          npm_config_progress: "false"
         run: |
           npm cache verify
-          npm ci --no-audit --no-fund
+
+          $maxAttempts = 3
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "npm ci attempt $attempt/$maxAttempts"
+            npm ci --no-audit --no-fund
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "npm ci completed successfully"
+              break
+            }
+
+            if ($attempt -eq $maxAttempts) {
+              throw "npm ci failed after $maxAttempts attempts"
+            }
+
+            Write-Warning "npm ci failed (attempt $attempt). Cleaning node_modules and npm cache, then retrying..."
+            if (Test-Path node_modules) {
+              Remove-Item node_modules -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            npm cache clean --force
+            Start-Sleep -Seconds 5
+          }
 
       - name: Build portable EXE (unsigned)
         shell: pwsh
