@@ -4886,7 +4886,7 @@ function applyResizableLayoutState() {
   const sidebarWidth = Number(localStorage.getItem(uiLayoutKey('sidebarWidth')) || 220);
   const pageAreaPx = Number(localStorage.getItem(uiLayoutKey('pageAreaPx')) || 0);
   const safeSidebar = Math.max(180, Math.min(360, sidebarWidth));
-  const safePage = Math.max(460, Math.min(3200, pageAreaPx || 0));
+  const safePage = Math.max(560, Math.min(3200, pageAreaPx || 0));
   document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${safeSidebar}px`);
   if (pageAreaPx > 0) {
     document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${safePage}px`);
@@ -4899,7 +4899,7 @@ function ensureDefaultPageAreaHeight() {
   if (!viewerArea) return;
 
   const preferred = Math.max(620, Math.floor(viewerArea.clientHeight * 0.88));
-  if (raw <= 0 || raw < 460) {
+  if (raw <= 0 || raw < 560) {
     localStorage.setItem(uiLayoutKey('pageAreaPx'), String(preferred));
   }
 
@@ -4948,9 +4948,9 @@ function setupResizableLayout() {
       const minTextHeight = textTools && !textHidden ? 44 : 0;
       const paddingReserve = 14;
 
-      const maxPageHeight = Math.max(460, viewerRect.height - minTextHeight - paddingReserve);
+      const maxPageHeight = Math.max(560, viewerRect.height - minTextHeight - paddingReserve);
       const rawPageHeight = e.clientY - canvasRect.top;
-      const safePageHeight = Math.max(460, Math.min(maxPageHeight, rawPageHeight));
+      const safePageHeight = Math.max(560, Math.min(maxPageHeight, rawPageHeight));
       localStorage.setItem(uiLayoutKey('pageAreaPx'), String(Math.round(safePageHeight)));
       applyResizableLayoutState();
     };
