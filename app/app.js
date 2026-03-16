@@ -369,6 +369,9 @@ const els = {
   cfgShowSearch: document.getElementById('cfgShowSearch'),
   cfgShowAnnot: document.getElementById('cfgShowAnnot'),
   cfgShowText: document.getElementById('cfgShowText'),
+  cfgSidebarWidth: document.getElementById('cfgSidebarWidth'),
+  cfgToolbarScale: document.getElementById('cfgToolbarScale'),
+  cfgTextMinHeight: document.getElementById('cfgTextMinHeight'),
   cfgTheme: document.getElementById('cfgTheme'),
   cfgAppLang: document.getElementById('cfgAppLang'),
   cfgOcrLang: document.getElementById('cfgOcrLang'),
@@ -994,6 +997,9 @@ function defaultSettings() {
     backgroundOcr: false,
     ocrCyrillicOnly: true,
     ocrQualityMode: 'balanced',
+    uiSidebarWidth: 220,
+    uiToolbarScale: 0.3,
+    uiTextMinHeight: 40,
     sidebarSections: Object.fromEntries(SIDEBAR_SECTION_CONFIG.map((x) => [x.key, true])),
     toolbarSections: Object.fromEntries(TOOLBAR_SECTION_CONFIG.map((x) => [x.key, true])),
   };
@@ -1013,6 +1019,17 @@ function loadAppSettings() {
 
 function saveAppSettings() {
   localStorage.setItem(appSettingsKey(), JSON.stringify(state.settings || defaultSettings()));
+}
+
+function applyUiSizeSettings() {
+  const settings = state.settings || defaultSettings();
+  const sidebar = Math.max(160, Math.min(360, Number(settings.uiSidebarWidth) || 220));
+  const toolbarScale = Math.max(0.25, Math.min(1, Number(settings.uiToolbarScale) || 0.3));
+  const textMin = Math.max(24, Math.min(180, Number(settings.uiTextMinHeight) || 40));
+
+  localStorage.setItem(uiLayoutKey('sidebarWidth'), String(Math.round(sidebar)));
+  document.documentElement.style.setProperty('--ui-toolbar-scale', String(toolbarScale));
+  document.documentElement.style.setProperty('--ui-text-min-height', `${Math.round(textMin)}px`);
 }
 
 function getOcrLang() {
@@ -1589,6 +1606,9 @@ function openSettingsModal() {
   if (els.cfgOcrMinW) els.cfgOcrMinW.value = String(state.settings?.ocrMinW || 24);
   if (els.cfgOcrMinH) els.cfgOcrMinH.value = String(state.settings?.ocrMinH || 24);
   if (els.cfgBackgroundOcr) els.cfgBackgroundOcr.checked = !!state.settings?.backgroundOcr;
+  if (els.cfgSidebarWidth) els.cfgSidebarWidth.value = String(state.settings?.uiSidebarWidth || 220);
+  if (els.cfgToolbarScale) els.cfgToolbarScale.value = String(Math.round((state.settings?.uiToolbarScale || 0.3) * 100));
+  if (els.cfgTextMinHeight) els.cfgTextMinHeight.value = String(state.settings?.uiTextMinHeight || 40);
   renderSectionVisibilityControls();
 
   els.settingsModal.classList.add('open');
@@ -1621,6 +1641,9 @@ function saveSettingsFromModal() {
   if (els.cfgOcrMinW) state.settings.ocrMinW = Math.max(8, Number(els.cfgOcrMinW.value) || 24);
   if (els.cfgOcrMinH) state.settings.ocrMinH = Math.max(8, Number(els.cfgOcrMinH.value) || 24);
   if (els.cfgBackgroundOcr) state.settings.backgroundOcr = !!els.cfgBackgroundOcr.checked;
+  if (els.cfgSidebarWidth) state.settings.uiSidebarWidth = Math.max(160, Math.min(360, Number(els.cfgSidebarWidth.value) || 220));
+  if (els.cfgToolbarScale) state.settings.uiToolbarScale = Math.max(0.25, Math.min(1, (Number(els.cfgToolbarScale.value) || 30) / 100));
+  if (els.cfgTextMinHeight) state.settings.uiTextMinHeight = Math.max(24, Math.min(180, Number(els.cfgTextMinHeight.value) || 40));
 
   document.querySelectorAll('#cfgSidebarSections input[data-section-key]').forEach((input) => {
     state.settings.sidebarSections[input.dataset.sectionKey] = !!input.checked;
@@ -1630,6 +1653,7 @@ function saveSettingsFromModal() {
   });
 
   saveAppSettings();
+  applyUiSizeSettings();
   applyAppLanguage();
   applyLayoutState();
   applySectionVisibilitySettings();
@@ -5393,6 +5417,7 @@ window.addEventListener('beforeunload', () => {
 renderRecent();
 renderTabs();
 loadAppSettings();
+applyUiSizeSettings();
 loadTheme();
 loadSearchScope();
 renderReadingProgress();

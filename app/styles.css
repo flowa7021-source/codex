@@ -12,6 +12,8 @@
   --danger: #ff8b8b;
   --border: #2d3a51;
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+  --ui-toolbar-scale: 0.3;
+  --ui-text-min-height: 40px;
 }
 
 body.light {
@@ -89,6 +91,11 @@ button, select, .upload-btn, .inline-file-btn, input, textarea {
 }
 
 button, .upload-btn, .inline-file-btn { padding: 3px 6px; cursor: pointer; font-size: 0.74rem; line-height: 1.1; }
+
+.toolbar button, .toolbar .upload-btn, .toolbar .inline-file-btn, .toolbar select, .toolbar input {
+  padding: calc(2px * var(--ui-toolbar-scale)) calc(4px * var(--ui-toolbar-scale));
+  font-size: calc(0.62rem + 0.34rem * var(--ui-toolbar-scale));
+}
 button:hover, .upload-btn:hover, .inline-file-btn:hover { border-color: var(--accent); }
 
 input[type='text'], input[type='number'], input[type='url'], textarea { padding: 4px 6px; width: 100%; font-size: 0.76rem; }
@@ -136,8 +143,8 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 2px;
-  padding: 2px 4px;
+  gap: calc(2px * var(--ui-toolbar-scale));
+  padding: calc(2px * var(--ui-toolbar-scale)) calc(4px * var(--ui-toolbar-scale));
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 92%, transparent);
   backdrop-filter: blur(8px);
@@ -145,7 +152,7 @@ input:focus, select:focus, textarea:focus {
   z-index: 10;
 }
 .toolbar-top { top: 0; }
-.toolbar-bottom { top: 28px; }
+.toolbar-bottom { top: calc(24px + 14px * var(--ui-toolbar-scale)); }
 
 .toolbar-bottom {
   flex-wrap: nowrap;
@@ -162,8 +169,8 @@ input:focus, select:focus, textarea:focus {
 .doc-tabs {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
+  gap: calc(2px * var(--ui-toolbar-scale));
+  padding: calc(2px * var(--ui-toolbar-scale)) calc(4px * var(--ui-toolbar-scale));
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 92%, transparent);
 }
@@ -179,8 +186,8 @@ input:focus, select:focus, textarea:focus {
 .doc-tab {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 2px 4px;
+  gap: calc(2px * var(--ui-toolbar-scale));
+  padding: calc(2px * var(--ui-toolbar-scale)) calc(4px * var(--ui-toolbar-scale));
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--panel-3);
@@ -275,7 +282,7 @@ input:focus, select:focus, textarea:focus {
   background: var(--panel);
   padding: 4px 6px;
 }
-#pageText { min-height: 40px; }
+#pageText { min-height: var(--ui-text-min-height); }
 
 #annStats, #hotkeysStatus, #workspaceStatus, #bookmarksStatus, #docInfo { color: var(--muted); font-size: 0.8rem; }
 #hotkeysStatus.error, #workspaceStatus.error, #bookmarksStatus.error { color: var(--danger); }
@@ -381,7 +388,7 @@ body.advanced-hidden .advanced-section { display: none; }
 }
 
 @media (max-width: 1180px) {
-  .toolbar-bottom { top: 46px; }
+  .toolbar-bottom { top: calc(42px + 16px * var(--ui-toolbar-scale)); }
 }
 
 @media (max-width: 1024px) {
@@ -392,19 +399,7 @@ body.advanced-hidden .advanced-section { display: none; }
     border-bottom: 1px solid var(--border);
     max-height: 44vh;
   }
-  .toolbar-bottom { top: 28px; }
-
-.toolbar-bottom {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-}
-
-.toolbar-bottom .toolbar-group {
-  flex-wrap: nowrap;
-}
-
+  .toolbar-bottom { top: calc(24px + 14px * var(--ui-toolbar-scale)); }
 }
 
 .modal {
