@@ -14,6 +14,8 @@
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
   --ui-toolbar-scale: 0.14;
   --ui-text-min-height: 40px;
+  --search-toolbar-rows: 1;
+  --search-toolbar-row-height: 22px;
 }
 
 body.light {
@@ -155,14 +157,14 @@ input:focus, select:focus, textarea:focus {
 .toolbar-bottom { top: 0; }
 
 .toolbar-bottom {
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
+  flex-wrap: wrap;
+  overflow: visible;
+  align-items: flex-start;
+  row-gap: calc(2px * var(--ui-toolbar-scale));
 }
 
 .toolbar-bottom .toolbar-group {
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 
@@ -234,6 +236,20 @@ input:focus, select:focus, textarea:focus {
 }
 .toolbar-group-search { flex: 1 1 240px; }
 .toolbar-group-annot { flex: 2 1 360px; }
+
+.toolbar-group-search {
+  flex: 1 1 280px;
+  align-items: flex-start;
+  align-content: flex-start;
+  row-gap: 2px;
+  min-height: calc(var(--search-toolbar-rows, 1) * var(--search-toolbar-row-height, 22px));
+}
+
+#searchInput { flex: 1 1 300px; min-width: 240px; }
+#searchScope { flex: 0 1 220px; min-width: 170px; }
+#searchBtn, #searchPrev, #searchNext { flex: 0 0 auto; white-space: nowrap; }
+#searchStatus { flex: 1 1 100%; order: 10; min-height: 1.1em; }
+
 .toolbar-group-utils { flex: 0 1 auto; }
 
 #pageInput { width: 74px; }

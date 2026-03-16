@@ -324,6 +324,7 @@ const els = {
   searchPrev: document.getElementById('searchPrev'),
   searchNext: document.getElementById('searchNext'),
   searchStatus: document.getElementById('searchStatus'),
+  searchToolsGroup: document.getElementById('searchToolsGroup'),
   importDjvuDataJson: document.getElementById('importDjvuDataJson'),
   themeToggle: document.getElementById('themeToggle'),
   fullscreen: document.getElementById('fullscreen'),
@@ -1528,6 +1529,7 @@ function applyAppLanguage() {
   if (els.searchBtn) els.searchBtn.textContent = t.searchBtn;
   if (els.searchPrev) els.searchPrev.textContent = t.searchPrev;
   if (els.searchNext) els.searchNext.textContent = t.searchNext;
+  updateSearchToolbarRows();
   if (els.fitWidth) els.fitWidth.textContent = t.fitWidth;
   if (els.fitPage) els.fitPage.textContent = t.fitPage;
   if (els.printPage) els.printPage.textContent = t.printPage;
@@ -4926,6 +4928,40 @@ function applyLayoutState() {
   if (els.toggleSearchTools) els.toggleSearchTools.textContent = `Поиск-панель: ${searchToolsHidden ? 'off' : 'on'}`;
   if (els.toggleAnnotTools) els.toggleAnnotTools.textContent = `Панель инструментов: ${annotToolsHidden ? 'off' : 'on'}`;
   if (els.toggleTextToolsInline) els.toggleTextToolsInline.textContent = textHidden ? 'Развернуть' : 'Свернуть';
+  updateSearchToolbarRows();
+}
+
+function updateSearchToolbarRows() {
+  if (!els.searchToolsGroup) return;
+  const apply = () => {
+    const controls = [els.searchInput, els.searchScope, els.searchBtn, els.searchPrev, els.searchNext]
+      .filter(Boolean)
+      .filter((el) => el.offsetParent !== null);
+    if (!controls.length) {
+      document.documentElement.style.setProperty('--search-toolbar-rows', '1');
+      return;
+    }
+
+    const tops = new Set();
+    controls.forEach((el) => tops.add(Math.round(el.getBoundingClientRect().top)));
+    const rows = Math.max(1, tops.size);
+    document.documentElement.style.setProperty('--search-toolbar-rows', String(rows));
+
+    const sample = controls[0];
+    const rowHeight = Math.max(18, Math.round(sample.getBoundingClientRect().height) + 4);
+    document.documentElement.style.setProperty('--search-toolbar-row-height', `${rowHeight}px`);
+  };
+
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(() => {
+      apply();
+      setTimeout(apply, 80);
+      setTimeout(apply, 220);
+    });
+    return;
+  }
+
+  apply();
 }
 
 function toggleLayoutState(name) {
@@ -5300,6 +5336,10 @@ els.searchNext.addEventListener('click', async () => {
   await jumpToSearchResult(state.searchCursor + 1);
 });
 
+window.addEventListener('resize', updateSearchToolbarRows);
+els.searchInput?.addEventListener('input', updateSearchToolbarRows);
+els.searchScope?.addEventListener('change', updateSearchToolbarRows);
+
 els.shortcutsHelp.addEventListener('click', showShortcutsHelp);
 els.toggleSidebar?.addEventListener('click', () => toggleLayoutState('sidebarHidden'));
 els.toggleToolsBar?.addEventListener('click', () => toggleLayoutState('toolsHidden'));
@@ -5474,6 +5514,12 @@ renderReadingGoalStatus();
 setupDragAndDrop();
 setupAnnotationEvents();
 setupResizableLayout();
+
+if (typeof ResizeObserver === 'function' && els.searchToolsGroup) {
+  const searchResizeObserver = new ResizeObserver(() => updateSearchToolbarRows());
+  searchResizeObserver.observe(els.searchToolsGroup);
+}
+
 applyLayoutState();
 applySectionVisibilitySettings();
 applyAdvancedPanelsState();
