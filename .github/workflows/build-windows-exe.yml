@@ -1,0 +1,118 @@
+name: Build Windows EXE
+
+"on":
+  workflow_dispatch:
+  push:
+    branches:
+      - Final
+  pull_request:
+    branches:
+      - Final
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-exe-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_DIR: G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z
+
+jobs:
+  build-windows:
+    name: Build ready-to-use Windows EXE artifacts
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: ${{ env.PROJECT_DIR }}
+
+    steps:
+      - name: Checkout Final branch source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Show CI context
+        run: |
+          Write-Host "GITHUB_ACTIONS=$env:GITHUB_ACTIONS"
+          Write-Host "CI=$env:CI"
+          Write-Host "GITHUB_REF=$env:GITHUB_REF"
+          Write-Host "Working dir=$(Get-Location)"
+
+      - name: Verify project files required for desktop build
+        run: |
+          $required = @(
+            'package.json',
+            'package-lock.json',
+            'electron/main.js',
+            'app/index.html',
+            'app/app.js'
+          )
+          foreach ($file in $required) {
+            if (!(Test-Path $file)) { throw "Required file not found: $file" }
+          }
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
+
+      - name: Install dependencies (clean)
+        run: npm ci
+
+      - name: Build portable EXE (unsigned)
+        run: npm run build:win:nosign
+
+      - name: Build NSIS installer EXE (unsigned)
+        run: npm run build:win:installer:nosign
+
+      - name: Validate produced EXE files
+        run: |
+          $portable = Get-ChildItem -Path dist -Filter '*.exe' -File | Where-Object { $_.Name -like 'NovaReader-*.exe' }
+          if (!$portable) { throw 'No EXE artifacts were produced in dist/' }
+
+          foreach ($file in $portable) {
+            if ($file.Length -lt 10MB) {
+              throw "Artifact too small to be a valid packaged app: $($file.Name) ($($file.Length) bytes)"
+            }
+          }
+
+          Write-Host 'Produced EXE artifacts:'
+          $portable | Sort-Object Name | ForEach-Object { Write-Host "- $($_.Name) [$([Math]::Round($_.Length / 1MB, 2)) MB]" }
+
+      - name: Generate SHA256 checksums for EXE artifacts
+        run: |
+          $checksumFile = 'dist/SHA256SUMS.txt'
+          if (Test-Path $checksumFile) {
+            Remove-Item $checksumFile -Force
+          }
+
+          $exeFiles = Get-ChildItem -Path dist -Filter '*.exe' -File | Sort-Object Name
+          if (!$exeFiles) {
+            throw 'No EXE files found to checksum'
+          }
+
+          foreach ($file in $exeFiles) {
+            $hash = (Get-FileHash -Algorithm SHA256 -Path $file.FullName).Hash.ToLower()
+            "$hash *$($file.Name)" | Out-File -FilePath $checksumFile -Encoding utf8 -Append
+          }
+
+          if (!(Test-Path $checksumFile)) {
+            throw 'Checksum file was not generated'
+          }
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: novareader-windows-exe
+          path: |
+            ${{ env.PROJECT_DIR }}/dist/*.exe
+            ${{ env.PROJECT_DIR }}/dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
