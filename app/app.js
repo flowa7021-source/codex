@@ -4883,10 +4883,10 @@ function toggleLayoutState(name) {
 }
 
 function applyResizableLayoutState() {
-  const sidebarWidth = Number(localStorage.getItem(uiLayoutKey('sidebarWidth')) || 360);
+  const sidebarWidth = Number(localStorage.getItem(uiLayoutKey('sidebarWidth')) || 260);
   const pageAreaPx = Number(localStorage.getItem(uiLayoutKey('pageAreaPx')) || 0);
-  const safeSidebar = Math.max(260, Math.min(560, sidebarWidth));
-  const safePage = Math.max(300, Math.min(2400, pageAreaPx || 0));
+  const safeSidebar = Math.max(200, Math.min(420, sidebarWidth));
+  const safePage = Math.max(300, Math.min(3200, pageAreaPx || 0));
   document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${safeSidebar}px`);
   if (pageAreaPx > 0) {
     document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${safePage}px`);
@@ -4898,7 +4898,7 @@ function ensureDefaultPageAreaHeight() {
   if (raw > 0) return;
   const viewerArea = document.querySelector('.viewer-area');
   if (!viewerArea) return;
-  const preferred = Math.max(360, Math.floor(viewerArea.clientHeight * 0.64));
+  const preferred = Math.max(460, Math.floor(viewerArea.clientHeight * 0.72));
   localStorage.setItem(uiLayoutKey('pageAreaPx'), String(preferred));
   applyResizableLayoutState();
 }
@@ -4911,7 +4911,10 @@ function setupResizableLayout() {
     let active = false;
     const onMove = (e) => {
       if (!active) return;
-      const safe = Math.max(260, Math.min(560, e.clientX));
+      const shellRect = document.querySelector('.app-shell')?.getBoundingClientRect();
+      if (!shellRect) return;
+      const raw = e.clientX - shellRect.left;
+      const safe = Math.max(200, Math.min(420, raw));
       localStorage.setItem(uiLayoutKey('sidebarWidth'), String(Math.round(safe)));
       applyResizableLayoutState();
     };
@@ -4934,7 +4937,7 @@ function setupResizableLayout() {
       const viewerRect = viewerArea.getBoundingClientRect();
       const canvasRect = els.canvasWrap.getBoundingClientRect();
       const textHidden = viewerArea.classList.contains('texttools-hidden');
-      const minTextHeight = textTools && !textHidden ? 104 : 0;
+      const minTextHeight = textTools && !textHidden ? 72 : 0;
       const paddingReserve = 14;
 
       const maxPageHeight = Math.max(300, viewerRect.height - minTextHeight - paddingReserve);
