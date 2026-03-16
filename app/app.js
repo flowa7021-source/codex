@@ -178,6 +178,7 @@ const state = {
   pageSkewAngles: {},
   pageSkewPromises: {},
   ocrTaskId: 0,
+  textEditMode: false,
 };
 
 const defaultHotkeys = {
@@ -352,6 +353,9 @@ const els = {
   refreshText: document.getElementById('refreshText'),
   copyText: document.getElementById('copyText'),
   exportText: document.getElementById('exportText'),
+  exportWord: document.getElementById('exportWord'),
+  toggleTextEdit: document.getElementById('toggleTextEdit'),
+  saveTextEdits: document.getElementById('saveTextEdits'),
   ocrCurrentPage: document.getElementById('ocrCurrentPage'),
   ocrRegionMode: document.getElementById('ocrRegionMode'),
   copyOcrText: document.getElementById('copyOcrText'),
@@ -4581,6 +4585,73 @@ function exportPageText() {
   URL.revokeObjectURL(url);
 }
 
+function setTextEditMode(enabled) {
+  state.textEditMode = !!enabled;
+  if (els.pageText) {
+    els.pageText.readOnly = !state.textEditMode;
+  }
+  if (els.toggleTextEdit) {
+    els.toggleTextEdit.textContent = `Редактирование текста: ${state.textEditMode ? 'on' : 'off'}`;
+    els.toggleTextEdit.classList.toggle('is-active', state.textEditMode);
+  }
+}
+
+function saveCurrentPageTextEdits() {
+  if (!state.adapter || !state.docName) return;
+  const txt = String(els.pageText?.value || '').trim();
+  const cache = loadOcrTextData();
+  const pagesText = Array.isArray(cache?.pagesText) ? [...cache.pagesText] : new Array(state.pageCount).fill('');
+  pagesText[state.currentPage - 1] = txt;
+  saveOcrTextData({
+    pagesText,
+    source: 'manual-edit',
+    scannedPages: Math.max(cache?.scannedPages || 0, state.currentPage),
+    totalPages: state.pageCount,
+    updatedAt: new Date().toISOString(),
+  });
+  setOcrStatus('OCR: правки текста сохранены для текущей страницы');
+}
+
+function exportCurrentDocToWord() {
+  if (!state.adapter) return;
+  const title = String(state.docName || 'document').replace(/[<>"'&]/g, '');
+  const cache = loadOcrTextData();
+  const pages = Array.isArray(cache?.pagesText) ? cache.pagesText : [];
+  const currentText = String(els.pageText?.value || '').trim();
+  if (!pages[state.currentPage - 1] && currentText) {
+    pages[state.currentPage - 1] = currentText;
+  }
+
+  const body = [];
+  body.push(`<h1>${title}</h1>`);
+  const maxPages = Math.max(state.pageCount || 1, pages.length || 0);
+  for (let i = 1; i <= maxPages; i += 1) {
+    const txt = String(pages[i - 1] || '').trim();
+    if (!txt) continue;
+    const escaped = txt
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br/>');
+    body.push(`<h2>Страница ${i}</h2><p>${escaped}</p>`);
+  }
+
+  if (body.length === 1) {
+    setOcrStatus('OCR: нет текста для экспорта в Word, выполните OCR/извлечение');
+    return;
+  }
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${body.join('')}</body></html>`;
+  const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${state.docName || 'document'}.doc`;
+  a.click();
+  URL.revokeObjectURL(url);
+  setOcrStatus('OCR: экспорт Word (текстовый слой/OCR) выполнен');
+}
+
 async function searchInPdf(query) {
   state.searchResults = [];
   state.searchCursor = -1;
@@ -5035,6 +5106,9 @@ els.importDjvuDataQuick?.addEventListener('click', () => els.importDjvuDataJson?
 els.refreshText.addEventListener('click', refreshPageText);
 els.copyText.addEventListener('click', copyPageText);
 els.exportText.addEventListener('click', exportPageText);
+els.exportWord?.addEventListener('click', exportCurrentDocToWord);
+els.toggleTextEdit?.addEventListener('click', () => setTextEditMode(!state.textEditMode));
+els.saveTextEdits?.addEventListener('click', saveCurrentPageTextEdits);
 els.ocrCurrentPage?.addEventListener('click', async () => {
   await runOcrForCurrentPage();
 });
