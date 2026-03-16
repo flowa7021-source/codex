@@ -143,6 +143,9 @@ const state = {
   isSelectingOcr: false,
   backgroundOcrToken: 0,
   settings: null,
+  openTabs: [],
+  activeTabId: null,
+  tabCounter: 0,
 };
 
 const defaultHotkeys = {
@@ -151,6 +154,10 @@ const defaultHotkeys = {
   zoomIn: 'ctrl+=',
   zoomOut: 'ctrl+-',
   annotate: 'ctrl+shift+a',
+  searchFocus: 'ctrl+f',
+  ocrPage: 'ctrl+shift+o',
+  fitWidth: 'ctrl+9',
+  fitPage: 'ctrl+0',
 };
 
 let hotkeys = { ...defaultHotkeys };
@@ -194,16 +201,26 @@ const els = {
   importNotesJson: document.getElementById('importNotesJson'),
   notesImportMode: document.getElementById('notesImportMode'),
   insertTimestamp: document.getElementById('insertTimestamp'),
+  docTabsList: document.getElementById('docTabsList'),
+  newTabFromFile: document.getElementById('newTabFromFile'),
   hkNext: document.getElementById('hkNext'),
   hkPrev: document.getElementById('hkPrev'),
   hkZoomIn: document.getElementById('hkZoomIn'),
   hkZoomOut: document.getElementById('hkZoomOut'),
   hkAnnotate: document.getElementById('hkAnnotate'),
+  hkSearchFocus: document.getElementById('hkSearchFocus'),
+  hkOcrPage: document.getElementById('hkOcrPage'),
+  hkFitWidth: document.getElementById('hkFitWidth'),
+  hkFitPage: document.getElementById('hkFitPage'),
   hkNextHint: document.getElementById('hkNextHint'),
   hkPrevHint: document.getElementById('hkPrevHint'),
   hkZoomInHint: document.getElementById('hkZoomInHint'),
   hkZoomOutHint: document.getElementById('hkZoomOutHint'),
   hkAnnotateHint: document.getElementById('hkAnnotateHint'),
+  hkSearchFocusHint: document.getElementById('hkSearchFocusHint'),
+  hkOcrPageHint: document.getElementById('hkOcrPageHint'),
+  hkFitWidthHint: document.getElementById('hkFitWidthHint'),
+  hkFitPageHint: document.getElementById('hkFitPageHint'),
   saveHotkeys: document.getElementById('saveHotkeys'),
   resetHotkeys: document.getElementById('resetHotkeys'),
   autoFixHotkeys: document.getElementById('autoFixHotkeys'),
@@ -3215,7 +3232,8 @@ async function extractDjvuFallbackText(file) {
 }
 
 
-async function openFile(file) {
+async function openFile(file, options = {}) {
+  const { fromTabSwitch = false, tabId = null, forceNewTab = false } = options;
   revokeCurrentObjectUrl();
   state.file = file;
   state.docName = file.name;
@@ -3233,6 +3251,13 @@ async function openFile(file) {
   els.pageText.value = '';
   ensureTextToolsVisible();
   state.djvuBinaryDetected = false;
+
+  if (!fromTabSwitch) {
+    upsertActiveTab(file, { tabId, forceNew: forceNewTab });
+  } else if (tabId) {
+    state.activeTabId = tabId;
+    renderTabs();
+  }
 
   const lower = file.name.toLowerCase();
 
@@ -3479,6 +3504,82 @@ function renderRecent() {
   });
 }
 
+function renderTabs() {
+  if (!els.docTabsList) return;
+  els.docTabsList.innerHTML = '';
+  state.openTabs.forEach((tab) => {
+    const btn = document.createElement('button');
+    btn.className = `doc-tab${tab.id === state.activeTabId ? ' active' : ''}`;
+    btn.type = 'button';
+    btn.title = tab.name;
+    btn.textContent = tab.name;
+    btn.addEventListener('click', async () => {
+      if (tab.id === state.activeTabId) return;
+      state.activeTabId = tab.id;
+      renderTabs();
+      if (tab.file) {
+        await openFile(tab.file, { fromTabSwitch: true, tabId: tab.id });
+      }
+    });
+
+    const close = document.createElement('button');
+    close.className = 'doc-tab-close';
+    close.type = 'button';
+    close.textContent = '×';
+    close.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const idx = state.openTabs.findIndex((x) => x.id === tab.id);
+      if (idx < 0) return;
+      const wasActive = state.activeTabId === tab.id;
+      state.openTabs.splice(idx, 1);
+      if (!state.openTabs.length) {
+        state.activeTabId = null;
+        renderTabs();
+        state.adapter = null;
+        state.file = null;
+        state.docName = null;
+        state.pageCount = 0;
+        els.emptyState.style.display = '';
+        els.canvas.width = els.canvas.height = 0;
+        els.annotationCanvas.width = els.annotationCanvas.height = 0;
+        els.pageStatus.textContent = 'Страница 0 / 0';
+        return;
+      }
+      if (wasActive) {
+        const next = state.openTabs[Math.max(0, idx - 1)] || state.openTabs[0];
+        state.activeTabId = next.id;
+        renderTabs();
+        await openFile(next.file, { fromTabSwitch: true, tabId: next.id });
+      } else {
+        renderTabs();
+      }
+    });
+
+    btn.appendChild(close);
+    els.docTabsList.appendChild(btn);
+  });
+}
+
+function upsertActiveTab(file, opts = {}) {
+  const forceNew = !!opts.forceNew;
+  const tabId = opts.tabId || state.activeTabId;
+  if (tabId && !forceNew) {
+    const tab = state.openTabs.find((x) => x.id === tabId);
+    if (tab) {
+      tab.name = file.name;
+      tab.file = file;
+      state.activeTabId = tab.id;
+      renderTabs();
+      return;
+    }
+  }
+
+  const nextId = `tab-${++state.tabCounter}`;
+  state.openTabs.push({ id: nextId, name: file.name, file });
+  state.activeTabId = nextId;
+  renderTabs();
+}
+
 function loadTheme() {
   const theme = localStorage.getItem('novareader-theme') || 'dark';
   document.body.classList.toggle('light', theme === 'light');
@@ -3710,7 +3811,15 @@ const hotkeyFieldMeta = {
   zoomIn: { input: () => els.hkZoomIn, hint: () => els.hkZoomInHint, label: 'Zoom +' },
   zoomOut: { input: () => els.hkZoomOut, hint: () => els.hkZoomOutHint, label: 'Zoom -' },
   annotate: { input: () => els.hkAnnotate, hint: () => els.hkAnnotateHint, label: 'Аннотации' },
+  searchFocus: { input: () => els.hkSearchFocus, hint: () => els.hkSearchFocusHint, label: 'Фокус поиска' },
+  ocrPage: { input: () => els.hkOcrPage, hint: () => els.hkOcrPageHint, label: 'OCR страницы' },
+  fitWidth: { input: () => els.hkFitWidth, hint: () => els.hkFitWidthHint, label: 'По ширине' },
+  fitPage: { input: () => els.hkFitPage, hint: () => els.hkFitPageHint, label: 'По странице' },
 };
+
+function hotkeyKeys() {
+  return Object.keys(hotkeyFieldMeta);
+}
 
 function normalizeHotkeyForDisplay(value) {
   const v = (value || '').toLowerCase();
@@ -3779,6 +3888,10 @@ function renderHotkeyInputs() {
   els.hkZoomIn.value = hotkeys.zoomIn;
   els.hkZoomOut.value = hotkeys.zoomOut;
   els.hkAnnotate.value = hotkeys.annotate;
+  if (els.hkSearchFocus) els.hkSearchFocus.value = hotkeys.searchFocus;
+  if (els.hkOcrPage) els.hkOcrPage.value = hotkeys.ocrPage;
+  if (els.hkFitWidth) els.hkFitWidth.value = hotkeys.fitWidth;
+  if (els.hkFitPage) els.hkFitPage.value = hotkeys.fitPage;
 }
 
 function saveHotkeys() {
@@ -3788,6 +3901,10 @@ function saveHotkeys() {
     zoomIn: normalizeHotkey(els.hkZoomIn.value, defaultHotkeys.zoomIn),
     zoomOut: normalizeHotkey(els.hkZoomOut.value, defaultHotkeys.zoomOut),
     annotate: normalizeHotkey(els.hkAnnotate.value, defaultHotkeys.annotate),
+    searchFocus: normalizeHotkey(els.hkSearchFocus?.value, defaultHotkeys.searchFocus),
+    ocrPage: normalizeHotkey(els.hkOcrPage?.value, defaultHotkeys.ocrPage),
+    fitWidth: normalizeHotkey(els.hkFitWidth?.value, defaultHotkeys.fitWidth),
+    fitPage: normalizeHotkey(els.hkFitPage?.value, defaultHotkeys.fitPage),
   };
 
   const validation = validateHotkeys(candidate);
@@ -3822,6 +3939,10 @@ function loadHotkeys() {
       zoomIn: normalizeHotkey(parsed.zoomIn, defaultHotkeys.zoomIn),
       zoomOut: normalizeHotkey(parsed.zoomOut, defaultHotkeys.zoomOut),
       annotate: normalizeHotkey(parsed.annotate, defaultHotkeys.annotate),
+      searchFocus: normalizeHotkey(parsed.searchFocus, defaultHotkeys.searchFocus),
+      ocrPage: normalizeHotkey(parsed.ocrPage, defaultHotkeys.ocrPage),
+      fitWidth: normalizeHotkey(parsed.fitWidth, defaultHotkeys.fitWidth),
+      fitPage: normalizeHotkey(parsed.fitPage, defaultHotkeys.fitPage),
     };
   } catch {
     hotkeys = { ...defaultHotkeys };
@@ -3862,7 +3983,7 @@ function stringifyHotkeyEvent(e) {
 }
 
 function bindHotkeyCapture() {
-  const fields = ['next', 'prev', 'zoomIn', 'zoomOut', 'annotate'];
+  const fields = hotkeyKeys();
   fields.forEach((field) => {
     const input = hotkeyFieldMeta[field].input();
     input.addEventListener('keydown', (e) => {
@@ -3884,13 +4005,17 @@ function bindHotkeyCapture() {
 }
 
 function autoFixHotkeys() {
-  const fields = ['next', 'prev', 'zoomIn', 'zoomOut', 'annotate'];
+  const fields = hotkeyKeys();
   const candidate = {
     next: normalizeHotkey(els.hkNext.value === '>' ? 'arrowright' : els.hkNext.value, ''),
     prev: normalizeHotkey(els.hkPrev.value === '<' ? 'arrowleft' : els.hkPrev.value, ''),
     zoomIn: normalizeHotkey(els.hkZoomIn.value, ''),
     zoomOut: normalizeHotkey(els.hkZoomOut.value, ''),
     annotate: normalizeHotkey(els.hkAnnotate.value, ''),
+    searchFocus: normalizeHotkey(els.hkSearchFocus?.value, ''),
+    ocrPage: normalizeHotkey(els.hkOcrPage?.value, ''),
+    fitWidth: normalizeHotkey(els.hkFitWidth?.value, ''),
+    fitPage: normalizeHotkey(els.hkFitPage?.value, ''),
   };
 
   const used = new Set();
@@ -3912,7 +4037,7 @@ function autoFixHotkeys() {
       continue;
     }
 
-    const fallbackPool = ['j', 'k', 'i', 'o', 'u', 'p', 'n', 'm'];
+    const fallbackPool = ['j', 'k', 'i', 'o', 'u', 'p', 'n', 'm', 'f2', 'f3', 'f4'];
     const fallback = fallbackPool.find((x) => !used.has(x)) || preferred;
     candidate[key] = fallback;
     used.add(fallback);
@@ -4542,7 +4667,7 @@ function setupDragAndDrop() {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer?.files?.[0];
-    if (file) await openFile(file);
+    if (file) await openFile(file, { forceNewTab: true });
   });
 }
 
@@ -4576,7 +4701,12 @@ els.settingsModal?.addEventListener('click', (e) => { if (e.target === els.setti
 els.fileInput.addEventListener('change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
-  await openFile(file);
+  await openFile(file, { forceNewTab: true });
+  e.target.value = '';
+});
+
+els.newTabFromFile?.addEventListener('click', () => {
+  els.fileInput?.click();
 });
 
 els.historyBack.addEventListener('click', navigateHistoryBack);
@@ -4885,6 +5015,10 @@ window.addEventListener('beforeunload', revokeCurrentObjectUrl);
 document.addEventListener('keydown', async (e) => {
   const key = e.key.toLowerCase();
   const combo = stringifyHotkeyEvent(e);
+
+  if (combo && Object.values(hotkeys).includes(combo) && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+  }
   if (e.altKey && key === 'arrowleft') {
     e.preventDefault();
     await navigateHistoryBack();
@@ -4900,11 +5034,21 @@ document.addEventListener('keydown', async (e) => {
   if (combo && combo === hotkeys.prev) els.prevPage.click();
   if (combo && combo === hotkeys.zoomIn) els.zoomIn.click();
   if (combo && combo === hotkeys.zoomOut) els.zoomOut.click();
+  if (combo && combo === hotkeys.fitWidth) els.fitWidth.click();
+  if (combo && combo === hotkeys.fitPage) els.fitPage.click();
+  if (combo && combo === hotkeys.ocrPage) {
+    e.preventDefault();
+    els.ocrCurrentPage?.click();
+  }
+  if (combo && combo === hotkeys.searchFocus) {
+    e.preventDefault();
+    els.searchInput.focus();
+  }
   if (key === 'b' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     addBookmark();
   }
-  if ((e.ctrlKey || e.metaKey) && key === 'f') {
+  if ((e.ctrlKey || e.metaKey) && key === 'f' && hotkeys.searchFocus === 'ctrl+f') {
     e.preventDefault();
     els.searchInput.focus();
   }
@@ -4936,6 +5080,7 @@ window.addEventListener('beforeunload', () => {
 });
 
 renderRecent();
+renderTabs();
 loadAppSettings();
 loadTheme();
 loadSearchScope();

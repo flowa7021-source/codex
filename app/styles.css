@@ -218,6 +218,48 @@ input:focus, select:focus, textarea:focus {
 .toolbar-top { top: 0; }
 .toolbar-bottom { top: 58px; }
 
+.doc-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.doc-tabs-list {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: auto;
+  min-width: 0;
+}
+
+.doc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.doc-tab.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.doc-tab-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0 2px;
+  cursor: pointer;
+}
+
 .divider {
   width: 1px;
   height: 26px;
@@ -510,6 +552,10 @@ body.advanced-hidden .advanced-section { display: none; }
 
 .settings-grid label {
   margin: 0;
+}
+
+.settings-hotkeys {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 [data-sidebar-section].section-hidden,
