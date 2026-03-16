@@ -12,7 +12,7 @@
   --danger: #ff8b8b;
   --border: #2d3a51;
   --shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
-  --ui-toolbar-scale: 0.22;
+  --ui-toolbar-scale: 0.14;
   --ui-text-min-height: 40px;
 }
 
@@ -94,7 +94,7 @@ button, .upload-btn, .inline-file-btn { padding: 3px 6px; cursor: pointer; font-
 
 .toolbar button, .toolbar .upload-btn, .toolbar .inline-file-btn, .toolbar select, .toolbar input {
   padding: calc(2px * var(--ui-toolbar-scale)) calc(4px * var(--ui-toolbar-scale));
-  font-size: calc(0.58rem + 0.30rem * var(--ui-toolbar-scale));
+  font-size: calc(0.50rem + 0.24rem * var(--ui-toolbar-scale));
 }
 button:hover, .upload-btn:hover, .inline-file-btn:hover { border-color: var(--accent); }
 

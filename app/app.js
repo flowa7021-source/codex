@@ -999,7 +999,7 @@ function defaultSettings() {
     ocrCyrillicOnly: true,
     ocrQualityMode: 'balanced',
     uiSidebarWidth: 220,
-    uiToolbarScale: 0.22,
+    uiToolbarScale: 0.14,
     uiTextMinHeight: 40,
     uiPageAreaPx: 680,
     sidebarSections: Object.fromEntries(SIDEBAR_SECTION_CONFIG.map((x) => [x.key, true])),
@@ -1026,7 +1026,7 @@ function saveAppSettings() {
 function applyUiSizeSettings() {
   const settings = state.settings || defaultSettings();
   const sidebar = Math.max(160, Math.min(360, Number(settings.uiSidebarWidth) || 220));
-  const toolbarScale = Math.max(0.1, Math.min(0.6, Number(settings.uiToolbarScale) || 0.22));
+  const toolbarScale = Math.max(0.1, Math.min(0.6, Number(settings.uiToolbarScale) || 0.14));
   const textMin = Math.max(24, Math.min(180, Number(settings.uiTextMinHeight) || 40));
   const pageArea = Math.max(420, Math.min(2200, Number(settings.uiPageAreaPx) || 680));
 
@@ -1615,10 +1615,11 @@ function openSettingsModal() {
   if (els.cfgOcrMinH) els.cfgOcrMinH.value = String(state.settings?.ocrMinH || 24);
   if (els.cfgBackgroundOcr) els.cfgBackgroundOcr.checked = !!state.settings?.backgroundOcr;
   if (els.cfgSidebarWidth) els.cfgSidebarWidth.value = String(state.settings?.uiSidebarWidth || 220);
-  if (els.cfgToolbarScale) els.cfgToolbarScale.value = String(Math.round((state.settings?.uiToolbarScale || 0.22) * 100));
+  if (els.cfgToolbarScale) els.cfgToolbarScale.value = String(Math.round((state.settings?.uiToolbarScale || 0.14) * 100));
   if (els.cfgTextMinHeight) els.cfgTextMinHeight.value = String(state.settings?.uiTextMinHeight || 40);
   if (els.cfgPageAreaHeight) els.cfgPageAreaHeight.value = String(state.settings?.uiPageAreaPx || 680);
   renderSectionVisibilityControls();
+  previewUiSizeFromModal();
 
   els.settingsModal.classList.add('open');
   els.settingsModal.setAttribute('aria-hidden', 'false');
@@ -1628,6 +1629,24 @@ function closeSettingsModal() {
   if (!els.settingsModal) return;
   els.settingsModal.classList.remove('open');
   els.settingsModal.setAttribute('aria-hidden', 'true');
+}
+
+function readUiSizeSettingsFromModal() {
+  return {
+    sidebar: Math.max(160, Math.min(360, Number(els.cfgSidebarWidth?.value) || 220)),
+    toolbarScale: Math.max(0.1, Math.min(0.6, (Number(els.cfgToolbarScale?.value) || 14) / 100)),
+    textMin: Math.max(24, Math.min(180, Number(els.cfgTextMinHeight?.value) || 40)),
+    pageArea: Math.max(420, Math.min(2200, Number(els.cfgPageAreaHeight?.value) || 680)),
+  };
+}
+
+function previewUiSizeFromModal() {
+  if (!els.settingsModal?.classList.contains('open')) return;
+  const values = readUiSizeSettingsFromModal();
+  document.documentElement.style.setProperty('--ui-toolbar-scale', String(values.toolbarScale));
+  document.documentElement.style.setProperty('--ui-text-min-height', `${Math.round(values.textMin)}px`);
+  document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${Math.round(values.sidebar)}px`);
+  document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${Math.round(values.pageArea)}px`);
 }
 
 function saveSettingsFromModal() {
@@ -1651,7 +1670,7 @@ function saveSettingsFromModal() {
   if (els.cfgOcrMinH) state.settings.ocrMinH = Math.max(8, Number(els.cfgOcrMinH.value) || 24);
   if (els.cfgBackgroundOcr) state.settings.backgroundOcr = !!els.cfgBackgroundOcr.checked;
   if (els.cfgSidebarWidth) state.settings.uiSidebarWidth = Math.max(160, Math.min(360, Number(els.cfgSidebarWidth.value) || 220));
-  if (els.cfgToolbarScale) state.settings.uiToolbarScale = Math.max(0.1, Math.min(0.6, (Number(els.cfgToolbarScale.value) || 22) / 100));
+  if (els.cfgToolbarScale) state.settings.uiToolbarScale = Math.max(0.1, Math.min(0.6, (Number(els.cfgToolbarScale.value) || 14) / 100));
   if (els.cfgTextMinHeight) state.settings.uiTextMinHeight = Math.max(24, Math.min(180, Number(els.cfgTextMinHeight.value) || 40));
   if (els.cfgPageAreaHeight) state.settings.uiPageAreaPx = Math.max(420, Math.min(2200, Number(els.cfgPageAreaHeight.value) || 680));
 
@@ -5038,6 +5057,10 @@ els.toggleAdvancedPanels?.addEventListener('click', toggleAdvancedPanelsState);
 els.openSettingsModal?.addEventListener('click', openSettingsModal);
 els.closeSettingsModal?.addEventListener('click', closeSettingsModal);
 els.saveSettingsModal?.addEventListener('click', saveSettingsFromModal);
+els.cfgSidebarWidth?.addEventListener('input', previewUiSizeFromModal);
+els.cfgToolbarScale?.addEventListener('input', previewUiSizeFromModal);
+els.cfgTextMinHeight?.addEventListener('input', previewUiSizeFromModal);
+els.cfgPageAreaHeight?.addEventListener('input', previewUiSizeFromModal);
 els.settingsModal?.addEventListener('click', (e) => { if (e.target === els.settingsModal) closeSettingsModal(); });
 
 els.fileInput.addEventListener('change', async (e) => {
