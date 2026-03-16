@@ -4883,10 +4883,10 @@ function toggleLayoutState(name) {
 }
 
 function applyResizableLayoutState() {
-  const sidebarWidth = Number(localStorage.getItem(uiLayoutKey('sidebarWidth')) || 260);
+  const sidebarWidth = Number(localStorage.getItem(uiLayoutKey('sidebarWidth')) || 220);
   const pageAreaPx = Number(localStorage.getItem(uiLayoutKey('pageAreaPx')) || 0);
-  const safeSidebar = Math.max(200, Math.min(420, sidebarWidth));
-  const safePage = Math.max(420, Math.min(3200, pageAreaPx || 0));
+  const safeSidebar = Math.max(180, Math.min(360, sidebarWidth));
+  const safePage = Math.max(460, Math.min(3200, pageAreaPx || 0));
   document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${safeSidebar}px`);
   if (pageAreaPx > 0) {
     document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${safePage}px`);
@@ -4898,11 +4898,17 @@ function ensureDefaultPageAreaHeight() {
   const viewerArea = document.querySelector('.viewer-area');
   if (!viewerArea) return;
 
-  const preferred = Math.max(560, Math.floor(viewerArea.clientHeight * 0.82));
-  if (raw <= 0 || raw < 420) {
+  const preferred = Math.max(620, Math.floor(viewerArea.clientHeight * 0.88));
+  if (raw <= 0 || raw < 460) {
     localStorage.setItem(uiLayoutKey('pageAreaPx'), String(preferred));
-    applyResizableLayoutState();
   }
+
+  const rawSidebar = Number(localStorage.getItem(uiLayoutKey('sidebarWidth')) || 0);
+  if (rawSidebar <= 0 || rawSidebar > 360) {
+    localStorage.setItem(uiLayoutKey('sidebarWidth'), '220');
+  }
+
+  applyResizableLayoutState();
 }
 
 function setupResizableLayout() {
@@ -4916,7 +4922,7 @@ function setupResizableLayout() {
       const shellRect = document.querySelector('.app-shell')?.getBoundingClientRect();
       if (!shellRect) return;
       const raw = e.clientX - shellRect.left;
-      const safe = Math.max(200, Math.min(420, raw));
+      const safe = Math.max(180, Math.min(360, raw));
       localStorage.setItem(uiLayoutKey('sidebarWidth'), String(Math.round(safe)));
       applyResizableLayoutState();
     };
@@ -4939,12 +4945,12 @@ function setupResizableLayout() {
       const viewerRect = viewerArea.getBoundingClientRect();
       const canvasRect = els.canvasWrap.getBoundingClientRect();
       const textHidden = viewerArea.classList.contains('texttools-hidden');
-      const minTextHeight = textTools && !textHidden ? 56 : 0;
+      const minTextHeight = textTools && !textHidden ? 44 : 0;
       const paddingReserve = 14;
 
-      const maxPageHeight = Math.max(420, viewerRect.height - minTextHeight - paddingReserve);
+      const maxPageHeight = Math.max(460, viewerRect.height - minTextHeight - paddingReserve);
       const rawPageHeight = e.clientY - canvasRect.top;
-      const safePageHeight = Math.max(420, Math.min(maxPageHeight, rawPageHeight));
+      const safePageHeight = Math.max(460, Math.min(maxPageHeight, rawPageHeight));
       localStorage.setItem(uiLayoutKey('pageAreaPx'), String(Math.round(safePageHeight)));
       applyResizableLayoutState();
     };
