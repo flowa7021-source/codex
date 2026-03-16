@@ -8,14 +8,13 @@ on:
       - master
       - work
       - исправленный-код
-      - Исправленный-код
     paths:
       - "G-claude-repair-ocr-bugs-gQxxl/**"
-      - ".github/workflows/main.yml"
+      - ".github/workflows/build-windows-exe.yml"
   pull_request:
     paths:
       - "G-claude-repair-ocr-bugs-gQxxl/**"
-      - ".github/workflows/main.yml"
+      - ".github/workflows/build-windows-exe.yml"
 
 env:
   PROJECT_DIR: G-claude-repair-ocr-bugs-gQxxl/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z
@@ -33,51 +32,48 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js (LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: "20"
           cache: npm
           cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build standalone portable EXE (all resources bundled)
+      - name: Build portable EXE (all app resources bundled)
         run: npm run build:win:nosign
 
-      - name: List dist files
-        run: Get-ChildItem dist -File | Format-Table Name, Length
-
-      - name: Generate SHA256 checksums
+      - name: Validate build output
         run: |
-          $artifacts = Get-ChildItem dist -File | Where-Object {
-            $_.Extension -in @('.exe', '.7z', '.blockmap', '.yml')
+          if (-not (Test-Path dist)) {
+            throw "dist folder not found after build"
           }
 
-          if (-not $artifacts) {
-            throw "Build artifacts not found in dist"
-          }
-
-          $exeArtifacts = $artifacts | Where-Object { $_.Extension -eq '.exe' }
-          if (-not $exeArtifacts) {
+          $exeFiles = Get-ChildItem -Path dist -File -Filter *.exe
+          if (-not $exeFiles) {
             throw "EXE artifact not found in dist"
           }
 
-          foreach ($artifact in $exeArtifacts) {
-            $hash = Get-FileHash $artifact.FullName -Algorithm SHA256
-            "${($artifact.Name)}  ${($hash.Hash)}" |
-              Out-File -FilePath (Join-Path dist "$($artifact.Name).sha256") -Encoding ascii
+          $exeFiles | Format-Table Name, Length
+
+      - name: Generate SHA256SUMS.txt
+        run: |
+          $exeFiles = Get-ChildItem -Path dist -File -Filter *.exe
+          $lines = foreach ($file in $exeFiles) {
+            $hash = Get-FileHash -Path $file.FullName -Algorithm SHA256
+            "${($file.Name)}  ${($hash.Hash)}"
           }
+
+          $lines | Out-File -FilePath dist/SHA256SUMS.txt -Encoding ascii
+          Get-Content dist/SHA256SUMS.txt
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: novareader-windows-build
+          name: novareader-windows-exe
           path: |
             ${{ env.PROJECT_DIR }}/dist/*.exe
-            ${{ env.PROJECT_DIR }}/dist/*.sha256
-            ${{ env.PROJECT_DIR }}/dist/*.yml
-            ${{ env.PROJECT_DIR }}/dist/*.blockmap
-            ${{ env.PROJECT_DIR }}/dist/*.7z
+            ${{ env.PROJECT_DIR }}/dist/SHA256SUMS.txt
           if-no-files-found: error
