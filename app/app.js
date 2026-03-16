@@ -372,6 +372,7 @@ const els = {
   cfgSidebarWidth: document.getElementById('cfgSidebarWidth'),
   cfgToolbarScale: document.getElementById('cfgToolbarScale'),
   cfgTextMinHeight: document.getElementById('cfgTextMinHeight'),
+  cfgPageAreaHeight: document.getElementById('cfgPageAreaHeight'),
   cfgTheme: document.getElementById('cfgTheme'),
   cfgAppLang: document.getElementById('cfgAppLang'),
   cfgOcrLang: document.getElementById('cfgOcrLang'),
@@ -998,8 +999,9 @@ function defaultSettings() {
     ocrCyrillicOnly: true,
     ocrQualityMode: 'balanced',
     uiSidebarWidth: 220,
-    uiToolbarScale: 0.3,
+    uiToolbarScale: 0.22,
     uiTextMinHeight: 40,
+    uiPageAreaPx: 680,
     sidebarSections: Object.fromEntries(SIDEBAR_SECTION_CONFIG.map((x) => [x.key, true])),
     toolbarSections: Object.fromEntries(TOOLBAR_SECTION_CONFIG.map((x) => [x.key, true])),
   };
@@ -1024,13 +1026,19 @@ function saveAppSettings() {
 function applyUiSizeSettings() {
   const settings = state.settings || defaultSettings();
   const sidebar = Math.max(160, Math.min(360, Number(settings.uiSidebarWidth) || 220));
-  const toolbarScale = Math.max(0.25, Math.min(1, Number(settings.uiToolbarScale) || 0.3));
+  const toolbarScale = Math.max(0.1, Math.min(0.6, Number(settings.uiToolbarScale) || 0.22));
   const textMin = Math.max(24, Math.min(180, Number(settings.uiTextMinHeight) || 40));
+  const pageArea = Math.max(420, Math.min(2200, Number(settings.uiPageAreaPx) || 680));
 
   localStorage.setItem(uiLayoutKey('sidebarWidth'), String(Math.round(sidebar)));
+  localStorage.setItem(uiLayoutKey('pageAreaPx'), String(Math.round(pageArea)));
   document.documentElement.style.setProperty('--ui-toolbar-scale', String(toolbarScale));
   document.documentElement.style.setProperty('--ui-text-min-height', `${Math.round(textMin)}px`);
+
+  document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${Math.round(sidebar)}px`);
+  document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${Math.round(pageArea)}px`);
 }
+
 
 function getOcrLang() {
   return state.settings?.ocrLang || 'auto';
@@ -1607,8 +1615,9 @@ function openSettingsModal() {
   if (els.cfgOcrMinH) els.cfgOcrMinH.value = String(state.settings?.ocrMinH || 24);
   if (els.cfgBackgroundOcr) els.cfgBackgroundOcr.checked = !!state.settings?.backgroundOcr;
   if (els.cfgSidebarWidth) els.cfgSidebarWidth.value = String(state.settings?.uiSidebarWidth || 220);
-  if (els.cfgToolbarScale) els.cfgToolbarScale.value = String(Math.round((state.settings?.uiToolbarScale || 0.3) * 100));
+  if (els.cfgToolbarScale) els.cfgToolbarScale.value = String(Math.round((state.settings?.uiToolbarScale || 0.22) * 100));
   if (els.cfgTextMinHeight) els.cfgTextMinHeight.value = String(state.settings?.uiTextMinHeight || 40);
+  if (els.cfgPageAreaHeight) els.cfgPageAreaHeight.value = String(state.settings?.uiPageAreaPx || 680);
   renderSectionVisibilityControls();
 
   els.settingsModal.classList.add('open');
@@ -1642,8 +1651,9 @@ function saveSettingsFromModal() {
   if (els.cfgOcrMinH) state.settings.ocrMinH = Math.max(8, Number(els.cfgOcrMinH.value) || 24);
   if (els.cfgBackgroundOcr) state.settings.backgroundOcr = !!els.cfgBackgroundOcr.checked;
   if (els.cfgSidebarWidth) state.settings.uiSidebarWidth = Math.max(160, Math.min(360, Number(els.cfgSidebarWidth.value) || 220));
-  if (els.cfgToolbarScale) state.settings.uiToolbarScale = Math.max(0.25, Math.min(1, (Number(els.cfgToolbarScale.value) || 30) / 100));
+  if (els.cfgToolbarScale) state.settings.uiToolbarScale = Math.max(0.1, Math.min(0.6, (Number(els.cfgToolbarScale.value) || 22) / 100));
   if (els.cfgTextMinHeight) state.settings.uiTextMinHeight = Math.max(24, Math.min(180, Number(els.cfgTextMinHeight.value) || 40));
+  if (els.cfgPageAreaHeight) state.settings.uiPageAreaPx = Math.max(420, Math.min(2200, Number(els.cfgPageAreaHeight.value) || 680));
 
   document.querySelectorAll('#cfgSidebarSections input[data-section-key]').forEach((input) => {
     state.settings.sidebarSections[input.dataset.sectionKey] = !!input.checked;
@@ -4910,7 +4920,7 @@ function applyResizableLayoutState() {
   const sidebarWidth = Number(localStorage.getItem(uiLayoutKey('sidebarWidth')) || 220);
   const pageAreaPx = Number(localStorage.getItem(uiLayoutKey('pageAreaPx')) || 0);
   const safeSidebar = Math.max(180, Math.min(360, sidebarWidth));
-  const safePage = Math.max(560, Math.min(3200, pageAreaPx || 0));
+  const safePage = Math.max(420, Math.min(3200, pageAreaPx || 0));
   document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${safeSidebar}px`);
   if (pageAreaPx > 0) {
     document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${safePage}px`);
@@ -4922,8 +4932,8 @@ function ensureDefaultPageAreaHeight() {
   const viewerArea = document.querySelector('.viewer-area');
   if (!viewerArea) return;
 
-  const preferred = Math.max(620, Math.floor(viewerArea.clientHeight * 0.88));
-  if (raw <= 0 || raw < 560) {
+  const preferred = Math.max(680, Math.floor(viewerArea.clientHeight * 0.86));
+  if (raw <= 0 || raw < 420) {
     localStorage.setItem(uiLayoutKey('pageAreaPx'), String(preferred));
   }
 
@@ -4969,12 +4979,12 @@ function setupResizableLayout() {
       const viewerRect = viewerArea.getBoundingClientRect();
       const canvasRect = els.canvasWrap.getBoundingClientRect();
       const textHidden = viewerArea.classList.contains('texttools-hidden');
-      const minTextHeight = textTools && !textHidden ? 44 : 0;
+      const minTextHeight = textTools && !textHidden ? Math.max(24, Number(state.settings?.uiTextMinHeight) || 40) : 0;
       const paddingReserve = 14;
 
-      const maxPageHeight = Math.max(560, viewerRect.height - minTextHeight - paddingReserve);
+      const maxPageHeight = Math.max(420, viewerRect.height - minTextHeight - paddingReserve);
       const rawPageHeight = e.clientY - canvasRect.top;
-      const safePageHeight = Math.max(560, Math.min(maxPageHeight, rawPageHeight));
+      const safePageHeight = Math.max(420, Math.min(maxPageHeight, rawPageHeight));
       localStorage.setItem(uiLayoutKey('pageAreaPx'), String(Math.round(safePageHeight)));
       applyResizableLayoutState();
     };
