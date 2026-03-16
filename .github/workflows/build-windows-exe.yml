@@ -18,6 +18,7 @@ on:
 
 env:
   PROJECT_DIR: G-claude-repair-ocr-bugs-gQxxl/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z
+  BUILD_DIR: C:/nr
 
 jobs:
   build-exe:
@@ -26,11 +27,22 @@ jobs:
     defaults:
       run:
         shell: pwsh
-        working-directory: ${{ env.PROJECT_DIR }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Prepare short build path (avoid Windows MAX_PATH issues)
+        run: |
+          if (Test-Path "${{ env.BUILD_DIR }}") {
+            Remove-Item -Recurse -Force "${{ env.BUILD_DIR }}"
+          }
+          New-Item -ItemType Directory -Path "${{ env.BUILD_DIR }}" | Out-Null
+
+          robocopy "${{ github.workspace }}\${{ env.PROJECT_DIR }}" "${{ env.BUILD_DIR }}" /E /NFL /NDL /NJH /NJS /NC /NS
+          if ($LASTEXITCODE -gt 7) {
+            throw "robocopy failed with exit code $LASTEXITCODE"
+          }
 
       - name: Setup Node.js (LTS)
         uses: actions/setup-node@v4
@@ -40,12 +52,15 @@ jobs:
           cache-dependency-path: ${{ env.PROJECT_DIR }}/package-lock.json
 
       - name: Install dependencies
+        working-directory: ${{ env.BUILD_DIR }}
         run: npm ci
 
       - name: Build portable EXE (all app resources bundled)
+        working-directory: ${{ env.BUILD_DIR }}
         run: npm run build:win:nosign
 
       - name: Validate build output
+        working-directory: ${{ env.BUILD_DIR }}
         run: |
           if (-not (Test-Path dist)) {
             throw "dist folder not found after build"
@@ -53,12 +68,15 @@ jobs:
 
           $exeFiles = Get-ChildItem -Path dist -File -Filter *.exe
           if (-not $exeFiles) {
+            Write-Host "dist contents for debugging:"
+            Get-ChildItem -Path dist -File | Format-Table Name, Length
             throw "EXE artifact not found in dist"
           }
 
           $exeFiles | Format-Table Name, Length
 
       - name: Generate SHA256SUMS.txt
+        working-directory: ${{ env.BUILD_DIR }}
         run: |
           $exeFiles = Get-ChildItem -Path dist -File -Filter *.exe
           $lines = foreach ($file in $exeFiles) {
@@ -74,6 +92,6 @@ jobs:
         with:
           name: novareader-windows-exe
           path: |
-            ${{ env.PROJECT_DIR }}/dist/*.exe
-            ${{ env.PROJECT_DIR }}/dist/SHA256SUMS.txt
+            ${{ env.BUILD_DIR }}/dist/*.exe
+            ${{ env.BUILD_DIR }}/dist/SHA256SUMS.txt
           if-no-files-found: error
