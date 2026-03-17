@@ -5,7 +5,8 @@ import { state, els } from './state.js';
 import { APP_VERSION, NOVAREADER_PLAN_PROGRESS_PERCENT } from './constants.js';
 import { yieldToMainThread } from './utils.js';
 import { getPerfSummary, pageRenderCache, objectUrlRegistry } from './perf.js';
-import { ensurePdfJs, ensureDjVuJs, ensureOcrad } from './loaders.js';
+import { ensurePdfJs, ensureDjVuJs } from './loaders.js';
+import { isTesseractAvailable } from './tesseract-adapter.js';
 
 // Dependencies injected from app.js at runtime
 let _deps = {
@@ -154,7 +155,7 @@ export async function verifyBundledAssets() {
     { key: 'pdfRuntime', url: new URL('../vendor/pdf.min.mjs', import.meta.url).href },
     { key: 'pdfWorker', url: new URL('../vendor/pdf.worker.min.mjs', import.meta.url).href },
     { key: 'djvuRuntime', url: new URL('../vendor/djvu.js', import.meta.url).href },
-    { key: 'ocrRuntime', url: new URL('../vendor/ocrad.js', import.meta.url).href },
+    { key: 'ocrRuntime', url: new URL('../vendor/tesseract/tesseract.esm.min.js', import.meta.url).href },
   ];
 
   const report = {};
@@ -201,7 +202,10 @@ export async function runRuntimeSelfCheck() {
 
   await checkOne('pdf', ensurePdfJs);
   await checkOne('djvu', ensureDjVuJs);
-  await checkOne('ocr', ensureOcrad);
+  await checkOne('ocr', async () => {
+    const avail = await isTesseractAvailable();
+    if (!avail) throw new Error('Tesseract.js not available');
+  });
 
   const bundledAssets = await verifyBundledAssets();
   report.assets = {

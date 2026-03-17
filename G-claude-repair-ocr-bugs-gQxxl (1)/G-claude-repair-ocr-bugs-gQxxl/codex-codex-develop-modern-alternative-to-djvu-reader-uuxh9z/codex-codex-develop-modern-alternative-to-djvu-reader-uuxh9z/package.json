@@ -22,8 +22,7 @@
     "djvujs-dist": "^0.5.4",
     "electron": "30.5.1",
     "electron-builder": "24.13.3",
-    "ocrad.js": "^0.0.1",
-    "pdfjs-dist": "^4.4.168",
+"pdfjs-dist": "^4.4.168",
     "tesseract.js": "^5.1.1"
   },
   "build": {

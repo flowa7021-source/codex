@@ -2,7 +2,7 @@
 import { APP_VERSION, NOVAREADER_PLAN_PROGRESS_PERCENT, SIDEBAR_SECTION_CONFIG, TOOLBAR_SECTION_CONFIG, OCR_MIN_DPI, CSS_BASE_DPI, OCR_MAX_SIDE_PX, OCR_MAX_PIXELS, OCR_SLOW_TASK_WARN_MS, OCR_HANG_WARN_MS, OCR_SOURCE_MAX_PIXELS, OCR_SOURCE_CACHE_MAX_PIXELS, OCR_SOURCE_CACHE_TTL_MS } from './modules/constants.js';
 import { throttle, debounce, yieldToMainThread, loadImage, downloadBlob } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
-import { ensurePdfJs, ensureDjVuJs, ensureOcrad } from './modules/loaders.js';
+import { ensurePdfJs, ensureDjVuJs } from './modules/loaders.js';
 import { perfMetrics, recordPerfMetric, getPerfSummary, cacheRenderedPage, getCachedPage, clearPageRenderCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
 import { ToolMode, toolStateMachine, activateAnnotateMode, deactivateAnnotateMode, activateOcrRegionMode, deactivateOcrRegionMode, activateTextEditMode, deactivateTextEditMode, activateSearchMode, deactivateSearchMode, initToolModeDeps } from './modules/tool-modes.js';
 import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
@@ -15,7 +15,6 @@ import { progressiveLoader } from './modules/progressive-loader.js';
 import { exportAnnotationsAsSvg, exportAnnotationsAsPdf } from './modules/annotation-export.js';
 import { applyPlugin, pluginToDocxXml, detectApplicablePlugins } from './modules/conversion-plugins.js';
 import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from './modules/docx-import-advanced.js';
-import { recognizeInWorker, isWorkerAvailable, terminateOcrWorker } from './modules/ocr-worker-manager.js';
 import { analyzeTextDensity, computeOcrZoom } from './modules/ocr-adaptive-dpi.js';
 import { getPageQualitySummary } from './modules/ocr-word-confidence.js';
 import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText } from './modules/ocr-storage.js';
@@ -45,7 +44,7 @@ function withErrorBoundary(fn, context, options = {}) {
 
 function classifyAppError(message) {
   const m = String(message || '').toLowerCase();
-  if (m.includes('runtime') || m.includes('ocrad') || m.includes('module')) return 'runtime';
+  if (m.includes('runtime') || m.includes('module')) return 'runtime';
   if (m.includes('fetch') || m.includes('http') || m.includes('load') || m.includes('network')) return 'asset-load';
   if (m.includes('memory') || m.includes('out of memory') || m.includes('allocation')) return 'memory';
   if (m.includes('timeout') || m.includes('timed out')) return 'timeout';
@@ -2439,32 +2438,11 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
     const variant = variants[i];
     let rawText = '';
     try {
-      // Try Tesseract first (high-quality WASM engine), then OCRAD Worker, then main-thread OCRAD
-      const tesseractReady = getTesseractStatus().ready || await isTesseractAvailable();
-      if (tesseractReady) {
-        const tessResult = await recognizeTesseract(variant, { lang });
-        if (tessResult && tessResult.text) {
-          rawText = tessResult.text;
-        }
+      const tessResult = await recognizeTesseract(variant, { lang });
+      if (tessResult && tessResult.text) {
+        rawText = tessResult.text;
       }
-      if (!rawText) {
-        // Fallback: try OCRAD Worker (off-main-thread)
-        if (isWorkerAvailable()) {
-          const vCtx = variant.getContext('2d');
-          const vImgData = vCtx.getImageData(0, 0, variant.width, variant.height);
-          const workerResult = await recognizeInWorker(vImgData.data, variant.width, variant.height);
-          if (workerResult !== null) {
-            rawText = workerResult;
-          }
-        }
-      }
-      if (!rawText) {
-        // Fallback: main-thread OCRAD
-        if (typeof window.OCRAD === 'function') {
-          rawText = window.OCRAD(variant);
-        }
-      }
-      if (!rawText && !tesseractReady && !isWorkerAvailable() && typeof window.OCRAD !== 'function') {
+      if (!rawText && !getTesseractStatus().ready) {
         pushDiagnosticEvent('ocr.engine.missing', { variant: i });
         break;
       }
@@ -2485,7 +2463,6 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
     if (tesseractAvail && i === 0 && best.length >= 20 && bestScore > 50) {
       break;
     }
-    // Yield every variant to keep UI responsive (OCRAD is synchronous/blocking)
     await yieldToMainThread();
   }
   const recognizeMs = Math.round(performance.now() - recognizeStart);
@@ -2883,7 +2860,7 @@ function drawOcrSelectionPreview() {
 function classifyOcrError(message) {
   const m = String(message || '').toLowerCase();
   if (!m) return 'unknown';
-  if (m.includes('runtime') || m.includes('ocrad')) return 'runtime';
+  if (m.includes('runtime') || m.includes('tesseract')) return 'runtime';
   if (m.includes('fetch') || m.includes('http') || m.includes('load')) return 'asset-load';
   if (m.includes('memory') || m.includes('out of memory')) return 'memory';
   if (m.includes('timeout')) return 'timeout';
@@ -2901,8 +2878,6 @@ async function runOcrOnRectNow(rect) {
       setOcrStatus('OCR: длительная обработка, ожидайте...');
       pushDiagnosticEvent('ocr.manual.hang-warning', { taskId, thresholdMs: OCR_HANG_WARN_MS, page: state.currentPage }, 'warn');
     }, OCR_HANG_WARN_MS);
-    // Load OCRAD as fallback (non-blocking — Tesseract is primary)
-    ensureOcrad().catch(() => {});
     const rel = {
       x: rect.x / Math.max(1, els.canvas.width),
       y: rect.y / Math.max(1, els.canvas.height),
@@ -3003,8 +2978,6 @@ async function extractTextForPage(pageNumber) {
   }
 
   try {
-    // Load OCRAD as fallback (non-blocking — Tesseract is primary)
-    ensureOcrad().catch(() => {});
     const canvas = await buildOcrSourceCanvas(pageNumber);
     const preferredSkew = await estimatePageSkewAngle(pageNumber);
     const ocrResult = await runOcrOnPreparedCanvas(canvas, { fast: true, preferredSkew });
@@ -7017,7 +6990,6 @@ window.addEventListener('beforeunload', () => {
   revokeAllTrackedUrls();
   clearPageRenderCache();
   terminateTesseract().catch(() => {});
-  terminateOcrWorker();
 });
 
 renderRecent();

@@ -40,15 +40,31 @@ const LANG_MAP = {
 
 /**
  * Check if Tesseract.js files are available locally.
+ * Uses GET with range header as fallback for file:// protocol where HEAD fails.
  * @returns {Promise<boolean>}
  */
 export async function isTesseractAvailable() {
   if (_available !== null) return _available;
   try {
-    const resp = await fetch(PATHS.workerJs, { method: 'HEAD', cache: 'force-cache' });
-    _available = resp.ok;
+    // HEAD requests fail on file:// protocol (Electron), use GET with range
+    const isFileProtocol = PATHS.workerJs.startsWith('file:');
+    if (isFileProtocol) {
+      const resp = await fetch(PATHS.workerJs, { cache: 'force-cache' });
+      _available = resp.ok || resp.status === 0; // status 0 is valid for file:// in some browsers
+    } else {
+      const resp = await fetch(PATHS.workerJs, { method: 'HEAD', cache: 'force-cache' });
+      _available = resp.ok;
+    }
   } catch {
-    _available = false;
+    // For file:// protocol, fetch may throw but file still exists
+    // Try dynamic import as final check
+    try {
+      const esmPath = resolveVendorPath('../vendor/tesseract/tesseract.esm.min.js');
+      await import(/* webpackIgnore: true */ esmPath);
+      _available = true;
+    } catch {
+      _available = false;
+    }
   }
   return _available;
 }
