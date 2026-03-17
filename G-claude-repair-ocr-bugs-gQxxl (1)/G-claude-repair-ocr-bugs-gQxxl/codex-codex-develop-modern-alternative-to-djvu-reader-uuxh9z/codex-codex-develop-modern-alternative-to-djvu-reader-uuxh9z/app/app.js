@@ -555,13 +555,19 @@ const toolStateMachine = {
 
 function deactivateAnnotateMode() {
   state.drawEnabled = false;
-  if (els.annotateToggle) els.annotateToggle.classList.remove('is-active');
+  if (els.annotateToggle) {
+    els.annotateToggle.classList.remove('active');
+    els.annotateToggle.textContent = '✎ off';
+  }
   renderAnnotations();
 }
 
 function activateAnnotateMode() {
   state.drawEnabled = true;
-  if (els.annotateToggle) els.annotateToggle.classList.add('is-active');
+  if (els.annotateToggle) {
+    els.annotateToggle.classList.add('active');
+    els.annotateToggle.textContent = '✎ on';
+  }
   updateOverlayInteractionState();
 }
 
@@ -569,11 +575,13 @@ function deactivateOcrRegionMode() {
   state.ocrRegionMode = false;
   state.isSelectingOcr = false;
   state.ocrSelection = null;
+  if (els.ocrRegionMode) els.ocrRegionMode.classList.remove('active');
   renderAnnotations();
 }
 
 function activateOcrRegionMode() {
   state.ocrRegionMode = true;
+  if (els.ocrRegionMode) els.ocrRegionMode.classList.add('active');
   updateOverlayInteractionState();
   setOcrStatus('OCR: выделите область на странице');
 }
@@ -584,7 +592,6 @@ function deactivateTextEditMode() {
   if (els.toggleTextEdit) {
     els.toggleTextEdit.textContent = 'Ред.';
     els.toggleTextEdit.classList.remove('active');
-    els.toggleTextEdit.classList.remove('is-active');
   }
 }
 
@@ -594,7 +601,6 @@ function activateTextEditMode() {
   if (els.toggleTextEdit) {
     els.toggleTextEdit.textContent = 'Ред.';
     els.toggleTextEdit.classList.add('active');
-    els.toggleTextEdit.classList.add('is-active');
   }
 }
 
@@ -2428,14 +2434,14 @@ function pushDiagnosticEvent(type, payload = {}, level = 'info') {
     store.events.splice(0, store.events.length - store.maxEvents);
   }
   if (els.diagnosticsStatus) {
-    els.diagnosticsStatus.textContent = `Диагностика: ${store.events.length} событий (последнее: ${type})`;
+    els.diagnosticsStatus.textContent = `${store.events.length} событий`;
   }
 }
 
 function clearDiagnostics() {
   state.diagnostics.events = [];
   if (els.diagnosticsStatus) {
-    els.diagnosticsStatus.textContent = 'Диагностика: очищено';
+    els.diagnosticsStatus.textContent = '';
   }
 }
 
@@ -3614,60 +3620,35 @@ function applyAppLanguage() {
   const t = {
     ru: {
       openSettings: 'Настройки',
-      ocrPage: 'OCR страницы',
-      ocrRegionOn: 'OCR область: on',
-      ocrRegionOff: 'OCR область: off',
-      copyOcr: 'Копировать OCR',
+      ocrPage: 'OCR',
+      copyOcr: '📋 OCR',
       searchBtn: 'Найти',
-      searchPrev: '↑ Совпадение',
-      searchNext: '↓ Совпадение',
-      fitWidth: 'По ширине',
-      fitPage: 'По странице',
-      printPage: 'Печать страницы',
-      downloadFile: 'Скачать',
-      pageTextPlaceholder: 'Здесь появится извлечённый текст текущей страницы',
-      settingsTitle: 'Настройки приложения',
+      pageTextPlaceholder: 'Текст страницы',
+      settingsTitle: 'Настройки',
       saveSettings: 'Сохранить',
-      ocrQualityHint: `OCR DPI: не ниже ${OCR_MIN_DPI}`,
     },
     en: {
       openSettings: 'Settings',
-      ocrPage: 'OCR page',
-      ocrRegionOn: 'OCR region: on',
-      ocrRegionOff: 'OCR region: off',
-      copyOcr: 'Copy OCR',
+      ocrPage: 'OCR',
+      copyOcr: '📋 OCR',
       searchBtn: 'Search',
-      searchPrev: '↑ Match',
-      searchNext: '↓ Match',
-      fitWidth: 'Fit width',
-      fitPage: 'Fit page',
-      printPage: 'Print page',
-      downloadFile: 'Download',
-      pageTextPlaceholder: 'Extracted text for current page appears here',
-      settingsTitle: 'Application settings',
+      pageTextPlaceholder: 'Page text',
+      settingsTitle: 'Settings',
       saveSettings: 'Save',
-      ocrQualityHint: `OCR DPI: not lower than ${OCR_MIN_DPI}`,
     },
   }[lang] || {};
 
   if (els.openSettingsModal) {
-    els.openSettingsModal.textContent = '⚙️';
+    els.openSettingsModal.textContent = '⚙';
     els.openSettingsModal.title = t.openSettings || 'Settings';
     els.openSettingsModal.setAttribute('aria-label', t.openSettings || 'Settings');
   }
   if (els.ocrCurrentPage) els.ocrCurrentPage.textContent = t.ocrPage;
   if (els.copyOcrText) els.copyOcrText.textContent = t.copyOcr;
   if (els.searchBtn) els.searchBtn.textContent = t.searchBtn;
-  if (els.searchPrev) els.searchPrev.textContent = t.searchPrev;
-  if (els.searchNext) els.searchNext.textContent = t.searchNext;
-  updateSearchToolbarRows();
-  if (els.fitWidth) els.fitWidth.textContent = t.fitWidth;
-  if (els.fitPage) els.fitPage.textContent = t.fitPage;
-  if (els.printPage) els.printPage.textContent = t.printPage;
-  if (els.downloadFile) els.downloadFile.textContent = t.downloadFile;
+  // Icon buttons (↑↓↔⊡⬇🖨) — not overridden by language
   if (els.pageText) els.pageText.placeholder = t.pageTextPlaceholder;
   if (els.saveSettingsModal) els.saveSettingsModal.textContent = t.saveSettings;
-  if (els.ocrStatus && !state.adapter) els.ocrStatus.textContent = t.ocrQualityHint || '';
   const modalTitle = document.querySelector('#settingsModal .modal-head h3');
   if (modalTitle) modalTitle.textContent = t.settingsTitle;
 
@@ -6836,7 +6817,7 @@ function updatePreviewSelection() {
   const buttons = els.pagePreviewList.querySelectorAll('button[data-page]');
   buttons.forEach((btn) => {
     const page = Number(btn.dataset.page);
-    btn.classList.toggle('is-active', page === state.currentPage);
+    btn.classList.toggle('active', page === state.currentPage);
   });
 }
 
