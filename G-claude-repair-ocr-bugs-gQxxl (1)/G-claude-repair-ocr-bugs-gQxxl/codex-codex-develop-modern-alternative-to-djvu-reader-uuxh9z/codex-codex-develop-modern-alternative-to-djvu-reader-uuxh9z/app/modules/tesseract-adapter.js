@@ -40,41 +40,40 @@ const LANG_MAP = {
 
 /**
  * Check if Tesseract.js files are available locally.
- * Uses GET with range header as fallback for file:// protocol where HEAD fails.
+ * Handles file:// protocol (Electron) where HEAD requests and fetch may behave
+ * differently than HTTP.
  * @returns {Promise<boolean>}
  */
 export async function isTesseractAvailable() {
   if (_available !== null) return _available;
+
+  // Strategy 1: Try to load the ESM module directly (works on all protocols)
   try {
-    // HEAD requests fail on file:// protocol (Electron), use GET with range
-    const isFileProtocol = PATHS.workerJs.startsWith('file:');
-    if (isFileProtocol) {
-      const resp = await fetch(PATHS.workerJs, { cache: 'force-cache' });
-      _available = resp.ok || resp.status === 0; // status 0 is valid for file:// in some browsers
-    } else {
-      const resp = await fetch(PATHS.workerJs, { method: 'HEAD', cache: 'force-cache' });
-      _available = resp.ok;
-    }
+    await loadTesseractModule();
+    _available = true;
+    return _available;
+  } catch { /* continue to next strategy */ }
+
+  // Strategy 2: HTTP HEAD check (works on http/https only)
+  try {
+    const resp = await fetch(PATHS.workerJs, { method: 'HEAD', cache: 'force-cache' });
+    _available = resp.ok;
   } catch {
-    // For file:// protocol, fetch may throw but file still exists
-    // Try dynamic import as final check
-    try {
-      const esmPath = resolveVendorPath('../vendor/tesseract/tesseract.esm.min.js');
-      await import(/* webpackIgnore: true */ esmPath);
-      _available = true;
-    } catch {
-      _available = false;
-    }
+    _available = false;
   }
   return _available;
 }
 
 /**
  * Dynamically import Tesseract.js ESM module from vendor.
+ * Module is cached after first successful load.
  */
+let _tesseractModule = null;
 async function loadTesseractModule() {
+  if (_tesseractModule) return _tesseractModule;
   const esmPath = resolveVendorPath('../vendor/tesseract/tesseract.esm.min.js');
   const mod = await import(/* webpackIgnore: true */ esmPath);
+  _tesseractModule = mod;
   return mod;
 }
 

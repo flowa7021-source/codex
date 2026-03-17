@@ -2430,7 +2430,10 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   // Pre-initialize Tesseract for current language (avoids init delay on first variant)
   const tesseractAvail = await isTesseractAvailable();
   if (tesseractAvail) {
-    await initTesseract(lang === 'auto' ? 'auto' : lang);
+    const initOk = await initTesseract(lang === 'auto' ? 'auto' : lang);
+    pushDiagnosticEvent('ocr.tesseract.init', { available: true, initialized: initOk, lang });
+  } else {
+    pushDiagnosticEvent('ocr.tesseract.init', { available: false, initialized: false, lang }, 'error');
   }
   for (let i = 0; i < variants.length; i += 1) {
     if (taskId && taskId !== state.ocrTaskId) return best;
