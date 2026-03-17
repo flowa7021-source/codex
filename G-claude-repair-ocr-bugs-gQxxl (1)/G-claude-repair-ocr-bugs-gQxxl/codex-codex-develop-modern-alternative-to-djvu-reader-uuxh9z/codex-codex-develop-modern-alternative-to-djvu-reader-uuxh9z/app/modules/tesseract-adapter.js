@@ -83,8 +83,22 @@ async function loadTesseractModule() {
   if (_tesseractModule) return _tesseractModule;
   const esmPath = resolveVendorPath('../vendor/tesseract/tesseract.esm.min.js');
   const mod = await import(/* webpackIgnore: true */ esmPath);
-  _tesseractModule = mod;
-  return mod;
+  // The ESM bundle wraps the CommonJS module as a default export:
+  //   export { tesseract_min as default }
+  // So mod = { default: { createWorker, createScheduler, ... } }
+  // We need the default export to access createWorker.
+  const resolved = mod.default || mod;
+  if (typeof resolved.createWorker !== 'function') {
+    // Last resort: check if createWorker is nested one more level (e.g. mod.default.default)
+    const deeper = resolved.default || resolved;
+    if (typeof deeper.createWorker === 'function') {
+      _tesseractModule = deeper;
+      return deeper;
+    }
+    throw new Error(`Tesseract module loaded but createWorker not found. Keys: ${Object.keys(resolved).join(', ')}`);
+  }
+  _tesseractModule = resolved;
+  return resolved;
 }
 
 /**
