@@ -3,9 +3,9 @@ import { APP_VERSION, NOVAREADER_PLAN_PROGRESS_PERCENT, SIDEBAR_SECTION_CONFIG, 
 import { throttle, debounce, yieldToMainThread, loadImage, downloadBlob } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
 import { ensurePdfJs, ensureDjVuJs, ensureOcrad } from './modules/loaders.js';
-import { perfMetrics, recordPerfMetric, computePercentile, getPerfSummary, workerPool, createOcrWorkerBlob, getPoolWorker, runInWorker, pageRenderCache, cacheRenderedPage, getCachedPage, evictPageFromCache, clearPageRenderCache, objectUrlRegistry, trackObjectUrl, revokeTrackedUrl, revokeAllTrackedUrls } from './modules/perf.js';
+import { perfMetrics, recordPerfMetric, getPerfSummary, cacheRenderedPage, getCachedPage, clearPageRenderCache, revokeAllTrackedUrls } from './modules/perf.js';
 import { ToolMode, toolStateMachine, activateAnnotateMode, deactivateAnnotateMode, activateOcrRegionMode, deactivateOcrRegionMode, activateTextEditMode, deactivateTextEditMode, activateSearchMode, deactivateSearchMode, initToolModeDeps } from './modules/tool-modes.js';
-import { pushDiagnosticEvent, clearDiagnostics, collectPerfBaseline, formatDiagnosticsForChat, exportDiagnostics, verifyBundledAssets, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
+import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
 import { setLanguage, getLanguage, loadLanguage, t, applyI18nToDOM, getAvailableLanguages } from './modules/i18n.js';
 import { parseEpub, EpubAdapter } from './modules/epub-adapter.js';
 import { postCorrectByLanguage, scoreTextByLanguage, detectLanguage } from './modules/ocr-languages.js';
@@ -15,10 +15,10 @@ import { progressiveLoader } from './modules/progressive-loader.js';
 import { exportAnnotationsAsSvg, exportAnnotationsAsPdf } from './modules/annotation-export.js';
 import { applyPlugin, pluginToDocxXml, detectApplicablePlugins } from './modules/conversion-plugins.js';
 import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from './modules/docx-import-advanced.js';
-import { recognizeInWorker, preprocessInWorker, isWorkerAvailable, warmUpOcrWorker, terminateOcrWorker } from './modules/ocr-worker-manager.js';
-import { analyzeTextDensity, computeOcrZoom, hasSmallText } from './modules/ocr-adaptive-dpi.js';
-import { scoreAllWords, markLowConfidenceWords, getPageQualitySummary } from './modules/ocr-word-confidence.js';
-import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText, isIndexedDbAvailable } from './modules/ocr-storage.js';
+import { recognizeInWorker, isWorkerAvailable, terminateOcrWorker } from './modules/ocr-worker-manager.js';
+import { analyzeTextDensity, computeOcrZoom } from './modules/ocr-adaptive-dpi.js';
+import { getPageQualitySummary } from './modules/ocr-word-confidence.js';
+import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText } from './modules/ocr-storage.js';
 import { initTesseract, recognizeTesseract, isTesseractAvailable, getTesseractStatus, terminateTesseract } from './modules/tesseract-adapter.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
@@ -1086,11 +1086,6 @@ class PDFAdapter {
   }
 
   async renderPage(pageNumber, canvas, { zoom, rotation }) {
-    // Cancel any in-flight render on the same canvas to avoid "Cannot use the same canvas during multiple render() operations"
-    if (this._currentRenderTask) {
-      try { this._currentRenderTask.cancel(); } catch { /* already finished */ }
-      this._currentRenderTask = null;
-    }
     const page = await this.pdfDoc.getPage(pageNumber);
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const viewport = page.getViewport({ scale: zoom * dpr, rotation });
@@ -1099,12 +1094,21 @@ class PDFAdapter {
     canvas.height = viewport.height;
     canvas.style.width = `${Math.round(viewport.width / dpr)}px`;
     canvas.style.height = `${Math.round(viewport.height / dpr)}px`;
+
+    // Only track/cancel render tasks for the main display canvas (els.canvas).
+    // Off-screen canvases (OCR probe, thumbnails) use independent render tasks.
+    const isMainCanvas = canvas === els?.canvas;
+    if (isMainCanvas && this._currentRenderTask) {
+      try { this._currentRenderTask.cancel(); } catch { /* already finished */ }
+      this._currentRenderTask = null;
+    }
+
     const renderTask = page.render({ canvasContext: ctx, viewport });
-    this._currentRenderTask = renderTask;
+    if (isMainCanvas) this._currentRenderTask = renderTask;
     try {
       await renderTask.promise;
     } finally {
-      if (this._currentRenderTask === renderTask) {
+      if (isMainCanvas && this._currentRenderTask === renderTask) {
         this._currentRenderTask = null;
       }
     }
@@ -2897,7 +2901,8 @@ async function runOcrOnRectNow(rect) {
       setOcrStatus('OCR: длительная обработка, ожидайте...');
       pushDiagnosticEvent('ocr.manual.hang-warning', { taskId, thresholdMs: OCR_HANG_WARN_MS, page: state.currentPage }, 'warn');
     }, OCR_HANG_WARN_MS);
-    await ensureOcrad();
+    // Load OCRAD as fallback (non-blocking — Tesseract is primary)
+    ensureOcrad().catch(() => {});
     const rel = {
       x: rect.x / Math.max(1, els.canvas.width),
       y: rect.y / Math.max(1, els.canvas.height),
@@ -2998,7 +3003,8 @@ async function extractTextForPage(pageNumber) {
   }
 
   try {
-    await ensureOcrad();
+    // Load OCRAD as fallback (non-blocking — Tesseract is primary)
+    ensureOcrad().catch(() => {});
     const canvas = await buildOcrSourceCanvas(pageNumber);
     const preferredSkew = await estimatePageSkewAngle(pageNumber);
     const ocrResult = await runOcrOnPreparedCanvas(canvas, { fast: true, preferredSkew });
