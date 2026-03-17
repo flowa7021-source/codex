@@ -216,8 +216,879 @@ async function ensureOcrad() {
 
 
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '2.0.0-alpha';
 const NOVAREADER_PLAN_PROGRESS_PERCENT = 100;
+
+// ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
+function withErrorBoundary(fn, context, options = {}) {
+  const { silent = false, fallback = null, rethrow = false } = options;
+  return async function boundaryWrapped(...args) {
+    const startedAt = performance.now();
+    try {
+      return await fn.apply(this, args);
+    } catch (error) {
+      const ms = Math.round(performance.now() - startedAt);
+      const message = String(error?.message || 'unknown error');
+      const errorType = classifyAppError(message);
+      pushDiagnosticEvent(`error-boundary.${context}`, { message, errorType, ms, context }, 'error');
+      if (!silent) {
+        showUserError(context, errorType, message);
+      }
+      if (rethrow) throw error;
+      return typeof fallback === 'function' ? fallback(error) : fallback;
+    }
+  };
+}
+
+function classifyAppError(message) {
+  const m = String(message || '').toLowerCase();
+  if (m.includes('runtime') || m.includes('ocrad') || m.includes('module')) return 'runtime';
+  if (m.includes('fetch') || m.includes('http') || m.includes('load') || m.includes('network')) return 'asset-load';
+  if (m.includes('memory') || m.includes('out of memory') || m.includes('allocation')) return 'memory';
+  if (m.includes('timeout') || m.includes('timed out')) return 'timeout';
+  if (m.includes('parse') || m.includes('json') || m.includes('syntax')) return 'parse';
+  if (m.includes('permission') || m.includes('security') || m.includes('cors')) return 'security';
+  if (m.includes('storage') || m.includes('quota')) return 'storage';
+  return 'processing';
+}
+
+function showUserError(context, errorType, message) {
+  const contextLabels = {
+    'file-open': 'Открытие файла',
+    'page-render': 'Рендер страницы',
+    'export-word': 'Экспорт в Word',
+    'export-png': 'Экспорт PNG',
+    'export-annotations': 'Экспорт аннотаций',
+    'import-annotations': 'Импорт аннотаций',
+    'search': 'Поиск',
+    'ocr': 'Распознавание',
+    'workspace-export': 'Экспорт рабочей области',
+    'workspace-import': 'Импорт рабочей области',
+  };
+  const label = contextLabels[context] || context;
+  const statusEl = els.searchStatus || els.ocrStatus || els.workspaceStatus;
+  if (statusEl) {
+    statusEl.textContent = `Ошибка [${label}]: ${errorType} — ${message}`;
+  }
+}
+
+// ─── Phase 0: Performance Metrics Collector (p95) ──────────────────────────
+const perfMetrics = {
+  renderTimes: [],
+  ocrTimes: [],
+  searchTimes: [],
+  pageLoadTimes: [],
+  maxSamples: 200,
+};
+
+function recordPerfMetric(category, ms) {
+  const arr = perfMetrics[category];
+  if (!arr) return;
+  arr.push(ms);
+  if (arr.length > perfMetrics.maxSamples) arr.shift();
+}
+
+function computePercentile(arr, p) {
+  if (!arr.length) return 0;
+  const sorted = [...arr].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1));
+  return sorted[idx];
+}
+
+function getPerfSummary() {
+  const summary = {};
+  for (const key of ['renderTimes', 'ocrTimes', 'searchTimes', 'pageLoadTimes']) {
+    const arr = perfMetrics[key];
+    if (!arr.length) { summary[key] = null; continue; }
+    summary[key] = {
+      count: arr.length,
+      min: Math.round(Math.min(...arr)),
+      max: Math.round(Math.max(...arr)),
+      median: Math.round(computePercentile(arr, 0.5)),
+      p95: Math.round(computePercentile(arr, 0.95)),
+      avg: Math.round(arr.reduce((a, b) => a + b, 0) / arr.length),
+    };
+  }
+  return summary;
+}
+
+// ─── Phase 1: Web Worker Pool ──────────────────────────────────────────────
+const workerPool = {
+  workers: [],
+  maxWorkers: Math.min(4, (navigator.hardwareConcurrency || 2)),
+  taskQueue: [],
+  activeCount: 0,
+};
+
+function createOcrWorkerBlob() {
+  const code = `
+    self.onmessage = function(e) {
+      const { type, payload, taskId } = e.data;
+      if (type === 'preprocess') {
+        const { imageData, width, height, thresholdBias, mode, invert } = payload;
+        const d = imageData.data;
+        const hist = new Uint32Array(256);
+        let mean = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const gray = (d[i] * 0.299) + (d[i+1] * 0.587) + (d[i+2] * 0.114);
+          const g = Math.max(0, Math.min(255, Math.round(gray)));
+          d[i] = d[i+1] = d[i+2] = g;
+          hist[g] += 1;
+          mean += g;
+        }
+        mean /= Math.max(1, d.length / 4);
+
+        const totalPx = d.length / 4;
+        let p5 = 0, p95 = 255, acc = 0;
+        for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= totalPx * 0.05) { p5 = i; break; } }
+        acc = 0;
+        for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= totalPx * 0.95) { p95 = i; break; } }
+        const spread = Math.max(1, p95 - p5);
+        const sqMean = Array.from(d).filter((_, i) => i % 4 === 0).reduce((s, v) => s + v*v, 0) / totalPx;
+        const stdDev = Math.sqrt(Math.max(0, sqMean - mean*mean));
+
+        for (let i = 0; i < d.length; i += 4) {
+          const stretched = ((d[i] - p5) * 255) / spread;
+          const contrastBoost = stdDev < 36 ? 1.18 : 1.0;
+          const centered = (stretched - 127) * contrastBoost + 127;
+          d[i] = d[i+1] = d[i+2] = Math.max(0, Math.min(255, Math.round(centered)));
+        }
+
+        // Otsu threshold
+        let otsu = 128;
+        { let total = 0, sumTotal = 0;
+          for (let i = 0; i < 256; i++) { total += hist[i]; sumTotal += i * hist[i]; }
+          let sumBack = 0, wBack = 0, maxVar = 0;
+          for (let t = 0; t < 256; t++) {
+            wBack += hist[t]; if (wBack === 0) continue;
+            const wFore = total - wBack; if (wFore === 0) break;
+            sumBack += t * hist[t];
+            const mBack = sumBack / wBack;
+            const mFore = (sumTotal - sumBack) / wFore;
+            const between = wBack * wFore * (mBack - mFore) * (mBack - mFore);
+            if (between > maxVar) { maxVar = between; otsu = t; }
+          }
+        }
+
+        const thresholdBase = mode === 'otsu' ? otsu : mean;
+        const threshold = Math.max(50, Math.min(220, thresholdBase + (thresholdBias || 0)));
+        for (let i = 0; i < d.length; i += 4) {
+          let v = d[i] > threshold ? 255 : 0;
+          if (invert) v = 255 - v;
+          d[i] = d[i+1] = d[i+2] = v;
+          d[i+3] = 255;
+        }
+
+        self.postMessage({ type: 'preprocess-done', taskId, imageData, width, height }, [imageData.data.buffer]);
+      }
+
+      if (type === 'search-text') {
+        const { pages, query } = payload;
+        const results = [];
+        const norm = (query || '').trim().toLowerCase();
+        if (norm) {
+          for (let i = 0; i < pages.length; i++) {
+            const text = (pages[i] || '').toLowerCase();
+            const count = text.split(norm).length - 1;
+            if (count > 0) results.push({ page: i + 1, count, snippet: text.substring(text.indexOf(norm), text.indexOf(norm) + 80) });
+          }
+        }
+        self.postMessage({ type: 'search-done', taskId, results });
+      }
+    };
+  `;
+  return new Blob([code], { type: 'application/javascript' });
+}
+
+function getPoolWorker() {
+  if (workerPool.workers.length < workerPool.maxWorkers) {
+    try {
+      const blob = createOcrWorkerBlob();
+      const url = URL.createObjectURL(blob);
+      const worker = new Worker(url);
+      workerPool.workers.push(worker);
+      return worker;
+    } catch {
+      return null;
+    }
+  }
+  const idx = workerPool.activeCount % workerPool.workers.length;
+  return workerPool.workers[idx] || null;
+}
+
+function runInWorker(type, payload) {
+  return new Promise((resolve, reject) => {
+    const worker = getPoolWorker();
+    if (!worker) { reject(new Error('Worker unavailable')); return; }
+    const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    workerPool.activeCount++;
+    const handler = (e) => {
+      if (e.data.taskId !== taskId) return;
+      worker.removeEventListener('message', handler);
+      worker.removeEventListener('error', errHandler);
+      workerPool.activeCount--;
+      resolve(e.data);
+    };
+    const errHandler = (err) => {
+      worker.removeEventListener('message', handler);
+      worker.removeEventListener('error', errHandler);
+      workerPool.activeCount--;
+      reject(err);
+    };
+    worker.addEventListener('message', handler);
+    worker.addEventListener('error', errHandler);
+    worker.postMessage({ type, payload, taskId });
+  });
+}
+
+// ─── Phase 1: Enhanced Memory Management ───────────────────────────────────
+const pageRenderCache = {
+  entries: new Map(),
+  maxEntries: 8,
+  maxTotalPixels: 32_000_000,
+  totalPixels: 0,
+};
+
+function cacheRenderedPage(pageNum, canvas) {
+  if (pageRenderCache.entries.has(pageNum)) return;
+  const pixels = canvas.width * canvas.height;
+  while (pageRenderCache.entries.size >= pageRenderCache.maxEntries ||
+         pageRenderCache.totalPixels + pixels > pageRenderCache.maxTotalPixels) {
+    const oldest = pageRenderCache.entries.keys().next().value;
+    if (oldest === undefined) break;
+    evictPageFromCache(oldest);
+  }
+  const copy = document.createElement('canvas');
+  copy.width = canvas.width;
+  copy.height = canvas.height;
+  copy.getContext('2d').drawImage(canvas, 0, 0);
+  pageRenderCache.entries.set(pageNum, { canvas: copy, pixels, ts: Date.now() });
+  pageRenderCache.totalPixels += pixels;
+}
+
+function getCachedPage(pageNum) {
+  const entry = pageRenderCache.entries.get(pageNum);
+  if (!entry) return null;
+  pageRenderCache.entries.delete(pageNum);
+  pageRenderCache.entries.set(pageNum, entry);
+  entry.ts = Date.now();
+  return entry.canvas;
+}
+
+function evictPageFromCache(pageNum) {
+  const entry = pageRenderCache.entries.get(pageNum);
+  if (!entry) return;
+  pageRenderCache.totalPixels -= entry.pixels;
+  if (entry.canvas) { entry.canvas.width = 0; entry.canvas.height = 0; }
+  pageRenderCache.entries.delete(pageNum);
+}
+
+function clearPageRenderCache() {
+  for (const [key] of pageRenderCache.entries) {
+    evictPageFromCache(key);
+  }
+}
+
+const objectUrlRegistry = new Set();
+
+function trackObjectUrl(url) {
+  objectUrlRegistry.add(url);
+}
+
+function revokeTrackedUrl(url) {
+  if (objectUrlRegistry.has(url)) {
+    URL.revokeObjectURL(url);
+    objectUrlRegistry.delete(url);
+  }
+}
+
+function revokeAllTrackedUrls() {
+  for (const url of objectUrlRegistry) {
+    URL.revokeObjectURL(url);
+  }
+  objectUrlRegistry.clear();
+}
+
+// ─── Phase 1: Unified Tool State Machine ───────────────────────────────────
+const ToolMode = {
+  IDLE: 'idle',
+  ANNOTATE: 'annotate',
+  OCR_REGION: 'ocr-region',
+  TEXT_EDIT: 'text-edit',
+  SEARCH: 'search',
+};
+
+const toolStateMachine = {
+  current: ToolMode.IDLE,
+  previous: ToolMode.IDLE,
+  listeners: [],
+
+  transition(newMode) {
+    if (newMode === this.current) return;
+    const oldMode = this.current;
+    this.previous = oldMode;
+    this.current = newMode;
+
+    if (oldMode === ToolMode.ANNOTATE) deactivateAnnotateMode();
+    if (oldMode === ToolMode.OCR_REGION) deactivateOcrRegionMode();
+    if (oldMode === ToolMode.TEXT_EDIT) deactivateTextEditMode();
+    if (oldMode === ToolMode.SEARCH) deactivateSearchMode();
+
+    if (newMode === ToolMode.ANNOTATE) activateAnnotateMode();
+    if (newMode === ToolMode.OCR_REGION) activateOcrRegionMode();
+    if (newMode === ToolMode.TEXT_EDIT) activateTextEditMode();
+    if (newMode === ToolMode.SEARCH) activateSearchMode();
+
+    pushDiagnosticEvent('tool.transition', { from: oldMode, to: newMode });
+    for (const fn of this.listeners) fn(newMode, oldMode);
+  },
+
+  toggle(mode) {
+    this.transition(this.current === mode ? ToolMode.IDLE : mode);
+  },
+
+  onTransition(fn) {
+    this.listeners.push(fn);
+  },
+};
+
+function deactivateAnnotateMode() {
+  state.drawEnabled = false;
+  if (els.annotateToggle) els.annotateToggle.classList.remove('is-active');
+  renderAnnotations();
+}
+
+function activateAnnotateMode() {
+  state.drawEnabled = true;
+  if (els.annotateToggle) els.annotateToggle.classList.add('is-active');
+  updateOverlayInteractionState();
+}
+
+function deactivateOcrRegionMode() {
+  state.ocrRegionMode = false;
+  state.isSelectingOcr = false;
+  state.ocrSelection = null;
+  renderAnnotations();
+}
+
+function activateOcrRegionMode() {
+  state.ocrRegionMode = true;
+  updateOverlayInteractionState();
+  setOcrStatus('OCR: выделите область на странице');
+}
+
+function deactivateTextEditMode() {
+  state.textEditMode = false;
+  if (els.pageText) els.pageText.readOnly = true;
+  if (els.toggleTextEdit) {
+    els.toggleTextEdit.textContent = 'Редактирование текста: off';
+    els.toggleTextEdit.classList.remove('is-active');
+  }
+}
+
+function activateTextEditMode() {
+  state.textEditMode = true;
+  if (els.pageText) els.pageText.readOnly = false;
+  if (els.toggleTextEdit) {
+    els.toggleTextEdit.textContent = 'Редактирование текста: on';
+    els.toggleTextEdit.classList.add('is-active');
+  }
+}
+
+function deactivateSearchMode() {
+  // Search mode deactivation is passive - just unfocus
+}
+
+function activateSearchMode() {
+  if (els.searchInput) els.searchInput.focus();
+}
+
+// ─── Phase 2: OCR Confidence Scoring ───────────────────────────────────────
+function computeOcrConfidence(text, variants) {
+  if (!text || !variants || !variants.length) return { score: 0, level: 'none', details: {} };
+
+  const charCount = text.length;
+  const wordCount = text.split(/\s+/).filter(Boolean).length;
+  const lang = getOcrLang();
+
+  const langScore = scoreOcrTextByLang(text, lang);
+  const normalizedLangScore = Math.min(100, Math.max(0, (langScore / Math.max(1, charCount)) * 15 + 50));
+
+  const alphaRatio = (text.match(/[A-Za-zА-Яа-яЁё]/g) || []).length / Math.max(1, charCount);
+  const digitRatio = (text.match(/\d/g) || []).length / Math.max(1, charCount);
+  const garbageRatio = (text.match(/[^A-Za-zА-Яа-яЁё0-9\s.,;:!?()\-«»"']/g) || []).length / Math.max(1, charCount);
+
+  const readabilityScore = Math.min(100, Math.max(0,
+    (alphaRatio * 70) + (digitRatio * 20) - (garbageRatio * 150) + (wordCount > 3 ? 20 : 0)
+  ));
+
+  const avgWordLen = charCount / Math.max(1, wordCount);
+  const wordLenScore = (avgWordLen >= 2 && avgWordLen <= 15) ? 100 : Math.max(0, 100 - Math.abs(avgWordLen - 8) * 10);
+
+  const score = Math.round(
+    normalizedLangScore * 0.4 + readabilityScore * 0.4 + wordLenScore * 0.2
+  );
+
+  const level = score >= 80 ? 'high' : score >= 50 ? 'medium' : score >= 20 ? 'low' : 'very-low';
+
+  return {
+    score,
+    level,
+    details: {
+      langScore: Math.round(normalizedLangScore),
+      readability: Math.round(readabilityScore),
+      wordLength: Math.round(wordLenScore),
+      charCount,
+      wordCount,
+      alphaRatio: Number(alphaRatio.toFixed(2)),
+      garbageRatio: Number(garbageRatio.toFixed(2)),
+    },
+  };
+}
+
+function postCorrectOcrText(text, lang) {
+  if (!text) return text;
+  let out = text;
+  const effectiveLang = lang || getOcrLang();
+
+  // Common OCR substitution fixes
+  const commonFixes = [
+    [/\bIl\b/g, 'Il'],
+    [/0([А-Яа-я])/g, 'О$1'],  // Zero → О in Cyrillic context
+    [/([А-Яа-я])0/g, '$1О'],
+    [/\bl\b(?=[А-Яа-я])/g, 'І'],
+  ];
+
+  if (effectiveLang === 'rus') {
+    const rusFixes = [
+      [/rnе/g, 'те'],
+      [/rn/g, 'т'],
+      [/\bпо3/g, 'поз'],
+      [/З([а-я])/g, '3$1'],  // Fix З/3 confusion in word context
+      [/\s{2,}/g, ' '],
+    ];
+    for (const [pattern, replacement] of [...commonFixes, ...rusFixes]) {
+      out = out.replace(pattern, replacement);
+    }
+  } else {
+    const engFixes = [
+      [/\brn\b/g, 'm'],
+      [/\bcI\b/g, 'cl'],
+      [/\btI\b/g, 'tl'],
+    ];
+    for (const [pattern, replacement] of [...commonFixes, ...engFixes]) {
+      out = out.replace(pattern, replacement);
+    }
+  }
+
+  out = out.replace(/\s{2,}/g, ' ').trim();
+  return out;
+}
+
+// ─── Phase 2: Batch OCR Queue with Progress/Cancel/Priority ────────────────
+const batchOcrState = {
+  queue: [],
+  running: false,
+  progress: { completed: 0, total: 0, currentPage: 0 },
+  cancelled: false,
+  results: new Map(),
+  confidenceStats: { high: 0, medium: 0, low: 0, veryLow: 0 },
+};
+
+function enqueueBatchOcr(pages, priority = 'normal') {
+  const newTasks = pages.map(p => ({ page: p, priority, status: 'pending' }));
+  if (priority === 'high') {
+    batchOcrState.queue.unshift(...newTasks);
+  } else {
+    batchOcrState.queue.push(...newTasks);
+  }
+  batchOcrState.progress.total = batchOcrState.queue.length + batchOcrState.progress.completed;
+  pushDiagnosticEvent('ocr.batch.enqueue', { pages: pages.length, priority, totalQueue: batchOcrState.queue.length });
+}
+
+function cancelBatchOcr() {
+  batchOcrState.cancelled = true;
+  batchOcrState.queue = [];
+  batchOcrState.running = false;
+  pushDiagnosticEvent('ocr.batch.cancel', { completed: batchOcrState.progress.completed });
+}
+
+function getBatchOcrProgress() {
+  return {
+    ...batchOcrState.progress,
+    percent: batchOcrState.progress.total > 0
+      ? Math.round((batchOcrState.progress.completed / batchOcrState.progress.total) * 100)
+      : 0,
+    running: batchOcrState.running,
+    queueLength: batchOcrState.queue.length,
+    confidenceStats: { ...batchOcrState.confidenceStats },
+  };
+}
+
+// ─── Phase 3: PDF Text Editing Layer with Undo/Redo ────────────────────────
+const pdfEditState = {
+  edits: new Map(),
+  undoStack: [],
+  redoStack: [],
+  maxHistory: 100,
+  dirty: false,
+};
+
+function getPageEdits(pageNum) {
+  return pdfEditState.edits.get(pageNum) || '';
+}
+
+function setPageEdits(pageNum, text) {
+  const oldText = pdfEditState.edits.get(pageNum) || '';
+  if (oldText === text) return;
+
+  pdfEditState.undoStack.push({ page: pageNum, text: oldText, ts: Date.now() });
+  if (pdfEditState.undoStack.length > pdfEditState.maxHistory) {
+    pdfEditState.undoStack.shift();
+  }
+  pdfEditState.redoStack = [];
+
+  pdfEditState.edits.set(pageNum, text);
+  pdfEditState.dirty = true;
+  pushDiagnosticEvent('pdf-edit.change', { page: pageNum, length: text.length });
+}
+
+function undoPageEdit() {
+  if (!pdfEditState.undoStack.length) return null;
+  const action = pdfEditState.undoStack.pop();
+  const currentText = pdfEditState.edits.get(action.page) || '';
+  pdfEditState.redoStack.push({ page: action.page, text: currentText, ts: Date.now() });
+  pdfEditState.edits.set(action.page, action.text);
+  pdfEditState.dirty = true;
+  pushDiagnosticEvent('pdf-edit.undo', { page: action.page });
+  return action;
+}
+
+function redoPageEdit() {
+  if (!pdfEditState.redoStack.length) return null;
+  const action = pdfEditState.redoStack.pop();
+  const currentText = pdfEditState.edits.get(action.page) || '';
+  pdfEditState.undoStack.push({ page: action.page, text: currentText, ts: Date.now() });
+  pdfEditState.edits.set(action.page, action.text);
+  pdfEditState.dirty = true;
+  pushDiagnosticEvent('pdf-edit.redo', { page: action.page });
+  return action;
+}
+
+function getEditHistory() {
+  return {
+    undoCount: pdfEditState.undoStack.length,
+    redoCount: pdfEditState.redoStack.length,
+    editedPages: [...pdfEditState.edits.keys()],
+    dirty: pdfEditState.dirty,
+  };
+}
+
+function clearEditHistory() {
+  pdfEditState.undoStack = [];
+  pdfEditState.redoStack = [];
+  pdfEditState.dirty = false;
+}
+
+function persistEdits() {
+  if (!state.docName) return;
+  const key = `nr-edits-${state.docName}`;
+  const payload = {
+    edits: Object.fromEntries(pdfEditState.edits),
+    updatedAt: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(key, JSON.stringify(payload));
+    pdfEditState.dirty = false;
+  } catch { /* storage quota */ }
+}
+
+function loadPersistedEdits() {
+  if (!state.docName) return;
+  const key = `nr-edits-${state.docName}`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed?.edits && typeof parsed.edits === 'object') {
+      for (const [page, text] of Object.entries(parsed.edits)) {
+        pdfEditState.edits.set(Number(page), text);
+      }
+    }
+  } catch { /* ignore */ }
+}
+
+// ─── Phase 3: True PDF→DOCX Converter ─────────────────────────────────────
+function buildDocxXml(title, pages) {
+  const escapeXml = (s) => String(s || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+  const docTitle = escapeXml(title);
+
+  const paragraphs = [];
+  paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${docTitle}</w:t></w:r></w:p>`);
+
+  for (let i = 0; i < pages.length; i++) {
+    const text = String(pages[i] || '').trim();
+    if (!text) continue;
+
+    paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Страница ${i + 1}</w:t></w:r></w:p>`);
+
+    const lines = text.split('\n');
+    let inTable = false;
+    let tableRows = [];
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        if (inTable && tableRows.length) {
+          paragraphs.push(buildDocxTable(tableRows));
+          tableRows = [];
+          inTable = false;
+        }
+        continue;
+      }
+
+      const cells = trimmed.split(/\t|  {2,}|\|/).map(c => c.trim()).filter(Boolean);
+      if (cells.length >= 2 && cells.length <= 20) {
+        inTable = true;
+        tableRows.push(cells);
+        continue;
+      }
+
+      if (inTable && tableRows.length) {
+        paragraphs.push(buildDocxTable(tableRows));
+        tableRows = [];
+        inTable = false;
+      }
+
+      const escapedLine = escapeXml(trimmed);
+      paragraphs.push(`<w:p><w:r><w:t xml:space="preserve">${escapedLine}</w:t></w:r></w:p>`);
+    }
+
+    if (inTable && tableRows.length) {
+      paragraphs.push(buildDocxTable(tableRows));
+    }
+
+    if (i < pages.length - 1) {
+      paragraphs.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
+    }
+  }
+
+  const body = paragraphs.join('\n');
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+  xmlns:v="urn:schemas-microsoft-com:vml"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:w10="urn:schemas-microsoft-com:office:word"
+  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml"
+  mc:Ignorable="w14 wp14">
+<w:body>
+${body}
+<w:sectPr>
+  <w:pgSz w:w="11906" w:h="16838"/>
+  <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/>
+</w:sectPr>
+</w:body>
+</w:document>`;
+}
+
+function buildDocxTable(rows) {
+  const escapeXml = (s) => String(s || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  const maxCols = Math.max(...rows.map(r => r.length));
+  const colWidth = Math.floor(9000 / maxCols);
+
+  let xml = '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblBorders>';
+  xml += '<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
+  xml += '<w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
+  xml += '<w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
+  xml += '<w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
+  xml += '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
+  xml += '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>';
+  xml += '</w:tblBorders></w:tblPr>';
+
+  xml += '<w:tblGrid>';
+  for (let c = 0; c < maxCols; c++) xml += `<w:gridCol w:w="${colWidth}"/>`;
+  xml += '</w:tblGrid>';
+
+  for (const row of rows) {
+    xml += '<w:tr>';
+    for (let c = 0; c < maxCols; c++) {
+      const cellText = escapeXml(row[c] || '');
+      xml += `<w:tc><w:p><w:r><w:t xml:space="preserve">${cellText}</w:t></w:r></w:p></w:tc>`;
+    }
+    xml += '</w:tr>';
+  }
+  xml += '</w:tbl>';
+  return xml;
+}
+
+function buildDocxStyles() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:styleId="Title">
+    <w:name w:val="Title"/>
+    <w:pPr><w:jc w:val="center"/></w:pPr>
+    <w:rPr><w:b/><w:sz w:val="48"/></w:rPr>
+  </w:style>
+  <w:style w:type="paragraph" w:styleId="Heading2">
+    <w:name w:val="heading 2"/>
+    <w:pPr><w:spacing w:before="240" w:after="120"/></w:pPr>
+    <w:rPr><w:b/><w:sz w:val="32"/></w:rPr>
+  </w:style>
+  <w:style w:type="table" w:styleId="TableGrid">
+    <w:name w:val="Table Grid"/>
+    <w:tblPr><w:tblBorders>
+      <w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+      <w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+      <w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+      <w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+      <w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+      <w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/>
+    </w:tblBorders></w:tblPr>
+  </w:style>
+</w:styles>`;
+}
+
+function buildContentTypes() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`;
+}
+
+function buildRels() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+}
+
+function buildWordRels() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
+}
+
+async function generateDocxBlob(title, pages) {
+  const docXml = buildDocxXml(title, pages);
+  const stylesXml = buildDocxStyles();
+  const contentTypesXml = buildContentTypes();
+  const relsXml = buildRels();
+  const wordRelsXml = buildWordRels();
+
+  // Build ZIP manually (minimal PKZIP implementation)
+  const encoder = new TextEncoder();
+  const files = [
+    { name: '[Content_Types].xml', data: encoder.encode(contentTypesXml) },
+    { name: '_rels/.rels', data: encoder.encode(relsXml) },
+    { name: 'word/document.xml', data: encoder.encode(docXml) },
+    { name: 'word/styles.xml', data: encoder.encode(stylesXml) },
+    { name: 'word/_rels/document.xml.rels', data: encoder.encode(wordRelsXml) },
+  ];
+
+  const parts = [];
+  const centralDir = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.name);
+    // Local file header
+    const header = new Uint8Array(30 + nameBytes.length);
+    const hv = new DataView(header.buffer);
+    hv.setUint32(0, 0x04034b50, true);  // signature
+    hv.setUint16(4, 20, true);           // version needed
+    hv.setUint16(6, 0, true);            // flags
+    hv.setUint16(8, 0, true);            // compression (stored)
+    hv.setUint16(10, 0, true);           // mod time
+    hv.setUint16(12, 0, true);           // mod date
+    const crc = crc32(file.data);
+    hv.setUint32(14, crc, true);         // crc-32
+    hv.setUint32(18, file.data.length, true);  // compressed size
+    hv.setUint32(22, file.data.length, true);  // uncompressed size
+    hv.setUint16(26, nameBytes.length, true);  // name length
+    hv.setUint16(28, 0, true);           // extra field length
+    header.set(nameBytes, 30);
+
+    parts.push(header, file.data);
+
+    // Central directory entry
+    const cde = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(cde.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, 0, true);
+    cv.setUint16(14, 0, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, file.data.length, true);
+    cv.setUint32(24, file.data.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint16(30, 0, true);
+    cv.setUint16(32, 0, true);
+    cv.setUint16(34, 0, true);
+    cv.setUint16(36, 0, true);
+    cv.setUint32(38, 0x20, true);
+    cv.setUint32(42, offset, true);
+    cde.set(nameBytes, 46);
+    centralDir.push(cde);
+
+    offset += header.length + file.data.length;
+  }
+
+  const cdOffset = offset;
+  let cdSize = 0;
+  for (const cde of centralDir) cdSize += cde.length;
+
+  // End of central directory
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(4, 0, true);
+  ev.setUint16(6, 0, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cdSize, true);
+  ev.setUint32(16, cdOffset, true);
+  ev.setUint16(20, 0, true);
+
+  const allParts = [...parts, ...centralDir, eocd];
+  const totalSize = allParts.reduce((s, p) => s + p.length, 0);
+  const result = new Uint8Array(totalSize);
+  let pos = 0;
+  for (const part of allParts) {
+    result.set(part, pos);
+    pos += part.length;
+  }
+
+  return new Blob([result], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+
+function crc32(data) {
+  let crc = 0xFFFFFFFF;
+  for (let i = 0; i < data.length; i++) {
+    crc ^= data[i];
+    for (let j = 0; j < 8; j++) {
+      crc = (crc >>> 1) ^ (crc & 1 ? 0xEDB88320 : 0);
+    }
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
 
 const state = {
   adapter: null,
@@ -1063,6 +1934,12 @@ function collectPerfBaseline() {
       count: resources.length,
     },
     memory,
+    perfMetricsSummary: getPerfSummary(),
+    editHistory: getEditHistory(),
+    batchOcrProgress: getBatchOcrProgress(),
+    toolMode: toolStateMachine.current,
+    pageCacheSize: pageRenderCache.entries.size,
+    trackedUrls: objectUrlRegistry.size,
   };
 }
 
@@ -1083,6 +1960,15 @@ function formatDiagnosticsForChat(payload) {
   lines.push('perf:');
   lines.push(JSON.stringify(payload.perf || {}, null, 0));
   lines.push('');
+  if (payload.perf?.perfMetricsSummary) {
+    lines.push('perfMetrics (p95):');
+    lines.push(JSON.stringify(payload.perf.perfMetricsSummary, null, 0));
+    lines.push('');
+  }
+  if (payload.perf?.editHistory) {
+    lines.push(`editHistory: undo=${payload.perf.editHistory.undoCount} redo=${payload.perf.editHistory.redoCount} dirty=${payload.perf.editHistory.dirty}`);
+    lines.push('');
+  }
   lines.push('events:');
   payload.events.forEach((event, idx) => {
     const payloadText = JSON.stringify(event.payload || {}, null, 0);
@@ -1361,6 +2247,11 @@ function updateOverlayInteractionState() {
 }
 
 function setDrawMode(enabled) {
+  if (enabled) {
+    toolStateMachine.transition(ToolMode.ANNOTATE);
+  } else if (toolStateMachine.current === ToolMode.ANNOTATE) {
+    toolStateMachine.transition(ToolMode.IDLE);
+  }
   state.drawEnabled = enabled;
   updateOverlayInteractionState();
   els.annotateToggle.textContent = `Аннотации: ${enabled ? 'on' : 'off'}`;
@@ -2480,6 +3371,11 @@ function setOcrStatusThrottled(text, minIntervalMs = 70) {
 
 function setOcrRegionMode(enabled) {
   state.ocrRegionMode = !!enabled;
+  if (enabled) {
+    toolStateMachine.transition(ToolMode.OCR_REGION);
+  } else if (toolStateMachine.current === ToolMode.OCR_REGION) {
+    toolStateMachine.transition(ToolMode.IDLE);
+  }
   if (!state.ocrRegionMode) {
     state.isSelectingOcr = false;
     state.ocrSelection = null;
@@ -2561,13 +3457,17 @@ async function runOcrOnRectNow(rect) {
     if (taskId !== state.ocrTaskId) return;
     const totalMs = Math.round(performance.now() - taskStartedAt);
     if (text) {
-      els.pageText.value = text;
-      setOcrStatus(`OCR: распознано ${text.length} символов за ${totalMs}мс`);
-      pushDiagnosticEvent('ocr.manual.finish', { taskId, textLength: text.length, totalMs, page: state.currentPage });
+      const corrected = postCorrectOcrText(text);
+      const confidence = computeOcrConfidence(corrected, []);
+      els.pageText.value = corrected;
+      setOcrStatus(`OCR: распознано ${corrected.length} символов за ${totalMs}мс [${confidence.level} ${confidence.score}%]`);
+      recordPerfMetric('ocrTimes', totalMs);
+      pushDiagnosticEvent('ocr.manual.finish', { taskId, textLength: corrected.length, totalMs, page: state.currentPage, confidence: confidence.score, confidenceLevel: confidence.level });
       if (totalMs >= OCR_SLOW_TASK_WARN_MS) {
         pushDiagnosticEvent('ocr.manual.slow', { taskId, totalMs, page: state.currentPage }, 'warn');
       }
     } else {
+      recordPerfMetric('ocrTimes', totalMs);
       setOcrStatus(`OCR: текст не найден (${totalMs}мс)`);
       pushDiagnosticEvent('ocr.manual.empty', { taskId, totalMs, page: state.currentPage }, 'warn');
     }
@@ -4384,10 +5284,12 @@ async function extractDjvuFallbackText(file) {
 }
 
 
-async function openFile(file) {
+const _openFileImpl = async function openFileImpl(file) {
   const openStartedAt = performance.now();
   pushDiagnosticEvent('file.open.start', { name: file?.name || 'unknown', size: Number(file?.size) || 0 });
   revokeCurrentObjectUrl();
+  clearPageRenderCache();
+  revokeAllTrackedUrls();
   state.file = file;
   state.docName = file.name;
   state.currentPage = 1;
@@ -4501,11 +5403,14 @@ async function openFile(file) {
   } else {
     setOcrStatus('OCR: фоновое распознавание выключено в настройках');
   }
+  loadPersistedEdits();
   renderCommentList();
   updateReadingTimeStatus();
   renderEtaStatus();
   startReadingTimer();
-}
+  recordPerfMetric('pageLoadTimes', Math.round(performance.now() - openStartedAt));
+};
+const openFile = withErrorBoundary(_openFileImpl, 'file-open');
 
 async function renderCurrentPage() {
   if (!state.adapter) return;
@@ -4532,9 +5437,12 @@ async function renderCurrentPage() {
   capturePageHistoryOnRender();
   saveViewState();
 
+  cacheRenderedPage(state.currentPage, els.canvas);
+
   // Defer non-critical updates to avoid blocking the render path
   const renderedPage = state.currentPage;
   const renderMs = Math.round(performance.now() - renderStartedAt);
+  recordPerfMetric('renderTimes', renderMs);
   requestAnimationFrame(() => {
     renderCommentList();
     trackVisitedPage(renderedPage);
@@ -5509,6 +6417,11 @@ function exportPageText() {
 
 function setTextEditMode(enabled) {
   state.textEditMode = !!enabled;
+  if (enabled) {
+    toolStateMachine.transition(ToolMode.TEXT_EDIT);
+  } else if (toolStateMachine.current === ToolMode.TEXT_EDIT) {
+    toolStateMachine.transition(ToolMode.IDLE);
+  }
   if (els.pageText) {
     els.pageText.readOnly = !state.textEditMode;
   }
@@ -5521,6 +6434,11 @@ function setTextEditMode(enabled) {
 function saveCurrentPageTextEdits() {
   if (!state.adapter || !state.docName) return;
   const txt = String(els.pageText?.value || '').trim();
+
+  // Record in PDF edit layer for undo/redo
+  setPageEdits(state.currentPage, txt);
+  persistEdits();
+
   const cache = loadOcrTextData();
   const pagesText = Array.isArray(cache?.pagesText) ? [...cache.pagesText] : new Array(state.pageCount).fill('');
   pagesText[state.currentPage - 1] = txt;
@@ -5531,50 +6449,58 @@ function saveCurrentPageTextEdits() {
     totalPages: state.pageCount,
     updatedAt: new Date().toISOString(),
   });
-  setOcrStatus('OCR: правки текста сохранены для текущей страницы');
+  const history = getEditHistory();
+  setOcrStatus(`Правки сохранены (undo: ${history.undoCount}, redo: ${history.redoCount})`);
 }
 
-function exportCurrentDocToWord() {
+async function exportCurrentDocToWord() {
   if (!state.adapter) return;
-  const title = String(state.docName || 'document').replace(/[<>"'&]/g, '');
+  const title = String(state.docName || 'document').replace(/\.[^.]+$/, '');
   const cache = loadOcrTextData();
-  const pages = Array.isArray(cache?.pagesText) ? cache.pagesText : [];
+  const pages = Array.isArray(cache?.pagesText) ? [...cache.pagesText] : [];
   const currentText = String(els.pageText?.value || '').trim();
   if (!pages[state.currentPage - 1] && currentText) {
     pages[state.currentPage - 1] = currentText;
   }
 
-  const body = [];
-  body.push(`<h1>${title}</h1>`);
-  const maxPages = Math.max(state.pageCount || 1, pages.length || 0);
-  for (let i = 1; i <= maxPages; i += 1) {
-    const txt = String(pages[i - 1] || '').trim();
-    if (!txt) continue;
-    const escaped = txt
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br/>');
-    body.push(`<h2>Страница ${i}</h2><p>${escaped}</p>`);
+  // Merge in manual edits from PDF edit layer
+  for (const [pageNum, editText] of pdfEditState.edits) {
+    if (editText && (!pages[pageNum - 1] || pages[pageNum - 1].length < editText.length)) {
+      pages[pageNum - 1] = editText;
+    }
   }
 
-  if (body.length === 1) {
-    setOcrStatus('OCR: нет текста для экспорта в Word, выполните OCR/извлечение');
+  const maxPages = Math.max(state.pageCount || 1, pages.length || 0);
+  const textPages = [];
+  for (let i = 0; i < maxPages; i++) {
+    textPages.push(String(pages[i] || '').trim());
+  }
+
+  const hasContent = textPages.some(t => t.length > 0);
+  if (!hasContent) {
+    setOcrStatus('OCR: нет текста для экспорта в DOCX, выполните OCR/извлечение');
     return;
   }
 
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${body.join('')}</body></html>`;
-  const blob = new Blob([html], { type: 'application/msword;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${state.docName || 'document'}.doc`;
-  a.click();
-  URL.revokeObjectURL(url);
-  setOcrStatus('OCR: экспорт Word (текстовый слой/OCR) выполнен');
+  try {
+    setOcrStatus('Экспорт DOCX: генерация...');
+    const blob = await generateDocxBlob(title, textPages);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${title}.docx`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setOcrStatus(`Экспорт DOCX: готово (${Math.round(blob.size / 1024)} КБ)`);
+    pushDiagnosticEvent('export.docx', { pages: maxPages, sizeKb: Math.round(blob.size / 1024) });
+  } catch (error) {
+    setOcrStatus(`Экспорт DOCX: ошибка — ${error.message}`);
+    pushDiagnosticEvent('export.docx.error', { message: error.message }, 'error');
+  }
 }
 
 async function searchInPdf(query) {
+  const searchStartedAt = performance.now();
   state.searchResults = [];
   state.searchCursor = -1;
   state.searchResultCounts = {};
@@ -5628,11 +6554,14 @@ async function searchInPdf(query) {
     }
   }
 
+  const searchMs = Math.round(performance.now() - searchStartedAt);
+  recordPerfMetric('searchTimes', searchMs);
+
   if (state.searchResults.length) {
     state.searchCursor = 0;
     await jumpToSearchResult(0);
     const suffix = scope === 'current' ? ' (текущая страница)' : '';
-    els.searchStatus.textContent = `Совпадение 1/${state.searchResults.length}${suffix}`;
+    els.searchStatus.textContent = `Совпадение 1/${state.searchResults.length}${suffix} (${searchMs}мс)`;
   } else {
     els.searchStatus.textContent = scope === 'current' ? 'На текущей странице не найдено' : 'Ничего не найдено';
     renderSearchResultsList();
@@ -6321,6 +7250,23 @@ document.addEventListener('keydown', async (e) => {
     if (state.drawEnabled) {
       e.preventDefault();
       undoStroke();
+    } else if (state.textEditMode && !e.shiftKey) {
+      e.preventDefault();
+      const action = undoPageEdit();
+      if (action && els.pageText) {
+        els.pageText.value = action.text;
+        setOcrStatus(`Отмена: страница ${action.page}`);
+      }
+    }
+  }
+  if ((e.ctrlKey || e.metaKey) && key === 'y') {
+    if (state.textEditMode) {
+      e.preventDefault();
+      const action = redoPageEdit();
+      if (action && els.pageText) {
+        els.pageText.value = action.text;
+        setOcrStatus(`Повтор: страница ${action.page}`);
+      }
     }
   }
   if (combo && combo === hotkeys.annotate) {
@@ -6342,6 +7288,9 @@ document.addEventListener('keydown', async (e) => {
 document.addEventListener('visibilitychange', syncReadingTimerWithVisibility);
 window.addEventListener('beforeunload', () => {
   stopReadingTimer(true);
+  if (pdfEditState.dirty) persistEdits();
+  revokeAllTrackedUrls();
+  clearPageRenderCache();
 });
 
 renderRecent();
