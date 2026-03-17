@@ -10,7 +10,17 @@ const STORE_NAME = 'ocr-pages';
 let _db = null;
 
 function openDb() {
-  if (_db) return Promise.resolve(_db);
+  // If cached connection exists, verify it's still alive
+  if (_db) {
+    try {
+      // Test if connection is still valid by checking objectStoreNames
+      _db.objectStoreNames;
+      return Promise.resolve(_db);
+    } catch {
+      // Connection died (e.g. browser closed it) — reopen
+      _db = null;
+    }
+  }
 
   return new Promise((resolve, reject) => {
     try {
@@ -27,6 +37,9 @@ function openDb() {
 
       request.onsuccess = (e) => {
         _db = e.target.result;
+        // Auto-recover if the connection is closed unexpectedly
+        _db.onclose = () => { _db = null; };
+        _db.onerror = () => { _db = null; };
         resolve(_db);
       };
 
@@ -41,8 +54,17 @@ function openDb() {
 
 function getStore(mode = 'readonly') {
   return openDb().then((db) => {
-    const tx = db.transaction(STORE_NAME, mode);
-    return tx.objectStore(STORE_NAME);
+    try {
+      const tx = db.transaction(STORE_NAME, mode);
+      return tx.objectStore(STORE_NAME);
+    } catch (err) {
+      // Transaction failed (connection may be stale) — reset and retry once
+      _db = null;
+      return openDb().then((db2) => {
+        const tx = db2.transaction(STORE_NAME, mode);
+        return tx.objectStore(STORE_NAME);
+      });
+    }
   });
 }
 

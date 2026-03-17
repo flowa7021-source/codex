@@ -2522,6 +2522,11 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
       }
     } catch (ocrErr) {
       pushDiagnosticEvent('ocr.engine.error', { variant: i, error: ocrErr?.message || String(ocrErr) });
+      // If worker died, stop trying more variants — they'll all fail too
+      if (!getTesseractStatus().ready) {
+        pushDiagnosticEvent('ocr.engine.dead', { variant: i, error: ocrErr?.message || String(ocrErr) }, 'error');
+        break;
+      }
       continue;
     }
     // When lang is 'auto', detect the language from raw OCR output
@@ -3106,6 +3111,21 @@ async function startBackgroundOcrScan(reason = 'auto') {
   if (!state.adapter || !state.pageCount) return;
   if (state.docName == null) return;
   if (state.backgroundOcrRunning) return;
+
+  // Pre-check: ensure Tesseract can initialize before scanning all pages
+  const tessAvail = await isTesseractAvailable();
+  if (!tessAvail) {
+    pushDiagnosticEvent('ocr.background.skip', { reason: 'tesseract-unavailable' }, 'warn');
+    return;
+  }
+  const lang = getOcrLang();
+  const initOk = await initTesseract(lang === 'auto' ? 'auto' : lang);
+  if (!initOk) {
+    pushDiagnosticEvent('ocr.background.skip', { reason: 'tesseract-init-failed', lang }, 'warn');
+    setOcrStatus('OCR: фоновое распознавание невозможно — ошибка инициализации');
+    return;
+  }
+
   const token = Date.now();
   state.backgroundOcrToken = token;
   state.backgroundOcrRunning = true;
@@ -3114,6 +3134,7 @@ async function startBackgroundOcrScan(reason = 'auto') {
   const existing = loadOcrTextData();
   const pagesText = Array.isArray(existing?.pagesText) ? [...existing.pagesText] : new Array(state.pageCount).fill('');
   const maxPages = Math.min(state.pageCount, 240);
+  let consecutiveEmpty = 0;
 
   try {
     for (let i = 1; i <= maxPages; i += 1) {
@@ -3121,10 +3142,11 @@ async function startBackgroundOcrScan(reason = 'auto') {
         return;
       }
       if (state.docName === null || state.docName === undefined) return;
-      if (pagesText[i - 1]) continue;
+      if (pagesText[i - 1]) { consecutiveEmpty = 0; continue; }
 
       const txt = await extractTextForPage(i);
       if (txt) {
+        consecutiveEmpty = 0;
         const corrected = postCorrectOcrText(txt);
         pagesText[i - 1] = corrected;
         indexOcrPage(i, corrected);
@@ -3141,6 +3163,14 @@ async function startBackgroundOcrScan(reason = 'auto') {
 
         if (i === state.currentPage && !els.pageText.value) {
           els.pageText.value = corrected;
+        }
+      } else {
+        consecutiveEmpty++;
+        // If Tesseract worker died, stop wasting CPU on remaining pages
+        if (consecutiveEmpty >= 5 && !getTesseractStatus().ready) {
+          pushDiagnosticEvent('ocr.background.abort', { reason: 'engine-dead', page: i, consecutiveEmpty }, 'error');
+          setOcrStatus('OCR: фоновое распознавание прервано — движок недоступен');
+          break;
         }
       }
 

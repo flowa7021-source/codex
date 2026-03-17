@@ -140,17 +140,30 @@ export async function initTesseract(lang = 'eng') {
       const Tesseract = await loadTesseractModule();
       const corePath = hasSIMD() ? PATHS.coreSimdLstm : PATHS.coreLstm;
 
-      // workerBlobURL: false is CRITICAL for Electron (file:// protocol).
-      // Default true creates a blob:-origin worker that cannot importScripts
-      // from file:// URLs, causing silent init failures.
-      _worker = await Tesseract.createWorker(tessLang, 1, {
+      const workerOpts = {
         workerPath: PATHS.workerJs,
         corePath: corePath,
         langPath: PATHS.langDataDir,
         cacheMethod: 'none', // Don't use IndexedDB cache — load from local files
         gzip: false, // Our traineddata files are not gzipped
-        workerBlobURL: false, // Use direct file:// worker, not blob: wrapper
-      });
+        // workerBlobURL: false is CRITICAL for Electron (file:// protocol).
+        // Default true creates a blob:-origin worker that cannot importScripts
+        // from file:// URLs, causing silent init failures.
+        workerBlobURL: false,
+      };
+
+      try {
+        _worker = await Tesseract.createWorker(tessLang, 1, workerOpts);
+      } catch (primaryErr) {
+        // If multi-language (e.g. 'eng+rus') fails, try falling back to first language
+        if (tessLang.includes('+')) {
+          const fallbackLang = tessLang.split('+')[0];
+          console.warn(`Tesseract multi-lang "${tessLang}" failed, trying "${fallbackLang}":`, primaryErr?.message);
+          _worker = await Tesseract.createWorker(fallbackLang, 1, workerOpts);
+        } else {
+          throw primaryErr;
+        }
+      }
 
       _currentLang = tessLang;
       _available = true;
@@ -207,6 +220,13 @@ export async function recognizeTesseract(canvas, options = {}) {
     return { text: text.trim(), confidence, words };
   } catch (err) {
     console.warn('Tesseract recognize error:', err);
+    // Worker may have crashed — reset so next call re-initializes
+    const errMsg = String(err?.message || err || '');
+    if (errMsg.includes('terminated') || errMsg.includes('Worker') || errMsg.includes('disposed') || errMsg.includes('dead')) {
+      _worker = null;
+      _currentLang = null;
+      _lastInitError = `recognize failed: ${errMsg}`;
+    }
     return { text: '', confidence: 0, words: [] };
   }
 }
