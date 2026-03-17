@@ -231,6 +231,7 @@ function withErrorBoundary(fn, context, options = {}) {
       const message = String(error?.message || 'unknown error');
       const errorType = classifyAppError(message);
       pushDiagnosticEvent(`error-boundary.${context}`, { message, errorType, ms, context }, 'error');
+      if (typeof recordCrashEvent === 'function') recordCrashEvent(errorType, message, context);
       if (!silent) {
         showUserError(context, errorType, message);
       }
@@ -3995,8 +3996,10 @@ async function runOcrOnRectNow(rect) {
       const corrected = postCorrectOcrText(text);
       const confidence = computeOcrConfidence(corrected, []);
       els.pageText.value = corrected;
+      indexOcrPage(state.currentPage, corrected);
       setOcrStatus(`OCR: распознано ${corrected.length} символов за ${totalMs}мс [${confidence.level} ${confidence.score}%]`);
       recordPerfMetric('ocrTimes', totalMs);
+      recordSuccessfulOperation();
       pushDiagnosticEvent('ocr.manual.finish', { taskId, textLength: corrected.length, totalMs, page: state.currentPage, confidence: confidence.score, confidenceLevel: confidence.level });
       if (totalMs >= OCR_SLOW_TASK_WARN_MS) {
         pushDiagnosticEvent('ocr.manual.slow', { taskId, totalMs, page: state.currentPage }, 'warn');
@@ -4011,6 +4014,7 @@ async function runOcrOnRectNow(rect) {
     const message = String(error?.message || 'unknown error');
     const errorType = classifyOcrError(message);
     setOcrStatus(`OCR: ошибка [${errorType}] (${message})`);
+    recordCrashEvent(errorType, message, 'ocr-manual');
     pushDiagnosticEvent('ocr.manual.error', { taskId, totalMs, page: state.currentPage, message, errorType }, 'error');
   } finally {
     if (hangWarnTimer) clearTimeout(hangWarnTimer);
@@ -5981,6 +5985,7 @@ async function renderCurrentPage() {
   const renderedPage = state.currentPage;
   const renderMs = Math.round(performance.now() - renderStartedAt);
   recordPerfMetric('renderTimes', renderMs);
+  recordSuccessfulOperation();
   requestAnimationFrame(() => {
     renderCommentList();
     trackVisitedPage(renderedPage);

@@ -1,6 +1,6 @@
 {
   "name": "novareader-desktop",
-  "version": "1.0.0",
+  "version": "2.0.0-alpha",
   "description": "NovaReader desktop build (no Python/server runtime)",
   "main": "electron/main.js",
   "author": "NovaReader",
@@ -8,7 +8,14 @@
   "scripts": {
     "start:desktop": "electron .",
     "build:win": "electron-builder --win portable",
-    "build:win:nosign": "electron-builder --win portable --config.win.signAndEditExecutable=false"
+    "build:win:nosign": "electron-builder --win portable --config.win.signAndEditExecutable=false",
+    "test:e2e": "npx playwright test --config tests/e2e/playwright.config.js",
+    "test:e2e:desktop": "npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd",
+    "test:e2e:mobile": "npx playwright test --config tests/e2e/playwright.config.js --project=mobile",
+    "test:benchmark": "node tests/benchmarks/ocr-quality-baseline.js",
+    "test:soak": "node tests/nightly-soak.js",
+    "test:soak:long": "SOAK_DURATION_MIN=60 node tests/nightly-soak.js",
+    "test": "npm run test:benchmark"
   },
   "devDependencies": {
     "djvujs-dist": "^0.5.4",
