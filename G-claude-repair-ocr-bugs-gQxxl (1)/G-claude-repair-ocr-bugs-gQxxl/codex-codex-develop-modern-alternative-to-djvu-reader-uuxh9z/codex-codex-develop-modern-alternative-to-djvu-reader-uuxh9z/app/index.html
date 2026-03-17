@@ -340,6 +340,7 @@
               <button id="ocrRegionMode" class="btn-xs tb-toggle">Область</button>
               <button id="copyOcrText" class="btn-xs">📋 OCR</button>
               <button id="cancelBackgroundOcr" class="btn-xs">⏹ Фон</button>
+              <button id="toggleOcrConfidence" class="btn-xs tb-toggle">Качество</button>
               <button id="exportHealthReport" class="btn-xs">Health</button>
             </div>
             <div class="section-actions">
@@ -458,6 +459,16 @@
               <label>Мин. W (px) <input id="cfgOcrMinW" type="number" min="8" value="24" /></label>
               <label>Мин. H (px) <input id="cfgOcrMinH" type="number" min="8" value="24" /></label>
             </div>
+          </section>
+          <section>
+            <h4>OCR хранилище</h4>
+            <p id="ocrStorageInfo" class="status-line"></p>
+            <div class="section-actions">
+              <button id="refreshOcrStorage" class="btn-ghost btn-xs">Обновить</button>
+              <button id="clearCurrentOcrData" class="btn-ghost btn-xs">Очистить текущий</button>
+              <button id="clearAllOcrData" class="btn-ghost btn-xs">Очистить всё</button>
+            </div>
+            <ul id="ocrDocumentsList" class="ocr-docs-list"></ul>
           </section>
         </div>
         <div class="modal-actions">

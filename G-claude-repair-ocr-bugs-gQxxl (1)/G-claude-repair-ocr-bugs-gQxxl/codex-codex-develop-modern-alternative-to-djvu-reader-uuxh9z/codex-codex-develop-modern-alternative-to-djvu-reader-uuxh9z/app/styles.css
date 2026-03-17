@@ -679,6 +679,11 @@ body.advanced-hidden .advanced-section { display: none; }
 .ocr-confidence-low { color: #f59e0b; }
 .ocr-confidence-very-low { color: var(--danger); }
 
+/* ═══ OCR Storage List ═══ */
+.ocr-docs-list { list-style: none; padding: 0; margin: 4px 0; max-height: 120px; overflow-y: auto; font-size: 0.85em; }
+.ocr-docs-list li { display: flex; justify-content: space-between; align-items: center; padding: 2px 4px; border-bottom: 1px solid var(--border, #333); }
+.ocr-docs-list li button { margin-left: 8px; flex-shrink: 0; }
+
 /* ═══ Session health ═══ */
 .session-health-good { color: var(--success); }
 .session-health-degraded { color: #f59e0b; }

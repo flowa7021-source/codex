@@ -8,16 +8,16 @@ import { ToolMode, toolStateMachine, activateAnnotateMode, deactivateAnnotateMod
 import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
 import { setLanguage, getLanguage, loadLanguage, t, applyI18nToDOM, getAvailableLanguages } from './modules/i18n.js';
 import { parseEpub, EpubAdapter } from './modules/epub-adapter.js';
-import { postCorrectByLanguage, scoreTextByLanguage, detectLanguage } from './modules/ocr-languages.js';
+import { postCorrectByLanguage, scoreTextByLanguage, detectLanguage, getSupportedLanguages, getLanguageName } from './modules/ocr-languages.js';
 import { blockEditor } from './modules/pdf-advanced-edit.js';
 import { formManager } from './modules/pdf-forms.js';
 import { progressiveLoader } from './modules/progressive-loader.js';
 import { exportAnnotationsAsSvg, exportAnnotationsAsPdf } from './modules/annotation-export.js';
 import { applyPlugin, pluginToDocxXml, detectApplicablePlugins } from './modules/conversion-plugins.js';
 import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from './modules/docx-import-advanced.js';
-import { analyzeTextDensity, computeOcrZoom } from './modules/ocr-adaptive-dpi.js';
-import { getPageQualitySummary } from './modules/ocr-word-confidence.js';
-import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText } from './modules/ocr-storage.js';
+import { analyzeTextDensity, computeOcrZoom, hasSmallText } from './modules/ocr-adaptive-dpi.js';
+import { getPageQualitySummary, markLowConfidenceWords } from './modules/ocr-word-confidence.js';
+import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText, deleteOcrData, listOcrDocuments, getOcrStorageSize } from './modules/ocr-storage.js';
 import { initTesseract, recognizeTesseract, isTesseractAvailable, getTesseractStatus, terminateTesseract, resetTesseractAvailability } from './modules/tesseract-adapter.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
@@ -1027,12 +1027,18 @@ function getSessionHealth() {
 function exportSessionHealthReport() {
   const health = getSessionHealth();
   const perfSummary = getPerfSummary();
+  const tessStatus = getTesseractStatus();
   const report = {
     app: 'NovaReader',
     version: APP_VERSION,
     ...health,
     perfMetrics: perfSummary,
     recentErrors: crashTelemetry.errors.slice(-20),
+    ocr: {
+      engine: tessStatus,
+      supportedLanguages: getSupportedLanguages().map((l) => ({ code: l, name: getLanguageName(l) })),
+      currentLang: getOcrLang(),
+    },
   };
 
   const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json;charset=utf-8' });
@@ -2037,9 +2043,8 @@ function estimateSkewAngleFromBinary(imageData) {
   }
   if (darkPoints.length < 200) return 0;
 
-  let bestAngle = 0;
-  let bestScore = -Infinity;
-  for (let deg = -6; deg <= 6; deg += 0.5) {
+  // Helper: compute projection variance for a given angle
+  function projectionVariance(deg) {
     const rad = (deg * Math.PI) / 180;
     const s = Math.sin(rad);
     const c = Math.cos(rad);
@@ -2054,11 +2059,31 @@ function estimateSkewAngleFromBinary(imageData) {
     let variance = 0;
     for (const v of bins.values()) variance += (v - mean) * (v - mean);
     variance /= Math.max(1, bins.size);
+    return variance;
+  }
+
+  // Coarse pass: -15° to +15° in 1° increments
+  let bestAngle = 0;
+  let bestScore = -Infinity;
+  for (let deg = -15; deg <= 15; deg += 1) {
+    const variance = projectionVariance(deg);
     if (variance > bestScore) {
       bestScore = variance;
       bestAngle = deg;
     }
   }
+
+  // Fine pass: ±1.5° around best in 0.25° increments
+  const fineStart = bestAngle - 1.5;
+  const fineEnd = bestAngle + 1.5;
+  for (let deg = fineStart; deg <= fineEnd; deg += 0.25) {
+    const variance = projectionVariance(deg);
+    if (variance > bestScore) {
+      bestScore = variance;
+      bestAngle = deg;
+    }
+  }
+
   return bestAngle;
 }
 
@@ -2254,8 +2279,11 @@ async function buildOcrSourceCanvas(pageNumber) {
     await state.adapter.renderPage(pageNumber, probeCanvas, { zoom: 1.0, rotation: state.rotation || 0 });
     const analysis = analyzeTextDensity(probeCanvas);
     adaptiveZoom = computeOcrZoom(probeCanvas.width, probeCanvas.height, analysis, OCR_SOURCE_MAX_PIXELS);
+    // Boost zoom for pages with very small text
+    const smallText = hasSmallText(probeCanvas);
+    if (smallText && adaptiveZoom < 3.0) adaptiveZoom = Math.min(3.0, adaptiveZoom * 1.4);
     probeCanvas.width = 0; probeCanvas.height = 0; // free memory
-    pushDiagnosticEvent('ocr.adaptive-dpi', { page: pageNumber, suggestedScale: analysis.suggestedScale, zoom: adaptiveZoom, density: analysis.density, strokeWidth: analysis.avgStrokeWidth });
+    pushDiagnosticEvent('ocr.adaptive-dpi', { page: pageNumber, suggestedScale: analysis.suggestedScale, zoom: adaptiveZoom, density: analysis.density, strokeWidth: analysis.avgStrokeWidth, smallText });
   } catch { /* fall through to default zoom */ }
   await state.adapter.renderPage(pageNumber, canvas, { zoom: adaptiveZoom, rotation: state.rotation || 0 });
   const normalized = constrainOcrSourceCanvasPixels(canvas, OCR_SOURCE_MAX_PIXELS);
@@ -2405,8 +2433,14 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   const taskId = Number(options.taskId || 0);
   const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
 
+  // Snapshot settings at pipeline start to prevent race conditions if user
+  // changes language or quality mode mid-pipeline
+  const pipelineLang = getOcrLang();
+  const pipelineQualityMode = state.settings?.ocrQualityMode || 'balanced';
+  const pipelineCyrillicOnly = !!state.settings?.ocrCyrillicOnly;
+
   // Early exit: check Tesseract availability BEFORE spending time on preprocessing
-  const lang = getOcrLang();
+  const lang = pipelineLang;
   const tesseractAvail = await isTesseractAvailable();
   if (tesseractAvail) {
     const initOk = await initTesseract(lang === 'auto' ? 'auto' : lang);
@@ -2425,7 +2459,7 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   }
 
   const preprocessStart = performance.now();
-  const isAccurate = state.settings?.ocrQualityMode === 'accurate';
+  const isAccurate = pipelineQualityMode === 'accurate';
   const recipeList = isAccurate
     ? [
       [-32, 'mean', false, 1],
@@ -2502,60 +2536,70 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   const preprocessMs = Math.round(performance.now() - preprocessStart);
 
   const recognizeStart = performance.now();
+  // Helper to free all variant canvases — called in finally to prevent leaks on early exit
+  function freeAllVariants() {
+    for (let i = 0; i < variants.length; i += 1) {
+      const c = variants[i];
+      if (c && c.width) { c.width = 0; c.height = 0; }
+      variants[i] = null;
+    }
+    for (let i = 0; i < baseVariants.length; i += 1) {
+      const c = baseVariants[i];
+      if (c && c.width) { c.width = 0; c.height = 0; }
+      baseVariants[i] = null;
+    }
+  }
+
   // lang already resolved at top of function; Tesseract already confirmed initialized
   let best = '';
   let bestScore = -Infinity;
   let detectedLang = lang;
-  for (let i = 0; i < variants.length; i += 1) {
-    if (taskId && taskId !== state.ocrTaskId) return best;
-    if (onProgress) onProgress({ phase: 'recognize', current: i + 1, total: variants.length });
-    const variant = variants[i];
-    let rawText = '';
-    try {
-      const tessResult = await recognizeTesseract(variant, { lang });
-      if (tessResult && tessResult.text) {
-        rawText = tessResult.text;
+  let taskCancelled = false;
+  try {
+    for (let i = 0; i < variants.length; i += 1) {
+      if (taskId && taskId !== state.ocrTaskId) { taskCancelled = true; break; }
+      if (onProgress) onProgress({ phase: 'recognize', current: i + 1, total: variants.length });
+      const variant = variants[i];
+      let rawText = '';
+      try {
+        const tessResult = await recognizeTesseract(variant, { lang });
+        if (tessResult && tessResult.text) {
+          rawText = tessResult.text;
+        }
+        if (!rawText && !getTesseractStatus().ready) {
+          pushDiagnosticEvent('ocr.engine.missing', { variant: i });
+          break;
+        }
+      } catch (ocrErr) {
+        pushDiagnosticEvent('ocr.engine.error', { variant: i, error: ocrErr?.message || String(ocrErr) });
+        // If worker died, stop trying more variants — they'll all fail too
+        if (!getTesseractStatus().ready) {
+          pushDiagnosticEvent('ocr.engine.dead', { variant: i, error: ocrErr?.message || String(ocrErr) }, 'error');
+          break;
+        }
+        continue;
       }
-      if (!rawText && !getTesseractStatus().ready) {
-        pushDiagnosticEvent('ocr.engine.missing', { variant: i });
+      // When lang is 'auto', detect the language from raw OCR output
+      const effectiveLang = (lang === 'auto' && rawText && rawText.length >= 20) ? detectLanguage(rawText) : lang;
+      const candidate = normalizeOcrTextByLang(rawText, effectiveLang);
+      const score = scoreOcrTextByLang(candidate, effectiveLang);
+      if (score > bestScore) {
+        best = candidate;
+        bestScore = score;
+        detectedLang = effectiveLang;
+      }
+      // If Tesseract gave a solid result on first variant, skip remaining variants
+      if (i === 0 && best.length >= 20 && bestScore > 50) {
         break;
       }
-    } catch (ocrErr) {
-      pushDiagnosticEvent('ocr.engine.error', { variant: i, error: ocrErr?.message || String(ocrErr) });
-      // If worker died, stop trying more variants — they'll all fail too
-      if (!getTesseractStatus().ready) {
-        pushDiagnosticEvent('ocr.engine.dead', { variant: i, error: ocrErr?.message || String(ocrErr) }, 'error');
-        break;
-      }
-      continue;
+      await yieldToMainThread();
     }
-    // When lang is 'auto', detect the language from raw OCR output
-    const effectiveLang = (lang === 'auto' && rawText && rawText.length >= 20) ? detectLanguage(rawText) : lang;
-    const candidate = normalizeOcrTextByLang(rawText, effectiveLang);
-    const score = scoreOcrTextByLang(candidate, effectiveLang);
-    if (score > bestScore) {
-      best = candidate;
-      bestScore = score;
-      detectedLang = effectiveLang;
-    }
-    // If Tesseract gave a solid result on first variant, skip remaining variants
-    if (i === 0 && best.length >= 20 && bestScore > 50) {
-      break;
-    }
-    await yieldToMainThread();
+  } finally {
+    // Always release canvas references regardless of how the loop ended
+    freeAllVariants();
   }
   const recognizeMs = Math.round(performance.now() - recognizeStart);
-  // Release canvas references to help GC
-  for (let i = 0; i < variants.length; i += 1) {
-    const c = variants[i];
-    if (c && c.width) { c.width = 0; c.height = 0; }
-    variants[i] = null;
-  }
-  for (let i = 0; i < baseVariants.length; i += 1) {
-    const c = baseVariants[i];
-    if (c && c.width) { c.width = 0; c.height = 0; }
-    baseVariants[i] = null;
-  }
+  if (taskCancelled) return best;
   pushDiagnosticEvent('ocr.pipeline.profile', {
     fast,
     lang,
@@ -2751,6 +2795,8 @@ function openSettingsModal() {
 
   els.settingsModal.classList.add('open');
   els.settingsModal.setAttribute('aria-hidden', 'false');
+  // Populate OCR storage info when modal opens
+  if (typeof refreshOcrStorageInfo === 'function') refreshOcrStorageInfo();
 }
 
 function closeSettingsModal() {
@@ -3133,7 +3179,7 @@ async function startBackgroundOcrScan(reason = 'auto') {
 
   const existing = loadOcrTextData();
   const pagesText = Array.isArray(existing?.pagesText) ? [...existing.pagesText] : new Array(state.pageCount).fill('');
-  const maxPages = Math.min(state.pageCount, 240);
+  const maxPages = state.pageCount;
   let consecutiveEmpty = 0;
 
   try {
@@ -6812,6 +6858,76 @@ els.copyOcrText?.addEventListener('click', async () => {
 });
 els.cancelBackgroundOcr?.addEventListener('click', () => {
   cancelAllOcrWork('manual-button');
+});
+
+// ─── OCR Confidence Overlay Toggle ──────────────────────────────────────────
+els.toggleOcrConfidence?.addEventListener('click', () => {
+  state.ocrConfidenceMode = !state.ocrConfidenceMode;
+  if (els.toggleOcrConfidence) {
+    els.toggleOcrConfidence.classList.toggle('active', state.ocrConfidenceMode);
+    els.toggleOcrConfidence.textContent = state.ocrConfidenceMode ? 'Качество: on' : 'Качество';
+  }
+  // Re-render text with or without confidence markers
+  const currentText = els.pageText?.value || '';
+  if (state.ocrConfidenceMode && currentText) {
+    const lang = getOcrLang();
+    const marked = markLowConfidenceWords(currentText, lang);
+    els.pageText.value = marked;
+    const summary = getPageQualitySummary(currentText, lang);
+    setOcrStatus(`Качество: ${summary.quality} | avg ${summary.avgScore}% | low: ${summary.lowCount} | medium: ${summary.mediumCount}`);
+  } else if (!state.ocrConfidenceMode && currentText) {
+    // Remove [?...?] markers
+    els.pageText.value = currentText.replace(/\[\?/g, '').replace(/\?\]/g, '');
+    setOcrStatus('OCR: idle');
+  }
+});
+
+// ─── OCR Storage Management ─────────────────────────────────────────────────
+async function refreshOcrStorageInfo() {
+  try {
+    const docs = await listOcrDocuments();
+    const sizeBytes = await getOcrStorageSize();
+    const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(2);
+    if (els.ocrStorageInfo) {
+      els.ocrStorageInfo.textContent = `${docs.length} документ(ов) | ~${sizeMb} MB`;
+    }
+    if (els.ocrDocumentsList) {
+      els.ocrDocumentsList.innerHTML = '';
+      for (const docName of docs) {
+        const li = document.createElement('li');
+        li.textContent = docName;
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-ghost btn-xs';
+        delBtn.textContent = '✕';
+        delBtn.addEventListener('click', async () => {
+          await deleteOcrData(docName);
+          await refreshOcrStorageInfo();
+        });
+        li.appendChild(delBtn);
+        els.ocrDocumentsList.appendChild(li);
+      }
+    }
+  } catch {
+    if (els.ocrStorageInfo) els.ocrStorageInfo.textContent = 'Ошибка чтения хранилища';
+  }
+}
+
+els.refreshOcrStorage?.addEventListener('click', refreshOcrStorageInfo);
+
+els.clearCurrentOcrData?.addEventListener('click', async () => {
+  if (!state.docName) return;
+  await deleteOcrData(state.docName);
+  await refreshOcrStorageInfo();
+  setOcrStatus('OCR: данные текущего документа очищены');
+});
+
+els.clearAllOcrData?.addEventListener('click', async () => {
+  const docs = await listOcrDocuments();
+  for (const doc of docs) {
+    await deleteOcrData(doc);
+  }
+  await refreshOcrStorageInfo();
+  setOcrStatus('OCR: все данные OCR очищены');
 });
 
 els.annotateToggle.addEventListener('click', () => setDrawMode(!state.drawEnabled));

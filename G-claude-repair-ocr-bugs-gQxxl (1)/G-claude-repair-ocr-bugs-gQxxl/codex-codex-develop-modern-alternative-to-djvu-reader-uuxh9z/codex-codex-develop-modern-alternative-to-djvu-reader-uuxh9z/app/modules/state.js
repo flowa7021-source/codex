@@ -45,6 +45,7 @@ export const state = {
   ocrLatestByReason: {},
   ocrLastProgressUiAt: 0,
   ocrLastProgressText: '',
+  ocrConfidenceMode: false,
   ocrSourceCache: new Map(),
   ocrCacheLastDiagAt: 0,
   ocrCacheLastHitDiagAt: 0,
@@ -280,4 +281,10 @@ export const els = {
   conversionInvoice: document.getElementById('conversionInvoice'),
   conversionReport: document.getElementById('conversionReport'),
   conversionTable: document.getElementById('conversionTable'),
+  toggleOcrConfidence: document.getElementById('toggleOcrConfidence'),
+  ocrStorageInfo: document.getElementById('ocrStorageInfo'),
+  refreshOcrStorage: document.getElementById('refreshOcrStorage'),
+  clearCurrentOcrData: document.getElementById('clearCurrentOcrData'),
+  clearAllOcrData: document.getElementById('clearAllOcrData'),
+  ocrDocumentsList: document.getElementById('ocrDocumentsList'),
 };
