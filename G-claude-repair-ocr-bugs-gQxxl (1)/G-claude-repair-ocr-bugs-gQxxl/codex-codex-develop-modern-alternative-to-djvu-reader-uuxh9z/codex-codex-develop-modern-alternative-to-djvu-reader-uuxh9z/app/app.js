@@ -3028,6 +3028,7 @@ function enqueueOcrTask(reason, task, options = {}) {
 
 function setOcrStatus(text) {
   if (els.ocrStatus) els.ocrStatus.textContent = text;
+  if (els.sbOcr) els.sbOcr.textContent = text ? `OCR: ${text}` : 'OCR: —';
 }
 
 function setOcrStatusThrottled(text, minIntervalMs = 70) {
@@ -5255,6 +5256,9 @@ function _updatePageUI(renderMs) {
   els.pageInput.value = String(state.currentPage);
   capturePageHistoryOnRender();
   saveViewState();
+  // Update status bar
+  if (els.sbPage) els.sbPage.textContent = `Стр. ${state.currentPage} / ${state.pageCount}`;
+  if (els.sbZoom) els.sbZoom.textContent = `${Math.round(state.zoom * 100)}%`;
   if (els.pdfBlockEdit?.classList.contains('active')) {
     blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
   }
@@ -8019,7 +8023,7 @@ window.addEventListener('resize', debouncedUpdateSearchToolbarRows);
 els.searchInput?.addEventListener('input', debouncedUpdateSearchToolbarRows);
 els.searchScope?.addEventListener('change', debouncedUpdateSearchToolbarRows);
 
-els.shortcutsHelp.addEventListener('click', showShortcutsHelp);
+els.shortcutsHelp?.addEventListener('click', showShortcutsHelp);
 els.toggleSidebar?.addEventListener('click', () => toggleLayoutState('sidebarHidden'));
 els.toggleToolsBar?.addEventListener('click', () => toggleLayoutState('toolsHidden'));
 els.toggleTextTools?.addEventListener('click', () => toggleLayoutState('textHidden'));
@@ -8264,6 +8268,82 @@ applyAdvancedPanelsState();
 applyAppLanguage();
 setDrawMode(false);
 setOcrRegionMode(false);
+
+// ─── UI Tab Switching (sidebar, bottom toolbar, settings modal) ──────────────
+(function initTabSwitching() {
+  // Sidebar tabs
+  document.querySelectorAll('.sidebar-tabs button[data-sidebar-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.sidebar-tabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const panel = document.querySelector(`.sidebar-panel[data-sidebar-panel="${btn.dataset.sidebarTab}"]`);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  // Bottom toolbar tabs
+  document.querySelectorAll('.bottom-tab-bar button[data-bottom-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.bottom-tab-bar button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.bottom-tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const panel = document.querySelector(`.bottom-tab-panel[data-bottom-panel="${btn.dataset.bottomTab}"]`);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  // Settings modal tabs
+  document.querySelectorAll('.modal-tabs button[data-modal-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.modal-tabs button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.modal-tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const panel = document.querySelector(`.modal-tab-panel[data-modal-panel="${btn.dataset.modalTab}"]`);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  // Dropdown menus — toggle on click, close on outside click
+  document.querySelectorAll('.dropdown-trigger').forEach(trigger => {
+    trigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const dd = trigger.closest('.dropdown');
+      const wasOpen = dd.classList.contains('open');
+      document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+      if (!wasOpen) dd.classList.add('open');
+    });
+  });
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.dropdown.open').forEach(d => d.classList.remove('open'));
+  });
+  // Close dropdown when a menu item is clicked
+  document.querySelectorAll('.dropdown-menu button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      btn.closest('.dropdown')?.classList.remove('open');
+    });
+  });
+})();
+
+// ─── Status Bar Updates ─────────────────────────────────────────────────────
+function updateStatusBar() {
+  if (els.sbPage) els.sbPage.textContent = `Стр. ${state.currentPage} / ${state.pageCount || '—'}`;
+  if (els.sbZoom) els.sbZoom.textContent = `${Math.round(state.zoom * 100)}%`;
+  if (els.sbReadingTime) {
+    const mins = Math.round((state.readingTotalMs || 0) / 60000);
+    els.sbReadingTime.textContent = `Чтение: ${mins} мин`;
+  }
+  if (els.sbFileSize && state.file) {
+    const bytes = state.file.size || 0;
+    const mb = (bytes / (1024 * 1024)).toFixed(1);
+    els.sbFileSize.textContent = bytes > 0 ? `${mb} МБ` : '—';
+  }
+}
+// Hook status bar into page changes
+const _origUpdatePageUI = typeof _updatePageUI === 'function' ? _updatePageUI : null;
+// Call updateStatusBar after page renders
+setInterval(updateStatusBar, 2000);
+updateStatusBar();
 
 // ─── Expose globals for E2E testing and diagnostics ──────────────────────────
 window.crashTelemetry = crashTelemetry;

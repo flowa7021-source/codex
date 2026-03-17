@@ -9,305 +9,438 @@
   <body>
     <div class="app-shell">
       <aside class="sidebar" id="sidebar">
-        <div class="sidebar-header">
-          <h1>NovaReader</h1>
-          <span id="appVersion" class="ver-badge"></span>
+        <!-- ═══ Sidebar Tab Bar ═══ -->
+        <nav class="sidebar-tabs">
+          <button class="active" data-sidebar-tab="nav" title="Навигация">
+            <span class="tab-icon">📑</span>
+            <span class="tab-label">Навиг.</span>
+          </button>
+          <button data-sidebar-tab="notes" title="Заметки">
+            <span class="tab-icon">📝</span>
+            <span class="tab-label">Заметки</span>
+          </button>
+          <button data-sidebar-tab="analytics" title="Аналитика">
+            <span class="tab-icon">📊</span>
+            <span class="tab-label">Аналит.</span>
+          </button>
+          <button data-sidebar-tab="settings" title="Настройки">
+            <span class="tab-icon">⚙</span>
+            <span class="tab-label">Настр.</span>
+          </button>
+        </nav>
+
+        <!-- ═══ Tab: Navigation ═══ -->
+        <div class="sidebar-panel active" data-sidebar-panel="nav">
+          <div class="sidebar-header">
+            <h1>NovaReader</h1>
+            <span id="appVersion" class="ver-badge"></span>
+          </div>
+
+          <label class="file-open-btn">
+            <span class="icon">📂</span> Открыть файл
+            <input id="fileInput" type="file" accept=".pdf,.djvu,.epub,.png,.jpg,.jpeg,.webp,.gif,.bmp" />
+          </label>
+
+          <section data-sidebar-section="recent">
+            <h2 class="section-toggle">Недавние</h2>
+            <ul id="recentList"></ul>
+            <div class="section-actions">
+              <button id="clearRecent" class="btn-ghost btn-xs">Очистить</button>
+            </div>
+          </section>
+
+          <section data-sidebar-section="bookmarks">
+            <h2 class="section-toggle">Закладки</h2>
+            <ul id="bookmarkList"></ul>
+            <div class="section-actions">
+              <button id="addBookmark" class="btn-accent btn-xs">+ Добавить</button>
+              <div class="dropdown">
+                <button class="btn-ghost btn-xs dropdown-trigger">⋮ Ещё</button>
+                <div class="dropdown-menu">
+                  <button id="exportBookmarks">Экспорт .json</button>
+                  <label class="file-inline">Импорт .json
+                    <input id="importBookmarks" type="file" accept="application/json,.json" />
+                  </label>
+                  <div class="dropdown-sep"></div>
+                  <button id="clearBookmarks">Очистить все</button>
+                </div>
+              </div>
+            </div>
+            <div class="section-actions">
+              <input id="bookmarkFilter" type="text" placeholder="Фильтр закладок…" class="input-compact" />
+              <button id="clearBookmarkFilter" class="btn-ghost btn-xs">✕</button>
+            </div>
+            <p id="bookmarksStatus" class="status-line"></p>
+          </section>
+
+          <section data-sidebar-section="outline">
+            <h2 class="section-toggle">Оглавление</h2>
+            <ul id="outlineList"></ul>
+          </section>
+
+          <section data-sidebar-section="previews">
+            <h2 class="section-toggle">Превью страниц</h2>
+            <ul id="pagePreviewList"></ul>
+          </section>
         </div>
 
-        <label class="file-open-btn">
-          <span class="icon">📂</span> Открыть
-          <input id="fileInput" type="file" accept=".pdf,.djvu,.epub,.png,.jpg,.jpeg,.webp,.gif,.bmp" />
-        </label>
+        <!-- ═══ Tab: Notes ═══ -->
+        <div class="sidebar-panel" data-sidebar-panel="notes">
+          <section data-sidebar-section="notes">
+            <h2>Заметки</h2>
+            <input id="notesTitle" type="text" placeholder="Заголовок" class="input-compact" />
+            <input id="notesTags" type="text" placeholder="Теги (через запятую)" class="input-compact" />
+            <textarea id="notes" placeholder="Заметки к документу…" rows="6"></textarea>
+            <p id="notesStatus" class="status-line"></p>
+            <div class="section-actions">
+              <button id="saveNotes" class="btn-accent btn-xs">Сохранить</button>
+              <button id="insertTimestamp" class="btn-ghost btn-xs">⏱ Время</button>
+              <div class="dropdown">
+                <button class="btn-ghost btn-xs dropdown-trigger">Экспорт ▾</button>
+                <div class="dropdown-menu">
+                  <button id="exportNotes">Экспорт .txt</button>
+                  <button id="exportNotesMd">Экспорт .md</button>
+                  <button id="exportNotesJson">Экспорт .json</button>
+                </div>
+              </div>
+              <div class="dropdown">
+                <button class="btn-ghost btn-xs dropdown-trigger">Импорт ▾</button>
+                <div class="dropdown-menu">
+                  <label class="file-inline">Импорт .json
+                    <input id="importNotesJson" type="file" accept="application/json,.json" />
+                  </label>
+                  <select id="notesImportMode" class="select-compact" style="margin: 4px 14px; width: auto;">
+                    <option value="replace">Заменить</option>
+                    <option value="append">Добавить</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </section>
 
-        <!-- ─── Навигация по документу ─── -->
-        <section data-sidebar-section="recent">
-          <h2>Недавние</h2>
-          <ul id="recentList"></ul>
-          <div class="section-actions">
-            <button id="clearRecent" class="btn-ghost btn-xs">Очистить</button>
-          </div>
-        </section>
+          <section>
+            <h2>Workspace</h2>
+            <div class="section-actions">
+              <button id="exportWorkspace" class="btn-ghost btn-xs">Экспорт</button>
+              <label class="btn-ghost btn-xs file-inline">Импорт
+                <input id="importWorkspace" type="file" accept="application/json,.json" />
+              </label>
+            </div>
+            <span id="workspaceStatus" class="status-line"></span>
+          </section>
+        </div>
 
-        <section data-sidebar-section="bookmarks">
-          <h2>Закладки</h2>
-          <ul id="bookmarkList"></ul>
-          <div class="section-actions">
-            <button id="addBookmark" class="btn-accent btn-xs">+ Добавить</button>
-            <button id="clearBookmarks" class="btn-ghost btn-xs">Очистить</button>
-            <button id="exportBookmarks" class="btn-ghost btn-xs">↗ .json</button>
-            <label class="btn-ghost btn-xs file-inline">↙ .json
-              <input id="importBookmarks" type="file" accept="application/json,.json" />
+        <!-- ═══ Tab: Analytics ═══ -->
+        <div class="sidebar-panel" data-sidebar-panel="analytics">
+          <section data-sidebar-section="progress">
+            <h2 class="section-toggle">Прогресс чтения</h2>
+            <p id="progressStatus" class="status-line"></p>
+            <p id="readingTimeStatus" class="status-line"></p>
+            <p id="etaStatus" class="status-line"></p>
+            <div class="section-actions">
+              <input id="readingGoalPage" type="number" min="1" placeholder="Цель (стр.)" class="input-compact input-narrow" />
+              <button id="saveReadingGoal" class="btn-ghost btn-xs">Задать</button>
+              <button id="clearReadingGoal" class="btn-ghost btn-xs">✕</button>
+            </div>
+            <p id="readingGoalStatus" class="status-line"></p>
+            <div class="section-actions">
+              <button id="resetProgress" class="btn-ghost btn-xs">Сбросить прогресс</button>
+              <button id="resetReadingTime" class="btn-ghost btn-xs">Сбросить время</button>
+            </div>
+          </section>
+
+          <section data-sidebar-section="searchResults" class="advanced-section">
+            <h2 class="section-toggle">Результаты поиска</h2>
+            <ul id="searchResultsList"></ul>
+            <div class="section-actions">
+              <button id="clearSearchResults" class="btn-ghost btn-xs">Очистить</button>
+              <div class="dropdown">
+                <button class="btn-ghost btn-xs dropdown-trigger">Экспорт ▾</button>
+                <div class="dropdown-menu">
+                  <button id="exportSearchResults">Экспорт .json</button>
+                  <button id="exportSearchResultsCsv">Экспорт .csv</button>
+                  <button id="exportSearchSummaryTxt">Экспорт summary</button>
+                </div>
+              </div>
+              <div class="dropdown">
+                <button class="btn-ghost btn-xs dropdown-trigger">Импорт ▾</button>
+                <div class="dropdown-menu">
+                  <label class="file-inline">Импорт .json
+                    <input id="importSearchResultsJson" type="file" accept=".json,application/json" />
+                  </label>
+                  <label class="file-inline">Импорт .csv
+                    <input id="importSearchResultsCsv" type="file" accept=".csv,text/csv" />
+                  </label>
+                  <label class="file-inline">DjVu data
+                    <input id="importDjvuDataJson" type="file" accept=".json,application/json" />
+                  </label>
+                </div>
+              </div>
+              <button id="copySearchResults" class="btn-ghost btn-xs">Копировать</button>
+            </div>
+          </section>
+
+          <section data-sidebar-section="searchHistory" class="advanced-section">
+            <h2 class="section-toggle">История поиска</h2>
+            <ul id="searchHistoryList"></ul>
+            <div class="section-actions">
+              <button id="clearSearchHistory" class="btn-ghost btn-xs">Очистить</button>
+              <div class="dropdown">
+                <button class="btn-ghost btn-xs dropdown-trigger">Экспорт ▾</button>
+                <div class="dropdown-menu">
+                  <button id="exportSearchHistory">Экспорт .json</button>
+                  <button id="exportSearchHistoryTxt">Экспорт .txt</button>
+                </div>
+              </div>
+              <button id="copySearchHistory" class="btn-ghost btn-xs">Копировать</button>
+              <label class="btn-ghost btn-xs file-inline">Импорт .json
+                <input id="importSearchHistoryJson" type="file" accept=".json,application/json" />
+              </label>
+            </div>
+          </section>
+
+          <section class="advanced-section">
+            <h2 class="section-toggle">Статистика</h2>
+            <p id="docStats" class="status-line"></p>
+          </section>
+
+          <section class="advanced-section">
+            <h2 class="section-toggle">Переходы</h2>
+            <ul id="visitTrailList"></ul>
+            <div class="section-actions">
+              <button id="clearVisitTrail" class="btn-ghost btn-xs">Очистить</button>
+            </div>
+          </section>
+
+          <section class="advanced-section">
+            <h2 class="section-toggle">Комментарии</h2>
+            <ul id="commentList"></ul>
+            <div class="section-actions">
+              <button id="clearComments" class="btn-ghost btn-xs">Очистить</button>
+            </div>
+          </section>
+        </div>
+
+        <!-- ═══ Tab: Settings ═══ -->
+        <div class="sidebar-panel" data-sidebar-panel="settings">
+          <section id="settingsSection">
+            <h2>Настройки</h2>
+            <div class="section-actions">
+              <button id="toggleAdvancedPanels" class="btn-ghost btn-xs">Расширенные: off</button>
+              <button id="toggleSidebarCompact" class="btn-ghost btn-xs">Компакт: off</button>
+            </div>
+            <div class="section-actions">
+              <button id="collapseSidebarSections" class="btn-ghost btn-xs">▴ Свернуть всё</button>
+              <button id="expandSidebarSections" class="btn-ghost btn-xs">▾ Развернуть всё</button>
+            </div>
+            <div class="section-actions">
+              <button id="openSettingsModal" class="btn-accent btn-xs">Открыть настройки</button>
+            </div>
+            <p id="settingsStatus" class="status-line"></p>
+          </section>
+
+          <section>
+            <h2>Cloud &amp; Collab</h2>
+            <label class="btn-ghost btn-xs file-inline">Импорт OCR .json
+              <input id="importOcrJson" type="file" accept="application/json,.json" />
             </label>
-          </div>
-          <div class="section-actions">
-            <input id="bookmarkFilter" type="text" placeholder="Фильтр…" class="input-compact" />
-            <button id="clearBookmarkFilter" class="btn-ghost btn-xs">✕</button>
-          </div>
-          <p id="bookmarksStatus" class="status-line"></p>
-        </section>
+            <div class="section-actions">
+              <input id="cloudSyncUrl" type="url" placeholder="Endpoint URL" class="input-compact" />
+              <button id="saveCloudSyncUrl" class="btn-ghost btn-xs">✓</button>
+            </div>
+            <div class="section-actions">
+              <button id="pushCloudSync" class="btn-ghost btn-xs">↑ Push</button>
+              <button id="pullCloudSync" class="btn-ghost btn-xs">↓ Pull</button>
+              <button id="toggleCollab" class="btn-ghost btn-xs">Collab: off</button>
+              <button id="broadcastCollab" class="btn-ghost btn-xs">Отправить</button>
+            </div>
+            <p id="stage4Status" class="status-line"></p>
+          </section>
 
-        <section data-sidebar-section="outline">
-          <h2>Оглавление</h2>
-          <ul id="outlineList"></ul>
-        </section>
-
-        <section data-sidebar-section="previews">
-          <h2>Превью</h2>
-          <ul id="pagePreviewList"></ul>
-        </section>
-
-        <!-- ─── Прогресс ─── -->
-        <section data-sidebar-section="progress">
-          <h2>Прогресс</h2>
-          <p id="progressStatus" class="status-line"></p>
-          <p id="readingTimeStatus" class="status-line"></p>
-          <p id="etaStatus" class="status-line"></p>
-          <div class="section-actions">
-            <input id="readingGoalPage" type="number" min="1" placeholder="Цель (стр.)" class="input-compact input-narrow" />
-            <button id="saveReadingGoal" class="btn-ghost btn-xs">Задать</button>
-            <button id="clearReadingGoal" class="btn-ghost btn-xs">✕</button>
-          </div>
-          <p id="readingGoalStatus" class="status-line"></p>
-          <div class="section-actions">
-            <button id="resetProgress" class="btn-ghost btn-xs">Сбросить прогресс</button>
-            <button id="resetReadingTime" class="btn-ghost btn-xs">Сбросить время</button>
-          </div>
-        </section>
-
-        <!-- ─── Поиск (advanced) ─── -->
-        <section class="advanced-section" data-sidebar-section="searchResults">
-          <h2>Результаты поиска</h2>
-          <ul id="searchResultsList"></ul>
-          <div class="section-actions">
-            <button id="clearSearchResults" class="btn-ghost btn-xs">Очистить</button>
-            <button id="exportSearchResults" class="btn-ghost btn-xs">↗ .json</button>
-            <button id="exportSearchResultsCsv" class="btn-ghost btn-xs">↗ .csv</button>
-            <button id="exportSearchSummaryTxt" class="btn-ghost btn-xs">↗ summary</button>
-            <label class="btn-ghost btn-xs file-inline">↙ .json
-              <input id="importSearchResultsJson" type="file" accept=".json,application/json" />
-            </label>
-            <label class="btn-ghost btn-xs file-inline">↙ .csv
-              <input id="importSearchResultsCsv" type="file" accept=".csv,text/csv" />
-            </label>
-            <label class="btn-ghost btn-xs file-inline">DjVu data
-              <input id="importDjvuDataJson" type="file" accept=".json,application/json" />
-            </label>
-            <button id="copySearchResults" class="btn-ghost btn-xs">Копировать</button>
-          </div>
-        </section>
-
-        <section class="advanced-section" data-sidebar-section="searchHistory">
-          <h2>История поиска</h2>
-          <ul id="searchHistoryList"></ul>
-          <div class="section-actions">
-            <button id="clearSearchHistory" class="btn-ghost btn-xs">Очистить</button>
-            <button id="exportSearchHistory" class="btn-ghost btn-xs">↗ .json</button>
-            <button id="exportSearchHistoryTxt" class="btn-ghost btn-xs">↗ .txt</button>
-            <button id="copySearchHistory" class="btn-ghost btn-xs">Копировать</button>
-            <label class="btn-ghost btn-xs file-inline">↙ .json
-              <input id="importSearchHistoryJson" type="file" accept=".json,application/json" />
-            </label>
-          </div>
-        </section>
-
-        <!-- ─── Аналитика (advanced) ─── -->
-        <section class="advanced-section">
-          <h2>Статистика</h2>
-          <p id="docStats" class="status-line"></p>
-        </section>
-
-        <section class="advanced-section">
-          <h2>Переходы</h2>
-          <ul id="visitTrailList"></ul>
-          <div class="section-actions">
-            <button id="clearVisitTrail" class="btn-ghost btn-xs">Очистить</button>
-          </div>
-        </section>
-
-        <section class="advanced-section">
-          <h2>Комментарии</h2>
-          <ul id="commentList"></ul>
-          <div class="section-actions">
-            <button id="clearComments" class="btn-ghost btn-xs">Очистить</button>
-          </div>
-        </section>
-
-        <!-- ─── Заметки ─── -->
-        <section data-sidebar-section="notes">
-          <h2>Заметки</h2>
-          <input id="notesTitle" type="text" placeholder="Заголовок" class="input-compact" />
-          <input id="notesTags" type="text" placeholder="Теги" class="input-compact" />
-          <textarea id="notes" placeholder="Заметки…"></textarea>
-          <p id="notesStatus" class="status-line"></p>
-          <div class="section-actions">
-            <button id="saveNotes" class="btn-accent btn-xs">Сохранить</button>
-            <button id="exportNotes" class="btn-ghost btn-xs">↗ .txt</button>
-            <button id="exportNotesMd" class="btn-ghost btn-xs">↗ .md</button>
-            <button id="exportNotesJson" class="btn-ghost btn-xs">↗ .json</button>
-            <select id="notesImportMode" class="select-compact">
-              <option value="replace">Заменить</option>
-              <option value="append">Добавить</option>
-            </select>
-            <label class="btn-ghost btn-xs file-inline">↙ .json
-              <input id="importNotesJson" type="file" accept="application/json,.json" />
-            </label>
-            <button id="insertTimestamp" class="btn-ghost btn-xs">⏱</button>
-          </div>
-        </section>
-
-        <!-- ─── Workspace ─── -->
-        <section>
-          <h2>Workspace</h2>
-          <div class="section-actions">
-            <button id="exportWorkspace" class="btn-ghost btn-xs">↗ Экспорт</button>
-            <label class="btn-ghost btn-xs file-inline">↙ Импорт
-              <input id="importWorkspace" type="file" accept="application/json,.json" />
-            </label>
-          </div>
-          <span id="workspaceStatus" class="status-line"></span>
-        </section>
-
-        <!-- ─── Cloud / Collab (advanced) ─── -->
-        <section class="advanced-section">
-          <h2>Cloud &amp; Collab</h2>
-          <label class="btn-ghost btn-xs file-inline">↙ OCR .json
-            <input id="importOcrJson" type="file" accept="application/json,.json" />
-          </label>
-          <div class="section-actions">
-            <input id="cloudSyncUrl" type="url" placeholder="Endpoint URL" class="input-compact" />
-            <button id="saveCloudSyncUrl" class="btn-ghost btn-xs">✓</button>
-          </div>
-          <div class="section-actions">
-            <button id="pushCloudSync" class="btn-ghost btn-xs">↑ Push</button>
-            <button id="pullCloudSync" class="btn-ghost btn-xs">↓ Pull</button>
-            <button id="toggleCollab" class="btn-ghost btn-xs">Collab: off</button>
-            <button id="broadcastCollab" class="btn-ghost btn-xs">Отправить</button>
-          </div>
-          <p id="stage4Status" class="status-line"></p>
-        </section>
-
-        <!-- ─── Настройки (компакт) ─── -->
-        <section id="settingsSection">
-          <h2>Настройки</h2>
-          <div class="section-actions">
-            <button id="toggleAdvancedPanels" class="btn-ghost btn-xs">Расширенные: off</button>
-            <button id="toggleSidebarCompact" class="btn-ghost btn-xs">Компакт: off</button>
-            <button id="collapseSidebarSections" class="btn-ghost btn-xs">▴ Свернуть</button>
-            <button id="expandSidebarSections" class="btn-ghost btn-xs">▾ Развернуть</button>
-          </div>
-          <div class="section-actions">
-            <button id="applyCommonHotkeys" class="btn-ghost btn-xs">Стандартные hotkeys</button>
-            <button id="exportDiagnostics" class="btn-ghost btn-xs">↗ Диагностика</button>
-            <button id="clearDiagnostics" class="btn-ghost btn-xs">Очистить диаг.</button>
-            <button id="runRuntimeSelfCheck" class="btn-ghost btn-xs">Self-check</button>
-          </div>
-          <p id="settingsStatus" class="status-line"></p>
-          <p id="diagnosticsStatus" class="status-line"></p>
-          <p id="runtimeCheckStatus" class="status-line"></p>
-        </section>
+          <section>
+            <h2>Диагностика</h2>
+            <div class="section-actions">
+              <button id="applyCommonHotkeys" class="btn-ghost btn-xs">Стандартные hotkeys</button>
+              <button id="exportDiagnostics" class="btn-ghost btn-xs">Экспорт</button>
+              <button id="clearDiagnostics" class="btn-ghost btn-xs">Очистить</button>
+              <button id="runRuntimeSelfCheck" class="btn-ghost btn-xs">Self-check</button>
+            </div>
+            <p id="diagnosticsStatus" class="status-line"></p>
+            <p id="runtimeCheckStatus" class="status-line"></p>
+          </section>
+        </div>
       </aside>
 
       <div id="sidebarResizeHandle" class="resize-handle resize-handle-vertical"></div>
 
       <main class="viewer-area">
-        <!-- ═══ Top toolbar ═══ -->
+        <!-- ═══ Top toolbar (simplified) ═══ -->
         <header class="toolbar toolbar-top">
           <div class="toolbar-group" data-toolbar-section="navigation">
-            <button id="historyBack" title="Назад">↶</button>
-            <button id="historyForward" title="Вперёд">↷</button>
-            <button id="prevPage" title="Предыдущая страница">◂</button>
+            <button id="historyBack" title="Назад в истории">←</button>
+            <button id="historyForward" title="Вперёд в истории">→</button>
+            <div class="tb-sep"></div>
+            <button id="prevPage" title="Предыдущая страница">◀</button>
             <span id="pageStatus" class="tb-label">0 / 0</span>
-            <button id="nextPage" title="Следующая страница">▸</button>
-            <input id="pageInput" type="number" min="1" value="1" class="input-page" />
-            <button id="goToPage" title="Перейти">↵</button>
+            <button id="nextPage" title="Следующая страница">▶</button>
+            <input id="pageInput" type="number" min="1" value="1" class="input-page" title="Номер страницы" />
+            <button id="goToPage" title="Перейти к странице">↵</button>
           </div>
 
           <div class="tb-sep" data-toolbar-section="navigation"></div>
 
           <div class="toolbar-group" data-toolbar-section="zoom">
-            <button id="zoomOut" title="Уменьшить">−</button>
+            <button id="zoomOut" title="Уменьшить масштаб">−</button>
             <span id="zoomStatus" class="tb-label">100%</span>
-            <button id="zoomIn" title="Увеличить">+</button>
-            <button id="fitWidth" title="По ширине">↔</button>
-            <button id="fitPage" title="По странице">⊡</button>
-            <button id="rotate" title="Повернуть">↻</button>
+            <button id="zoomIn" title="Увеличить масштаб">+</button>
+            <button id="fitWidth" title="По ширине окна">↔</button>
+            <button id="fitPage" title="Вся страница">⊡</button>
+            <button id="rotate" title="Повернуть на 90°">↻</button>
           </div>
 
           <div class="tb-sep" data-toolbar-section="zoom"></div>
 
           <div class="toolbar-group" data-toolbar-section="view">
-            <button id="themeToggle" title="Тема">◑</button>
+            <button id="themeToggle" title="Сменить тему">◑</button>
             <button id="fullscreen" title="Полный экран">⛶</button>
-            <button id="shortcutsHelp" title="Горячие клавиши">⌨</button>
-            <button id="openSettingsModal" title="Настройки">⚙</button>
-          </div>
-
-          <div class="tb-sep" data-toolbar-section="view"></div>
-
-          <div class="toolbar-group" data-toolbar-section="panels">
-            <button id="toggleSidebar" title="Сайдбар" class="tb-toggle active">☰</button>
-            <button id="toggleToolsBar" title="Инструменты" class="tb-toggle active">▤</button>
-            <button id="toggleTextTools" title="Текст" class="tb-toggle active">¶</button>
-            <button id="toggleSearchTools" title="Поиск" class="tb-toggle active">⌕</button>
-            <button id="toggleAnnotTools" title="Аннотации" class="tb-toggle active">✎</button>
+            <button id="toggleSidebar" title="Показать/скрыть сайдбар" class="tb-toggle active">☰</button>
+            <button id="toggleToolsBar" title="Показать/скрыть инструменты" class="tb-toggle active">▤</button>
+            <button id="toggleTextTools" title="Текстовая панель" class="tb-toggle active">¶</button>
           </div>
         </header>
 
-        <!-- ═══ Bottom toolbar ═══ -->
-        <header class="toolbar toolbar-bottom">
-          <div class="toolbar-group toolbar-group-search" id="searchToolsGroup">
-            <input id="searchInput" type="text" placeholder="Поиск…" />
+        <!-- ═══ Bottom toolbar — tabbed ═══ -->
+        <div class="toolbar toolbar-bottom">
+          <nav class="bottom-tab-bar">
+            <button class="active" data-bottom-tab="search" title="Поиск по документу">🔍 Поиск</button>
+            <button data-bottom-tab="annot" title="Аннотации и рисование">✎ Аннотации</button>
+            <button data-bottom-tab="text" title="Текст и OCR">📄 Текст/OCR</button>
+            <button data-bottom-tab="tools" title="Инструменты PDF">📎 Инструменты</button>
+          </nav>
+
+          <!-- Tab: Search -->
+          <div class="bottom-tab-panel active" data-bottom-panel="search">
+            <input id="searchInput" type="text" placeholder="Поиск в документе…" />
             <select id="searchScope">
               <option value="all">Весь документ</option>
               <option value="current">Текущая страница</option>
             </select>
             <button id="searchBtn">Найти</button>
-            <button id="searchPrev">↑</button>
-            <button id="searchNext">↓</button>
+            <button id="searchPrev" title="Предыдущий результат">↑</button>
+            <button id="searchNext" title="Следующий результат">↓</button>
             <span id="searchStatus" class="status-inline"></span>
+            <div class="tb-sep"></div>
+            <button id="toggleSearchTools" class="tb-toggle" title="Расширенный поиск">⌕</button>
+            <button id="downloadFile" title="Скачать файл">⬇ Скачать</button>
+            <button id="printPage" title="Печать страницы">🖨 Печать</button>
+            <button id="importDjvuDataQuick" class="is-hidden">DjVu</button>
+            <span id="docInfo" class="status-inline"></span>
           </div>
 
-          <div class="tb-sep"></div>
-
-          <div class="toolbar-group toolbar-group-annot" id="annotToolsGroup" data-toolbar-section="tools">
-            <button id="annotateToggle" class="tb-toggle">✎ off</button>
+          <!-- Tab: Annotations -->
+          <div class="bottom-tab-panel" data-bottom-panel="annot" id="annotToolsGroup">
+            <button id="annotateToggle" class="tb-toggle">✎ Рисование</button>
             <select id="drawTool">
               <option value="pen">Перо</option>
               <option value="highlighter">Маркер</option>
               <option value="eraser">Ластик</option>
-              <option value="comment">💬</option>
-              <option value="rect">▭</option>
-              <option value="arrow">→</option>
-              <option value="line">╱</option>
-              <option value="circle">◯</option>
+              <option value="comment">💬 Коммент.</option>
+              <option value="rect">▭ Прямоуг.</option>
+              <option value="arrow">→ Стрелка</option>
+              <option value="line">╱ Линия</option>
+              <option value="circle">◯ Круг</option>
             </select>
-            <input id="drawColor" type="color" value="#ffd84d" />
-            <input id="drawSize" type="range" min="2" max="24" value="6" />
-            <button id="undoStroke" title="Отмена">↩</button>
-            <button id="clearStrokes" title="Очистить страницу">🗑</button>
-            <button id="exportAnnotated" class="btn-xs">PNG</button>
-            <button id="exportAnnSvg" class="btn-xs">SVG</button>
-            <button id="exportAnnPdf" class="btn-xs">PDF</button>
-            <button id="exportAnnJson" class="btn-xs">↗ стр.</button>
-            <label class="btn-xs file-inline">↙ стр.
-              <input id="importAnnJson" type="file" accept="application/json,.json" />
-            </label>
-            <button id="exportAnnBundle" class="btn-xs">↗ док.</button>
-            <label class="btn-xs file-inline">↙ док.
-              <input id="importAnnBundle" type="file" accept="application/json,.json" />
-            </label>
+            <input id="drawColor" type="color" value="#ffd84d" title="Цвет" />
+            <input id="drawSize" type="range" min="2" max="24" value="6" title="Толщина" />
+            <button id="undoStroke" title="Отменить">↩</button>
+            <button id="clearStrokes" title="Очистить аннотации">🗑</button>
+            <div class="tb-sep"></div>
+            <div class="dropdown">
+              <button class="btn-xs dropdown-trigger">Экспорт ▾</button>
+              <div class="dropdown-menu">
+                <button id="exportAnnotated">Экспорт PNG</button>
+                <button id="exportAnnSvg">Экспорт SVG</button>
+                <button id="exportAnnPdf">Экспорт PDF</button>
+                <button id="exportAnnJson">Экспорт страницы .json</button>
+                <button id="exportAnnBundle">Экспорт документа .json</button>
+              </div>
+            </div>
+            <div class="dropdown">
+              <button class="btn-xs dropdown-trigger">Импорт ▾</button>
+              <div class="dropdown-menu">
+                <label class="file-inline">Импорт страницы .json
+                  <input id="importAnnJson" type="file" accept="application/json,.json" />
+                </label>
+                <label class="file-inline">Импорт документа .json
+                  <input id="importAnnBundle" type="file" accept="application/json,.json" />
+                </label>
+              </div>
+            </div>
+            <button id="toggleAnnotTools" class="tb-toggle" title="Панель аннотаций">Панель</button>
             <span id="annStats" class="status-inline"></span>
           </div>
 
-          <div class="tb-sep"></div>
-
-          <div class="toolbar-group toolbar-group-utils" id="utilityToolsGroup">
-            <button id="downloadFile" title="Скачать">⬇</button>
-            <button id="printPage" title="Печать">🖨</button>
-            <button id="importDjvuDataQuick" class="is-hidden">DjVu</button>
-            <span id="docInfo" class="status-inline"></span>
+          <!-- Tab: Text/OCR -->
+          <div class="bottom-tab-panel" data-bottom-panel="text">
+            <button id="refreshText" class="btn-xs" title="Извлечь текст страницы">Текст</button>
+            <button id="copyText" class="btn-xs" title="Копировать текст">📋 Копир.</button>
+            <button id="toggleTextEdit" class="btn-xs tb-toggle" title="Режим редактирования">Ред.</button>
+            <button id="saveTextEdits" class="btn-xs" title="Сохранить правки">💾</button>
+            <button id="undoTextEdit" class="btn-xs" title="Отмена">↩</button>
+            <button id="redoTextEdit" class="btn-xs" title="Повтор">↪</button>
+            <div class="tb-sep"></div>
+            <button id="ocrCurrentPage" class="btn-xs" title="Распознать текущую страницу">OCR</button>
+            <button id="ocrRegionMode" class="btn-xs tb-toggle" title="Выделить область для OCR">Область</button>
+            <button id="copyOcrText" class="btn-xs" title="Копировать OCR текст">📋 OCR</button>
+            <button id="cancelBackgroundOcr" class="btn-xs" title="Остановить фоновый OCR">⏹ Фон</button>
+            <button id="toggleOcrConfidence" class="btn-xs tb-toggle" title="Показать качество OCR">Качество</button>
+            <div class="tb-sep"></div>
+            <div class="dropdown">
+              <button class="btn-xs dropdown-trigger">Экспорт ▾</button>
+              <div class="dropdown-menu">
+                <button id="exportText">Экспорт .txt</button>
+                <button id="exportWord">Экспорт .docx</button>
+                <button id="exportOcrIndex">Экспорт OCR index</button>
+                <button id="exportHealthReport">Health Report</button>
+              </div>
+            </div>
+            <label class="btn-xs file-inline" title="Импорт DOCX">↙ .docx
+              <input id="importDocx" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            </label>
+            <button id="toggleTextToolsInline" class="btn-collapse" title="Свернуть текст-панель">▾</button>
           </div>
-        </header>
+
+          <!-- Tab: Tools -->
+          <div class="bottom-tab-panel" data-bottom-panel="tools">
+            <button id="pdfFormFill" class="btn-xs" title="Заполнение форм PDF">Формы</button>
+            <div class="dropdown">
+              <button class="btn-xs dropdown-trigger">Формы ▾</button>
+              <div class="dropdown-menu">
+                <button id="pdfFormExport">Экспорт данных формы</button>
+                <label class="file-inline">Импорт данных формы
+                  <input id="pdfFormImport" type="file" accept="application/json,.json" />
+                </label>
+                <button id="pdfFormClear">Очистить формы</button>
+              </div>
+            </div>
+            <div class="tb-sep"></div>
+            <button id="pdfBlockEdit" class="btn-xs tb-toggle" title="Редактор блоков">Блоки</button>
+            <label class="btn-xs file-inline" title="Вставить изображение">🖼 Вставить
+              <input id="insertImageInput" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" />
+            </label>
+            <button id="addWatermark" class="btn-xs" title="Добавить водяной знак">💧 Знак</button>
+            <button id="addStamp" class="btn-xs" title="Добавить штамп">🔖 Штамп</button>
+            <button id="addSignature" class="btn-xs" title="Нарисовать подпись">✍ Подпись</button>
+            <div class="tb-sep"></div>
+            <button id="mergePages" class="btn-xs" title="Объединить PDF файлы">📎 Объединить</button>
+            <button id="splitPages" class="btn-xs" title="Разделить PDF по страницам">✂ Разделить</button>
+            <button id="addBookmarkToolbar" class="btn-xs" title="Добавить закладку">📑 Закладка</button>
+            <div class="tb-sep"></div>
+            <button id="conversionInvoice" class="btn-xs" title="Плагин: счёт-фактура">Счёт</button>
+            <button id="conversionReport" class="btn-xs" title="Плагин: отчёт">Отчёт</button>
+            <button id="conversionTable" class="btn-xs" title="Плагин: таблица">Таблица</button>
+          </div>
+        </div>
 
         <!-- ═══ Canvas ═══ -->
         <section class="canvas-wrap" id="canvasWrap">
@@ -316,173 +449,181 @@
             <div id="textLayerDiv" class="text-layer"></div>
             <canvas id="annotationCanvas"></canvas>
           </div>
-          <p id="emptyState" class="empty-msg">Откройте PDF, DjVu, ePub или изображение</p>
+          <p id="emptyState" class="empty-msg">Откройте PDF, DjVu, ePub или изображение для просмотра</p>
         </section>
 
         <div id="canvasResizeHandle" class="resize-handle resize-handle-horizontal"></div>
 
-        <!-- ═══ Text tools ═══ -->
+        <!-- ═══ Text tools panel ═══ -->
         <section class="text-tools" id="textToolsSection">
-          <div class="text-tools-bar">
-            <div class="section-actions">
-              <button id="refreshText" class="btn-xs" title="Извлечь текст">Текст</button>
-              <button id="copyText" class="btn-xs" title="Копировать">📋</button>
-              <button id="exportText" class="btn-xs">.txt</button>
-              <button id="exportWord" class="btn-xs">.docx</button>
-              <label class="btn-xs file-inline" title="Импорт DOCX">↙ .docx
-                <input id="importDocx" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-              </label>
-              <button id="exportOcrIndex" class="btn-xs">OCR idx</button>
-              <button id="toggleTextEdit" class="btn-xs tb-toggle">Ред.</button>
-              <button id="saveTextEdits" class="btn-xs">💾</button>
-              <button id="undoTextEdit" class="btn-xs" title="Отмена">↩</button>
-              <button id="redoTextEdit" class="btn-xs" title="Повтор">↪</button>
-              <button id="ocrCurrentPage" class="btn-xs">OCR</button>
-              <button id="ocrRegionMode" class="btn-xs tb-toggle">Область</button>
-              <button id="copyOcrText" class="btn-xs">📋 OCR</button>
-              <button id="cancelBackgroundOcr" class="btn-xs">⏹ Фон</button>
-              <button id="toggleOcrConfidence" class="btn-xs tb-toggle">Качество</button>
-              <button id="exportHealthReport" class="btn-xs">Health</button>
-            </div>
-            <div class="section-actions">
-              <button id="pdfFormFill" class="btn-xs" title="Заполнение форм">Формы</button>
-              <button id="pdfFormExport" class="btn-xs" title="Экспорт данных формы">↗ Формы</button>
-              <label class="btn-xs file-inline" title="Импорт данных формы">↙ Формы
-                <input id="pdfFormImport" type="file" accept="application/json,.json" />
-              </label>
-              <button id="pdfFormClear" class="btn-xs" title="Очистить формы">✕ Формы</button>
-              <button id="pdfBlockEdit" class="btn-xs tb-toggle" title="Редактор блоков">Блоки</button>
-              <label class="btn-xs file-inline" title="Вставить изображение">🖼 Вставить
-                <input id="insertImageInput" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" />
-              </label>
-              <button id="addWatermark" class="btn-xs" title="Водяной знак">💧 Знак</button>
-              <button id="addStamp" class="btn-xs" title="Штамп">🔖 Штамп</button>
-              <button id="addSignature" class="btn-xs" title="Подпись">✍ Подпись</button>
-              <button id="mergePages" class="btn-xs" title="Объединить PDF">📎 Объед.</button>
-              <button id="splitPages" class="btn-xs" title="Разделить PDF">✂ Раздел.</button>
-              <button id="addBookmarkToolbar" class="btn-xs" title="Добавить закладку">📑 Закл.</button>
-              <button id="conversionInvoice" class="btn-xs" title="Плагин: счёт">Счёт</button>
-              <button id="conversionReport" class="btn-xs" title="Плагин: отчёт">Отчёт</button>
-              <button id="conversionTable" class="btn-xs" title="Плагин: таблица">Таблица</button>
-            </div>
-            <button id="toggleTextToolsInline" class="btn-collapse" title="Свернуть">▾</button>
-          </div>
-          <textarea id="pageText" readonly placeholder="Текст страницы"></textarea>
+          <textarea id="pageText" readonly placeholder="Текст страницы появится здесь…"></textarea>
           <p id="ocrStatus" class="status-line"></p>
         </section>
       </main>
+
+      <!-- ═══ Status Bar ═══ -->
+      <footer class="status-bar" id="statusBar">
+        <span class="status-bar-item" id="sbPage">Стр. — / —</span>
+        <span class="status-bar-sep"></span>
+        <span class="status-bar-item" id="sbZoom">100%</span>
+        <span class="status-bar-sep"></span>
+        <span class="status-bar-item" id="sbOcr">OCR: —</span>
+        <span class="status-bar-sep"></span>
+        <span class="status-bar-item" id="sbFileSize">—</span>
+        <span class="status-bar-sep"></span>
+        <span class="status-bar-item" id="sbReadingTime">Чтение: 0 мин</span>
+      </footer>
     </div>
 
-    <!-- ═══ Settings Modal ═══ -->
+    <!-- ═══ Settings Modal (tabbed) ═══ -->
     <div id="settingsModal" class="modal" aria-hidden="true">
       <div class="modal-card">
         <div class="modal-head">
-          <h3>Настройки</h3>
+          <h3>Настройки NovaReader</h3>
           <button id="closeSettingsModal" class="btn-close">✕</button>
         </div>
+
+        <nav class="modal-tabs">
+          <button class="active" data-modal-tab="general">Общие</button>
+          <button data-modal-tab="appearance">Внешний вид</button>
+          <button data-modal-tab="ocr">OCR</button>
+          <button data-modal-tab="hotkeys">Клавиши</button>
+          <button data-modal-tab="advanced">Продвинутые</button>
+        </nav>
+
         <div class="modal-body">
-          <section>
-            <h4>Панели</h4>
-            <label class="checkbox-row"><input id="cfgShowSidebar" type="checkbox" checked /> <span>Сайдбар</span></label>
-            <label class="checkbox-row"><input id="cfgShowSearch" type="checkbox" checked /> <span>Поиск</span></label>
-            <label class="checkbox-row"><input id="cfgShowAnnot" type="checkbox" checked /> <span>Аннотации</span></label>
-            <label class="checkbox-row"><input id="cfgShowText" type="checkbox" checked /> <span>Текст</span></label>
-          </section>
-          <section>
-            <h4>Видимость разделов</h4>
-            <div id="cfgSidebarSections" class="settings-grid"></div>
-            <div id="cfgToolbarSections" class="settings-grid"></div>
-          </section>
-          <section>
-            <h4>Размеры</h4>
-            <div class="settings-grid">
-              <label>Сайдбар (px) <input id="cfgSidebarWidth" type="number" min="160" max="360" value="220" /></label>
-              <label>Масштаб панели (%) <input id="cfgToolbarScale" type="number" min="10" max="100" value="100" /></label>
-              <label>Текст мин. (px) <input id="cfgTextMinHeight" type="number" min="24" max="180" value="40" /></label>
-              <label>Область (px) <input id="cfgPageAreaHeight" type="number" min="520" max="2600" value="860" /></label>
-              <label>Верх (px) <input id="cfgTopToolbarHeight" type="number" min="28" max="72" value="34" /></label>
-              <label>Низ (px) <input id="cfgBottomToolbarHeight" type="number" min="48" max="220" value="86" /></label>
-              <label>Текст (px) <input id="cfgTextPanelHeight" type="number" min="72" max="360" value="120" /></label>
-              <label>Аннот. холст (%) <input id="cfgAnnotationCanvasScale" type="number" min="50" max="100" value="90" /></label>
-            </div>
-          </section>
-          <section>
-            <h4>Оформление</h4>
-            <div class="settings-grid">
-              <label>Тема
-                <select id="cfgTheme">
-                  <option value="dark">Тёмная</option>
-                  <option value="light">Светлая</option>
-                </select>
-              </label>
-              <label>Язык
-                <select id="cfgAppLang">
-                  <option value="ru">Русский</option>
-                  <option value="en">English</option>
-                </select>
-              </label>
-              <label>OCR
-                <select id="cfgOcrLang">
-                  <option value="auto">Auto</option>
-                  <option value="rus">Русский</option>
-                  <option value="eng">English</option>
-                  <option value="deu">Deutsch</option>
-                  <option value="fra">Français</option>
-                  <option value="spa">Español</option>
-                  <option value="ita">Italiano</option>
-                  <option value="por">Português</option>
-                </select>
-              </label>
-              <label>Точность
-                <select id="cfgOcrQualityMode">
-                  <option value="balanced">Баланс</option>
-                  <option value="accurate">Точность</option>
-                </select>
-              </label>
-            </div>
-            <label class="checkbox-row"><input id="cfgOcrCyrillicOnly" type="checkbox" checked /> <span>Кириллица: очищать латиницу</span></label>
-          </section>
-          <section>
-            <h4>Горячие клавиши</h4>
-            <div class="shortcut-grid settings-hotkeys">
-              <label>Стр.→ <input id="hkNext" type="text" maxlength="32" value="pagedown" /><small id="hkNextHint" class="hotkey-hint"></small></label>
-              <label>Стр.← <input id="hkPrev" type="text" maxlength="32" value="pageup" /><small id="hkPrevHint" class="hotkey-hint"></small></label>
-              <label>Zoom+ <input id="hkZoomIn" type="text" maxlength="32" value="ctrl+=" /><small id="hkZoomInHint" class="hotkey-hint"></small></label>
-              <label>Zoom− <input id="hkZoomOut" type="text" maxlength="32" value="ctrl+-" /><small id="hkZoomOutHint" class="hotkey-hint"></small></label>
-              <label>Аннот. <input id="hkAnnotate" type="text" maxlength="32" value="ctrl+shift+a" /><small id="hkAnnotateHint" class="hotkey-hint"></small></label>
-              <label>Поиск <input id="hkSearchFocus" type="text" maxlength="32" value="ctrl+f" /><small id="hkSearchFocusHint" class="hotkey-hint"></small></label>
-              <label>OCR <input id="hkOcrPage" type="text" maxlength="32" value="ctrl+shift+o" /><small id="hkOcrPageHint" class="hotkey-hint"></small></label>
-              <label>Ширина <input id="hkFitWidth" type="text" maxlength="32" value="ctrl+9" /><small id="hkFitWidthHint" class="hotkey-hint"></small></label>
-              <label>Страница <input id="hkFitPage" type="text" maxlength="32" value="ctrl+0" /><small id="hkFitPageHint" class="hotkey-hint"></small></label>
-            </div>
-            <div class="section-actions">
-              <button id="saveHotkeys" class="btn-accent btn-xs">Сохранить</button>
-              <button id="resetHotkeys" class="btn-ghost btn-xs">Сбросить</button>
-              <button id="autoFixHotkeys" class="btn-ghost btn-xs">Авто-фикс</button>
-              <span id="hotkeysStatus" class="status-inline"></span>
-            </div>
-          </section>
-          <section>
-            <h4>OCR область</h4>
-            <label class="checkbox-row"><input id="cfgBackgroundOcr" type="checkbox" /> <span>Фоновое OCR при открытии</span></label>
-            <div class="settings-grid">
-              <label>Мин. W (px) <input id="cfgOcrMinW" type="number" min="8" value="24" /></label>
-              <label>Мин. H (px) <input id="cfgOcrMinH" type="number" min="8" value="24" /></label>
-            </div>
-          </section>
-          <section>
-            <h4>OCR хранилище</h4>
-            <p id="ocrStorageInfo" class="status-line"></p>
-            <div class="section-actions">
-              <button id="refreshOcrStorage" class="btn-ghost btn-xs">Обновить</button>
-              <button id="clearCurrentOcrData" class="btn-ghost btn-xs">Очистить текущий</button>
-              <button id="clearAllOcrData" class="btn-ghost btn-xs">Очистить всё</button>
-            </div>
-            <ul id="ocrDocumentsList" class="ocr-docs-list"></ul>
-          </section>
+          <!-- Tab: General -->
+          <div class="modal-tab-panel active" data-modal-panel="general">
+            <section>
+              <h4>Панели</h4>
+              <label class="checkbox-row"><input id="cfgShowSidebar" type="checkbox" checked /> <span>Сайдбар</span></label>
+              <label class="checkbox-row"><input id="cfgShowSearch" type="checkbox" checked /> <span>Поиск</span></label>
+              <label class="checkbox-row"><input id="cfgShowAnnot" type="checkbox" checked /> <span>Аннотации</span></label>
+              <label class="checkbox-row"><input id="cfgShowText" type="checkbox" checked /> <span>Текстовая панель</span></label>
+            </section>
+            <section>
+              <h4>Видимость разделов</h4>
+              <div id="cfgSidebarSections" class="settings-grid"></div>
+              <div id="cfgToolbarSections" class="settings-grid"></div>
+            </section>
+          </div>
+
+          <!-- Tab: Appearance -->
+          <div class="modal-tab-panel" data-modal-panel="appearance">
+            <section>
+              <h4>Оформление</h4>
+              <div class="settings-grid">
+                <label>Тема
+                  <select id="cfgTheme">
+                    <option value="dark">Тёмная</option>
+                    <option value="light">Светлая</option>
+                  </select>
+                </label>
+                <label>Язык
+                  <select id="cfgAppLang">
+                    <option value="ru">Русский</option>
+                    <option value="en">English</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+            <section>
+              <h4>Размеры</h4>
+              <div class="settings-grid">
+                <label>Сайдбар (px) <input id="cfgSidebarWidth" type="number" min="160" max="400" value="280" /></label>
+                <label>Масштаб панели (%) <input id="cfgToolbarScale" type="number" min="10" max="100" value="100" /></label>
+                <label>Текст мин. (px) <input id="cfgTextMinHeight" type="number" min="24" max="180" value="50" /></label>
+                <label>Текст панель (px) <input id="cfgTextPanelHeight" type="number" min="72" max="400" value="140" /></label>
+              </div>
+            </section>
+          </div>
+
+          <!-- Tab: OCR -->
+          <div class="modal-tab-panel" data-modal-panel="ocr">
+            <section>
+              <h4>Распознавание текста</h4>
+              <div class="settings-grid">
+                <label>Язык OCR
+                  <select id="cfgOcrLang">
+                    <option value="auto">Auto</option>
+                    <option value="rus">Русский</option>
+                    <option value="eng">English</option>
+                    <option value="deu">Deutsch</option>
+                    <option value="fra">Français</option>
+                    <option value="spa">Español</option>
+                    <option value="ita">Italiano</option>
+                    <option value="por">Português</option>
+                  </select>
+                </label>
+                <label>Точность
+                  <select id="cfgOcrQualityMode">
+                    <option value="balanced">Баланс</option>
+                    <option value="accurate">Точность</option>
+                  </select>
+                </label>
+              </div>
+              <label class="checkbox-row"><input id="cfgOcrCyrillicOnly" type="checkbox" checked /> <span>Кириллица: очищать латиницу</span></label>
+            </section>
+            <section>
+              <h4>Область OCR</h4>
+              <label class="checkbox-row"><input id="cfgBackgroundOcr" type="checkbox" /> <span>Фоновое OCR при открытии</span></label>
+              <div class="settings-grid">
+                <label>Мин. ширина (px) <input id="cfgOcrMinW" type="number" min="8" value="24" /></label>
+                <label>Мин. высота (px) <input id="cfgOcrMinH" type="number" min="8" value="24" /></label>
+              </div>
+            </section>
+            <section>
+              <h4>OCR хранилище</h4>
+              <p id="ocrStorageInfo" class="status-line"></p>
+              <div class="section-actions">
+                <button id="refreshOcrStorage" class="btn-ghost btn-xs">Обновить</button>
+                <button id="clearCurrentOcrData" class="btn-ghost btn-xs">Очистить текущий</button>
+                <button id="clearAllOcrData" class="btn-ghost btn-xs">Очистить всё</button>
+              </div>
+              <ul id="ocrDocumentsList" class="ocr-docs-list"></ul>
+            </section>
+          </div>
+
+          <!-- Tab: Hotkeys -->
+          <div class="modal-tab-panel" data-modal-panel="hotkeys">
+            <section>
+              <h4>Горячие клавиши</h4>
+              <div class="shortcut-grid settings-hotkeys">
+                <label>Стр.→ <input id="hkNext" type="text" maxlength="32" value="pagedown" /><small id="hkNextHint" class="hotkey-hint"></small></label>
+                <label>Стр.← <input id="hkPrev" type="text" maxlength="32" value="pageup" /><small id="hkPrevHint" class="hotkey-hint"></small></label>
+                <label>Zoom+ <input id="hkZoomIn" type="text" maxlength="32" value="ctrl+=" /><small id="hkZoomInHint" class="hotkey-hint"></small></label>
+                <label>Zoom− <input id="hkZoomOut" type="text" maxlength="32" value="ctrl+-" /><small id="hkZoomOutHint" class="hotkey-hint"></small></label>
+                <label>Аннот. <input id="hkAnnotate" type="text" maxlength="32" value="ctrl+shift+a" /><small id="hkAnnotateHint" class="hotkey-hint"></small></label>
+                <label>Поиск <input id="hkSearchFocus" type="text" maxlength="32" value="ctrl+f" /><small id="hkSearchFocusHint" class="hotkey-hint"></small></label>
+                <label>OCR <input id="hkOcrPage" type="text" maxlength="32" value="ctrl+shift+o" /><small id="hkOcrPageHint" class="hotkey-hint"></small></label>
+                <label>Ширина <input id="hkFitWidth" type="text" maxlength="32" value="ctrl+9" /><small id="hkFitWidthHint" class="hotkey-hint"></small></label>
+                <label>Страница <input id="hkFitPage" type="text" maxlength="32" value="ctrl+0" /><small id="hkFitPageHint" class="hotkey-hint"></small></label>
+              </div>
+              <div class="section-actions">
+                <button id="saveHotkeys" class="btn-accent btn-xs">Сохранить</button>
+                <button id="resetHotkeys" class="btn-ghost btn-xs">Сбросить</button>
+                <button id="autoFixHotkeys" class="btn-ghost btn-xs">Авто-фикс</button>
+                <span id="hotkeysStatus" class="status-inline"></span>
+              </div>
+            </section>
+          </div>
+
+          <!-- Tab: Advanced -->
+          <div class="modal-tab-panel" data-modal-panel="advanced">
+            <section>
+              <h4>Продвинутые размеры</h4>
+              <div class="settings-grid">
+                <label>Область просмотра (px) <input id="cfgPageAreaHeight" type="number" min="520" max="2600" value="860" /></label>
+                <label>Верх. панель (px) <input id="cfgTopToolbarHeight" type="number" min="28" max="72" value="44" /></label>
+                <label>Ниж. панель (px) <input id="cfgBottomToolbarHeight" type="number" min="48" max="220" value="86" /></label>
+                <label>Аннот. холст (%) <input id="cfgAnnotationCanvasScale" type="number" min="50" max="100" value="90" /></label>
+              </div>
+            </section>
+          </div>
         </div>
+
         <div class="modal-actions">
-          <button id="saveSettingsModal" class="btn-accent">Сохранить</button>
+          <button id="saveSettingsModal" class="btn-accent">Сохранить настройки</button>
         </div>
       </div>
     </div>
