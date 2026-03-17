@@ -2931,7 +2931,18 @@ async function extractTextForPage(pageNumber) {
     await ensureOcrad();
     const canvas = await buildOcrSourceCanvas(pageNumber);
     const preferredSkew = await estimatePageSkewAngle(pageNumber);
-    return await runOcrOnPreparedCanvas(canvas, { fast: true, preferredSkew });
+    const ocrResult = await runOcrOnPreparedCanvas(canvas, { fast: true, preferredSkew });
+    // Persist OCR result to cache so we don't re-OCR on next access
+    if (ocrResult) {
+      try {
+        const existing = loadOcrTextData();
+        const pagesText = Array.isArray(existing?.pagesText) ? [...existing.pagesText] : [];
+        while (pagesText.length < pageNumber) pagesText.push('');
+        pagesText[pageNumber - 1] = ocrResult;
+        saveOcrTextData({ ...existing, pagesText, updatedAt: new Date().toISOString() });
+      } catch { /* persist best-effort */ }
+    }
+    return ocrResult;
   } catch {
     return '';
   }
@@ -2970,6 +2981,7 @@ function scheduleBackgroundOcrScan(reason = 'default', delayMs = 600) {
 
 async function startBackgroundOcrScan(reason = 'auto') {
   if (!state.adapter || !state.pageCount) return;
+  if (state.docName == null) return;
   if (state.backgroundOcrRunning) return;
   const token = Date.now();
   state.backgroundOcrToken = token;
