@@ -184,6 +184,17 @@ export async function initTesseract(lang = 'eng') {
       _initFailCount = 0; // reset on success
       _lastInitError = '';
       _lastFailTime = 0;
+
+      // Configure Tesseract parameters for higher quality recognition
+      try {
+        await _worker.setParameters({
+          tessedit_pageseg_mode: '6',    // Assume a single uniform block of text
+          preserve_interword_spaces: '1', // Keep spaces between words
+          textord_heavy_nr: '1',         // Heavy noise removal
+          tessedit_do_invert: '0',       // Don't try inverted (we handle it ourselves)
+        });
+      } catch { /* setParameters may not be supported in all versions */ }
+
       return true;
     } catch (err) {
       _initFailCount++;

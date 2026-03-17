@@ -18,7 +18,7 @@ import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from
 import { analyzeTextDensity, computeOcrZoom, hasSmallText } from './modules/ocr-adaptive-dpi.js';
 import { getPageQualitySummary, markLowConfidenceWords } from './modules/ocr-word-confidence.js';
 import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText, deleteOcrData, listOcrDocuments, getOcrStorageSize } from './modules/ocr-storage.js';
-import { initTesseract, recognizeTesseract, isTesseractAvailable, getTesseractStatus, terminateTesseract, resetTesseractAvailability } from './modules/tesseract-adapter.js';
+import { initTesseract, recognizeTesseract, recognizeWithBoxes, isTesseractAvailable, getTesseractStatus, terminateTesseract, resetTesseractAvailability } from './modules/tesseract-adapter.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -695,6 +695,32 @@ async function generateDocxWithImages(title, pages, includeImages) {
   return createZipBlob(files);
 }
 
+function _groupWordsIntoLines(words) {
+  if (!words || !words.length) return [];
+  const sorted = [...words].filter(w => w.bbox).sort((a, b) => {
+    const dy = a.bbox.y0 - b.bbox.y0;
+    return Math.abs(dy) < 5 ? a.bbox.x0 - b.bbox.x0 : dy;
+  });
+
+  const lines = [];
+  let currentLine = [sorted[0]];
+  let currentY = sorted[0].bbox.y0;
+  const threshold = Math.max(5, Math.abs(sorted[0].bbox.y1 - sorted[0].bbox.y0) * 0.5);
+
+  for (let i = 1; i < sorted.length; i++) {
+    const word = sorted[i];
+    if (Math.abs(word.bbox.y0 - currentY) <= threshold) {
+      currentLine.push(word);
+    } else {
+      lines.push(currentLine);
+      currentLine = [word];
+      currentY = word.bbox.y0;
+    }
+  }
+  if (currentLine.length) lines.push(currentLine);
+  return lines;
+}
+
 function buildDocxXmlWithImages(title, pages, imageRels) {
   const escapeXml = (s) => String(s || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -707,15 +733,53 @@ function buildDocxXmlWithImages(title, pages, imageRels) {
     const text = String(pages[i] || '').trim();
     const imgRel = imageRels.find(r => r.target === `media/page${i + 1}.png`);
 
-    paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Страница ${i + 1}</w:t></w:r></w:p>`);
+    // Use word-level data for structured paragraphs if available
+    const words = _ocrWordCache.get(i + 1);
+    const useWordLayout = words && words.length > 0 && text.length > 0;
 
-    if (imgRel) {
-      const widthEmu = 5800000;
-      const heightEmu = 7500000;
-      paragraphs.push(buildDocxImageParagraph(imgRel.rId, widthEmu, heightEmu));
-    }
+    if (useWordLayout) {
+      // Group words into lines based on Y-coordinate proximity
+      const lineGroups = _groupWordsIntoLines(words);
+      const fontSizes = words.map(w => w.bbox ? Math.abs(w.bbox.y1 - w.bbox.y0) : 12);
+      const avgFontSize = fontSizes.reduce((a, b) => a + b, 0) / Math.max(1, fontSizes.length);
 
-    if (text) {
+      // Detect paragraphs by line spacing
+      let prevLineBottom = 0;
+      for (const lineWords of lineGroups) {
+        if (!lineWords.length) continue;
+        const lineTop = Math.min(...lineWords.map(w => w.bbox?.y0 || 0));
+        const lineBottom = Math.max(...lineWords.map(w => w.bbox?.y1 || 0));
+        const lineHeight = lineBottom - lineTop;
+        const gap = lineTop - prevLineBottom;
+
+        // Detect heading: larger font or significant gap before line
+        const lineAvgHeight = lineHeight;
+        const isHeading = lineAvgHeight > avgFontSize * 1.3 && gap > avgFontSize * 0.5;
+        const isParagraphBreak = gap > lineHeight * 1.5;
+
+        const lineText = lineWords.map(w => w.text).join(' ').trim();
+        if (!lineText) continue;
+
+        // Check if this line looks like a table row
+        const cells = lineText.split(/\t|  {2,}|\|/).map(c => c.trim()).filter(Boolean);
+        if (cells.length >= 2 && cells.length <= 20) {
+          // Will be handled in next pass
+          paragraphs.push(`<w:p><w:r><w:t xml:space="preserve">${escapeXml(lineText)}</w:t></w:r></w:p>`);
+        } else if (isHeading) {
+          const sz = Math.round(Math.min(36, Math.max(14, lineAvgHeight * 0.75)) * 2);
+          paragraphs.push(`<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${escapeXml(lineText)}</w:t></w:r></w:p>`);
+        } else {
+          const sz = Math.round(Math.min(28, Math.max(10, lineAvgHeight * 0.55)) * 2);
+          if (isParagraphBreak && prevLineBottom > 0) {
+            paragraphs.push(`<w:p><w:pPr><w:spacing w:before="120"/></w:pPr><w:r><w:rPr><w:sz w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${escapeXml(lineText)}</w:t></w:r></w:p>`);
+          } else {
+            paragraphs.push(`<w:p><w:r><w:rPr><w:sz w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${escapeXml(lineText)}</w:t></w:r></w:p>`);
+          }
+        }
+        prevLineBottom = lineBottom;
+      }
+    } else if (text) {
+      // Fallback: text-only layout with table detection
       const lines = text.split('\n');
       let inTable = false;
       let tableRows = [];
@@ -727,6 +791,7 @@ function buildDocxXmlWithImages(title, pages, imageRels) {
             tableRows = [];
             inTable = false;
           }
+          paragraphs.push('<w:p/>'); // Empty paragraph for spacing
           continue;
         }
         const cells = trimmed.split(/\t|  {2,}|\|/).map(c => c.trim()).filter(Boolean);
@@ -743,6 +808,13 @@ function buildDocxXmlWithImages(title, pages, imageRels) {
         paragraphs.push(`<w:p><w:r><w:t xml:space="preserve">${escapeXml(trimmed)}</w:t></w:r></w:p>`);
       }
       if (inTable && tableRows.length) paragraphs.push(buildDocxTable(tableRows));
+    }
+
+    // Add page image AFTER text (as supplementary, not primary content)
+    if (imgRel && !useWordLayout) {
+      const widthEmu = 5800000;
+      const heightEmu = 7500000;
+      paragraphs.push(buildDocxImageParagraph(imgRel.rId, widthEmu, heightEmu));
     }
 
     if (i < pages.length - 1) {
@@ -2465,13 +2537,17 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
       [-32, 'mean', false, 1],
       [-16, 'mean', false, 1],
       [0, 'mean', false, 1],
+      [0, 'otsu', false, 1],
       [16, 'otsu', false, 1],
       [28, 'otsu', false, 1],
       [10, 'otsu', true, 1],
+      [-10, 'otsu', false, 1],
     ]
     : [
       [0, 'otsu', false, 1],
+      [0, 'mean', false, 1],
       [16, 'otsu', false, 1],
+      [-16, 'mean', false, 1],
     ];
 
   let preprocessDone = 0;
@@ -2553,6 +2629,7 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   // lang already resolved at top of function; Tesseract already confirmed initialized
   let best = '';
   let bestScore = -Infinity;
+  let bestWords = [];
   let detectedLang = lang;
   let taskCancelled = false;
   try {
@@ -2561,10 +2638,12 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
       if (onProgress) onProgress({ phase: 'recognize', current: i + 1, total: variants.length });
       const variant = variants[i];
       let rawText = '';
+      let words = [];
       try {
         const tessResult = await recognizeTesseract(variant, { lang });
         if (tessResult && tessResult.text) {
           rawText = tessResult.text;
+          words = tessResult.words || [];
         }
         if (!rawText && !getTesseractStatus().ready) {
           pushDiagnosticEvent('ocr.engine.missing', { variant: i });
@@ -2586,6 +2665,7 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
       if (score > bestScore) {
         best = candidate;
         bestScore = score;
+        bestWords = words;
         detectedLang = effectiveLang;
       }
       // If Tesseract gave a solid result on first variant, skip remaining variants
@@ -2617,6 +2697,21 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   });
   // Apply post-correction using detected language
   best = postCorrectOcrText(best, detectedLang);
+
+  // Cache word-level data for text layer and DOCX export
+  if (bestWords.length > 0 && options.pageNum) {
+    _ocrWordCache.set(options.pageNum, bestWords);
+    // Also persist to OCR storage
+    try {
+      const cache = loadOcrTextData();
+      if (cache) {
+        if (!cache.pagesWords) cache.pagesWords = [];
+        cache.pagesWords[options.pageNum - 1] = bestWords;
+        saveOcrTextData(cache);
+      }
+    } catch { /* non-critical */ }
+  }
+
   return best;
 }
 
@@ -3016,6 +3111,7 @@ async function runOcrOnRectNow(rect) {
     const text = await runOcrOnPreparedCanvas(src, {
       preferredSkew,
       taskId,
+      pageNum: state.currentPage,
       onProgress: ({ phase, current, total }) => {
         if (taskId !== state.ocrTaskId) return;
         if (phase === 'preprocess') {
@@ -3049,6 +3145,8 @@ async function runOcrOnRectNow(rect) {
       if (totalMs >= OCR_SLOW_TASK_WARN_MS) {
         pushDiagnosticEvent('ocr.manual.slow', { taskId, totalMs, page: state.currentPage }, 'warn');
       }
+      // Refresh text layer with newly recognized word boxes
+      renderTextLayer(state.currentPage, state.zoom, state.rotation).catch(() => {});
     } else {
       recordPerfMetric('ocrTimes', totalMs);
       setOcrStatus(`OCR: текст не найден (${totalMs}мс)`);
@@ -3105,7 +3203,7 @@ async function extractTextForPage(pageNumber) {
   try {
     const canvas = await buildOcrSourceCanvas(pageNumber);
     const preferredSkew = await estimatePageSkewAngle(pageNumber);
-    const ocrResult = await runOcrOnPreparedCanvas(canvas, { fast: true, preferredSkew });
+    const ocrResult = await runOcrOnPreparedCanvas(canvas, { fast: true, preferredSkew, pageNum: pageNumber });
     // Persist OCR result to cache so we don't re-OCR on next access
     if (ocrResult) {
       try {
@@ -5214,6 +5312,691 @@ async function renderCurrentPage() {
 
   cacheRenderedPage(page, els.canvas, zoom, rotation);
   _schedulePreRender(page, zoom, rotation);
+
+  // Render text layer after page render (non-blocking)
+  renderTextLayer(page, zoom, rotation).catch(() => {});
+}
+
+// ─── Safe createObjectURL wrapper ──────────────────────────────────────────
+function safeCreateObjectURL(data) {
+  if (data instanceof Blob || data instanceof File) {
+    return URL.createObjectURL(data);
+  }
+  // Wrap raw data in a Blob as fallback
+  if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
+    return URL.createObjectURL(new Blob([data]));
+  }
+  if (typeof data === 'string') {
+    return URL.createObjectURL(new Blob([data], { type: 'text/plain' }));
+  }
+  console.warn('safeCreateObjectURL: invalid argument type', typeof data);
+  return '';
+}
+
+// ─── Text Layer Rendering ──────────────────────────────────────────────────
+// Stores OCR word-level data per page for reuse by DOCX export & search
+const _ocrWordCache = new Map();
+
+async function renderTextLayer(pageNum, zoom, rotation) {
+  const container = els.textLayerDiv;
+  if (!container) return;
+  container.innerHTML = '';
+  container.style.width = els.canvas.style.width;
+  container.style.height = els.canvas.style.height;
+
+  if (!state.adapter) return;
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  // ── Path 1: PDF.js native text content ──
+  if (state.adapter.type === 'pdf') {
+    try {
+      const page = await state.adapter.pdfDoc.getPage(pageNum);
+      const renderScale = zoom * dpr;
+      const viewport = page.getViewport({ scale: renderScale, rotation });
+      const textContent = await page.getTextContent({ normalizeWhitespace: true });
+
+      if (!textContent?.items?.length) {
+        // No native text → try OCR word data
+        await _renderOcrTextLayer(pageNum, zoom, dpr);
+        return;
+      }
+
+      const displayW = parseFloat(els.canvas.style.width) || (viewport.width / dpr);
+      const displayH = parseFloat(els.canvas.style.height) || (viewport.height / dpr);
+      container.style.width = `${displayW}px`;
+      container.style.height = `${displayH}px`;
+
+      for (const item of textContent.items) {
+        const str = item.str;
+        if (!str) continue;
+        const tx = item.transform;
+        if (!tx) continue;
+
+        const span = document.createElement('span');
+        span.textContent = str;
+
+        // PDF text transform: [scaleX, skewY, skewX, scaleY, translateX, translateY]
+        const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
+        const scaleFactor = 1 / dpr;
+
+        // Position in display coordinates
+        const x = tx[4] * scaleFactor;
+        const y = displayH - (tx[5] * scaleFactor) - (fontSize * scaleFactor);
+
+        span.style.left = `${x}px`;
+        span.style.top = `${y}px`;
+        span.style.fontSize = `${fontSize * scaleFactor}px`;
+        span.style.fontFamily = item.fontName || 'sans-serif';
+
+        // Apply rotation/skew from transform matrix
+        const angle = Math.atan2(tx[1], tx[0]);
+        if (Math.abs(angle) > 0.01) {
+          span.style.transform = `rotate(${-angle}rad)`;
+        }
+
+        // Scale width to match original character spacing
+        if (item.width > 0) {
+          const estimatedWidth = fontSize * str.length * 0.5;
+          const actualWidth = item.width * renderScale * scaleFactor;
+          if (estimatedWidth > 0 && Math.abs(actualWidth - estimatedWidth) > 2) {
+            span.style.letterSpacing = `${((actualWidth - estimatedWidth) / Math.max(1, str.length - 1))}px`;
+          }
+        }
+
+        container.appendChild(span);
+      }
+    } catch (err) {
+      console.warn('Text layer render failed:', err);
+    }
+    return;
+  }
+
+  // ── Path 2: OCR-based text layer ──
+  await _renderOcrTextLayer(pageNum, zoom, dpr);
+}
+
+async function _renderOcrTextLayer(pageNum, zoom, dpr) {
+  const container = els.textLayerDiv;
+  if (!container) return;
+
+  // Check OCR word cache
+  let words = _ocrWordCache.get(pageNum);
+  if (!words) {
+    // Try to get from OCR storage
+    const ocr = loadOcrTextData();
+    if (ocr?.pagesWords?.[pageNum - 1]) {
+      words = ocr.pagesWords[pageNum - 1];
+    }
+  }
+  if (!words || !words.length) return;
+
+  const canvasW = els.canvas.width;
+  const canvasH = els.canvas.height;
+  const displayW = parseFloat(els.canvas.style.width) || canvasW;
+  const displayH = parseFloat(els.canvas.style.height) || canvasH;
+  const scaleX = displayW / canvasW;
+  const scaleY = displayH / canvasH;
+
+  container.style.width = `${displayW}px`;
+  container.style.height = `${displayH}px`;
+
+  for (const word of words) {
+    if (!word.text || !word.bbox) continue;
+    const span = document.createElement('span');
+    span.textContent = word.text;
+    span.dataset.confidence = String(word.confidence || 0);
+
+    const x = word.bbox.x0 * scaleX;
+    const y = word.bbox.y0 * scaleY;
+    const w = (word.bbox.x1 - word.bbox.x0) * scaleX;
+    const h = (word.bbox.y1 - word.bbox.y0) * scaleY;
+
+    span.style.left = `${x}px`;
+    span.style.top = `${y}px`;
+    span.style.fontSize = `${Math.max(6, h * 0.85)}px`;
+    span.style.width = `${w}px`;
+    span.style.height = `${h}px`;
+
+    container.appendChild(span);
+  }
+}
+
+// ─── Search Highlight in Text Layer ─────────────────────────────────────────
+function highlightSearchInTextLayer(query) {
+  const container = els.textLayerDiv;
+  if (!container || !query) return 0;
+
+  // Remove old highlights
+  container.querySelectorAll('.search-highlight').forEach(el => {
+    const parent = el.parentNode;
+    parent.replaceChild(document.createTextNode(el.textContent), el);
+    parent.normalize();
+  });
+
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return 0;
+
+  let count = 0;
+  const spans = container.querySelectorAll('span');
+  for (const span of spans) {
+    const text = span.textContent;
+    const lower = text.toLowerCase();
+    const idx = lower.indexOf(normalized);
+    if (idx === -1) continue;
+
+    // Split the span text around matches
+    const frag = document.createDocumentFragment();
+    let lastIdx = 0;
+    let pos = lower.indexOf(normalized, 0);
+    while (pos !== -1) {
+      if (pos > lastIdx) {
+        frag.appendChild(document.createTextNode(text.slice(lastIdx, pos)));
+      }
+      const mark = document.createElement('mark');
+      mark.className = 'search-highlight';
+      mark.textContent = text.slice(pos, pos + normalized.length);
+      mark.dataset.matchIndex = String(count);
+      frag.appendChild(mark);
+      count++;
+      lastIdx = pos + normalized.length;
+      pos = lower.indexOf(normalized, lastIdx);
+    }
+    if (lastIdx < text.length) {
+      frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+    }
+    span.textContent = '';
+    span.appendChild(frag);
+  }
+  return count;
+}
+
+function scrollToSearchHighlight(index) {
+  const marks = els.textLayerDiv?.querySelectorAll('.search-highlight');
+  if (!marks?.length) return;
+  // Remove active class from all
+  marks.forEach(m => m.classList.remove('active'));
+  const target = marks[index % marks.length];
+  if (target) {
+    target.classList.add('active');
+    target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
+// ─── Inline Text Editor (Acrobat-style) ────────────────────────────────────
+let _activeInlineEditor = null;
+
+function enableInlineTextEditing() {
+  const container = els.textLayerDiv;
+  if (!container) return;
+  container.classList.add('editing');
+
+  container.addEventListener('dblclick', _handleTextLayerDblClick);
+}
+
+function disableInlineTextEditing() {
+  const container = els.textLayerDiv;
+  if (!container) return;
+  container.classList.remove('editing');
+  container.removeEventListener('dblclick', _handleTextLayerDblClick);
+  if (_activeInlineEditor) {
+    _activeInlineEditor.remove();
+    _activeInlineEditor = null;
+  }
+}
+
+function _handleTextLayerDblClick(e) {
+  const span = e.target.closest('span');
+  if (!span) {
+    // Click on empty area → create new text block
+    const rect = els.textLayerDiv.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    _createInlineEditor(x, y, '', null);
+    return;
+  }
+
+  // Edit existing text
+  const rect = span.getBoundingClientRect();
+  const containerRect = els.textLayerDiv.getBoundingClientRect();
+  const x = rect.left - containerRect.left;
+  const y = rect.top - containerRect.top;
+  _createInlineEditor(x, y, span.textContent, span);
+}
+
+function _createInlineEditor(x, y, initialText, targetSpan) {
+  if (_activeInlineEditor) _activeInlineEditor.remove();
+
+  const editor = document.createElement('div');
+  editor.className = 'inline-editor';
+  editor.contentEditable = 'true';
+  editor.textContent = initialText;
+  editor.style.left = `${x}px`;
+  editor.style.top = `${y}px`;
+  if (targetSpan) {
+    editor.style.minWidth = `${targetSpan.offsetWidth + 20}px`;
+    editor.style.fontSize = targetSpan.style.fontSize;
+  }
+
+  editor.addEventListener('blur', () => {
+    const newText = editor.textContent.trim();
+    if (targetSpan && newText) {
+      targetSpan.textContent = newText;
+    } else if (!targetSpan && newText) {
+      // Create new text block through block editor
+      const displayW = parseFloat(els.canvas.style.width) || 1;
+      const displayH = parseFloat(els.canvas.style.height) || 1;
+      const canvasW = els.canvas.width || 1;
+      const canvasH = els.canvas.height || 1;
+      blockEditor.addTextBlock(state.currentPage,
+        (x / displayW) * canvasW,
+        (y / displayH) * canvasH,
+        newText,
+        { fontSize: parseInt(editor.style.fontSize) || 14 }
+      );
+      if (blockEditor.active) {
+        blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
+      }
+    }
+    editor.remove();
+    _activeInlineEditor = null;
+    // Save the edited text back to OCR/edit storage
+    _syncTextLayerToStorage();
+  });
+
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { editor.remove(); _activeInlineEditor = null; }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editor.blur(); }
+  });
+
+  els.textLayerDiv.appendChild(editor);
+  _activeInlineEditor = editor;
+  editor.focus();
+
+  // Select all text
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function _syncTextLayerToStorage() {
+  const container = els.textLayerDiv;
+  if (!container || !state.adapter) return;
+
+  // Collect all text from spans
+  const spans = container.querySelectorAll('span');
+  const text = Array.from(spans).map(s => s.textContent).join(' ');
+  if (text.trim()) {
+    setPageEdits(state.currentPage, text.trim());
+    persistEdits();
+  }
+}
+
+// ─── Image Insertion ───────────────────────────────────────────────────────
+function handleImageInsertion(file) {
+  if (!file || !state.adapter) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    const img = new Image();
+    img.onload = () => {
+      // Insert at center of visible area
+      const canvasW = parseFloat(els.canvas.style.width) || 400;
+      const canvasH = parseFloat(els.canvas.style.height) || 600;
+      const maxW = canvasW * 0.5;
+      const maxH = canvasH * 0.5;
+      let w = img.width;
+      let h = img.height;
+      if (w > maxW) { h *= maxW / w; w = maxW; }
+      if (h > maxH) { w *= maxH / h; h = maxH; }
+
+      const x = (canvasW - w) / 2;
+      const y = (canvasH - h) / 2;
+
+      // Enable block editor if not active
+      if (!blockEditor.active) {
+        els.pdfBlockEdit?.classList.add('active');
+        blockEditor.enable(els.canvasWrap, els.canvas);
+      }
+
+      blockEditor.addImageBlock(state.currentPage, x, y, dataUrl, w, h);
+      blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
+      setOcrStatus('Изображение вставлено. Перемещайте и масштабируйте в режиме "Блоки".');
+    };
+    img.src = dataUrl;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ─── Watermark ─────────────────────────────────────────────────────────────
+function addWatermarkToPage(text, options = {}) {
+  if (!state.adapter) return;
+  const {
+    fontSize = 60,
+    color = 'rgba(200, 200, 200, 0.3)',
+    angle = -45,
+  } = options;
+
+  const ctx = els.annotationCanvas.getContext('2d');
+  const w = els.annotationCanvas.width;
+  const h = els.annotationCanvas.height;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  ctx.save();
+  ctx.translate(w / 2, h / 2);
+  ctx.rotate((angle * Math.PI) / 180);
+  ctx.font = `${fontSize * dpr}px sans-serif`;
+  ctx.fillStyle = color;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+// ─── Stamp ─────────────────────────────────────────────────────────────────
+function addStampToPage(stampType) {
+  if (!state.adapter) return;
+  const stamps = {
+    approved: { text: 'УТВЕРЖДЕНО', color: 'rgba(0, 150, 0, 0.5)', border: '#00aa00' },
+    rejected: { text: 'ОТКЛОНЕНО', color: 'rgba(200, 0, 0, 0.5)', border: '#cc0000' },
+    draft: { text: 'ЧЕРНОВИК', color: 'rgba(150, 150, 0, 0.5)', border: '#aaaa00' },
+    confidential: { text: 'КОНФИДЕНЦИАЛЬНО', color: 'rgba(200, 0, 0, 0.5)', border: '#cc0000' },
+    copy: { text: 'КОПИЯ', color: 'rgba(0, 0, 200, 0.5)', border: '#0000cc' },
+  };
+
+  const stamp = stamps[stampType] || stamps.approved;
+  const ctx = els.annotationCanvas.getContext('2d');
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const w = els.annotationCanvas.width;
+
+  const boxW = 300 * dpr;
+  const boxH = 80 * dpr;
+  const x = w - boxW - 40 * dpr;
+  const y = 40 * dpr;
+
+  ctx.save();
+  ctx.strokeStyle = stamp.border;
+  ctx.lineWidth = 3 * dpr;
+  ctx.setLineDash([6 * dpr, 3 * dpr]);
+  ctx.strokeRect(x, y, boxW, boxH);
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = stamp.color;
+  ctx.font = `bold ${24 * dpr}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(stamp.text, x + boxW / 2, y + boxH / 2);
+  ctx.restore();
+}
+
+// ─── Signature Pad ─────────────────────────────────────────────────────────
+function openSignaturePad() {
+  // Create modal with canvas for drawing signature
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;';
+
+  const card = document.createElement('div');
+  card.style.cssText = 'background:white;border-radius:8px;padding:16px;min-width:400px;';
+  card.innerHTML = '<h3 style="margin:0 0 8px">Нарисуйте подпись</h3>';
+
+  const sigCanvas = document.createElement('canvas');
+  sigCanvas.width = 400;
+  sigCanvas.height = 200;
+  sigCanvas.style.cssText = 'border:1px solid #ccc;border-radius:4px;cursor:crosshair;display:block;background:white;';
+
+  const sigCtx = sigCanvas.getContext('2d');
+  sigCtx.lineWidth = 2;
+  sigCtx.lineCap = 'round';
+  sigCtx.lineJoin = 'round';
+  sigCtx.strokeStyle = '#000';
+
+  let drawing = false;
+  sigCanvas.addEventListener('pointerdown', (e) => {
+    drawing = true;
+    sigCtx.beginPath();
+    sigCtx.moveTo(e.offsetX, e.offsetY);
+  });
+  sigCanvas.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    sigCtx.lineTo(e.offsetX, e.offsetY);
+    sigCtx.stroke();
+  });
+  sigCanvas.addEventListener('pointerup', () => { drawing = false; });
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:8px;margin-top:8px;justify-content:flex-end;';
+
+  const clearBtn = document.createElement('button');
+  clearBtn.textContent = 'Очистить';
+  clearBtn.className = 'btn-xs';
+  clearBtn.addEventListener('click', () => {
+    sigCtx.clearRect(0, 0, 400, 200);
+  });
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = 'Отмена';
+  cancelBtn.className = 'btn-xs';
+  cancelBtn.addEventListener('click', () => modal.remove());
+
+  const insertBtn = document.createElement('button');
+  insertBtn.textContent = 'Вставить';
+  insertBtn.className = 'btn-xs';
+  insertBtn.style.background = '#3b82f6';
+  insertBtn.style.color = 'white';
+  insertBtn.addEventListener('click', () => {
+    const dataUrl = sigCanvas.toDataURL('image/png');
+    if (!blockEditor.active) {
+      els.pdfBlockEdit?.classList.add('active');
+      blockEditor.enable(els.canvasWrap, els.canvas);
+    }
+    const canvasW = parseFloat(els.canvas.style.width) || 400;
+    const canvasH = parseFloat(els.canvas.style.height) || 600;
+    blockEditor.addImageBlock(state.currentPage, canvasW * 0.5, canvasH * 0.75, dataUrl, 200, 100);
+    blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
+    setOcrStatus('Подпись вставлена');
+    modal.remove();
+  });
+
+  btnRow.append(clearBtn, cancelBtn, insertBtn);
+  card.append(sigCanvas, btnRow);
+  modal.appendChild(card);
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+// ─── PDF Merge ─────────────────────────────────────────────────────────────
+async function mergePdfFiles() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.pdf';
+  input.multiple = true;
+  input.addEventListener('change', async () => {
+    const files = Array.from(input.files || []);
+    if (files.length < 2) {
+      setOcrStatus('Выберите 2+ PDF файла для объединения');
+      return;
+    }
+    try {
+      setOcrStatus(`Объединение ${files.length} файлов...`);
+      const pdfjsLib = await ensurePdfJs();
+      const allPages = [];
+
+      for (const file of files) {
+        const arrayBuf = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          const ctx = canvas.getContext('2d');
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          allPages.push({ canvas, width: viewport.width, height: viewport.height });
+        }
+      }
+
+      // Build merged PDF from page images
+      const mergedBlob = buildMergedPdfFromCanvases(allPages);
+      // Cleanup
+      allPages.forEach(p => { p.canvas.width = 0; p.canvas.height = 0; });
+
+      const url = safeCreateObjectURL(mergedBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'merged.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+      setOcrStatus(`Объединено: ${allPages.length} страниц из ${files.length} файлов`);
+    } catch (err) {
+      setOcrStatus(`Ошибка объединения: ${err?.message || 'неизвестная'}`);
+    }
+  });
+  input.click();
+}
+
+function buildMergedPdfFromCanvases(pages) {
+  // Simple PDF builder with images
+  const encoder = new TextEncoder();
+  let objects = [];
+  let xrefOffsets = [];
+  let body = '';
+  let offset = 0;
+
+  const header = '%PDF-1.4\n';
+  body += header;
+  offset = header.length;
+
+  // Catalog
+  objects.push(`1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`);
+  // Pages
+  const pageRefs = pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ');
+  objects.push(`2 0 obj\n<< /Type /Pages /Kids [${pageRefs}] /Count ${pages.length} >>\nendobj\n`);
+
+  let objNum = 3;
+  const imageObjects = [];
+
+  for (let i = 0; i < pages.length; i++) {
+    const p = pages[i];
+    const imgData = p.canvas.toDataURL('image/jpeg', 0.85);
+    const base64 = imgData.split(',')[1];
+    const imgBytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+    const pageObjNum = objNum++;
+    const contentsObjNum = objNum++;
+    const imgObjNum = objNum++;
+
+    const stream = `q ${p.width} 0 0 ${p.height} 0 0 cm /Img${i} Do Q`;
+
+    objects.push(`${pageObjNum} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${p.width} ${p.height}] /Contents ${contentsObjNum} 0 R /Resources << /XObject << /Img${i} ${imgObjNum} 0 R >> >> >>\nendobj\n`);
+    objects.push(`${contentsObjNum} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`);
+
+    imageObjects.push({ objNum: imgObjNum, data: imgBytes, width: p.width, height: p.height });
+  }
+
+  // Build the final PDF
+  let pdfParts = [header];
+  for (const obj of objects) {
+    xrefOffsets.push(offset);
+    pdfParts.push(obj);
+    offset += obj.length;
+  }
+
+  // Image stream objects
+  for (const img of imageObjects) {
+    const imgHeader = `${img.objNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.data.length} >>\nstream\n`;
+    const imgFooter = `\nendstream\nendobj\n`;
+    xrefOffsets.push(offset);
+    pdfParts.push(imgHeader);
+    offset += imgHeader.length;
+    pdfParts.push(img.data);
+    offset += img.data.length;
+    pdfParts.push(imgFooter);
+    offset += imgFooter.length;
+  }
+
+  const xrefStart = offset;
+  const totalObjs = objects.length + imageObjects.length + 1;
+  let xref = `xref\n0 ${totalObjs}\n0000000000 65535 f \n`;
+  for (const xo of xrefOffsets) {
+    xref += `${String(xo).padStart(10, '0')} 00000 n \n`;
+  }
+  xref += `trailer\n<< /Size ${totalObjs} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
+  pdfParts.push(xref);
+
+  // Combine text and binary parts
+  const textParts = pdfParts.filter(p => typeof p === 'string');
+  const allParts = pdfParts.map(p => typeof p === 'string' ? encoder.encode(p) : p);
+  const totalSize = allParts.reduce((s, p) => s + p.length, 0);
+  const result = new Uint8Array(totalSize);
+  let pos = 0;
+  for (const p of allParts) { result.set(p, pos); pos += p.length; }
+
+  return new Blob([result], { type: 'application/pdf' });
+}
+
+// ─── PDF Split ──────────────────────────────────────────────────────────────
+async function splitPdfPages() {
+  if (!state.adapter || state.adapter.type !== 'pdf') {
+    setOcrStatus('Разделение доступно только для PDF');
+    return;
+  }
+  const rangeStr = prompt(`Введите диапазон страниц (напр. "1-3" или "1,3,5-7").\nВсего страниц: ${state.pageCount}`);
+  if (!rangeStr) return;
+
+  const pageNums = parsePageRange(rangeStr, state.pageCount);
+  if (!pageNums.length) {
+    setOcrStatus('Неверный диапазон страниц');
+    return;
+  }
+
+  try {
+    setOcrStatus(`Извлечение ${pageNums.length} страниц...`);
+    const pages = [];
+    for (const pn of pageNums) {
+      const page = await state.adapter.pdfDoc.getPage(pn);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      pages.push({ canvas, width: viewport.width, height: viewport.height });
+    }
+
+    const blob = buildMergedPdfFromCanvases(pages);
+    pages.forEach(p => { p.canvas.width = 0; p.canvas.height = 0; });
+
+    const url = safeCreateObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${state.docName || 'document'}-pages-${rangeStr}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setOcrStatus(`Извлечено ${pageNums.length} страниц`);
+  } catch (err) {
+    setOcrStatus(`Ошибка: ${err?.message || 'неизвестная'}`);
+  }
+}
+
+function parsePageRange(str, maxPage) {
+  const parts = str.split(',').map(s => s.trim()).filter(Boolean);
+  const result = [];
+  for (const part of parts) {
+    const rangeParts = part.split('-').map(s => parseInt(s.trim(), 10));
+    if (rangeParts.length === 1 && !isNaN(rangeParts[0])) {
+      const p = rangeParts[0];
+      if (p >= 1 && p <= maxPage) result.push(p);
+    } else if (rangeParts.length === 2 && !isNaN(rangeParts[0]) && !isNaN(rangeParts[1])) {
+      const from = Math.max(1, rangeParts[0]);
+      const to = Math.min(maxPage, rangeParts[1]);
+      for (let i = from; i <= to; i++) result.push(i);
+    }
+  }
+  return [...new Set(result)].sort((a, b) => a - b);
 }
 
 
@@ -6222,14 +7005,18 @@ function setTextEditMode(enabled) {
   state.textEditMode = !!enabled;
   if (enabled) {
     toolStateMachine.transition(ToolMode.TEXT_EDIT);
-  } else if (toolStateMachine.current === ToolMode.TEXT_EDIT) {
-    toolStateMachine.transition(ToolMode.IDLE);
+    enableInlineTextEditing();
+  } else {
+    if (toolStateMachine.current === ToolMode.TEXT_EDIT) {
+      toolStateMachine.transition(ToolMode.IDLE);
+    }
+    disableInlineTextEditing();
   }
   if (els.pageText) {
     els.pageText.readOnly = !state.textEditMode;
   }
   if (els.toggleTextEdit) {
-    els.toggleTextEdit.textContent = 'Ред.';
+    els.toggleTextEdit.textContent = state.textEditMode ? 'Ред. ВКЛ' : 'Ред.';
     els.toggleTextEdit.classList.toggle('active', state.textEditMode);
   }
 }
@@ -6369,6 +7156,9 @@ async function searchInPdf(query) {
   if (state.searchResults.length) {
     state.searchCursor = 0;
     await jumpToSearchResult(0);
+    // Highlight matches in text layer
+    const hlCount = highlightSearchInTextLayer(query);
+    if (hlCount > 0) scrollToSearchHighlight(0);
     const suffix = scope === 'current' ? ' (текущая страница)' : '';
     els.searchStatus.textContent = `Совпадение 1/${state.searchResults.length}${suffix} (${searchMs}мс)`;
   } else {
@@ -6383,6 +7173,9 @@ async function jumpToSearchResult(index) {
   state.currentPage = state.searchResults[state.searchCursor];
   els.searchStatus.textContent = `Совпадение ${state.searchCursor + 1}/${state.searchResults.length}`;
   await renderCurrentPage();
+  // Highlight matches on the rendered page
+  const hlCount = highlightSearchInTextLayer(state.lastSearchQuery);
+  if (hlCount > 0) scrollToSearchHighlight(0);
 }
 
 function normalizePageInput() {
@@ -6423,7 +7216,7 @@ async function fitPage() {
 
 function downloadCurrentFile() {
   if (!state.file) return;
-  const url = URL.createObjectURL(state.file);
+  const url = safeCreateObjectURL(state.file);
   const a = document.createElement('a');
   a.href = url;
   a.download = state.file.name;
@@ -7023,7 +7816,9 @@ els.exportAnnSvg?.addEventListener('click', () => {
   if (!state.adapter) return;
   const strokes = loadStrokes();
   const blob = exportAnnotationsAsSvg(strokes, els.annotationCanvas.width, els.annotationCanvas.height);
-  const url = URL.createObjectURL(blob);
+  if (!blob) { setOcrStatus('Ошибка экспорта SVG'); return; }
+  const url = safeCreateObjectURL(blob);
+  if (!url) return;
   const a = document.createElement('a');
   a.href = url;
   a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotations.svg`;
@@ -7036,7 +7831,9 @@ els.exportAnnPdf?.addEventListener('click', () => {
   const strokes = loadStrokes();
   const pageImageDataUrl = els.canvas.toDataURL('image/png');
   const blob = exportAnnotationsAsPdf(strokes, els.annotationCanvas.width, els.annotationCanvas.height, pageImageDataUrl);
-  const url = URL.createObjectURL(blob);
+  if (!blob) { setOcrStatus('Ошибка экспорта PDF'); return; }
+  const url = safeCreateObjectURL(blob);
+  if (!url) return;
   const a = document.createElement('a');
   a.href = url;
   a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotations.pdf`;
@@ -7103,6 +7900,45 @@ els.pdfBlockEdit?.addEventListener('click', () => {
     setOcrStatus('Редактор блоков: ВЫКЛ');
   }
 });
+
+// ─── Image Insertion ─────────────────────────────────────────────────────────
+els.insertImageInput?.addEventListener('change', (e) => {
+  const file = e.target.files?.[0];
+  if (file) handleImageInsertion(file);
+  e.target.value = '';
+});
+
+// ─── Watermark ──────────────────────────────────────────────────────────────
+els.addWatermark?.addEventListener('click', () => {
+  if (!state.adapter) return;
+  const text = prompt('Текст водяного знака:', 'КОНФИДЕНЦИАЛЬНО');
+  if (!text) return;
+  addWatermarkToPage(text);
+  setOcrStatus(`Водяной знак "${text}" добавлен`);
+});
+
+// ─── Stamps ─────────────────────────────────────────────────────────────────
+els.addStamp?.addEventListener('click', () => {
+  if (!state.adapter) return;
+  const types = ['approved', 'rejected', 'draft', 'confidential', 'copy'];
+  const labels = ['УТВЕРЖДЕНО', 'ОТКЛОНЕНО', 'ЧЕРНОВИК', 'КОНФИДЕНЦИАЛЬНО', 'КОПИЯ'];
+  const choice = prompt(`Выберите штамп (1-5):\n${labels.map((l, i) => `${i + 1}. ${l}`).join('\n')}`, '1');
+  const idx = parseInt(choice, 10) - 1;
+  if (idx >= 0 && idx < types.length) {
+    addStampToPage(types[idx]);
+    setOcrStatus(`Штамп "${labels[idx]}" добавлен`);
+  }
+});
+
+// ─── Signature ──────────────────────────────────────────────────────────────
+els.addSignature?.addEventListener('click', () => {
+  if (!state.adapter) return;
+  openSignaturePad();
+});
+
+// ─── Merge / Split ──────────────────────────────────────────────────────────
+els.mergePages?.addEventListener('click', () => mergePdfFiles());
+els.splitPages?.addEventListener('click', () => splitPdfPages());
 
 // ─── Conversion Plugins ─────────────────────────────────────────────────────
 function exportPluginResult(pluginId, result) {

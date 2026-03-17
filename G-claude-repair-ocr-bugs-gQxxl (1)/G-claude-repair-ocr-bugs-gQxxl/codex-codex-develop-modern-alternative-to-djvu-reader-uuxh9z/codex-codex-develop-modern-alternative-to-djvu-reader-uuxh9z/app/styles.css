@@ -456,6 +456,74 @@ input:focus, select:focus, textarea:focus {
 }
 #annotationCanvas.drawing-enabled { pointer-events: auto; cursor: crosshair; }
 
+/* ═══ Text Layer ═══ */
+.text-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  opacity: 0.25;
+  line-height: 1.0;
+  z-index: 2;                     /* between viewerCanvas (0) and annotationCanvas (3) */
+  pointer-events: auto;
+}
+.text-layer > span {
+  position: absolute;
+  white-space: pre;
+  color: transparent;
+  pointer-events: all;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+.text-layer > span::selection {
+  background: rgba(0, 100, 255, 0.4);
+  color: transparent;
+}
+.text-layer > span::-moz-selection {
+  background: rgba(0, 100, 255, 0.4);
+  color: transparent;
+}
+/* Text edit mode — show text as editable */
+.text-layer.editing > span {
+  color: rgba(0, 0, 0, 0.7);
+  background: rgba(255, 255, 200, 0.3);
+  cursor: text;
+  outline: none;
+}
+.text-layer.editing > span:focus {
+  background: rgba(255, 255, 100, 0.5);
+  outline: 1px solid #3b82f6;
+}
+/* Search highlights */
+.text-layer .search-highlight {
+  background: rgba(255, 216, 77, 0.6) !important;
+  color: transparent;
+  border-radius: 2px;
+}
+.text-layer .search-highlight.active {
+  background: rgba(255, 149, 0, 0.8) !important;
+  outline: 2px solid #ff6600;
+}
+/* Inline text editor */
+.text-layer .inline-editor {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.95);
+  border: 2px solid #3b82f6;
+  border-radius: 3px;
+  padding: 2px 4px;
+  color: #000;
+  font-family: inherit;
+  outline: none;
+  z-index: 10;
+  min-width: 40px;
+  min-height: 1.2em;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  resize: both;
+  overflow: auto;
+}
+
 .empty-msg {
   color: var(--muted);
   text-align: center;

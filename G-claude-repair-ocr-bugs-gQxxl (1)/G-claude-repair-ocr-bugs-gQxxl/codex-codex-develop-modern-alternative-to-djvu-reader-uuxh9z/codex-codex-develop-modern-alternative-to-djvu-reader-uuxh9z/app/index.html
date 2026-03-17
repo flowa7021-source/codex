@@ -313,6 +313,7 @@
         <section class="canvas-wrap" id="canvasWrap">
           <div class="canvas-stack" id="canvasStack">
             <canvas id="viewerCanvas"></canvas>
+            <div id="textLayerDiv" class="text-layer"></div>
             <canvas id="annotationCanvas"></canvas>
           </div>
           <p id="emptyState" class="empty-msg">Откройте PDF, DjVu, ePub или изображение</p>
@@ -351,6 +352,15 @@
               </label>
               <button id="pdfFormClear" class="btn-xs" title="Очистить формы">✕ Формы</button>
               <button id="pdfBlockEdit" class="btn-xs tb-toggle" title="Редактор блоков">Блоки</button>
+              <label class="btn-xs file-inline" title="Вставить изображение">🖼 Вставить
+                <input id="insertImageInput" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" />
+              </label>
+              <button id="addWatermark" class="btn-xs" title="Водяной знак">💧 Знак</button>
+              <button id="addStamp" class="btn-xs" title="Штамп">🔖 Штамп</button>
+              <button id="addSignature" class="btn-xs" title="Подпись">✍ Подпись</button>
+              <button id="mergePages" class="btn-xs" title="Объединить PDF">📎 Объед.</button>
+              <button id="splitPages" class="btn-xs" title="Разделить PDF">✂ Раздел.</button>
+              <button id="addBookmark" class="btn-xs" title="Добавить закладку">📑 Закл.</button>
               <button id="conversionInvoice" class="btn-xs" title="Плагин: счёт">Счёт</button>
               <button id="conversionReport" class="btn-xs" title="Плагин: отчёт">Отчёт</button>
               <button id="conversionTable" class="btn-xs" title="Плагин: таблица">Таблица</button>
