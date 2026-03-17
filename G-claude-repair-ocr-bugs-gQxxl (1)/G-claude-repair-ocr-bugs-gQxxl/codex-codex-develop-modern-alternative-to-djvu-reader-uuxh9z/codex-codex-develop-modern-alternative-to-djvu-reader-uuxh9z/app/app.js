@@ -2395,19 +2395,33 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   const lang = getOcrLang();
   let best = '';
   let bestScore = -Infinity;
+  let detectedLang = lang;
   for (let i = 0; i < variants.length; i += 1) {
     if (taskId && taskId !== state.ocrTaskId) return best;
     if (onProgress) onProgress({ phase: 'recognize', current: i + 1, total: variants.length });
     const variant = variants[i];
-    const candidate = normalizeOcrTextByLang(window.OCRAD(variant));
-    const score = scoreOcrTextByLang(candidate, lang);
+    let rawText = '';
+    try {
+      if (typeof window.OCRAD !== 'function') {
+        pushDiagnosticEvent('ocr.engine.missing', { variant: i });
+        break;
+      }
+      rawText = window.OCRAD(variant);
+    } catch (ocrErr) {
+      pushDiagnosticEvent('ocr.engine.error', { variant: i, error: ocrErr?.message || String(ocrErr) });
+      continue;
+    }
+    // When lang is 'auto', detect the language from raw OCR output
+    const effectiveLang = (lang === 'auto' && rawText && rawText.length >= 20) ? detectLanguage(rawText) : lang;
+    const candidate = normalizeOcrTextByLang(rawText, effectiveLang);
+    const score = scoreOcrTextByLang(candidate, effectiveLang);
     if (score > bestScore) {
       best = candidate;
       bestScore = score;
+      detectedLang = effectiveLang;
     }
-    if (i % 2 === 1) {
-      await yieldToMainThread();
-    }
+    // Yield every variant to keep UI responsive (OCRAD is synchronous/blocking)
+    await yieldToMainThread();
   }
   const recognizeMs = Math.round(performance.now() - recognizeStart);
   // Release canvas references to help GC
@@ -2424,6 +2438,7 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   pushDiagnosticEvent('ocr.pipeline.profile', {
     fast,
     lang,
+    detectedLang,
     variantCount: variants.length,
     variantBudget,
     sourceMegaPixels,
@@ -2435,11 +2450,13 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
     bestLength: best.length,
     bestScore: Number.isFinite(bestScore) ? Math.round(bestScore) : null,
   });
+  // Apply post-correction using detected language
+  best = postCorrectOcrText(best, detectedLang);
   return best;
 }
 
-function normalizeOcrTextByLang(text) {
-  const lang = getOcrLang();
+function normalizeOcrTextByLang(text, langOverride) {
+  const lang = langOverride || getOcrLang();
   let out = String(text || '').replace(/[\t\r]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!out) return '';
 
@@ -2460,7 +2477,18 @@ function normalizeOcrTextByLang(text) {
       out = out.replace(/[A-Za-z]/g, '');
     }
     out = out.replace(/[^А-Яа-яЁё0-9 .,;:!?()«»"'\-\n]/g, ' ');
+  } else if (lang === 'deu') {
+    out = out.replace(/[^A-Za-zÄäÖöÜüß0-9 .,;:!?()'\-\n]/g, ' ');
+  } else if (lang === 'fra') {
+    out = out.replace(/[^A-Za-zÀ-ÿŒœÆæ0-9 .,;:!?()«»"'\-\n]/g, ' ');
+  } else if (lang === 'spa') {
+    out = out.replace(/[^A-Za-záéíóúñüÁÉÍÓÚÑÜ¿¡0-9 .,;:!?()'\-\n]/g, ' ');
+  } else if (lang === 'ita') {
+    out = out.replace(/[^A-Za-zÀ-ÿ0-9 .,;:!?()«»"'\-\n]/g, ' ');
+  } else if (lang === 'por') {
+    out = out.replace(/[^A-Za-záàâãéèêíóòôõúçÁÀÂÃÉÈÊÍÓÒÔÕÚÇ0-9 .,;:!?()«»"'\-\n]/g, ' ');
   } else {
+    // auto / unknown — detect dominant script
     const cyr = (out.match(/[А-Яа-яЁё]/g) || []).length;
     const lat = (out.match(/[A-Za-z]/g) || []).length;
     if (cyr > 0 && lat > 0 && cyr >= lat * 0.3) {
@@ -4717,7 +4745,7 @@ const _openFileImpl = async function openFileImpl(file) {
     let openedByNative = false;
     try {
       const DjVu = await ensureDjVuJs();
-      const data = await file.arrayBuffer();
+      const data = await progressiveLoader.loadFileProgressive(file);
       const doc = new DjVu.Document(data);
       state.adapter = new DjVuNativeAdapter(doc, file.name);
       openedByNative = true;
@@ -4751,7 +4779,7 @@ const _openFileImpl = async function openFileImpl(file) {
     }
   } else if (lower.endsWith('.epub')) {
     try {
-      const data = await file.arrayBuffer();
+      const data = await progressiveLoader.loadFileProgressive(file);
       const epubData = await parseEpub(data);
       state.adapter = new EpubAdapter(epubData);
     } catch (err) {
@@ -4834,6 +4862,11 @@ async function renderCurrentPage() {
   els.annotationCanvas.style.height = `${displayHeight}px`;
 
   renderAnnotations();
+
+  // Refresh block editor overlay if active
+  if (els.pdfBlockEdit?.classList.contains('active')) {
+    blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
+  }
 
   els.pageStatus.textContent = `${state.currentPage} / ${state.pageCount}`;
   els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
@@ -6460,11 +6493,15 @@ els.importDocx?.addEventListener('change', async (e) => {
     if (parsed && parsed.blocks && parsed.blocks.length > 0) {
       const html = formattedBlocksToHtml(parsed.blocks);
       const merged = mergeDocxIntoWorkspace(parsed, [], state.pageCount || 1);
+      const plainText = merged.text || parsed.blocks.map(b => b.text || '').join('\n');
       if (els.pageText) {
-        els.pageText.value = merged.text || parsed.blocks.map(b => b.text || '').join('\n');
+        els.pageText.value = plainText;
       }
+      // Store formatted HTML for potential rich display/export
+      state.lastDocxImportHtml = html;
+      state.lastDocxImportBlocks = parsed.blocks;
       setOcrStatus(`DOCX импортирован: ${parsed.blocks.length} блоков, ${parsed.styles?.length || 0} стилей`);
-      pushDiagnosticEvent('docx.import.advanced', { blocks: parsed.blocks.length, file: file.name });
+      pushDiagnosticEvent('docx.import.advanced', { blocks: parsed.blocks.length, file: file.name, hasHtml: !!html });
     } else {
       importDocxEdits(file);
     }
@@ -6565,7 +6602,8 @@ els.pdfFormFill?.addEventListener('click', async () => {
     return;
   }
   await formManager.loadFromAdapter(state.adapter);
-  formManager.renderFormOverlay(els.canvasWrap);
+  const fctx = els.annotationCanvas.getContext('2d');
+  formManager.renderFormOverlay(fctx, state.currentPage, state.zoom);
   setOcrStatus(`Формы: ${formManager.fields.length} полей найдено`);
 });
 
@@ -6587,7 +6625,8 @@ els.pdfFormImport?.addEventListener('change', async (e) => {
     const text = await file.text();
     const data = JSON.parse(text);
     formManager.importFormData(data);
-    formManager.renderFormOverlay(els.canvasWrap);
+    const fctx = els.annotationCanvas.getContext('2d');
+  formManager.renderFormOverlay(fctx, state.currentPage, state.zoom);
     setOcrStatus('Данные формы импортированы');
   } catch (err) {
     setOcrStatus(`Ошибка импорта формы: ${err?.message || 'неизвестная'}`);
@@ -6617,6 +6656,18 @@ els.pdfBlockEdit?.addEventListener('click', () => {
 });
 
 // ─── Conversion Plugins ─────────────────────────────────────────────────────
+function exportPluginResult(pluginId, result) {
+  if (!result) return;
+  const payload = { app: 'NovaReader', plugin: pluginId, page: state.currentPage, docName: state.docName, result, timestamp: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${state.docName || 'document'}-${pluginId}-page${state.currentPage}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 els.conversionInvoice?.addEventListener('click', async () => {
   if (!state.adapter) return;
   const text = els.pageText?.value || '';
@@ -6624,6 +6675,7 @@ els.conversionInvoice?.addEventListener('click', async () => {
   if (result) {
     setOcrStatus(`Плагин "Счёт": ${result.blocks?.length || 0} блоков извлечено`);
     pushDiagnosticEvent('plugin.invoice', { page: state.currentPage, blocks: result.blocks?.length || 0 });
+    exportPluginResult('invoice', result);
   }
 });
 
@@ -6634,6 +6686,7 @@ els.conversionReport?.addEventListener('click', async () => {
   if (result) {
     setOcrStatus(`Плагин "Отчёт": ${result.blocks?.length || 0} блоков извлечено`);
     pushDiagnosticEvent('plugin.report', { page: state.currentPage, blocks: result.blocks?.length || 0 });
+    exportPluginResult('report', result);
   }
 });
 
@@ -6644,6 +6697,7 @@ els.conversionTable?.addEventListener('click', async () => {
   if (result) {
     setOcrStatus(`Плагин "Таблица": ${result.rows?.length || 0} строк извлечено`);
     pushDiagnosticEvent('plugin.table', { page: state.currentPage, rows: result.rows?.length || 0 });
+    exportPluginResult('custom-table', result);
   }
 });
 

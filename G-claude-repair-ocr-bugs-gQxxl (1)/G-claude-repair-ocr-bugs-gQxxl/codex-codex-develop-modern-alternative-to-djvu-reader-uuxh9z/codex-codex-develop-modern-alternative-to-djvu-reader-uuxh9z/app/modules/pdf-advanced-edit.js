@@ -244,6 +244,42 @@ export class PdfBlockEditor {
     this._notify('import-all', null, null);
   }
 
+  enable(container, sourceCanvas) {
+    this.active = true;
+    this.sourceCanvas = sourceCanvas;
+    this.refreshOverlay(container, sourceCanvas);
+    this._notify('enable', null, null);
+  }
+
+  disable() {
+    this.active = false;
+    this.sourceCanvas = null;
+    if (this._overlay) {
+      this._overlay.remove();
+      this._overlay = null;
+    }
+    this._notify('disable', null, null);
+  }
+
+  refreshOverlay(container, sourceCanvas) {
+    if (!this.active || !container || !sourceCanvas) return;
+    if (!this._overlay) {
+      this._overlay = document.createElement('canvas');
+      this._overlay.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:5;';
+      container.style.position = 'relative';
+      container.appendChild(this._overlay);
+    }
+    this._overlay.width = sourceCanvas.width;
+    this._overlay.height = sourceCanvas.height;
+    this._overlay.style.width = sourceCanvas.style.width;
+    this._overlay.style.height = sourceCanvas.style.height;
+    // Current page from data attribute or default 1
+    const pageNum = Number(container.dataset?.page || 1);
+    const ctx = this._overlay.getContext('2d');
+    ctx.clearRect(0, 0, this._overlay.width, this._overlay.height);
+    this.renderBlocks(ctx, pageNum, 1);
+  }
+
   onEvent(fn) {
     this.listeners.push(fn);
   }

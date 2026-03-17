@@ -134,6 +134,8 @@ export function getPoolWorker() {
       const blob = createOcrWorkerBlob();
       const url = URL.createObjectURL(blob);
       const worker = new Worker(url);
+      // Revoke blob URL immediately — worker already loaded the code
+      URL.revokeObjectURL(url);
       workerPool.workers.push(worker);
       return worker;
     } catch {
