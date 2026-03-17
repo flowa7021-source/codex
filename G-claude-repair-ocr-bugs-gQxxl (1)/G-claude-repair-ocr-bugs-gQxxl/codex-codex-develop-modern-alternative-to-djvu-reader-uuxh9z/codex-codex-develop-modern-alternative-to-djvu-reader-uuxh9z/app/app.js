@@ -621,9 +621,9 @@ function downloadOcrTextExport() {
 
 // ─── Phase 3: DOCX Image Embedding ────────────────────────────────────────
 async function capturePageAsImageData(pageNum) {
-  const cached = getCachedPage(pageNum);
-  if (cached && cached.width > 0) {
-    return cached.toDataURL('image/png').split(',')[1];
+  const cachedEntry = getCachedPage(pageNum);
+  if (cachedEntry && cachedEntry.canvas && cachedEntry.canvas.width > 0) {
+    return cachedEntry.canvas.toDataURL('image/png').split(',')[1];
   }
   if (!state.adapter) return null;
   const tempCanvas = document.createElement('canvas');
@@ -5095,57 +5095,125 @@ const _openFileImpl = async function openFileImpl(file) {
 };
 const openFile = withErrorBoundary(_openFileImpl, 'file-open');
 
-async function renderCurrentPage() {
+// ─── Pre-render bookkeeping ─────────────────────────────────────────────────
+let _preRenderTimer = 0;
+
+function _schedulePreRender(currentPage, zoom, rotation) {
+  clearTimeout(_preRenderTimer);
+  _preRenderTimer = setTimeout(() => {
+    _preRenderAdjacent(currentPage, zoom, rotation);
+  }, 150); // slight delay so the current page settles first
+}
+
+async function _preRenderAdjacent(page, zoom, rotation) {
   if (!state.adapter) return;
-  const renderStartedAt = performance.now();
-
-  els.emptyState.style.display = 'none';
-  try {
-    await state.adapter.renderPage(state.currentPage, els.canvas, {
-      zoom: state.zoom,
-      rotation: state.rotation,
-    });
-  } catch (err) {
-    // Silently ignore cancelled renders (superseded by a newer render call)
-    if (err?.name === 'RenderingCancelledException' || err?.message?.includes('Rendering cancelled')) return;
-    throw err;
+  const targets = [];
+  if (page + 1 <= state.pageCount) targets.push(page + 1);
+  if (page - 1 >= 1) targets.push(page - 1);
+  for (const p of targets) {
+    // Skip if already cached at this zoom/rotation
+    const existing = pageRenderCache.entries.get(p);
+    if (existing && existing.zoom === zoom && existing.rotation === rotation) continue;
+    // Don't pre-render if user has already navigated away
+    if (state.currentPage !== page) return;
+    try {
+      const offscreen = document.createElement('canvas');
+      await state.adapter.renderPage(p, offscreen, { zoom, rotation });
+      // Verify user didn't navigate away during async render
+      if (state.currentPage !== page) { offscreen.width = 0; offscreen.height = 0; return; }
+      cacheRenderedPage(p, offscreen, zoom, rotation);
+      offscreen.width = 0;
+      offscreen.height = 0;
+    } catch {
+      // Pre-render failures are non-critical; silently ignore
+    }
   }
+}
 
+// ─── Helper: blit a cached entry onto the main canvas ───────────────────────
+function _blitCacheToCanvas(entry, canvas) {
+  canvas.width = entry.canvas.width;
+  canvas.height = entry.canvas.height;
+  if (entry.cssWidth) canvas.style.width = entry.cssWidth;
+  if (entry.cssHeight) canvas.style.height = entry.cssHeight;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  ctx.drawImage(entry.canvas, 0, 0);
+}
+
+function _updateAnnotationCanvas() {
   const displayWidth = Math.max(1, Math.round(parseFloat(els.canvas.style.width || String(els.canvas.width))));
   const displayHeight = Math.max(1, Math.round(parseFloat(els.canvas.style.height || String(els.canvas.height))));
-  // Render annotations at device-pixel resolution for crisp lines on HiDPI
   const annotDpr = Math.max(1, window.devicePixelRatio || 1);
   els.annotationCanvas.width = Math.ceil(displayWidth * annotDpr);
   els.annotationCanvas.height = Math.ceil(displayHeight * annotDpr);
   els.annotationCanvas.style.width = `${displayWidth}px`;
   els.annotationCanvas.style.height = `${displayHeight}px`;
-
   renderAnnotations();
+}
 
-  // Refresh block editor overlay if active
-  if (els.pdfBlockEdit?.classList.contains('active')) {
-    blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
-  }
-
+function _updatePageUI(renderMs) {
   els.pageStatus.textContent = `${state.currentPage} / ${state.pageCount}`;
   els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
   els.pageInput.value = String(state.currentPage);
   capturePageHistoryOnRender();
   saveViewState();
-
-  cacheRenderedPage(state.currentPage, els.canvas);
-
-  // Defer non-critical updates to avoid blocking the render path
+  if (els.pdfBlockEdit?.classList.contains('active')) {
+    blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
+  }
   const renderedPage = state.currentPage;
-  const renderMs = Math.round(performance.now() - renderStartedAt);
-  recordPerfMetric('renderTimes', renderMs);
-  recordSuccessfulOperation();
+  if (renderMs != null) {
+    recordPerfMetric('renderTimes', renderMs);
+    recordSuccessfulOperation();
+  }
   requestAnimationFrame(() => {
     renderCommentList();
     trackVisitedPage(renderedPage);
     renderReadingProgress();
-    pushDiagnosticEvent('page.render', { page: renderedPage, zoom: Number(state.zoom.toFixed(2)), ms: renderMs });
+    pushDiagnosticEvent('page.render', {
+      page: renderedPage,
+      zoom: Number(state.zoom.toFixed(2)),
+      ms: renderMs ?? 0,
+    });
   });
+}
+
+async function renderCurrentPage() {
+  if (!state.adapter) return;
+  const renderStartedAt = performance.now();
+  const page = state.currentPage;
+  const zoom = state.zoom;
+  const rotation = state.rotation;
+
+  els.emptyState.style.display = 'none';
+
+  // ── Fast path: exact cache hit (same zoom & rotation) → instant display ──
+  const cached = getCachedPage(page);
+  if (cached && cached.zoom === zoom && cached.rotation === rotation && cached.canvas.width > 0) {
+    _blitCacheToCanvas(cached, els.canvas);
+    _updateAnnotationCanvas();
+    _updatePageUI(Math.round(performance.now() - renderStartedAt));
+    _schedulePreRender(page, zoom, rotation);
+    return;
+  }
+
+  // ── Show stale cache as placeholder while rendering ──
+  if (cached && cached.canvas.width > 0) {
+    _blitCacheToCanvas(cached, els.canvas);
+  }
+
+  // ── Full render ──
+  try {
+    await state.adapter.renderPage(page, els.canvas, { zoom, rotation });
+  } catch (err) {
+    if (err?.name === 'RenderingCancelledException' || err?.message?.includes('Rendering cancelled')) return;
+    throw err;
+  }
+
+  _updateAnnotationCanvas();
+  _updatePageUI(Math.round(performance.now() - renderStartedAt));
+
+  cacheRenderedPage(page, els.canvas, zoom, rotation);
+  _schedulePreRender(page, zoom, rotation);
 }
 
 

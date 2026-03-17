@@ -180,8 +180,11 @@ export const pageRenderCache = {
   totalPixels: 0,
 };
 
-export function cacheRenderedPage(pageNum, canvas) {
-  if (pageRenderCache.entries.has(pageNum)) return;
+export function cacheRenderedPage(pageNum, canvas, zoom, rotation) {
+  // Evict existing entry for this page (zoom/rotation may have changed)
+  if (pageRenderCache.entries.has(pageNum)) {
+    evictPageFromCache(pageNum);
+  }
   const pixels = canvas.width * canvas.height;
   while (pageRenderCache.entries.size >= pageRenderCache.maxEntries ||
          pageRenderCache.totalPixels + pixels > pageRenderCache.maxTotalPixels) {
@@ -194,17 +197,29 @@ export function cacheRenderedPage(pageNum, canvas) {
   copy.height = canvas.height;
   // alpha:false — cached pages are always opaque; avoids compositing overhead on restore
   copy.getContext('2d', { alpha: false }).drawImage(canvas, 0, 0);
-  pageRenderCache.entries.set(pageNum, { canvas: copy, pixels, ts: Date.now() });
+  pageRenderCache.entries.set(pageNum, {
+    canvas: copy,
+    pixels,
+    ts: Date.now(),
+    zoom: zoom ?? -1,
+    rotation: rotation ?? 0,
+    cssWidth: canvas.style.width || '',
+    cssHeight: canvas.style.height || '',
+  });
   pageRenderCache.totalPixels += pixels;
 }
 
+/**
+ * Retrieve cached page entry (updates LRU position).
+ * Returns full entry: { canvas, zoom, rotation, cssWidth, cssHeight } or null.
+ */
 export function getCachedPage(pageNum) {
   const entry = pageRenderCache.entries.get(pageNum);
   if (!entry) return null;
   pageRenderCache.entries.delete(pageNum);
   pageRenderCache.entries.set(pageNum, entry);
   entry.ts = Date.now();
-  return entry.canvas;
+  return entry;
 }
 
 export function evictPageFromCache(pageNum) {
