@@ -6,6 +6,15 @@ import { ensurePdfJs, ensureDjVuJs, ensureOcrad } from './modules/loaders.js';
 import { perfMetrics, recordPerfMetric, computePercentile, getPerfSummary, workerPool, createOcrWorkerBlob, getPoolWorker, runInWorker, pageRenderCache, cacheRenderedPage, getCachedPage, evictPageFromCache, clearPageRenderCache, objectUrlRegistry, trackObjectUrl, revokeTrackedUrl, revokeAllTrackedUrls } from './modules/perf.js';
 import { ToolMode, toolStateMachine, activateAnnotateMode, deactivateAnnotateMode, activateOcrRegionMode, deactivateOcrRegionMode, activateTextEditMode, deactivateTextEditMode, activateSearchMode, deactivateSearchMode, initToolModeDeps } from './modules/tool-modes.js';
 import { pushDiagnosticEvent, clearDiagnostics, collectPerfBaseline, formatDiagnosticsForChat, exportDiagnostics, verifyBundledAssets, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
+import { setLanguage, getLanguage, loadLanguage, t, applyI18nToDOM, getAvailableLanguages } from './modules/i18n.js';
+import { parseEpub, EpubAdapter } from './modules/epub-adapter.js';
+import { postCorrectByLanguage, scoreTextByLanguage, detectLanguage } from './modules/ocr-languages.js';
+import { blockEditor } from './modules/pdf-advanced-edit.js';
+import { formManager } from './modules/pdf-forms.js';
+import { progressiveLoader } from './modules/progressive-loader.js';
+import { exportAnnotationsAsSvg, exportAnnotationsAsPdf } from './modules/annotation-export.js';
+import { applyPlugin, pluginToDocxXml, detectApplicablePlugins } from './modules/conversion-plugins.js';
+import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from './modules/docx-import-advanced.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -106,41 +115,9 @@ function computeOcrConfidence(text, variants) {
 
 function postCorrectOcrText(text, lang) {
   if (!text) return text;
-  let out = text;
   const effectiveLang = lang || getOcrLang();
-
-  // Common OCR substitution fixes
-  const commonFixes = [
-    [/\bIl\b/g, 'Il'],
-    [/0([А-Яа-я])/g, 'О$1'],  // Zero → О in Cyrillic context
-    [/([А-Яа-я])0/g, '$1О'],
-    [/\bl\b(?=[А-Яа-я])/g, 'І'],
-  ];
-
-  if (effectiveLang === 'rus') {
-    const rusFixes = [
-      [/rnе/g, 'те'],
-      [/rn/g, 'т'],
-      [/\bпо3/g, 'поз'],
-      [/З([а-я])/g, '3$1'],  // Fix З/3 confusion in word context
-      [/\s{2,}/g, ' '],
-    ];
-    for (const [pattern, replacement] of [...commonFixes, ...rusFixes]) {
-      out = out.replace(pattern, replacement);
-    }
-  } else {
-    const engFixes = [
-      [/\brn\b/g, 'm'],
-      [/\bcI\b/g, 'cl'],
-      [/\btI\b/g, 'tl'],
-    ];
-    for (const [pattern, replacement] of [...commonFixes, ...engFixes]) {
-      out = out.replace(pattern, replacement);
-    }
-  }
-
-  out = out.replace(/\s{2,}/g, ' ').trim();
-  return out;
+  // Delegate to ocr-languages module for extended language support (DE, FR, ES, IT, PT)
+  return postCorrectByLanguage(text, effectiveLang);
 }
 
 // ─── Phase 2: Batch OCR Queue with Progress/Cancel/Priority ────────────────
@@ -2325,16 +2302,9 @@ function pickVariantsByBudget(variants, maxCount) {
 function scoreOcrTextByLang(text, lang) {
   const s = String(text || '').trim();
   if (!s) return 0;
-  const cyr = (s.match(/[А-Яа-яЁё]/g) || []).length;
-  const lat = (s.match(/[A-Za-z]/g) || []).length;
-  const digits = (s.match(/[0-9]/g) || []).length;
-  const mixedPenalty = hasMixedCyrillicLatinToken(s) ? 120 : 0;
-  if (lang === 'rus') {
-    return (cyr * 4) - (lat * 3) + digits - mixedPenalty + scoreCyrillicWordQuality(s) + scoreRussianBigrams(s);
-  }
-  if (lang === 'eng') return (lat * 4) - (cyr * 3) + digits - mixedPenalty + scoreEnglishBigrams(s);
-  const autoLangBonus = cyr >= lat ? (scoreRussianBigrams(s) + scoreCyrillicWordQuality(s)) : scoreEnglishBigrams(s);
-  return Math.max(cyr, lat) * 2 + digits - mixedPenalty + autoLangBonus;
+  // Delegate to ocr-languages module for extended language support (DE, FR, ES, IT, PT)
+  const effectiveLang = lang || getOcrLang();
+  return scoreTextByLanguage(s, effectiveLang);
 }
 
 async function runOcrOnPreparedCanvas(canvas, options = {}) {
@@ -4733,7 +4703,7 @@ const _openFileImpl = async function openFileImpl(file) {
   if (lower.endsWith('.pdf')) {
     try {
       const pdf = await ensurePdfJs();
-      const data = await file.arrayBuffer();
+      const data = await progressiveLoader.loadFileProgressive(file);
       const pdfDoc = await pdf.getDocument({ data }).promise;
       state.adapter = new PDFAdapter(pdfDoc);
     } catch {
@@ -4779,6 +4749,15 @@ const _openFileImpl = async function openFileImpl(file) {
     if (openedByNative) {
       saveDjvuData({});
     }
+  } else if (lower.endsWith('.epub')) {
+    try {
+      const data = await file.arrayBuffer();
+      const epubData = await parseEpub(data);
+      state.adapter = new EpubAdapter(epubData);
+    } catch (err) {
+      state.adapter = new UnsupportedAdapter(file.name);
+      els.searchStatus.textContent = `ePub ошибка: ${err?.message || 'неизвестная ошибка'}`;
+    }
   } else if (/\.(png|jpe?g|webp|gif|bmp)$/i.test(lower)) {
     const url = URL.createObjectURL(file);
     state.currentObjectUrl = url;
@@ -4789,6 +4768,12 @@ const _openFileImpl = async function openFileImpl(file) {
   }
 
   state.pageCount = state.adapter.getPageCount();
+
+  // Auto-load PDF forms if adapter is PDF
+  if (state.adapter?.type === 'pdf') {
+    formManager.loadFromAdapter(state.adapter).catch(() => {});
+  }
+
   restoreViewStateIfPresent();
   stopReadingTimer(false);
   state.readingTotalMs = loadReadingTime();
@@ -6466,9 +6451,26 @@ els.refreshText.addEventListener('click', refreshPageText);
 els.copyText.addEventListener('click', copyPageText);
 els.exportText.addEventListener('click', exportPageText);
 els.exportWord?.addEventListener('click', exportCurrentDocToWord);
-els.importDocx?.addEventListener('change', (e) => {
+els.importDocx?.addEventListener('change', async (e) => {
   const file = e.target?.files?.[0];
-  if (file) importDocxEdits(file);
+  if (!file) { e.target.value = ''; return; }
+  try {
+    const data = await file.arrayBuffer();
+    const parsed = parseDocxAdvanced(data);
+    if (parsed && parsed.blocks && parsed.blocks.length > 0) {
+      const html = formattedBlocksToHtml(parsed.blocks);
+      const merged = mergeDocxIntoWorkspace(parsed, [], state.pageCount || 1);
+      if (els.pageText) {
+        els.pageText.value = merged.text || parsed.blocks.map(b => b.text || '').join('\n');
+      }
+      setOcrStatus(`DOCX импортирован: ${parsed.blocks.length} блоков, ${parsed.styles?.length || 0} стилей`);
+      pushDiagnosticEvent('docx.import.advanced', { blocks: parsed.blocks.length, file: file.name });
+    } else {
+      importDocxEdits(file);
+    }
+  } catch {
+    importDocxEdits(file);
+  }
   e.target.value = '';
 });
 els.exportOcrIndex?.addEventListener('click', downloadOcrTextExport);
@@ -6528,6 +6530,121 @@ els.importAnnBundle.addEventListener('change', async (e) => {
   if (!file) return;
   await importAnnotationBundleJson(file);
   e.target.value = '';
+});
+
+// ─── Annotation SVG/PDF export ──────────────────────────────────────────────
+els.exportAnnSvg?.addEventListener('click', () => {
+  if (!state.adapter) return;
+  const strokes = loadStrokes();
+  const blob = exportAnnotationsAsSvg(strokes, els.annotationCanvas.width, els.annotationCanvas.height);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotations.svg`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+els.exportAnnPdf?.addEventListener('click', () => {
+  if (!state.adapter) return;
+  const strokes = loadStrokes();
+  const pageImageDataUrl = els.canvas.toDataURL('image/png');
+  const blob = exportAnnotationsAsPdf(strokes, els.annotationCanvas.width, els.annotationCanvas.height, pageImageDataUrl);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotations.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ─── PDF Forms ──────────────────────────────────────────────────────────────
+els.pdfFormFill?.addEventListener('click', async () => {
+  if (!state.adapter || state.adapter.type !== 'pdf') {
+    setOcrStatus('Формы доступны только для PDF');
+    return;
+  }
+  await formManager.loadFromAdapter(state.adapter);
+  formManager.renderFormOverlay(els.canvasWrap);
+  setOcrStatus(`Формы: ${formManager.fields.length} полей найдено`);
+});
+
+els.pdfFormExport?.addEventListener('click', () => {
+  const data = formManager.exportFormData();
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${state.docName || 'document'}-form-data.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+els.pdfFormImport?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    formManager.importFormData(data);
+    formManager.renderFormOverlay(els.canvasWrap);
+    setOcrStatus('Данные формы импортированы');
+  } catch (err) {
+    setOcrStatus(`Ошибка импорта формы: ${err?.message || 'неизвестная'}`);
+  }
+  e.target.value = '';
+});
+
+els.pdfFormClear?.addEventListener('click', () => {
+  formManager.clearAll();
+  setOcrStatus('Формы очищены');
+});
+
+// ─── PDF Block Editor ───────────────────────────────────────────────────────
+els.pdfBlockEdit?.addEventListener('click', () => {
+  if (!state.adapter || state.adapter.type !== 'pdf') {
+    setOcrStatus('Редактор блоков доступен только для PDF');
+    return;
+  }
+  const isActive = els.pdfBlockEdit.classList.toggle('active');
+  if (isActive) {
+    blockEditor.enable(els.canvasWrap, els.canvas);
+    setOcrStatus('Редактор блоков: ВКЛ');
+  } else {
+    blockEditor.disable();
+    setOcrStatus('Редактор блоков: ВЫКЛ');
+  }
+});
+
+// ─── Conversion Plugins ─────────────────────────────────────────────────────
+els.conversionInvoice?.addEventListener('click', async () => {
+  if (!state.adapter) return;
+  const text = els.pageText?.value || '';
+  const result = applyPlugin('invoice', text, state.currentPage);
+  if (result) {
+    setOcrStatus(`Плагин "Счёт": ${result.blocks?.length || 0} блоков извлечено`);
+    pushDiagnosticEvent('plugin.invoice', { page: state.currentPage, blocks: result.blocks?.length || 0 });
+  }
+});
+
+els.conversionReport?.addEventListener('click', async () => {
+  if (!state.adapter) return;
+  const text = els.pageText?.value || '';
+  const result = applyPlugin('report', text, state.currentPage);
+  if (result) {
+    setOcrStatus(`Плагин "Отчёт": ${result.blocks?.length || 0} блоков извлечено`);
+    pushDiagnosticEvent('plugin.report', { page: state.currentPage, blocks: result.blocks?.length || 0 });
+  }
+});
+
+els.conversionTable?.addEventListener('click', async () => {
+  if (!state.adapter) return;
+  const text = els.pageText?.value || '';
+  const result = applyPlugin('custom-table', text, state.currentPage);
+  if (result) {
+    setOcrStatus(`Плагин "Таблица": ${result.rows?.length || 0} строк извлечено`);
+    pushDiagnosticEvent('plugin.table', { page: state.currentPage, rows: result.rows?.length || 0 });
+  }
 });
 
 els.importDjvuDataJson.addEventListener('change', async (e) => {
@@ -6761,6 +6878,17 @@ runRuntimeSelfCheck();
 loadAppSettings();
 applyUiSizeSettings();
 loadTheme();
+
+// ─── i18n initialization ────────────────────────────────────────────────────
+loadLanguage();
+applyI18nToDOM();
+if (els.cfgAppLang) {
+  els.cfgAppLang.value = getLanguage();
+  els.cfgAppLang.addEventListener('change', () => {
+    setLanguage(els.cfgAppLang.value);
+    applyI18nToDOM();
+  });
+}
 loadSearchScope();
 renderReadingProgress();
 updateHistoryButtons();

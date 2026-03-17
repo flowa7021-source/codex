@@ -16,7 +16,7 @@
 
         <label class="file-open-btn">
           <span class="icon">📂</span> Открыть
-          <input id="fileInput" type="file" accept=".pdf,.djvu,.png,.jpg,.jpeg,.webp,.gif,.bmp" />
+          <input id="fileInput" type="file" accept=".pdf,.djvu,.epub,.png,.jpg,.jpeg,.webp,.gif,.bmp" />
         </label>
 
         <!-- ─── Навигация по документу ─── -->
@@ -286,6 +286,8 @@
             <button id="undoStroke" title="Отмена">↩</button>
             <button id="clearStrokes" title="Очистить страницу">🗑</button>
             <button id="exportAnnotated" class="btn-xs">PNG</button>
+            <button id="exportAnnSvg" class="btn-xs">SVG</button>
+            <button id="exportAnnPdf" class="btn-xs">PDF</button>
             <button id="exportAnnJson" class="btn-xs">↗ стр.</button>
             <label class="btn-xs file-inline">↙ стр.
               <input id="importAnnJson" type="file" accept="application/json,.json" />
@@ -313,7 +315,7 @@
             <canvas id="viewerCanvas"></canvas>
             <canvas id="annotationCanvas"></canvas>
           </div>
-          <p id="emptyState" class="empty-msg">Откройте PDF, DjVu или изображение</p>
+          <p id="emptyState" class="empty-msg">Откройте PDF, DjVu, ePub или изображение</p>
         </section>
 
         <div id="canvasResizeHandle" class="resize-handle resize-handle-horizontal"></div>
@@ -339,6 +341,18 @@
               <button id="copyOcrText" class="btn-xs">📋 OCR</button>
               <button id="cancelBackgroundOcr" class="btn-xs">⏹ Фон</button>
               <button id="exportHealthReport" class="btn-xs">Health</button>
+            </div>
+            <div class="section-actions">
+              <button id="pdfFormFill" class="btn-xs" title="Заполнение форм">Формы</button>
+              <button id="pdfFormExport" class="btn-xs" title="Экспорт данных формы">↗ Формы</button>
+              <label class="btn-xs file-inline" title="Импорт данных формы">↙ Формы
+                <input id="pdfFormImport" type="file" accept="application/json,.json" />
+              </label>
+              <button id="pdfFormClear" class="btn-xs" title="Очистить формы">✕ Формы</button>
+              <button id="pdfBlockEdit" class="btn-xs tb-toggle" title="Редактор блоков">Блоки</button>
+              <button id="conversionInvoice" class="btn-xs" title="Плагин: счёт">Счёт</button>
+              <button id="conversionReport" class="btn-xs" title="Плагин: отчёт">Отчёт</button>
+              <button id="conversionTable" class="btn-xs" title="Плагин: таблица">Таблица</button>
             </div>
             <button id="toggleTextToolsInline" class="btn-collapse" title="Свернуть">▾</button>
           </div>
@@ -401,6 +415,11 @@
                   <option value="auto">Auto</option>
                   <option value="rus">Русский</option>
                   <option value="eng">English</option>
+                  <option value="deu">Deutsch</option>
+                  <option value="fra">Français</option>
+                  <option value="spa">Español</option>
+                  <option value="ita">Italiano</option>
+                  <option value="por">Português</option>
                 </select>
               </label>
               <label>Точность
