@@ -582,7 +582,8 @@ function deactivateTextEditMode() {
   state.textEditMode = false;
   if (els.pageText) els.pageText.readOnly = true;
   if (els.toggleTextEdit) {
-    els.toggleTextEdit.textContent = 'Редактирование текста: off';
+    els.toggleTextEdit.textContent = 'Ред.';
+    els.toggleTextEdit.classList.remove('active');
     els.toggleTextEdit.classList.remove('is-active');
   }
 }
@@ -591,7 +592,8 @@ function activateTextEditMode() {
   state.textEditMode = true;
   if (els.pageText) els.pageText.readOnly = false;
   if (els.toggleTextEdit) {
-    els.toggleTextEdit.textContent = 'Редактирование текста: on';
+    els.toggleTextEdit.textContent = 'Ред.';
+    els.toggleTextEdit.classList.add('active');
     els.toggleTextEdit.classList.add('is-active');
   }
 }
@@ -2790,7 +2792,8 @@ function setDrawMode(enabled) {
   }
   state.drawEnabled = enabled;
   updateOverlayInteractionState();
-  els.annotateToggle.textContent = `Аннотации: ${enabled ? 'on' : 'off'}`;
+  els.annotateToggle.textContent = `✎ ${enabled ? 'on' : 'off'}`;
+  els.annotateToggle.classList.toggle('active', enabled);
 }
 
 function appSettingsKey() {
@@ -3669,7 +3672,7 @@ function applyAppLanguage() {
   if (modalTitle) modalTitle.textContent = t.settingsTitle;
 
   if (els.ocrRegionMode) {
-    els.ocrRegionMode.textContent = state.ocrRegionMode ? t.ocrRegionOn : t.ocrRegionOff;
+    els.ocrRegionMode.classList.toggle('active', state.ocrRegionMode);
   }
 }
 
@@ -4617,7 +4620,7 @@ function setStage4Status(message, type = '') {
 
 function initReleaseGuards() {
   if (els.appVersion) {
-    els.appVersion.textContent = `Version: ${APP_VERSION}`;
+    els.appVersion.textContent = APP_VERSION;
   }
 
   if (typeof fetch !== 'function') {
@@ -4853,7 +4856,7 @@ function toggleCollaborationChannel() {
       state.collabChannel.close();
       state.collabChannel = null;
     }
-    els.toggleCollab.textContent = 'Collab: off';
+    if (els.toggleCollab) els.toggleCollab.textContent = 'Collab: off';
     setStage4Status('Collab выключен.');
     return;
   }
@@ -5534,13 +5537,13 @@ function clearReadingGoal() {
 
 function renderReadingGoalStatus() {
   if (!state.adapter || !state.pageCount) {
-    els.readingGoalStatus.textContent = 'Цель чтения не задана';
+    els.readingGoalStatus.textContent = '';
     return;
   }
 
   const goal = state.readingGoalPage;
   if (!goal) {
-    els.readingGoalStatus.textContent = 'Цель чтения не задана';
+    els.readingGoalStatus.textContent = '';
     return;
   }
 
@@ -5591,7 +5594,7 @@ function renderEtaStatus() {
 
 function renderDocStats() {
   if (!state.adapter || !state.pageCount) {
-    els.docStats.textContent = 'Откройте документ для статистики';
+    els.docStats.textContent = '';
     return;
   }
 
@@ -5607,7 +5610,7 @@ function renderDocStats() {
   const totalHours = (state.readingTotalMs + activeMs) / 3600000;
   const pace = totalHours > 0.01 ? `${(state.currentPage / totalHours).toFixed(1)} стр/ч` : '—';
 
-  els.docStats.textContent = `Аннотации: ${totalStrokes} · Комментарии: ${totalComments} · Закладки: ${bookmarks} · Темп: ${pace}`;
+  els.docStats.textContent = `${totalStrokes} аннот. · ${totalComments} комм. · ${bookmarks} закл. · ${pace}`;
 }
 
 function renderVisitTrail() {
@@ -5737,7 +5740,7 @@ function updateReadingTimeStatus() {
     return;
   }
   const activeMs = state.readingStartedAt ? Date.now() - state.readingStartedAt : 0;
-  els.readingTimeStatus.textContent = `Время чтения: ${formatDuration(state.readingTotalMs + activeMs)}`;
+  els.readingTimeStatus.textContent = formatDuration(state.readingTotalMs + activeMs);
   renderDocStats();
   renderEtaStatus();
 }
@@ -5973,7 +5976,7 @@ async function renderCurrentPage() {
 
   renderAnnotations();
 
-  els.pageStatus.textContent = `Страница ${state.currentPage} / ${state.pageCount}`;
+  els.pageStatus.textContent = `${state.currentPage} / ${state.pageCount}`;
   els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
   els.pageInput.value = String(state.currentPage);
   capturePageHistoryOnRender();
@@ -6026,7 +6029,7 @@ function clearViewState() {
 
 function renderReadingProgress() {
   if (!state.adapter || !state.pageCount) {
-    els.progressStatus.textContent = 'Нет открытого документа';
+    els.progressStatus.textContent = '';
     return;
   }
 
@@ -6969,8 +6972,8 @@ function setTextEditMode(enabled) {
     els.pageText.readOnly = !state.textEditMode;
   }
   if (els.toggleTextEdit) {
-    els.toggleTextEdit.textContent = `Редактирование текста: ${state.textEditMode ? 'on' : 'off'}`;
-    els.toggleTextEdit.classList.toggle('is-active', state.textEditMode);
+    els.toggleTextEdit.textContent = 'Ред.';
+    els.toggleTextEdit.classList.toggle('active', state.textEditMode);
   }
 }
 
@@ -7097,7 +7100,7 @@ async function searchInPdf(query) {
         state.searchResultCounts[i] = count;
       }
       if (i % 10 === 0) {
-        els.searchStatus.textContent = `Поиск: ${i}/${state.pageCount}...`;
+        els.searchStatus.textContent = `${i}/${state.pageCount}…`;
         await yieldToMainThread();
       }
     }
@@ -7191,7 +7194,7 @@ function applyAdvancedPanelsState() {
   const hidden = localStorage.getItem(uiLayoutKey('advancedHidden')) !== '0';
   document.body.classList.toggle('advanced-hidden', hidden);
   if (els.toggleAdvancedPanels) {
-    els.toggleAdvancedPanels.textContent = `Расширенные панели: ${hidden ? 'off' : 'on'}`;
+    els.toggleAdvancedPanels.textContent = `Расширенные: ${hidden ? 'off' : 'on'}`;
   }
 }
 
@@ -7221,12 +7224,12 @@ function applyLayoutState() {
   document.querySelector('.viewer-area')?.classList.toggle('searchtools-hidden', searchToolsHidden);
   document.querySelector('.viewer-area')?.classList.toggle('annottools-hidden', annotToolsHidden);
 
-  if (els.toggleSidebar) els.toggleSidebar.textContent = `Сайдбар: ${sidebarHidden ? 'off' : 'on'}`;
-  if (els.toggleToolsBar) els.toggleToolsBar.textContent = `Панель инструментов: ${toolsHidden ? 'off' : 'on'}`;
-  if (els.toggleTextTools) els.toggleTextTools.textContent = `Текстовый блок: ${textHidden ? 'off' : 'on'}`;
-  if (els.toggleSearchTools) els.toggleSearchTools.textContent = `Поиск-панель: ${searchToolsHidden ? 'off' : 'on'}`;
-  if (els.toggleAnnotTools) els.toggleAnnotTools.textContent = `Панель инструментов: ${annotToolsHidden ? 'off' : 'on'}`;
-  if (els.toggleTextToolsInline) els.toggleTextToolsInline.textContent = textHidden ? 'Развернуть' : 'Свернуть';
+  if (els.toggleSidebar) els.toggleSidebar.classList.toggle('active', !sidebarHidden);
+  if (els.toggleToolsBar) els.toggleToolsBar.classList.toggle('active', !toolsHidden);
+  if (els.toggleTextTools) els.toggleTextTools.classList.toggle('active', !textHidden);
+  if (els.toggleSearchTools) els.toggleSearchTools.classList.toggle('active', !searchToolsHidden);
+  if (els.toggleAnnotTools) els.toggleAnnotTools.classList.toggle('active', !annotToolsHidden);
+  if (els.toggleTextToolsInline) els.toggleTextToolsInline.textContent = textHidden ? '▸' : '▾';
   updateSearchToolbarRows();
 }
 
@@ -7730,7 +7733,7 @@ function uiSidebarCompactKey() {
 function setSidebarCompactMode(enabled) {
   document.body.classList.toggle('sidebar-compact', !!enabled);
   if (els.toggleSidebarCompact) {
-    els.toggleSidebarCompact.textContent = `Компактная панель: ${enabled ? 'on' : 'off'}`;
+    els.toggleSidebarCompact.textContent = `Компакт: ${enabled ? 'on' : 'off'}`;
   }
   localStorage.setItem(uiSidebarCompactKey(), enabled ? '1' : '0');
 }
