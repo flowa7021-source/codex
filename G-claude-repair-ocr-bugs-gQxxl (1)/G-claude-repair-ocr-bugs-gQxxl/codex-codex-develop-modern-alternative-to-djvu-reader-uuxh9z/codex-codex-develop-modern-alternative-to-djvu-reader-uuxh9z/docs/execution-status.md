@@ -50,5 +50,13 @@
 - [x] Phase 4 — UX и функциональная целостность: **100%**
 - [x] Phase 5 — Hardening и GA: **100%**
 
+### Phase 6 — OCR Integration & Bug Fixes: **100%**
+- [x] Tesseract.js интегрирован как основной OCR-движок (OCRAD fallback).
+- [x] Adaptive DPI — автоматический подбор масштаба для OCR на основе анализа плотности текста.
+- [x] Word-level confidence scoring — оценка качества распознанных слов.
+- [x] IndexedDB storage — OCR-кеш в IndexedDB (без лимита 5MB localStorage).
+- [x] Canvas race condition — отмена предыдущего рендера перед новым (PDF.js).
+- [x] Tesseract/OCRAD Worker cleanup в beforeunload.
+
 ## Статус
 План выполнен на 100%. Все фазы закрыты. Приложение готово к alpha-тестированию.

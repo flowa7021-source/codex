@@ -1065,6 +1065,7 @@ class PDFAdapter {
     this.type = 'pdf';
     this.pageTextCache = new Map();
     this.pageTextPromises = new Map();
+    this._currentRenderTask = null;
   }
 
   _evictTextCache() {
@@ -1085,6 +1086,11 @@ class PDFAdapter {
   }
 
   async renderPage(pageNumber, canvas, { zoom, rotation }) {
+    // Cancel any in-flight render on the same canvas to avoid "Cannot use the same canvas during multiple render() operations"
+    if (this._currentRenderTask) {
+      try { this._currentRenderTask.cancel(); } catch { /* already finished */ }
+      this._currentRenderTask = null;
+    }
     const page = await this.pdfDoc.getPage(pageNumber);
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const viewport = page.getViewport({ scale: zoom * dpr, rotation });
@@ -1093,7 +1099,15 @@ class PDFAdapter {
     canvas.height = viewport.height;
     canvas.style.width = `${Math.round(viewport.width / dpr)}px`;
     canvas.style.height = `${Math.round(viewport.height / dpr)}px`;
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    const renderTask = page.render({ canvasContext: ctx, viewport });
+    this._currentRenderTask = renderTask;
+    try {
+      await renderTask.promise;
+    } finally {
+      if (this._currentRenderTask === renderTask) {
+        this._currentRenderTask = null;
+      }
+    }
   }
 
   buildTextFromItems(items) {
@@ -2170,8 +2184,17 @@ async function buildOcrSourceCanvas(pageNumber) {
   }
 
   const canvas = document.createElement('canvas');
-  const fixedZoom = state.settings?.ocrQualityMode === 'accurate' ? 1.7 : 1.35;
-  await state.adapter.renderPage(pageNumber, canvas, { zoom: fixedZoom, rotation: state.rotation || 0 });
+  // Use adaptive DPI: render a small probe first, analyze text density, then render at optimal zoom
+  let adaptiveZoom = state.settings?.ocrQualityMode === 'accurate' ? 1.7 : 1.35;
+  try {
+    const probeCanvas = document.createElement('canvas');
+    await state.adapter.renderPage(pageNumber, probeCanvas, { zoom: 1.0, rotation: state.rotation || 0 });
+    const analysis = analyzeTextDensity(probeCanvas);
+    adaptiveZoom = computeOcrZoom(probeCanvas.width, probeCanvas.height, analysis, OCR_SOURCE_MAX_PIXELS);
+    probeCanvas.width = 0; probeCanvas.height = 0; // free memory
+    pushDiagnosticEvent('ocr.adaptive-dpi', { page: pageNumber, suggestedScale: analysis.suggestedScale, zoom: adaptiveZoom, density: analysis.density, strokeWidth: analysis.avgStrokeWidth });
+  } catch { /* fall through to default zoom */ }
+  await state.adapter.renderPage(pageNumber, canvas, { zoom: adaptiveZoom, rotation: state.rotation || 0 });
   const normalized = constrainOcrSourceCanvasPixels(canvas, OCR_SOURCE_MAX_PIXELS);
   if (normalized.scaled) {
     pushDiagnosticEvent('ocr.source.downscale', {
@@ -2401,25 +2424,43 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   let best = '';
   let bestScore = -Infinity;
   let detectedLang = lang;
+  // Pre-initialize Tesseract for current language (avoids init delay on first variant)
+  const tesseractAvail = await isTesseractAvailable();
+  if (tesseractAvail) {
+    await initTesseract(lang === 'auto' ? 'auto' : lang);
+  }
   for (let i = 0; i < variants.length; i += 1) {
     if (taskId && taskId !== state.ocrTaskId) return best;
     if (onProgress) onProgress({ phase: 'recognize', current: i + 1, total: variants.length });
     const variant = variants[i];
     let rawText = '';
     try {
-      // Try OCR Worker first (off-main-thread), fallback to main-thread OCRAD
-      if (isWorkerAvailable()) {
-        const vCtx = variant.getContext('2d');
-        const vImgData = vCtx.getImageData(0, 0, variant.width, variant.height);
-        const workerResult = await recognizeInWorker(vImgData.data, variant.width, variant.height);
-        if (workerResult !== null) {
-          rawText = workerResult;
-        } else if (typeof window.OCRAD === 'function') {
+      // Try Tesseract first (high-quality WASM engine), then OCRAD Worker, then main-thread OCRAD
+      const tesseractReady = getTesseractStatus().ready || await isTesseractAvailable();
+      if (tesseractReady) {
+        const tessResult = await recognizeTesseract(variant, { lang });
+        if (tessResult && tessResult.text) {
+          rawText = tessResult.text;
+        }
+      }
+      if (!rawText) {
+        // Fallback: try OCRAD Worker (off-main-thread)
+        if (isWorkerAvailable()) {
+          const vCtx = variant.getContext('2d');
+          const vImgData = vCtx.getImageData(0, 0, variant.width, variant.height);
+          const workerResult = await recognizeInWorker(vImgData.data, variant.width, variant.height);
+          if (workerResult !== null) {
+            rawText = workerResult;
+          }
+        }
+      }
+      if (!rawText) {
+        // Fallback: main-thread OCRAD
+        if (typeof window.OCRAD === 'function') {
           rawText = window.OCRAD(variant);
         }
-      } else if (typeof window.OCRAD === 'function') {
-        rawText = window.OCRAD(variant);
-      } else {
+      }
+      if (!rawText && !tesseractReady && !isWorkerAvailable() && typeof window.OCRAD !== 'function') {
         pushDiagnosticEvent('ocr.engine.missing', { variant: i });
         break;
       }
@@ -2435,6 +2476,10 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
       best = candidate;
       bestScore = score;
       detectedLang = effectiveLang;
+    }
+    // If Tesseract gave a solid result on first variant, skip remaining variants
+    if (tesseractAvail && i === 0 && best.length >= 20 && bestScore > 50) {
+      break;
     }
     // Yield every variant to keep UI responsive (OCRAD is synchronous/blocking)
     await yieldToMainThread();
@@ -2884,12 +2929,18 @@ async function runOcrOnRectNow(rect) {
     if (text) {
       const corrected = postCorrectOcrText(text);
       const confidence = computeOcrConfidence(corrected, []);
+      // Word-level confidence scoring
+      const qualitySummary = getPageQualitySummary(corrected, getOcrLang());
       els.pageText.value = corrected;
       indexOcrPage(state.currentPage, corrected);
-      setOcrStatus(`OCR: распознано ${corrected.length} символов за ${totalMs}мс [${confidence.level} ${confidence.score}%]`);
+      // Persist to IndexedDB
+      if (state.docName) {
+        savePageOcrText(state.docName, state.currentPage, corrected).catch(() => {});
+      }
+      setOcrStatus(`OCR: распознано ${corrected.length} символов за ${totalMs}мс [${confidence.level} ${confidence.score}%] качество: ${qualitySummary.quality}`);
       recordPerfMetric('ocrTimes', totalMs);
       recordSuccessfulOperation();
-      pushDiagnosticEvent('ocr.manual.finish', { taskId, textLength: corrected.length, totalMs, page: state.currentPage, confidence: confidence.score, confidenceLevel: confidence.level });
+      pushDiagnosticEvent('ocr.manual.finish', { taskId, textLength: corrected.length, totalMs, page: state.currentPage, confidence: confidence.score, confidenceLevel: confidence.level, wordQuality: qualitySummary.quality, avgWordScore: qualitySummary.avgScore, lowConfidenceWords: qualitySummary.lowCount });
       if (totalMs >= OCR_SLOW_TASK_WARN_MS) {
         pushDiagnosticEvent('ocr.manual.slow', { taskId, totalMs, page: state.currentPage }, 'warn');
       }
@@ -2938,6 +2989,9 @@ async function extractTextForPage(pageNumber) {
   }
   if (text) return text;
 
+  // Check IndexedDB first, then localStorage
+  const idbText = await getPageOcrText(state.docName || 'global', pageNumber);
+  if (idbText) return idbText;
   const cache = loadOcrTextData();
   if (Array.isArray(cache?.pagesText) && cache.pagesText[pageNumber - 1]) {
     return cache.pagesText[pageNumber - 1];
@@ -3573,6 +3627,19 @@ function loadOcrTextData() {
 
 function saveOcrTextData(payload) {
   localStorage.setItem(ocrTextKey(), JSON.stringify(payload));
+  // Also persist to IndexedDB for larger datasets
+  const docName = state.docName || 'global';
+  saveOcrData(docName, payload).catch(() => {});
+}
+
+async function loadOcrTextDataAsync() {
+  // Try IndexedDB first (supports larger datasets), fall back to localStorage
+  const docName = state.docName || 'global';
+  try {
+    const idbData = await loadOcrData(docName);
+    if (idbData) return idbData;
+  } catch { /* fall through */ }
+  return loadOcrTextData();
 }
 
 
@@ -4877,10 +4944,16 @@ async function renderCurrentPage() {
   const renderStartedAt = performance.now();
 
   els.emptyState.style.display = 'none';
-  await state.adapter.renderPage(state.currentPage, els.canvas, {
-    zoom: state.zoom,
-    rotation: state.rotation,
-  });
+  try {
+    await state.adapter.renderPage(state.currentPage, els.canvas, {
+      zoom: state.zoom,
+      rotation: state.rotation,
+    });
+  } catch (err) {
+    // Silently ignore cancelled renders (superseded by a newer render call)
+    if (err?.name === 'RenderingCancelledException' || err?.message?.includes('Rendering cancelled')) return;
+    throw err;
+  }
 
   const displayWidth = Math.max(1, Math.round(parseFloat(els.canvas.style.width || String(els.canvas.width))));
   const displayHeight = Math.max(1, Math.round(parseFloat(els.canvas.style.height || String(els.canvas.height))));
@@ -6937,6 +7010,8 @@ window.addEventListener('beforeunload', () => {
   if (pdfEditState.dirty) persistEdits();
   revokeAllTrackedUrls();
   clearPageRenderCache();
+  terminateTesseract().catch(() => {});
+  terminateOcrWorker();
 });
 
 renderRecent();
