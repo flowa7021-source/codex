@@ -44,7 +44,7 @@ test.describe('01 — Application startup', () => {
 test.describe('02 — File opening', () => {
   test('upload button is visible and interactive', async ({ page }) => {
     await openApp(page);
-    const uploadBtn = page.locator('.upload-btn').first();
+    const uploadBtn = page.locator('.file-open-btn').first();
     await expect(uploadBtn).toBeVisible();
     await expect(uploadBtn).toBeEnabled();
   });
@@ -75,12 +75,13 @@ test.describe('04 — Zoom and rotation', () => {
     await openApp(page);
     await expect(page.locator('#zoomIn')).toBeVisible();
     await expect(page.locator('#zoomOut')).toBeVisible();
-    await expect(page.locator('#zoomFit')).toBeVisible();
+    await expect(page.locator('#fitWidth')).toBeVisible();
+    await expect(page.locator('#fitPage')).toBeVisible();
   });
 
   test('rotation control exists', async ({ page }) => {
     await openApp(page);
-    await expect(page.locator('#rotateCw')).toBeVisible();
+    await expect(page.locator('#rotate')).toBeVisible();
   });
 });
 
@@ -229,7 +230,7 @@ test.describe('13 — Search', () => {
 test.describe('14 — Annotation tools', () => {
   test('annotation canvas exists', async ({ page }) => {
     await openApp(page);
-    await expect(page.locator('#annotCanvas')).toBeAttached();
+    await expect(page.locator('#annotationCanvas')).toBeAttached();
   });
 });
 

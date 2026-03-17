@@ -3,7 +3,7 @@ import { APP_VERSION, NOVAREADER_PLAN_PROGRESS_PERCENT, SIDEBAR_SECTION_CONFIG, 
 import { throttle, debounce, yieldToMainThread, loadImage, downloadBlob } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
 import { ensurePdfJs, ensureDjVuJs, ensureOcrad } from './modules/loaders.js';
-import { perfMetrics, recordPerfMetric, getPerfSummary, cacheRenderedPage, getCachedPage, clearPageRenderCache, revokeAllTrackedUrls } from './modules/perf.js';
+import { perfMetrics, recordPerfMetric, getPerfSummary, cacheRenderedPage, getCachedPage, clearPageRenderCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
 import { ToolMode, toolStateMachine, activateAnnotateMode, deactivateAnnotateMode, activateOcrRegionMode, deactivateOcrRegionMode, activateTextEditMode, deactivateTextEditMode, activateSearchMode, deactivateSearchMode, initToolModeDeps } from './modules/tool-modes.js';
 import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
 import { setLanguage, getLanguage, loadLanguage, t, applyI18nToDOM, getAvailableLanguages } from './modules/i18n.js';
@@ -7086,3 +7086,10 @@ applyAdvancedPanelsState();
 applyAppLanguage();
 setDrawMode(false);
 setOcrRegionMode(false);
+
+// ─── Expose globals for E2E testing and diagnostics ──────────────────────────
+window.crashTelemetry = crashTelemetry;
+window.ocrSearchIndex = ocrSearchIndex;
+window.searchOcrIndex = searchOcrIndex;
+window.pageRenderCache = pageRenderCache;
+window.objectUrlRegistry = objectUrlRegistry;

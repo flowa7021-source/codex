@@ -18,6 +18,7 @@
     "test": "npm run test:benchmark"
   },
   "devDependencies": {
+    "@playwright/test": "^1.45.0",
     "djvujs-dist": "^0.5.4",
     "electron": "30.5.1",
     "electron-builder": "24.13.3",
