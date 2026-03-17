@@ -15,6 +15,11 @@ import { progressiveLoader } from './modules/progressive-loader.js';
 import { exportAnnotationsAsSvg, exportAnnotationsAsPdf } from './modules/annotation-export.js';
 import { applyPlugin, pluginToDocxXml, detectApplicablePlugins } from './modules/conversion-plugins.js';
 import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from './modules/docx-import-advanced.js';
+import { recognizeInWorker, preprocessInWorker, isWorkerAvailable, warmUpOcrWorker, terminateOcrWorker } from './modules/ocr-worker-manager.js';
+import { analyzeTextDensity, computeOcrZoom, hasSmallText } from './modules/ocr-adaptive-dpi.js';
+import { scoreAllWords, markLowConfidenceWords, getPageQualitySummary } from './modules/ocr-word-confidence.js';
+import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText, isIndexedDbAvailable } from './modules/ocr-storage.js';
+import { initTesseract, recognizeTesseract, isTesseractAvailable, getTesseractStatus, terminateTesseract } from './modules/tesseract-adapter.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -2402,11 +2407,22 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
     const variant = variants[i];
     let rawText = '';
     try {
-      if (typeof window.OCRAD !== 'function') {
+      // Try OCR Worker first (off-main-thread), fallback to main-thread OCRAD
+      if (isWorkerAvailable()) {
+        const vCtx = variant.getContext('2d');
+        const vImgData = vCtx.getImageData(0, 0, variant.width, variant.height);
+        const workerResult = await recognizeInWorker(vImgData.data, variant.width, variant.height);
+        if (workerResult !== null) {
+          rawText = workerResult;
+        } else if (typeof window.OCRAD === 'function') {
+          rawText = window.OCRAD(variant);
+        }
+      } else if (typeof window.OCRAD === 'function') {
+        rawText = window.OCRAD(variant);
+      } else {
         pushDiagnosticEvent('ocr.engine.missing', { variant: i });
         break;
       }
-      rawText = window.OCRAD(variant);
     } catch (ocrErr) {
       pushDiagnosticEvent('ocr.engine.error', { variant: i, error: ocrErr?.message || String(ocrErr) });
       continue;
