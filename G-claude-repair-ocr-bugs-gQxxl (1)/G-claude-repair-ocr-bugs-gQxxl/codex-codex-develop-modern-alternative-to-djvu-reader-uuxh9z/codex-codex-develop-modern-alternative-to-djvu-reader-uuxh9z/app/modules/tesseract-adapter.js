@@ -10,7 +10,10 @@ let _initializing = false;
 let _initPromise = null;
 let _available = null; // null = not checked, true/false
 let _initFailCount = 0; // track consecutive init failures for backoff
+let _lastInitError = ''; // last error message for diagnostics
+let _lastFailTime = 0; // timestamp of last failure for cooldown
 const MAX_INIT_RETRIES = 3; // max retries before giving up for this session
+const INIT_FAIL_COOLDOWN_MS = 5000; // minimum delay between retry attempts after failure
 
 // Resolve local paths relative to this module
 function resolveVendorPath(relativePath) {
@@ -113,6 +116,11 @@ export async function initTesseract(lang = 'eng') {
   // If too many consecutive failures, don't retry
   if (_initFailCount >= MAX_INIT_RETRIES) return false;
 
+  // Cooldown: don't spam retries immediately after a failure
+  if (_lastFailTime > 0 && (performance.now() - _lastFailTime) < INIT_FAIL_COOLDOWN_MS) {
+    return false;
+  }
+
   // If currently initializing, wait for it
   if (_initializing && _initPromise) {
     await _initPromise;
@@ -132,21 +140,29 @@ export async function initTesseract(lang = 'eng') {
       const Tesseract = await loadTesseractModule();
       const corePath = hasSIMD() ? PATHS.coreSimdLstm : PATHS.coreLstm;
 
+      // workerBlobURL: false is CRITICAL for Electron (file:// protocol).
+      // Default true creates a blob:-origin worker that cannot importScripts
+      // from file:// URLs, causing silent init failures.
       _worker = await Tesseract.createWorker(tessLang, 1, {
         workerPath: PATHS.workerJs,
         corePath: corePath,
         langPath: PATHS.langDataDir,
         cacheMethod: 'none', // Don't use IndexedDB cache — load from local files
         gzip: false, // Our traineddata files are not gzipped
+        workerBlobURL: false, // Use direct file:// worker, not blob: wrapper
       });
 
       _currentLang = tessLang;
       _available = true;
       _initFailCount = 0; // reset on success
+      _lastInitError = '';
+      _lastFailTime = 0;
       return true;
     } catch (err) {
       _initFailCount++;
-      console.warn(`Tesseract init failed (attempt ${_initFailCount}/${MAX_INIT_RETRIES}):`, err?.message || err);
+      _lastInitError = String(err?.message || err || 'unknown error');
+      _lastFailTime = performance.now();
+      console.warn(`Tesseract init failed (attempt ${_initFailCount}/${MAX_INIT_RETRIES}):`, _lastInitError);
       _worker = null;
       _currentLang = null;
       // Don't set _available = false here — the module exists, only worker creation failed.
@@ -217,6 +233,7 @@ export function getTesseractStatus() {
     lang: _currentLang,
     available: _available,
     initFailCount: _initFailCount,
+    lastError: _lastInitError,
   };
 }
 
@@ -226,6 +243,8 @@ export function getTesseractStatus() {
  */
 export function resetTesseractAvailability() {
   _initFailCount = 0;
+  _lastInitError = '';
+  _lastFailTime = 0;
   // Only reset _available if it was set to false due to init failure
   // (keep null or true as-is)
   if (_available === false) _available = null;

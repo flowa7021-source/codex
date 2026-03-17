@@ -2410,14 +2410,17 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   const tesseractAvail = await isTesseractAvailable();
   if (tesseractAvail) {
     const initOk = await initTesseract(lang === 'auto' ? 'auto' : lang);
-    pushDiagnosticEvent('ocr.tesseract.init', { available: true, initialized: initOk, lang });
+    const tessStatus = getTesseractStatus();
+    pushDiagnosticEvent('ocr.tesseract.init', { available: true, initialized: initOk, lang, failCount: tessStatus.initFailCount, lastError: tessStatus.lastError || undefined });
     if (!initOk) {
-      pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-init-failed', lang, ms: Math.round(performance.now() - startedAt) });
+      pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-init-failed', lang, ms: Math.round(performance.now() - startedAt), lastError: tessStatus.lastError || undefined });
+      setOcrStatus(`OCR: ошибка инициализации движка (попытка ${tessStatus.initFailCount}/3)`);
       return '';
     }
   } else {
     pushDiagnosticEvent('ocr.tesseract.init', { available: false, initialized: false, lang }, 'error');
     pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-unavailable', lang, ms: Math.round(performance.now() - startedAt) });
+    setOcrStatus('OCR: движок Tesseract недоступен');
     return '';
   }
 
