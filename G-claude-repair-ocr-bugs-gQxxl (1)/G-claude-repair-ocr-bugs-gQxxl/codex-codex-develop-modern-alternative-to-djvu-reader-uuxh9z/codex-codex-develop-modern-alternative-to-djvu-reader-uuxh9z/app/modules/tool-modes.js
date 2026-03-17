@@ -1,7 +1,19 @@
+// ─── Tool State Machine Module ───────────────────────────────────────────────
+// Self-contained tool mode management with dependency injection.
+
 import { state, els } from './state.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
-import { renderAnnotations, updateOverlayInteractionState } from './drawing.js';
-import { setOcrStatus } from './ocr.js';
+
+// Dependencies injected from app.js at runtime
+let _deps = {
+  renderAnnotations: () => {},
+  updateOverlayInteractionState: () => {},
+  setOcrStatus: () => {},
+};
+
+export function initToolModeDeps(deps) {
+  Object.assign(_deps, deps);
+}
 
 export const ToolMode = {
   IDLE: 'idle',
@@ -51,7 +63,7 @@ export function deactivateAnnotateMode() {
     els.annotateToggle.classList.remove('active');
     els.annotateToggle.textContent = '✎ off';
   }
-  renderAnnotations();
+  _deps.renderAnnotations();
 }
 
 export function activateAnnotateMode() {
@@ -60,7 +72,7 @@ export function activateAnnotateMode() {
     els.annotateToggle.classList.add('active');
     els.annotateToggle.textContent = '✎ on';
   }
-  updateOverlayInteractionState();
+  _deps.updateOverlayInteractionState();
 }
 
 export function deactivateOcrRegionMode() {
@@ -68,14 +80,14 @@ export function deactivateOcrRegionMode() {
   state.isSelectingOcr = false;
   state.ocrSelection = null;
   if (els.ocrRegionMode) els.ocrRegionMode.classList.remove('active');
-  renderAnnotations();
+  _deps.renderAnnotations();
 }
 
 export function activateOcrRegionMode() {
   state.ocrRegionMode = true;
   if (els.ocrRegionMode) els.ocrRegionMode.classList.add('active');
-  updateOverlayInteractionState();
-  setOcrStatus('OCR: выделите область на странице');
+  _deps.updateOverlayInteractionState();
+  _deps.setOcrStatus('OCR: выделите область на странице');
 }
 
 export function deactivateTextEditMode() {

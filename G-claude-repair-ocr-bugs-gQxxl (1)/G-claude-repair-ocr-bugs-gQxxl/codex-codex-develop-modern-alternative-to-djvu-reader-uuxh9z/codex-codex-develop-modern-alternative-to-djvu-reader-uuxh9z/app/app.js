@@ -1,223 +1,11 @@
-let pdfjsLib = null;
-let djvuLib = null;
-let ocradReady = false;
-let pdfLoadPromise = null;
-let djvuLoadPromise = null;
-let ocradLoadPromise = null;
-
-function throttle(fn, ms) {
-  let last = 0;
-  let timer = null;
-  return function (...args) {
-    const now = performance.now();
-    const remaining = ms - (now - last);
-    if (remaining <= 0) {
-      if (timer) { clearTimeout(timer); timer = null; }
-      last = now;
-      fn.apply(this, args);
-    } else if (!timer) {
-      timer = setTimeout(() => {
-        last = performance.now();
-        timer = null;
-        fn.apply(this, args);
-      }, remaining);
-    }
-  };
-}
-
-function debounce(fn, ms) {
-  let timer = null;
-  return function (...args) {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => { timer = null; fn.apply(this, args); }, ms);
-  };
-}
-
-async function ensurePdfJs() {
-  if (pdfjsLib) return pdfjsLib;
-  if (pdfLoadPromise) return pdfLoadPromise;
-
-  const localPdfUrl = new URL('./vendor/pdf.min.mjs', import.meta.url).href;
-  const localWorkerUrl = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
-
-  pdfLoadPromise = (async () => {
-    try {
-      pdfjsLib = await import(localPdfUrl);
-      if (pdfjsLib?.GlobalWorkerOptions) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = localWorkerUrl;
-      }
-      return pdfjsLib;
-    } catch {
-      pdfLoadPromise = null;
-      throw new Error('PDF.js недоступен в локальном runtime пакете');
-    }
-  })();
-
-  return pdfLoadPromise;
-}
-
-async function ensureDjVuJs() {
-  if (djvuLib) return djvuLib;
-  if (djvuLoadPromise) return djvuLoadPromise;
-
-  const url = new URL('./vendor/djvu.js', import.meta.url).href;
-  djvuLoadPromise = (async () => {
-    await new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-djvu-runtime="1"]');
-    if (existing) {
-      if (window.DjVu) {
-        resolve();
-      } else {
-        existing.addEventListener('load', () => resolve(), { once: true });
-        existing.addEventListener('error', () => reject(new Error('DjVu runtime load error')), { once: true });
-      }
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = url;
-    script.async = true;
-    script.dataset.djvuRuntime = '1';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('DjVu runtime load error'));
-    document.head.appendChild(script);
-  });
-
-    if (!window.DjVu) {
-      throw new Error('DjVu runtime не инициализирован');
-    }
-
-    djvuLib = window.DjVu;
-    return djvuLib;
-  })();
-
-  try {
-    return await djvuLoadPromise;
-  } finally {
-    djvuLoadPromise = null;
-  }
-}
-
-async function ensureOcrad() {
-  if (ocradReady && typeof (globalThis.OCRAD || window.OCRAD) === 'function') {
-    if (!window.OCRAD && typeof globalThis.OCRAD === 'function') {
-      window.OCRAD = globalThis.OCRAD;
-    }
-    return;
-  }
-  if (ocradLoadPromise) return ocradLoadPromise;
-
-  const url = new URL('./vendor/ocrad.js', import.meta.url).href;
-
-  const prepareOcradModuleConfig = (memoryBytes = 128 * 1024 * 1024) => {
-    const safeMemory = Math.max(16 * 1024 * 1024, Number(memoryBytes) || (128 * 1024 * 1024));
-    const existingModule = (typeof globalThis.Module === 'object' && globalThis.Module) ? globalThis.Module : {};
-    const merged = {
-      ...existingModule,
-      TOTAL_MEMORY: safeMemory,
-      ALLOW_MEMORY_GROWTH: 1,
-      printErr: existingModule.printErr || (() => {}),
-    };
-    globalThis.Module = merged;
-    if (typeof window !== 'undefined') {
-      window.Module = merged;
-    }
-    return merged;
-  };
-
-  prepareOcradModuleConfig();
-
-  const waitForOcrad = async (timeoutMs = 1600) => {
-    const started = performance.now();
-    while ((performance.now() - started) < timeoutMs) {
-      if (typeof window.OCRAD === 'function') return true;
-      if (!window.OCRAD && typeof globalThis.OCRAD === 'function') {
-        window.OCRAD = globalThis.OCRAD;
-        return true;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 40));
-    }
-    return typeof window.OCRAD === 'function';
-  };
-
-  const loadViaScriptTag = (src, forceReload = false) => new Promise((resolve, reject) => {
-    let existing = document.querySelector('script[data-ocrad-runtime="1"]');
-    if (existing && forceReload) {
-      existing.remove();
-      existing = null;
-    }
-
-    if (existing) {
-      if (typeof window.OCRAD === 'function') {
-        resolve();
-      } else {
-        existing.addEventListener('load', () => resolve(), { once: true });
-        existing.addEventListener('error', () => reject(new Error('OCR runtime load error')), { once: true });
-      }
-      return;
-    }
-
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.dataset.ocradRuntime = '1';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('OCR runtime load error'));
-    document.head.appendChild(script);
-  });
-
-  ocradLoadPromise = (async () => {
-    let ready = false;
-
-    try {
-      await loadViaScriptTag(url);
-      ready = await waitForOcrad();
-    } catch {
-      ready = false;
-    }
-
-    if (!ready) {
-      try {
-        const code = await fetch(url, { cache: 'force-cache' }).then((r) => {
-          if (!r.ok) throw new Error('fetch failed');
-          return r.text();
-        });
-        // eslint-disable-next-line no-new-func
-        (new Function(code))();
-        ready = await waitForOcrad(1000);
-      } catch {
-        ready = false;
-      }
-    }
-
-    if (!ready) {
-      try {
-        prepareOcradModuleConfig(192 * 1024 * 1024);
-        await loadViaScriptTag(`${url}${url.includes('?') ? '&' : '?'}v=${Date.now()}`, true);
-        ready = await waitForOcrad();
-      } catch {
-        ready = false;
-      }
-    }
-
-    if (!ready) {
-      throw new Error('OCR runtime не инициализирован');
-    }
-
-    ocradReady = true;
-  })();
-
-  try {
-    return await ocradLoadPromise;
-  } finally {
-    ocradLoadPromise = null;
-  }
-}
-
-
-
-const APP_VERSION = '2.0.0-alpha';
-const NOVAREADER_PLAN_PROGRESS_PERCENT = 100;
+// ─── Module Imports ─────────────────────────────────────────────────────────
+import { APP_VERSION, NOVAREADER_PLAN_PROGRESS_PERCENT, SIDEBAR_SECTION_CONFIG, TOOLBAR_SECTION_CONFIG, OCR_MIN_DPI, CSS_BASE_DPI, OCR_MAX_SIDE_PX, OCR_MAX_PIXELS, OCR_SLOW_TASK_WARN_MS, OCR_HANG_WARN_MS, OCR_SOURCE_MAX_PIXELS, OCR_SOURCE_CACHE_MAX_PIXELS, OCR_SOURCE_CACHE_TTL_MS } from './modules/constants.js';
+import { throttle, debounce, yieldToMainThread, loadImage, downloadBlob } from './modules/utils.js';
+import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
+import { ensurePdfJs, ensureDjVuJs, ensureOcrad } from './modules/loaders.js';
+import { perfMetrics, recordPerfMetric, computePercentile, getPerfSummary, workerPool, createOcrWorkerBlob, getPoolWorker, runInWorker, pageRenderCache, cacheRenderedPage, getCachedPage, evictPageFromCache, clearPageRenderCache, objectUrlRegistry, trackObjectUrl, revokeTrackedUrl, revokeAllTrackedUrls } from './modules/perf.js';
+import { ToolMode, toolStateMachine, activateAnnotateMode, deactivateAnnotateMode, activateOcrRegionMode, deactivateOcrRegionMode, activateTextEditMode, deactivateTextEditMode, activateSearchMode, deactivateSearchMode, initToolModeDeps } from './modules/tool-modes.js';
+import { pushDiagnosticEvent, clearDiagnostics, collectPerfBaseline, formatDiagnosticsForChat, exportDiagnostics, verifyBundledAssets, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -271,345 +59,6 @@ function showUserError(context, errorType, message) {
   if (statusEl) {
     statusEl.textContent = `Ошибка [${label}]: ${errorType} — ${message}`;
   }
-}
-
-// ─── Phase 0: Performance Metrics Collector (p95) ──────────────────────────
-const perfMetrics = {
-  renderTimes: [],
-  ocrTimes: [],
-  searchTimes: [],
-  pageLoadTimes: [],
-  maxSamples: 200,
-};
-
-function recordPerfMetric(category, ms) {
-  const arr = perfMetrics[category];
-  if (!arr) return;
-  arr.push(ms);
-  if (arr.length > perfMetrics.maxSamples) arr.shift();
-}
-
-function computePercentile(arr, p) {
-  if (!arr.length) return 0;
-  const sorted = [...arr].sort((a, b) => a - b);
-  const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1));
-  return sorted[idx];
-}
-
-function getPerfSummary() {
-  const summary = {};
-  for (const key of ['renderTimes', 'ocrTimes', 'searchTimes', 'pageLoadTimes']) {
-    const arr = perfMetrics[key];
-    if (!arr.length) { summary[key] = null; continue; }
-    summary[key] = {
-      count: arr.length,
-      min: Math.round(Math.min(...arr)),
-      max: Math.round(Math.max(...arr)),
-      median: Math.round(computePercentile(arr, 0.5)),
-      p95: Math.round(computePercentile(arr, 0.95)),
-      avg: Math.round(arr.reduce((a, b) => a + b, 0) / arr.length),
-    };
-  }
-  return summary;
-}
-
-// ─── Phase 1: Web Worker Pool ──────────────────────────────────────────────
-const workerPool = {
-  workers: [],
-  maxWorkers: Math.min(4, (navigator.hardwareConcurrency || 2)),
-  taskQueue: [],
-  activeCount: 0,
-};
-
-function createOcrWorkerBlob() {
-  const code = `
-    self.onmessage = function(e) {
-      const { type, payload, taskId } = e.data;
-      if (type === 'preprocess') {
-        const { imageData, width, height, thresholdBias, mode, invert } = payload;
-        const d = imageData.data;
-        const hist = new Uint32Array(256);
-        let mean = 0;
-        for (let i = 0; i < d.length; i += 4) {
-          const gray = (d[i] * 0.299) + (d[i+1] * 0.587) + (d[i+2] * 0.114);
-          const g = Math.max(0, Math.min(255, Math.round(gray)));
-          d[i] = d[i+1] = d[i+2] = g;
-          hist[g] += 1;
-          mean += g;
-        }
-        mean /= Math.max(1, d.length / 4);
-
-        const totalPx = d.length / 4;
-        let p5 = 0, p95 = 255, acc = 0;
-        for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= totalPx * 0.05) { p5 = i; break; } }
-        acc = 0;
-        for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= totalPx * 0.95) { p95 = i; break; } }
-        const spread = Math.max(1, p95 - p5);
-        const sqMean = Array.from(d).filter((_, i) => i % 4 === 0).reduce((s, v) => s + v*v, 0) / totalPx;
-        const stdDev = Math.sqrt(Math.max(0, sqMean - mean*mean));
-
-        for (let i = 0; i < d.length; i += 4) {
-          const stretched = ((d[i] - p5) * 255) / spread;
-          const contrastBoost = stdDev < 36 ? 1.18 : 1.0;
-          const centered = (stretched - 127) * contrastBoost + 127;
-          d[i] = d[i+1] = d[i+2] = Math.max(0, Math.min(255, Math.round(centered)));
-        }
-
-        // Otsu threshold
-        let otsu = 128;
-        { let total = 0, sumTotal = 0;
-          for (let i = 0; i < 256; i++) { total += hist[i]; sumTotal += i * hist[i]; }
-          let sumBack = 0, wBack = 0, maxVar = 0;
-          for (let t = 0; t < 256; t++) {
-            wBack += hist[t]; if (wBack === 0) continue;
-            const wFore = total - wBack; if (wFore === 0) break;
-            sumBack += t * hist[t];
-            const mBack = sumBack / wBack;
-            const mFore = (sumTotal - sumBack) / wFore;
-            const between = wBack * wFore * (mBack - mFore) * (mBack - mFore);
-            if (between > maxVar) { maxVar = between; otsu = t; }
-          }
-        }
-
-        const thresholdBase = mode === 'otsu' ? otsu : mean;
-        const threshold = Math.max(50, Math.min(220, thresholdBase + (thresholdBias || 0)));
-        for (let i = 0; i < d.length; i += 4) {
-          let v = d[i] > threshold ? 255 : 0;
-          if (invert) v = 255 - v;
-          d[i] = d[i+1] = d[i+2] = v;
-          d[i+3] = 255;
-        }
-
-        self.postMessage({ type: 'preprocess-done', taskId, imageData, width, height }, [imageData.data.buffer]);
-      }
-
-      if (type === 'search-text') {
-        const { pages, query } = payload;
-        const results = [];
-        const norm = (query || '').trim().toLowerCase();
-        if (norm) {
-          for (let i = 0; i < pages.length; i++) {
-            const text = (pages[i] || '').toLowerCase();
-            const count = text.split(norm).length - 1;
-            if (count > 0) results.push({ page: i + 1, count, snippet: text.substring(text.indexOf(norm), text.indexOf(norm) + 80) });
-          }
-        }
-        self.postMessage({ type: 'search-done', taskId, results });
-      }
-    };
-  `;
-  return new Blob([code], { type: 'application/javascript' });
-}
-
-function getPoolWorker() {
-  if (workerPool.workers.length < workerPool.maxWorkers) {
-    try {
-      const blob = createOcrWorkerBlob();
-      const url = URL.createObjectURL(blob);
-      const worker = new Worker(url);
-      workerPool.workers.push(worker);
-      return worker;
-    } catch {
-      return null;
-    }
-  }
-  const idx = workerPool.activeCount % workerPool.workers.length;
-  return workerPool.workers[idx] || null;
-}
-
-function runInWorker(type, payload) {
-  return new Promise((resolve, reject) => {
-    const worker = getPoolWorker();
-    if (!worker) { reject(new Error('Worker unavailable')); return; }
-    const taskId = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    workerPool.activeCount++;
-    const handler = (e) => {
-      if (e.data.taskId !== taskId) return;
-      worker.removeEventListener('message', handler);
-      worker.removeEventListener('error', errHandler);
-      workerPool.activeCount--;
-      resolve(e.data);
-    };
-    const errHandler = (err) => {
-      worker.removeEventListener('message', handler);
-      worker.removeEventListener('error', errHandler);
-      workerPool.activeCount--;
-      reject(err);
-    };
-    worker.addEventListener('message', handler);
-    worker.addEventListener('error', errHandler);
-    worker.postMessage({ type, payload, taskId });
-  });
-}
-
-// ─── Phase 1: Enhanced Memory Management ───────────────────────────────────
-const pageRenderCache = {
-  entries: new Map(),
-  maxEntries: 8,
-  maxTotalPixels: 32_000_000,
-  totalPixels: 0,
-};
-
-function cacheRenderedPage(pageNum, canvas) {
-  if (pageRenderCache.entries.has(pageNum)) return;
-  const pixels = canvas.width * canvas.height;
-  while (pageRenderCache.entries.size >= pageRenderCache.maxEntries ||
-         pageRenderCache.totalPixels + pixels > pageRenderCache.maxTotalPixels) {
-    const oldest = pageRenderCache.entries.keys().next().value;
-    if (oldest === undefined) break;
-    evictPageFromCache(oldest);
-  }
-  const copy = document.createElement('canvas');
-  copy.width = canvas.width;
-  copy.height = canvas.height;
-  copy.getContext('2d').drawImage(canvas, 0, 0);
-  pageRenderCache.entries.set(pageNum, { canvas: copy, pixels, ts: Date.now() });
-  pageRenderCache.totalPixels += pixels;
-}
-
-function getCachedPage(pageNum) {
-  const entry = pageRenderCache.entries.get(pageNum);
-  if (!entry) return null;
-  pageRenderCache.entries.delete(pageNum);
-  pageRenderCache.entries.set(pageNum, entry);
-  entry.ts = Date.now();
-  return entry.canvas;
-}
-
-function evictPageFromCache(pageNum) {
-  const entry = pageRenderCache.entries.get(pageNum);
-  if (!entry) return;
-  pageRenderCache.totalPixels -= entry.pixels;
-  if (entry.canvas) { entry.canvas.width = 0; entry.canvas.height = 0; }
-  pageRenderCache.entries.delete(pageNum);
-}
-
-function clearPageRenderCache() {
-  for (const [key] of pageRenderCache.entries) {
-    evictPageFromCache(key);
-  }
-}
-
-const objectUrlRegistry = new Set();
-
-function trackObjectUrl(url) {
-  objectUrlRegistry.add(url);
-}
-
-function revokeTrackedUrl(url) {
-  if (objectUrlRegistry.has(url)) {
-    URL.revokeObjectURL(url);
-    objectUrlRegistry.delete(url);
-  }
-}
-
-function revokeAllTrackedUrls() {
-  for (const url of objectUrlRegistry) {
-    URL.revokeObjectURL(url);
-  }
-  objectUrlRegistry.clear();
-}
-
-// ─── Phase 1: Unified Tool State Machine ───────────────────────────────────
-const ToolMode = {
-  IDLE: 'idle',
-  ANNOTATE: 'annotate',
-  OCR_REGION: 'ocr-region',
-  TEXT_EDIT: 'text-edit',
-  SEARCH: 'search',
-};
-
-const toolStateMachine = {
-  current: ToolMode.IDLE,
-  previous: ToolMode.IDLE,
-  listeners: [],
-
-  transition(newMode) {
-    if (newMode === this.current) return;
-    const oldMode = this.current;
-    this.previous = oldMode;
-    this.current = newMode;
-
-    if (oldMode === ToolMode.ANNOTATE) deactivateAnnotateMode();
-    if (oldMode === ToolMode.OCR_REGION) deactivateOcrRegionMode();
-    if (oldMode === ToolMode.TEXT_EDIT) deactivateTextEditMode();
-    if (oldMode === ToolMode.SEARCH) deactivateSearchMode();
-
-    if (newMode === ToolMode.ANNOTATE) activateAnnotateMode();
-    if (newMode === ToolMode.OCR_REGION) activateOcrRegionMode();
-    if (newMode === ToolMode.TEXT_EDIT) activateTextEditMode();
-    if (newMode === ToolMode.SEARCH) activateSearchMode();
-
-    pushDiagnosticEvent('tool.transition', { from: oldMode, to: newMode });
-    for (const fn of this.listeners) fn(newMode, oldMode);
-  },
-
-  toggle(mode) {
-    this.transition(this.current === mode ? ToolMode.IDLE : mode);
-  },
-
-  onTransition(fn) {
-    this.listeners.push(fn);
-  },
-};
-
-function deactivateAnnotateMode() {
-  state.drawEnabled = false;
-  if (els.annotateToggle) {
-    els.annotateToggle.classList.remove('active');
-    els.annotateToggle.textContent = '✎ off';
-  }
-  renderAnnotations();
-}
-
-function activateAnnotateMode() {
-  state.drawEnabled = true;
-  if (els.annotateToggle) {
-    els.annotateToggle.classList.add('active');
-    els.annotateToggle.textContent = '✎ on';
-  }
-  updateOverlayInteractionState();
-}
-
-function deactivateOcrRegionMode() {
-  state.ocrRegionMode = false;
-  state.isSelectingOcr = false;
-  state.ocrSelection = null;
-  if (els.ocrRegionMode) els.ocrRegionMode.classList.remove('active');
-  renderAnnotations();
-}
-
-function activateOcrRegionMode() {
-  state.ocrRegionMode = true;
-  if (els.ocrRegionMode) els.ocrRegionMode.classList.add('active');
-  updateOverlayInteractionState();
-  setOcrStatus('OCR: выделите область на странице');
-}
-
-function deactivateTextEditMode() {
-  state.textEditMode = false;
-  if (els.pageText) els.pageText.readOnly = true;
-  if (els.toggleTextEdit) {
-    els.toggleTextEdit.textContent = 'Ред.';
-    els.toggleTextEdit.classList.remove('active');
-  }
-}
-
-function activateTextEditMode() {
-  state.textEditMode = true;
-  if (els.pageText) els.pageText.readOnly = false;
-  if (els.toggleTextEdit) {
-    els.toggleTextEdit.textContent = 'Ред.';
-    els.toggleTextEdit.classList.add('active');
-  }
-}
-
-function deactivateSearchMode() {
-  // Search mode deactivation is passive - just unfocus
-}
-
-function activateSearchMode() {
-  if (els.searchInput) els.searchInput.focus();
 }
 
 // ─── Phase 2: OCR Confidence Scoring ───────────────────────────────────────
@@ -1627,303 +1076,6 @@ window.addEventListener('unhandledrejection', (event) => {
   pushDiagnosticEvent('crash.unhandled-rejection', { message }, 'error');
 });
 
-const state = {
-  adapter: null,
-  file: null,
-  docName: null,
-  currentPage: 1,
-  pageCount: 0,
-  zoom: 1,
-  rotation: 0,
-  searchResults: [],
-  searchCursor: -1,
-  searchResultCounts: {},
-  lastSearchQuery: '',
-  lastSearchScope: 'all',
-  outline: [],
-  drawEnabled: false,
-  isDrawing: false,
-  currentStroke: null,
-  historyBack: [],
-  historyForward: [],
-  isHistoryNavigation: false,
-  lastRenderedPage: null,
-  readingTotalMs: 0,
-  readingStartedAt: null,
-  visitTrail: [],
-  readingGoalPage: null,
-  collabChannel: null,
-  collabEnabled: false,
-  djvuBinaryDetected: false,
-  currentObjectUrl: null,
-  ocrRegionMode: false,
-  ocrSelection: null,
-  isSelectingOcr: false,
-  backgroundOcrToken: 0,
-  backgroundOcrTimer: null,
-  backgroundOcrRunning: false,
-  settings: null,
-  pageSkewAngles: {},
-  pageSkewPromises: {},
-  ocrTaskId: 0,
-  ocrJobRunning: false,
-  ocrQueue: Promise.resolve(),
-  ocrQueueEpoch: 0,
-  ocrLatestByReason: {},
-  ocrLastProgressUiAt: 0,
-  ocrLastProgressText: '',
-  ocrSourceCache: new Map(),
-  ocrCacheLastDiagAt: 0,
-  ocrCacheLastHitDiagAt: 0,
-  ocrCacheHitCount: 0,
-  ocrCacheExpireCount: 0,
-  ocrCacheLastExpireDiagAt: 0,
-  ocrCacheMissCount: 0,
-  ocrCacheLastMissDiagAt: 0,
-  ocrCacheOpsCount: 0,
-  textEditMode: false,
-  diagnostics: { events: [], maxEvents: 500, sessionId: `nr-${Date.now().toString(36)}` },
-};
-
-const defaultHotkeys = {
-  next: 'pagedown',
-  prev: 'pageup',
-  zoomIn: 'ctrl+=',
-  zoomOut: 'ctrl+-',
-  annotate: 'ctrl+shift+a',
-  searchFocus: 'ctrl+f',
-  ocrPage: 'ctrl+shift+o',
-  fitWidth: 'ctrl+9',
-  fitPage: 'ctrl+0',
-};
-
-let hotkeys = { ...defaultHotkeys };
-
-
-const SIDEBAR_SECTION_CONFIG = [
-  { key: 'recent', label: 'Недавние файлы' },
-  { key: 'bookmarks', label: 'Закладки' },
-  { key: 'outline', label: 'Оглавление' },
-  { key: 'previews', label: 'Превью страниц' },
-  { key: 'progress', label: 'Прогресс чтения' },
-  { key: 'searchResults', label: 'Результаты поиска' },
-  { key: 'searchHistory', label: 'История поиска' },
-  { key: 'notes', label: 'Заметки' },
-];
-
-const TOOLBAR_SECTION_CONFIG = [
-  { key: 'navigation', label: 'Навигация (верхняя панель)' },
-  { key: 'zoom', label: 'Масштаб и поворот' },
-  { key: 'view', label: 'Вид и служебные кнопки' },
-  { key: 'tools', label: 'Панель инструментов' },
-];
-
-const OCR_MIN_DPI = 300;
-const CSS_BASE_DPI = 96;
-const OCR_MAX_SIDE_PX = 4096;
-const OCR_MAX_PIXELS = 8_500_000;
-const OCR_SLOW_TASK_WARN_MS = 3500;
-const OCR_HANG_WARN_MS = 7000;
-const OCR_SOURCE_MAX_PIXELS = 4_800_000;
-const OCR_SOURCE_CACHE_MAX_PIXELS = 12_000_000;
-const OCR_SOURCE_CACHE_TTL_MS = 2 * 60 * 1000;
-
-const els = {
-  fileInput: document.getElementById('fileInput'),
-  appVersion: document.getElementById('appVersion'),
-  recentList: document.getElementById('recentList'),
-  clearRecent: document.getElementById('clearRecent'),
-  toggleAdvancedPanels: document.getElementById('toggleAdvancedPanels'),
-  notesTitle: document.getElementById('notesTitle'),
-  notesTags: document.getElementById('notesTags'),
-  notes: document.getElementById('notes'),
-  notesStatus: document.getElementById('notesStatus'),
-  saveNotes: document.getElementById('saveNotes'),
-  exportNotes: document.getElementById('exportNotes'),
-  exportNotesMd: document.getElementById('exportNotesMd'),
-  exportNotesJson: document.getElementById('exportNotesJson'),
-  importNotesJson: document.getElementById('importNotesJson'),
-  notesImportMode: document.getElementById('notesImportMode'),
-  insertTimestamp: document.getElementById('insertTimestamp'),
-  hkNext: document.getElementById('hkNext'),
-  hkPrev: document.getElementById('hkPrev'),
-  hkZoomIn: document.getElementById('hkZoomIn'),
-  hkZoomOut: document.getElementById('hkZoomOut'),
-  hkAnnotate: document.getElementById('hkAnnotate'),
-  hkSearchFocus: document.getElementById('hkSearchFocus'),
-  hkOcrPage: document.getElementById('hkOcrPage'),
-  hkFitWidth: document.getElementById('hkFitWidth'),
-  hkFitPage: document.getElementById('hkFitPage'),
-  hkNextHint: document.getElementById('hkNextHint'),
-  hkPrevHint: document.getElementById('hkPrevHint'),
-  hkZoomInHint: document.getElementById('hkZoomInHint'),
-  hkZoomOutHint: document.getElementById('hkZoomOutHint'),
-  hkAnnotateHint: document.getElementById('hkAnnotateHint'),
-  hkSearchFocusHint: document.getElementById('hkSearchFocusHint'),
-  hkOcrPageHint: document.getElementById('hkOcrPageHint'),
-  hkFitWidthHint: document.getElementById('hkFitWidthHint'),
-  hkFitPageHint: document.getElementById('hkFitPageHint'),
-  saveHotkeys: document.getElementById('saveHotkeys'),
-  resetHotkeys: document.getElementById('resetHotkeys'),
-  autoFixHotkeys: document.getElementById('autoFixHotkeys'),
-  hotkeysStatus: document.getElementById('hotkeysStatus'),
-  settingsStatus: document.getElementById('settingsStatus'),
-  exportDiagnostics: document.getElementById('exportDiagnostics'),
-  clearDiagnostics: document.getElementById('clearDiagnostics'),
-  diagnosticsStatus: document.getElementById('diagnosticsStatus'),
-  runRuntimeSelfCheck: document.getElementById('runRuntimeSelfCheck'),
-  runtimeCheckStatus: document.getElementById('runtimeCheckStatus'),
-  applyCommonHotkeys: document.getElementById('applyCommonHotkeys'),
-  toggleSidebarCompact: document.getElementById('toggleSidebarCompact'),
-  collapseSidebarSections: document.getElementById('collapseSidebarSections'),
-  expandSidebarSections: document.getElementById('expandSidebarSections'),
-  exportWorkspace: document.getElementById('exportWorkspace'),
-  importWorkspace: document.getElementById('importWorkspace'),
-  workspaceStatus: document.getElementById('workspaceStatus'),
-  importOcrJson: document.getElementById('importOcrJson'),
-  cloudSyncUrl: document.getElementById('cloudSyncUrl'),
-  saveCloudSyncUrl: document.getElementById('saveCloudSyncUrl'),
-  pushCloudSync: document.getElementById('pushCloudSync'),
-  pullCloudSync: document.getElementById('pullCloudSync'),
-  toggleCollab: document.getElementById('toggleCollab'),
-  broadcastCollab: document.getElementById('broadcastCollab'),
-  stage4Status: document.getElementById('stage4Status'),
-  progressStatus: document.getElementById('progressStatus'),
-  resetProgress: document.getElementById('resetProgress'),
-  readingTimeStatus: document.getElementById('readingTimeStatus'),
-  resetReadingTime: document.getElementById('resetReadingTime'),
-  etaStatus: document.getElementById('etaStatus'),
-  readingGoalPage: document.getElementById('readingGoalPage'),
-  saveReadingGoal: document.getElementById('saveReadingGoal'),
-  clearReadingGoal: document.getElementById('clearReadingGoal'),
-  readingGoalStatus: document.getElementById('readingGoalStatus'),
-  visitTrailList: document.getElementById('visitTrailList'),
-  clearVisitTrail: document.getElementById('clearVisitTrail'),
-  docStats: document.getElementById('docStats'),
-  searchHistoryList: document.getElementById('searchHistoryList'),
-  clearSearchHistory: document.getElementById('clearSearchHistory'),
-  exportSearchHistory: document.getElementById('exportSearchHistory'),
-  exportSearchHistoryTxt: document.getElementById('exportSearchHistoryTxt'),
-  copySearchHistory: document.getElementById('copySearchHistory'),
-  importSearchHistoryJson: document.getElementById('importSearchHistoryJson'),
-  searchResultsList: document.getElementById('searchResultsList'),
-  clearSearchResults: document.getElementById('clearSearchResults'),
-  exportSearchResults: document.getElementById('exportSearchResults'),
-  exportSearchResultsCsv: document.getElementById('exportSearchResultsCsv'),
-  exportSearchSummaryTxt: document.getElementById('exportSearchSummaryTxt'),
-  importSearchResultsJson: document.getElementById('importSearchResultsJson'),
-  importSearchResultsCsv: document.getElementById('importSearchResultsCsv'),
-  copySearchResults: document.getElementById('copySearchResults'),
-  historyBack: document.getElementById('historyBack'),
-  historyForward: document.getElementById('historyForward'),
-  prevPage: document.getElementById('prevPage'),
-  nextPage: document.getElementById('nextPage'),
-  pageStatus: document.getElementById('pageStatus'),
-  pageInput: document.getElementById('pageInput'),
-  goToPage: document.getElementById('goToPage'),
-  zoomOut: document.getElementById('zoomOut'),
-  zoomIn: document.getElementById('zoomIn'),
-  fitWidth: document.getElementById('fitWidth'),
-  fitPage: document.getElementById('fitPage'),
-  zoomStatus: document.getElementById('zoomStatus'),
-  rotate: document.getElementById('rotate'),
-  canvas: document.getElementById('viewerCanvas'),
-  annotationCanvas: document.getElementById('annotationCanvas'),
-  emptyState: document.getElementById('emptyState'),
-  searchInput: document.getElementById('searchInput'),
-  searchScope: document.getElementById('searchScope'),
-  searchBtn: document.getElementById('searchBtn'),
-  searchPrev: document.getElementById('searchPrev'),
-  searchNext: document.getElementById('searchNext'),
-  searchStatus: document.getElementById('searchStatus'),
-  searchToolsGroup: document.getElementById('searchToolsGroup'),
-  importDjvuDataJson: document.getElementById('importDjvuDataJson'),
-  themeToggle: document.getElementById('themeToggle'),
-  fullscreen: document.getElementById('fullscreen'),
-  shortcutsHelp: document.getElementById('shortcutsHelp'),
-  toggleSidebar: document.getElementById('toggleSidebar'),
-  toggleToolsBar: document.getElementById('toggleToolsBar'),
-  toggleTextTools: document.getElementById('toggleTextTools'),
-  toggleSearchTools: document.getElementById('toggleSearchTools'),
-  toggleAnnotTools: document.getElementById('toggleAnnotTools'),
-  toggleTextToolsInline: document.getElementById('toggleTextToolsInline'),
-  textToolsSection: document.getElementById('textToolsSection'),
-  canvasWrap: document.getElementById('canvasWrap'),
-  addBookmark: document.getElementById('addBookmark'),
-  clearBookmarks: document.getElementById('clearBookmarks'),
-  exportBookmarks: document.getElementById('exportBookmarks'),
-  importBookmarks: document.getElementById('importBookmarks'),
-  bookmarkFilter: document.getElementById('bookmarkFilter'),
-  clearBookmarkFilter: document.getElementById('clearBookmarkFilter'),
-  bookmarksStatus: document.getElementById('bookmarksStatus'),
-  bookmarkList: document.getElementById('bookmarkList'),
-  outlineList: document.getElementById('outlineList'),
-  pagePreviewList: document.getElementById('pagePreviewList'),
-  downloadFile: document.getElementById('downloadFile'),
-  printPage: document.getElementById('printPage'),
-  importDjvuDataQuick: document.getElementById('importDjvuDataQuick'),
-  docInfo: document.getElementById('docInfo'),
-  refreshText: document.getElementById('refreshText'),
-  copyText: document.getElementById('copyText'),
-  exportText: document.getElementById('exportText'),
-  exportWord: document.getElementById('exportWord'),
-  importDocx: document.getElementById('importDocx'),
-  exportOcrIndex: document.getElementById('exportOcrIndex'),
-  undoTextEdit: document.getElementById('undoTextEdit'),
-  redoTextEdit: document.getElementById('redoTextEdit'),
-  exportHealthReport: document.getElementById('exportHealthReport'),
-  toggleTextEdit: document.getElementById('toggleTextEdit'),
-  saveTextEdits: document.getElementById('saveTextEdits'),
-  ocrCurrentPage: document.getElementById('ocrCurrentPage'),
-  ocrRegionMode: document.getElementById('ocrRegionMode'),
-  copyOcrText: document.getElementById('copyOcrText'),
-  cancelBackgroundOcr: document.getElementById('cancelBackgroundOcr'),
-  ocrStatus: document.getElementById('ocrStatus'),
-  pageText: document.getElementById('pageText'),
-  openSettingsModal: document.getElementById('openSettingsModal'),
-  closeSettingsModal: document.getElementById('closeSettingsModal'),
-  saveSettingsModal: document.getElementById('saveSettingsModal'),
-  settingsModal: document.getElementById('settingsModal'),
-  cfgShowSidebar: document.getElementById('cfgShowSidebar'),
-  cfgShowSearch: document.getElementById('cfgShowSearch'),
-  cfgShowAnnot: document.getElementById('cfgShowAnnot'),
-  cfgShowText: document.getElementById('cfgShowText'),
-  cfgSidebarWidth: document.getElementById('cfgSidebarWidth'),
-  cfgToolbarScale: document.getElementById('cfgToolbarScale'),
-  cfgTextMinHeight: document.getElementById('cfgTextMinHeight'),
-  cfgPageAreaHeight: document.getElementById('cfgPageAreaHeight'),
-  cfgTopToolbarHeight: document.getElementById('cfgTopToolbarHeight'),
-  cfgBottomToolbarHeight: document.getElementById('cfgBottomToolbarHeight'),
-  cfgTextPanelHeight: document.getElementById('cfgTextPanelHeight'),
-  cfgAnnotationCanvasScale: document.getElementById('cfgAnnotationCanvasScale'),
-  cfgTheme: document.getElementById('cfgTheme'),
-  cfgAppLang: document.getElementById('cfgAppLang'),
-  cfgOcrLang: document.getElementById('cfgOcrLang'),
-  cfgOcrCyrillicOnly: document.getElementById('cfgOcrCyrillicOnly'),
-  cfgOcrQualityMode: document.getElementById('cfgOcrQualityMode'),
-  cfgOcrMinW: document.getElementById('cfgOcrMinW'),
-  cfgOcrMinH: document.getElementById('cfgOcrMinH'),
-  cfgBackgroundOcr: document.getElementById('cfgBackgroundOcr'),
-  cfgSidebarSections: document.getElementById('cfgSidebarSections'),
-  cfgToolbarSections: document.getElementById('cfgToolbarSections'),
-  sidebarResizeHandle: document.getElementById('sidebarResizeHandle'),
-  canvasResizeHandle: document.getElementById('canvasResizeHandle'),
-  annotateToggle: document.getElementById('annotateToggle'),
-  drawTool: document.getElementById('drawTool'),
-  drawColor: document.getElementById('drawColor'),
-  drawSize: document.getElementById('drawSize'),
-  undoStroke: document.getElementById('undoStroke'),
-  clearStrokes: document.getElementById('clearStrokes'),
-  exportAnnotated: document.getElementById('exportAnnotated'),
-  exportAnnJson: document.getElementById('exportAnnJson'),
-  importAnnJson: document.getElementById('importAnnJson'),
-  exportAnnBundle: document.getElementById('exportAnnBundle'),
-  importAnnBundle: document.getElementById('importAnnBundle'),
-  annStats: document.getElementById('annStats'),
-  commentList: document.getElementById('commentList'),
-  clearComments: document.getElementById('clearComments'),
-};
-
 class PDFAdapter {
   static TEXT_CACHE_MAX = 30;
   constructor(pdfDoc) {
@@ -2356,15 +1508,6 @@ class UnsupportedAdapter {
   }
 }
 
-function loadImage(url) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = url;
-  });
-}
-
 
 function revokeCurrentObjectUrl() {
   if (state.currentObjectUrl) {
@@ -2420,252 +1563,6 @@ function bookmarkKey() {
   return `novareader-bookmarks:${state.docName || 'global'}`;
 }
 
-
-function pushDiagnosticEvent(type, payload = {}, level = 'info') {
-  const event = {
-    ts: new Date().toISOString(),
-    level,
-    type,
-    payload,
-  };
-  const store = state.diagnostics;
-  store.events.push(event);
-  if (store.events.length > store.maxEvents) {
-    store.events.splice(0, store.events.length - store.maxEvents);
-  }
-  if (els.diagnosticsStatus) {
-    els.diagnosticsStatus.textContent = `${store.events.length} событий`;
-  }
-}
-
-function clearDiagnostics() {
-  state.diagnostics.events = [];
-  if (els.diagnosticsStatus) {
-    els.diagnosticsStatus.textContent = '';
-  }
-}
-
-function collectPerfBaseline() {
-  const nav = performance.getEntriesByType('navigation')?.[0] || null;
-  const longTasks = performance.getEntriesByType('longtask') || [];
-  const resources = performance.getEntriesByType('resource') || [];
-  const memory = performance?.memory
-    ? {
-      usedJSHeapSize: Number(performance.memory.usedJSHeapSize || 0),
-      totalJSHeapSize: Number(performance.memory.totalJSHeapSize || 0),
-      jsHeapSizeLimit: Number(performance.memory.jsHeapSizeLimit || 0),
-    }
-    : null;
-
-  return {
-    ts: new Date().toISOString(),
-    uptimeMs: Math.round(performance.now()),
-    navigation: nav
-      ? {
-        type: nav.type || 'navigate',
-        domContentLoadedMs: Math.round(nav.domContentLoadedEventEnd || 0),
-        loadEventMs: Math.round(nav.loadEventEnd || 0),
-      }
-      : null,
-    longTask: {
-      count: longTasks.length,
-      maxMs: longTasks.length ? Math.round(Math.max(...longTasks.map((x) => x.duration || 0))) : 0,
-      totalMs: longTasks.length ? Math.round(longTasks.reduce((sum, x) => sum + (x.duration || 0), 0)) : 0,
-    },
-    resources: {
-      count: resources.length,
-    },
-    memory,
-    perfMetricsSummary: getPerfSummary(),
-    editHistory: getEditHistory(),
-    batchOcrProgress: getBatchOcrProgress(),
-    toolMode: toolStateMachine.current,
-    pageCacheSize: pageRenderCache.entries.size,
-    trackedUrls: objectUrlRegistry.size,
-    ocrSearchIndexPages: ocrSearchIndex.pages.size,
-    sessionHealth: getSessionHealth(),
-  };
-}
-
-function formatDiagnosticsForChat(payload) {
-  const lines = [];
-  lines.push('# NovaReader diagnostics');
-  lines.push(`appVersion: ${payload.appVersion}`);
-  lines.push(`sessionId: ${payload.sessionId}`);
-  lines.push(`exportedAt: ${payload.exportedAt}`);
-  lines.push(`docName: ${payload.docName || '-'}`);
-  lines.push(`page: ${payload.page ?? '-'}`);
-  lines.push(`eventCount: ${payload.eventCount}`);
-  lines.push(`uptimeMs: ${payload.perf?.uptimeMs ?? '-'}`);
-  lines.push(`longTaskCount: ${payload.perf?.longTask?.count ?? '-'}`);
-  lines.push(`longTaskMaxMs: ${payload.perf?.longTask?.maxMs ?? '-'}`);
-  lines.push(`resourceCount: ${payload.perf?.resources?.count ?? '-'}`);
-  lines.push('');
-  lines.push('perf:');
-  lines.push(JSON.stringify(payload.perf || {}, null, 0));
-  lines.push('');
-  if (payload.perf?.perfMetricsSummary) {
-    lines.push('perfMetrics (p95):');
-    lines.push(JSON.stringify(payload.perf.perfMetricsSummary, null, 0));
-    lines.push('');
-  }
-  if (payload.perf?.editHistory) {
-    lines.push(`editHistory: undo=${payload.perf.editHistory.undoCount} redo=${payload.perf.editHistory.redoCount} dirty=${payload.perf.editHistory.dirty}`);
-    lines.push('');
-  }
-  lines.push('events:');
-  payload.events.forEach((event, idx) => {
-    const payloadText = JSON.stringify(event.payload || {}, null, 0);
-    lines.push(`${idx + 1}. [${event.ts}] [${event.level}] ${event.type} ${payloadText}`);
-  });
-  return lines.join('\n');
-}
-
-
-function exportDiagnostics() {
-  const payload = {
-    appVersion: APP_VERSION,
-    sessionId: state.diagnostics.sessionId,
-    exportedAt: new Date().toISOString(),
-    docName: state.docName || null,
-    page: state.currentPage || null,
-    eventCount: state.diagnostics.events.length,
-    events: state.diagnostics.events,
-    perf: collectPerfBaseline(),
-  };
-  const text = formatDiagnosticsForChat(payload);
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `novareader-diagnostics-${Date.now()}.txt`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  pushDiagnosticEvent('diagnostics.export', {
-    eventCount: payload.eventCount,
-    format: 'txt',
-    uptimeMs: payload.perf?.uptimeMs || 0,
-    longTaskCount: payload.perf?.longTask?.count || 0,
-  });
-}
-
-async function verifyBundledAssets() {
-  const assets = [
-    { key: 'pdfRuntime', url: new URL('./vendor/pdf.min.mjs', import.meta.url).href },
-    { key: 'pdfWorker', url: new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href },
-    { key: 'djvuRuntime', url: new URL('./vendor/djvu.js', import.meta.url).href },
-    { key: 'ocrRuntime', url: new URL('./vendor/ocrad.js', import.meta.url).href },
-  ];
-
-  const report = {};
-  let okCount = 0;
-
-  for (const asset of assets) {
-    try {
-      const res = await fetch(asset.url, { cache: 'no-store' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text = await res.text();
-      const size = text.length;
-      report[asset.key] = { ok: size > 0, size, message: size > 0 ? 'ok' : 'empty file' };
-      if (size > 0) okCount += 1;
-    } catch (error) {
-      report[asset.key] = { ok: false, size: 0, message: error?.message || 'fetch failed' };
-    }
-    await yieldToMainThread();
-  }
-
-  return {
-    okCount,
-    total: assets.length,
-    report,
-  };
-}
-
-async function runRuntimeSelfCheck() {
-  const startedAt = performance.now();
-  const report = {
-    pdf: { ok: false, message: '' },
-    djvu: { ok: false, message: '' },
-    ocr: { ok: false, message: '' },
-  };
-
-  const checkOne = async (name, fn) => {
-    try {
-      await fn();
-      report[name] = { ok: true, message: 'ok (bundled runtime loaded)' };
-    } catch (error) {
-      report[name] = { ok: false, message: error?.message || 'load failed' };
-      pushDiagnosticEvent('runtime.selfcheck.failure', { module: name, message: report[name].message }, 'error');
-    }
-  };
-
-  await checkOne('pdf', ensurePdfJs);
-  await checkOne('djvu', ensureDjVuJs);
-  await checkOne('ocr', ensureOcrad);
-
-
-  const bundledAssets = await verifyBundledAssets();
-  report.assets = {
-    ok: bundledAssets.okCount === bundledAssets.total,
-    message: `${bundledAssets.okCount}/${bundledAssets.total} файлов доступны`,
-    details: bundledAssets.report,
-  };
-
-  const totalMs = Math.round(performance.now() - startedAt);
-  const okCount = Object.values(report).filter((x) => x.ok).length;
-  const status = `Runtime check: ${okCount}/4 проверок доступны, ${totalMs}ms`;
-  if (els.runtimeCheckStatus) {
-    els.runtimeCheckStatus.textContent = status;
-  }
-
-  pushDiagnosticEvent('runtime.selfcheck.finish', {
-    okCount,
-    total: 4,
-    ms: totalMs,
-    report,
-  }, okCount === 4 ? 'info' : 'warn');
-}
-
-function setupRuntimeDiagnostics() {
-  window.addEventListener('error', (event) => {
-    pushDiagnosticEvent('runtime.error', {
-      message: event?.message || 'Unknown error',
-      source: event?.filename || null,
-      line: event?.lineno || null,
-      col: event?.colno || null,
-    }, 'error');
-  });
-
-  window.addEventListener('unhandledrejection', (event) => {
-    const reason = event?.reason;
-    pushDiagnosticEvent('runtime.unhandledrejection', {
-      message: reason?.message || String(reason || 'Unknown rejection'),
-    }, 'error');
-  });
-
-  if (typeof PerformanceObserver === 'function') {
-    try {
-      const observer = new PerformanceObserver((list) => {
-        list.getEntries().forEach((entry) => {
-          if (entry.duration >= 50) {
-            pushDiagnosticEvent('perf.longtask', {
-              name: entry.name || 'longtask',
-              duration: Math.round(entry.duration),
-            }, 'warn');
-          }
-        });
-      });
-      observer.observe({ type: 'longtask', buffered: true });
-    } catch {
-      pushDiagnosticEvent('perf.observer.unavailable', {}, 'warn');
-    }
-  }
-
-  pushDiagnosticEvent('runtime.diagnostics.ready', { userAgent: navigator.userAgent });
-  pushDiagnosticEvent('runtime.plan.progress', { percent: NOVAREADER_PLAN_PROGRESS_PERCENT });
-}
 
 function viewStateKey() {
   return `novareader-view:${state.docName || 'global'}`;
@@ -3328,14 +2225,6 @@ async function estimatePageSkewAngle(pageNumber) {
   })();
 
   return state.pageSkewPromises[pageNumber];
-}
-
-async function yieldToMainThread(timeoutMs = 20) {
-  if (typeof window.requestIdleCallback === 'function') {
-    await new Promise((resolve) => window.requestIdleCallback(() => resolve(), { timeout: timeoutMs }));
-    return;
-  }
-  await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function cropCanvasByRelativeRect(sourceCanvas, relativeRect) {
@@ -4728,7 +3617,7 @@ async function applyWorkspacePayload(payload, { skipConfirm = false } = {}) {
     };
     const validation = validateHotkeys(candidate);
     if (validation.ok) {
-      hotkeys = candidate;
+      setHotkeys(candidate);
       localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
       renderHotkeyInputs();
       setHotkeysInputErrors([]);
@@ -6441,7 +5330,7 @@ function saveHotkeys() {
   }
 
   setHotkeysInputErrors([]);
-  hotkeys = candidate;
+  setHotkeys(candidate);
   localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
   renderHotkeyInputs();
   setHotkeysStatus(validation.message, 'success');
@@ -6450,7 +5339,7 @@ function saveHotkeys() {
 function loadHotkeys() {
   const raw = localStorage.getItem('novareader-hotkeys');
   if (!raw) {
-    hotkeys = { ...defaultHotkeys };
+    setHotkeys({ ...defaultHotkeys });
     renderHotkeyInputs();
     setHotkeysInputErrors([]);
     setHotkeysStatus('Используются значения по умолчанию.');
@@ -6459,7 +5348,7 @@ function loadHotkeys() {
 
   try {
     const parsed = JSON.parse(raw);
-    hotkeys = {
+    setHotkeys({
       next: normalizeHotkey(parsed.next, defaultHotkeys.next),
       prev: normalizeHotkey(parsed.prev, defaultHotkeys.prev),
       zoomIn: normalizeHotkey(parsed.zoomIn, defaultHotkeys.zoomIn),
@@ -6469,9 +5358,9 @@ function loadHotkeys() {
       ocrPage: normalizeHotkey(parsed.ocrPage, defaultHotkeys.ocrPage),
       fitWidth: normalizeHotkey(parsed.fitWidth, defaultHotkeys.fitWidth),
       fitPage: normalizeHotkey(parsed.fitPage, defaultHotkeys.fitPage),
-    };
+    });
   } catch {
-    hotkeys = { ...defaultHotkeys };
+    setHotkeys({ ...defaultHotkeys });
   }
   renderHotkeyInputs();
   setHotkeysInputErrors([]);
@@ -6479,7 +5368,7 @@ function loadHotkeys() {
 }
 
 function resetHotkeys() {
-  hotkeys = { ...defaultHotkeys };
+  setHotkeys({ ...defaultHotkeys });
   localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
   renderHotkeyInputs();
   setHotkeysInputErrors([]);
@@ -6569,7 +5458,7 @@ function autoFixHotkeys() {
     used.add(fallback);
   }
 
-  hotkeys = candidate;
+  setHotkeys(candidate);
   localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
   renderHotkeyInputs();
   setHotkeysInputErrors([]);
@@ -7752,7 +6641,7 @@ function initSidebarSections() {
 }
 
 function applyCommonHotkeys() {
-  hotkeys = { ...defaultHotkeys };
+  setHotkeys({ ...defaultHotkeys });
   localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
   renderHotkeyInputs();
   setHotkeysInputErrors([]);
@@ -7852,6 +6741,21 @@ window.addEventListener('beforeunload', () => {
 });
 
 renderRecent();
+
+// ─── Wire up module dependency injection ────────────────────────────────────
+initDiagnosticsDeps({
+  getEditHistory,
+  getBatchOcrProgress,
+  getSessionHealth,
+  getOcrSearchIndexSize: () => ocrSearchIndex.pages.size,
+  getToolMode: () => toolStateMachine.current,
+});
+initToolModeDeps({
+  renderAnnotations,
+  updateOverlayInteractionState,
+  setOcrStatus,
+});
+
 setupRuntimeDiagnostics();
 runRuntimeSelfCheck();
 loadAppSettings();

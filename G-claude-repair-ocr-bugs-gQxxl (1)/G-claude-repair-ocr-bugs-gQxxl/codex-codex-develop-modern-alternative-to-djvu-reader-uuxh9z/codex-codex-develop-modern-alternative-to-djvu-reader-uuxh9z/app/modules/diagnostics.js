@@ -1,13 +1,24 @@
+// ─── Diagnostics Module ─────────────────────────────────────────────────────
+// Self-contained diagnostics with dependency injection for app-level functions.
+
 import { state, els } from './state.js';
 import { APP_VERSION, NOVAREADER_PLAN_PROGRESS_PERCENT } from './constants.js';
 import { yieldToMainThread } from './utils.js';
 import { getPerfSummary, pageRenderCache, objectUrlRegistry } from './perf.js';
 import { ensurePdfJs, ensureDjVuJs, ensureOcrad } from './loaders.js';
-import { getEditHistory } from './text-edit.js';
-import { getBatchOcrProgress } from './ocr.js';
-import { getSessionHealth } from './errors.js';
-import { ocrSearchIndex } from './search.js';
-import { toolStateMachine } from './tool-modes.js';
+
+// Dependencies injected from app.js at runtime
+let _deps = {
+  getEditHistory: () => ({ undoCount: 0, redoCount: 0, editedPages: [], dirty: false }),
+  getBatchOcrProgress: () => ({ completed: 0, total: 0, percent: 0, running: false, queueLength: 0, confidenceStats: {} }),
+  getSessionHealth: () => ({ sessionId: '', uptimeMs: 0, totalErrors: 0, crashes: 0, crashFreeRate: 100 }),
+  getOcrSearchIndexSize: () => 0,
+  getToolMode: () => 'idle',
+};
+
+export function initDiagnosticsDeps(deps) {
+  Object.assign(_deps, deps);
+}
 
 export function pushDiagnosticEvent(type, payload = {}, level = 'info') {
   const event = {
@@ -65,13 +76,13 @@ export function collectPerfBaseline() {
     },
     memory,
     perfMetricsSummary: getPerfSummary(),
-    editHistory: getEditHistory(),
-    batchOcrProgress: getBatchOcrProgress(),
-    toolMode: toolStateMachine.current,
+    editHistory: _deps.getEditHistory(),
+    batchOcrProgress: _deps.getBatchOcrProgress(),
+    toolMode: _deps.getToolMode(),
     pageCacheSize: pageRenderCache.entries.size,
     trackedUrls: objectUrlRegistry.size,
-    ocrSearchIndexPages: ocrSearchIndex.pages.size,
-    sessionHealth: getSessionHealth(),
+    ocrSearchIndexPages: _deps.getOcrSearchIndexSize(),
+    sessionHealth: _deps.getSessionHealth(),
   };
 }
 
@@ -109,7 +120,6 @@ export function formatDiagnosticsForChat(payload) {
   return lines.join('\n');
 }
 
-
 export function exportDiagnostics() {
   const payload = {
     appVersion: APP_VERSION,
@@ -141,10 +151,10 @@ export function exportDiagnostics() {
 
 export async function verifyBundledAssets() {
   const assets = [
-    { key: 'pdfRuntime', url: new URL('./vendor/pdf.min.mjs', import.meta.url).href },
-    { key: 'pdfWorker', url: new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href },
-    { key: 'djvuRuntime', url: new URL('./vendor/djvu.js', import.meta.url).href },
-    { key: 'ocrRuntime', url: new URL('./vendor/ocrad.js', import.meta.url).href },
+    { key: 'pdfRuntime', url: new URL('../vendor/pdf.min.mjs', import.meta.url).href },
+    { key: 'pdfWorker', url: new URL('../vendor/pdf.worker.min.mjs', import.meta.url).href },
+    { key: 'djvuRuntime', url: new URL('../vendor/djvu.js', import.meta.url).href },
+    { key: 'ocrRuntime', url: new URL('../vendor/ocrad.js', import.meta.url).href },
   ];
 
   const report = {};
@@ -192,7 +202,6 @@ export async function runRuntimeSelfCheck() {
   await checkOne('pdf', ensurePdfJs);
   await checkOne('djvu', ensureDjVuJs);
   await checkOne('ocr', ensureOcrad);
-
 
   const bundledAssets = await verifyBundledAssets();
   report.assets = {
