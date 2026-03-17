@@ -54,6 +54,9 @@ body {
   background: radial-gradient(circle at 20% 0%, rgba(79, 156, 255, 0.1), transparent 36%), var(--bg);
   font-size: 13px;
   line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* ── Shell grid ── */
@@ -437,7 +440,10 @@ input:focus, select:focus, textarea:focus {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   background: white;
-  image-rendering: auto;
+  /* Use high-quality interpolation for document rendering.
+     -webkit-optimize-contrast sharpens downscaled images in Chromium. */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: high-quality;
   will-change: contents;         /* hint GPU to prepare for frequent repaints */
   contain: layout style paint;   /* isolate repaints from rest of DOM */
 }

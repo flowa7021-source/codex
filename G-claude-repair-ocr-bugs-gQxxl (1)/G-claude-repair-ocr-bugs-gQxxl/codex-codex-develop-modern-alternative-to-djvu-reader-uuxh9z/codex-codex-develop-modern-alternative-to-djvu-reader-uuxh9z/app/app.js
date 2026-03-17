@@ -1087,12 +1087,22 @@ class PDFAdapter {
   async renderPage(pageNumber, canvas, { zoom, rotation }) {
     const page = await this.pdfDoc.getPage(pageNumber);
     const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const viewport = page.getViewport({ scale: zoom * dpr, rotation });
-    const ctx = canvas.getContext('2d');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+    // Render at higher resolution for sharper text: use ceil to avoid
+    // sub-pixel truncation that causes blurry edges on text glyphs.
+    const renderScale = zoom * dpr;
+    const viewport = page.getViewport({ scale: renderScale, rotation });
+
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
     canvas.style.width = `${Math.round(viewport.width / dpr)}px`;
     canvas.style.height = `${Math.round(viewport.height / dpr)}px`;
+
+    // alpha:false — tells the browser this is an opaque canvas, enabling
+    // faster compositing and eliminating transparent-background artifacts.
+    const ctx = canvas.getContext('2d', { alpha: false });
+    // Fill white background before PDF.js renders (prevents flash of black)
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     // Only track/cancel render tasks for the main display canvas (els.canvas).
     // Off-screen canvases (OCR probe, thumbnails) use independent render tasks.
@@ -1102,7 +1112,12 @@ class PDFAdapter {
       this._currentRenderTask = null;
     }
 
-    const renderTask = page.render({ canvasContext: ctx, viewport });
+    const renderTask = page.render({
+      canvasContext: ctx,
+      viewport,
+      // PDF.js rendering hints for higher quality
+      background: 'rgba(255,255,255,1)',
+    });
     if (isMainCanvas) this._currentRenderTask = renderTask;
     try {
       await renderTask.promise;
@@ -1210,38 +1225,42 @@ class ImageAdapter {
 
   async renderPage(_pageNumber, canvas, { zoom, rotation }) {
     const img = await loadImage(this.imageUrl);
-    const ctx = canvas.getContext('2d');
     const rad = (rotation * Math.PI) / 180;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
 
     const w = img.width * zoom;
     const h = img.height * zoom;
-    const rw = w * dpr;
-    const rh = h * dpr;
+    const rw = Math.ceil(w * dpr);
+    const rh = Math.ceil(h * dpr);
 
     if (rotation % 180 === 0) {
       canvas.width = rw;
       canvas.height = rh;
       canvas.style.width = `${Math.round(w)}px`;
       canvas.style.height = `${Math.round(h)}px`;
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.translate(w / 2, h / 2);
-      ctx.rotate(rad);
-      ctx.drawImage(img, -w / 2, -h / 2, w, h);
-      ctx.restore();
     } else {
       canvas.width = rh;
       canvas.height = rw;
       canvas.style.width = `${Math.round(h)}px`;
       canvas.style.height = `${Math.round(w)}px`;
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.translate(h / 2, w / 2);
-      ctx.rotate(rad);
-      ctx.drawImage(img, -w / 2, -h / 2, w, h);
-      ctx.restore();
     }
+
+    const ctx = canvas.getContext('2d', { alpha: false });
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    if (rotation % 180 === 0) {
+      ctx.translate(w / 2, h / 2);
+    } else {
+      ctx.translate(h / 2, w / 2);
+    }
+    ctx.rotate(rad);
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
   }
 
   async getText() {
@@ -1309,46 +1328,51 @@ class DjVuAdapter {
     const imageUrl = this.pagesImages[pageNumber - 1];
     if (imageUrl) {
       const img = await loadImage(imageUrl);
-      const ctx = canvas.getContext('2d');
       const rad = (rotation * Math.PI) / 180;
       const dpr = Math.max(1, window.devicePixelRatio || 1);
       const w = img.width * zoom;
       const h = img.height * zoom;
-      const rw = w * dpr;
-      const rh = h * dpr;
+      const rw = Math.ceil(w * dpr);
+      const rh = Math.ceil(h * dpr);
+
       if (rotation % 180 === 0) {
         canvas.width = rw;
         canvas.height = rh;
         canvas.style.width = `${Math.round(w)}px`;
         canvas.style.height = `${Math.round(h)}px`;
-        ctx.save();
-        ctx.scale(dpr, dpr);
-        ctx.translate(w / 2, h / 2);
-        ctx.rotate(rad);
-        ctx.drawImage(img, -w / 2, -h / 2, w, h);
-        ctx.restore();
       } else {
         canvas.width = rh;
         canvas.height = rw;
         canvas.style.width = `${Math.round(h)}px`;
         canvas.style.height = `${Math.round(w)}px`;
-        ctx.save();
-        ctx.scale(dpr, dpr);
-        ctx.translate(h / 2, w / 2);
-        ctx.rotate(rad);
-        ctx.drawImage(img, -w / 2, -h / 2, w, h);
-        ctx.restore();
       }
+
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      if (rotation % 180 === 0) {
+        ctx.translate(w / 2, h / 2);
+      } else {
+        ctx.translate(h / 2, w / 2);
+      }
+      ctx.rotate(rad);
+      ctx.drawImage(img, -w / 2, -h / 2, w, h);
+      ctx.restore();
       return;
     }
 
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const viewport = await this.getPageViewport(pageNumber, zoom * dpr, rotation);
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
     canvas.style.width = `${Math.round(viewport.width / dpr)}px`;
     canvas.style.height = `${Math.round(viewport.height / dpr)}px`;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     ctx.fillStyle = '#10141b';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#f8fafc';
@@ -1411,39 +1435,65 @@ class DjVuNativeAdapter {
     const tmp = document.createElement('canvas');
     tmp.width = imageData.width;
     tmp.height = imageData.height;
-    tmp.getContext('2d').putImageData(imageData, 0, 0);
+    tmp.getContext('2d', { alpha: false }).putImageData(imageData, 0, 0);
 
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const rad = (rotation * Math.PI) / 180;
     const w = tmp.width * zoom;
     const h = tmp.height * zoom;
-    const rw = w * dpr;
-    const rh = h * dpr;
+    const rw = Math.ceil(w * dpr);
+    const rh = Math.ceil(h * dpr);
 
-    const ctx = canvas.getContext('2d');
     if (rotation % 180 === 0) {
       canvas.width = rw;
       canvas.height = rh;
       canvas.style.width = `${Math.round(w)}px`;
       canvas.style.height = `${Math.round(h)}px`;
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.translate(w / 2, h / 2);
-      ctx.rotate(rad);
-      ctx.drawImage(tmp, -w / 2, -h / 2, w, h);
-      ctx.restore();
     } else {
       canvas.width = rh;
       canvas.height = rw;
       canvas.style.width = `${Math.round(h)}px`;
       canvas.style.height = `${Math.round(w)}px`;
-      ctx.save();
-      ctx.scale(dpr, dpr);
-      ctx.translate(h / 2, w / 2);
-      ctx.rotate(rad);
-      ctx.drawImage(tmp, -w / 2, -h / 2, w, h);
-      ctx.restore();
     }
+
+    const ctx = canvas.getContext('2d', { alpha: false });
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // For significant upscaling (zoom > 2x), use two-pass rendering
+    // for sharper results: first scale to 2x, then to final size.
+    const effectiveScale = zoom * dpr;
+    let source = tmp;
+    if (effectiveScale > 2.5 && tmp.width > 0 && tmp.height > 0) {
+      const mid = document.createElement('canvas');
+      const midScale = Math.sqrt(effectiveScale);
+      mid.width = Math.ceil(tmp.width * midScale);
+      mid.height = Math.ceil(tmp.height * midScale);
+      const midCtx = mid.getContext('2d', { alpha: false });
+      midCtx.imageSmoothingEnabled = true;
+      midCtx.imageSmoothingQuality = 'high';
+      midCtx.drawImage(tmp, 0, 0, mid.width, mid.height);
+      // Release tmp early
+      tmp.width = 0; tmp.height = 0;
+      source = mid;
+    }
+
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    if (rotation % 180 === 0) {
+      ctx.translate(w / 2, h / 2);
+    } else {
+      ctx.translate(h / 2, w / 2);
+    }
+    ctx.rotate(rad);
+    ctx.drawImage(source, -w / 2, -h / 2, w, h);
+    ctx.restore();
+
+    // Release intermediate canvas
+    if (source !== tmp) { source.width = 0; source.height = 0; }
+    if (tmp.width > 0) { tmp.width = 0; tmp.height = 0; }
   }
 
   async getText(pageNumber) {
@@ -1596,7 +1646,17 @@ function invalidateAnnotationCaches() {
 }
 
 function getCurrentAnnotationCtx() {
-  return els.annotationCanvas.getContext('2d');
+  const ctx = els.annotationCanvas.getContext('2d');
+  return ctx;
+}
+
+/**
+ * Returns the DPR scale factor used for the annotation canvas.
+ * Annotation canvas is sized at displayWidth*dpr × displayHeight*dpr
+ * while CSS size is displayWidth × displayHeight.
+ */
+function getAnnotationDpr() {
+  return Math.max(1, window.devicePixelRatio || 1);
 }
 
 function loadStrokes(page = state.currentPage) {
@@ -3238,7 +3298,13 @@ function drawStroke(ctx, stroke) {
 
 function renderAnnotations() {
   const ctx = getCurrentAnnotationCtx();
+  const adpr = getAnnotationDpr();
   ctx.clearRect(0, 0, els.annotationCanvas.width, els.annotationCanvas.height);
+
+  // Scale context to match HiDPI annotation canvas
+  ctx.save();
+  ctx.scale(adpr, adpr);
+
   const strokes = loadStrokes();
   const comments = loadComments();
 
@@ -3262,6 +3328,8 @@ function renderAnnotations() {
   });
 
   if (state.ocrSelection) drawOcrSelectionPreview();
+
+  ctx.restore(); // undo DPR scale
 
   els.annStats.textContent = `Штрихов: ${strokes.length} • Комментариев: ${comments.length}`;
 }
@@ -4894,7 +4962,19 @@ const _openFileImpl = async function openFileImpl(file) {
     formManager.loadFromAdapter(state.adapter).catch(() => {});
   }
 
-  restoreViewStateIfPresent();
+  const hadSavedState = restoreViewStateIfPresent();
+  // If no saved zoom, auto-fit page width for optimal initial display quality
+  if (!hadSavedState && state.adapter) {
+    try {
+      const vp = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);
+      const scrollbarW = els.canvasWrap.offsetWidth - els.canvasWrap.clientWidth;
+      const available = Math.max(200, els.canvasWrap.clientWidth - Math.max(16, scrollbarW + 16));
+      const autoZoom = available / vp.width;
+      if (autoZoom > 0.3 && autoZoom < 4) {
+        state.zoom = Math.round(autoZoom * 100) / 100;
+      }
+    } catch { /* keep default zoom=1 */ }
+  }
   stopReadingTimer(false);
   state.readingTotalMs = loadReadingTime();
   state.readingStartedAt = null;
@@ -4954,8 +5034,10 @@ async function renderCurrentPage() {
 
   const displayWidth = Math.max(1, Math.round(parseFloat(els.canvas.style.width || String(els.canvas.width))));
   const displayHeight = Math.max(1, Math.round(parseFloat(els.canvas.style.height || String(els.canvas.height))));
-  els.annotationCanvas.width = displayWidth;
-  els.annotationCanvas.height = displayHeight;
+  // Render annotations at device-pixel resolution for crisp lines on HiDPI
+  const annotDpr = Math.max(1, window.devicePixelRatio || 1);
+  els.annotationCanvas.width = Math.ceil(displayWidth * annotDpr);
+  els.annotationCanvas.height = Math.ceil(displayHeight * annotDpr);
   els.annotationCanvas.style.width = `${displayWidth}px`;
   els.annotationCanvas.style.height = `${displayHeight}px`;
 
@@ -5030,7 +5112,7 @@ function renderReadingProgress() {
 
 function restoreViewStateIfPresent() {
   const saved = loadViewState();
-  if (!saved) return;
+  if (!saved) return false;
 
   if (Number.isInteger(saved.page) && saved.page >= 1 && saved.page <= state.pageCount) {
     state.currentPage = saved.page;
@@ -5041,6 +5123,7 @@ function restoreViewStateIfPresent() {
   if (typeof saved.rotation === 'number' && Number.isFinite(saved.rotation)) {
     state.rotation = ((saved.rotation % 360) + 360) % 360;
   }
+  return true;
 }
 
 async function resetReadingProgress() {
@@ -6170,7 +6253,10 @@ async function goToPage() {
 async function fitWidth() {
   if (!state.adapter) return;
   const viewport = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);
-  const available = Math.max(200, els.canvasWrap.clientWidth - 80);
+  // Use minimal padding (scrollbar width + canvas padding) for maximum use of space
+  const scrollbarWidth = els.canvasWrap.offsetWidth - els.canvasWrap.clientWidth;
+  const padding = Math.max(16, scrollbarWidth + 16);
+  const available = Math.max(200, els.canvasWrap.clientWidth - padding);
   state.zoom = Math.max(0.3, Math.min(4, available / viewport.width));
   await renderCurrentPage();
 }
@@ -6178,8 +6264,12 @@ async function fitWidth() {
 async function fitPage() {
   if (!state.adapter) return;
   const viewport = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);
-  const availableWidth = Math.max(200, els.canvasWrap.clientWidth - 80);
-  const availableHeight = Math.max(200, els.canvasWrap.clientHeight - 80);
+  const scrollbarW = els.canvasWrap.offsetWidth - els.canvasWrap.clientWidth;
+  const scrollbarH = els.canvasWrap.offsetHeight - els.canvasWrap.clientHeight;
+  const paddingW = Math.max(16, scrollbarW + 16);
+  const paddingH = Math.max(16, scrollbarH + 16);
+  const availableWidth = Math.max(200, els.canvasWrap.clientWidth - paddingW);
+  const availableHeight = Math.max(200, els.canvasWrap.clientHeight - paddingH);
   state.zoom = Math.max(0.3, Math.min(4, Math.min(availableWidth / viewport.width, availableHeight / viewport.height)));
   await renderCurrentPage();
 }

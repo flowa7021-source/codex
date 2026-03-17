@@ -192,7 +192,8 @@ export function cacheRenderedPage(pageNum, canvas) {
   const copy = document.createElement('canvas');
   copy.width = canvas.width;
   copy.height = canvas.height;
-  copy.getContext('2d').drawImage(canvas, 0, 0);
+  // alpha:false — cached pages are always opaque; avoids compositing overhead on restore
+  copy.getContext('2d', { alpha: false }).drawImage(canvas, 0, 0);
   pageRenderCache.entries.set(pageNum, { canvas: copy, pixels, ts: Date.now() });
   pageRenderCache.totalPixels += pixels;
 }
