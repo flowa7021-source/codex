@@ -286,6 +286,7 @@ export const els = {
   splitPages: document.getElementById('splitPages'),
   textLayerDiv: document.getElementById('textLayerDiv'),
   canvasStack: document.getElementById('canvasStack'),
+  addBookmarkToolbar: document.getElementById('addBookmarkToolbar'),
   conversionInvoice: document.getElementById('conversionInvoice'),
   conversionReport: document.getElementById('conversionReport'),
   conversionTable: document.getElementById('conversionTable'),

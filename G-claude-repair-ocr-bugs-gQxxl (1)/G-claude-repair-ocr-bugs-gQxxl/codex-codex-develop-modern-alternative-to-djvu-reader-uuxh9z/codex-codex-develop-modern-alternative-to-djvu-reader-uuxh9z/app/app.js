@@ -7636,6 +7636,7 @@ els.saveReadingGoal.addEventListener('click', saveReadingGoal);
 els.clearReadingGoal.addEventListener('click', clearReadingGoal);
 els.themeToggle?.addEventListener('click', toggleTheme);
 els.addBookmark.addEventListener('click', addBookmark);
+els.addBookmarkToolbar?.addEventListener('click', addBookmark);
 els.clearBookmarks.addEventListener('click', clearBookmarks);
 els.exportBookmarks.addEventListener('click', exportBookmarksJson);
 els.importBookmarks.addEventListener('change', async (e) => {
