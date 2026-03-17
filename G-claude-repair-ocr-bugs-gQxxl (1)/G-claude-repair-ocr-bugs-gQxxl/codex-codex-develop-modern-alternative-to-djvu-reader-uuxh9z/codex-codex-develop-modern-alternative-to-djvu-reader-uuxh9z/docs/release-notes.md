@@ -1,26 +1,50 @@
-# NovaReader 1.0.0 — Release Notes
+# NovaReader 2.0.0-alpha — Release Notes
 
-## Что вошло
-- Мульти-адаптерный viewer: PDF/Image/DjVu.
-- Аннотации: pen/highlighter/eraser + rect/arrow/line/circle + комментарии.
-- Поиск, извлечение текста, bookmarks, notes, hotkeys, история и превью страниц.
-- Workspace backup import/export.
-- Stage 4: OCR import, cloud sync (push/pull), collaboration via BroadcastChannel.
+## Обзор
+Крупное обновление качества, производительности и функционала. Все ключевые функции чтения, аннотирования, OCR и экспорта работают стабильнее. Добавлены PDF-редактирование и полноценная конвертация в DOCX.
 
-## UX переработка (release polish)
-- Переработанная визуальная система: карточки, улучшенные контрасты, единые кнопки и поля ввода.
-- Более читаемая структура левой панели и улучшенная адаптивность для узких экранов.
+---
 
-## Runtime hardening
-- `dev_server.py` теперь перенаправляет `/` на `/app/` для старта в один клик.
-- Добавлен `GET /api/health` для быстрой диагностики релизного запуска.
-- Добавлено ограничение размера payload для `PUT /api/workspace` (по умолчанию 5 MB).
+## Новое в 2.0.0
 
-## Desktop .exe build (Windows)
-- Добавлена Electron-обёртка (`electron/main.js`) для запуска без Python/PowerShell/серверов.
-- Добавлена сборка `.exe` через `electron-builder` (`npm run build:win`).
+### Стабильность и отказоустойчивость
+- **Единая система обработки ошибок** (`withErrorBoundary`) — все операции открытия, рендера и экспорта обёрнуты в error boundary с классификацией ошибок (runtime, asset-load, memory, timeout, parse, security, storage, processing) и user-friendly отображением.
+- **Crash telemetry** — автоматический перехват `window.error` и `unhandledrejection`, подсчёт crash-free rate, экспорт отчёта здоровья сессии.
+- **Автоочистка ресурсов** при закрытии вкладки — Object URLs, кэш страниц, сохранение pending-правок.
 
-## Запуск release-версии
-- `python3 dev_server.py`
-- Приложение: `http://localhost:4173/app/`
-- Встроенный cloud endpoint: `http://localhost:4173/api/workspace`
+### Производительность
+- **Web Worker pool** — пул до `navigator.hardwareConcurrency` воркеров для параллельной обработки изображений и полнотекстового поиска, с fallback на main thread.
+- **LRU-кэш отрендеренных страниц** — до 8 страниц / 32 Мпикс, ускоряет навигацию вперёд/назад.
+- **Object URL registry** — централизованный трекинг и автоматическое освобождение blob URLs.
+- **Perf-метрики p95** — автоматическая запись render/OCR/search/pageLoad с вычислением min/max/median/p95/avg. Интеграция в экспорт диагностики.
+
+### OCR 2.0
+- **Confidence scoring** — многофакторная оценка качества (langScore, readability, wordLength) с уровнями `high / medium / low / very-low`, отображение в UI.
+- **Post-correction** — автоматическое исправление типичных OCR-артефактов для русского и английского языков.
+- **Batch OCR queue** — очередь с приоритизацией (high/normal), отменой, прогресс-трекинг.
+- **OCR search index** — индексация распознанного текста с координатами (страница, строка, смещение), поиск по индексу, экспорт индекса в JSON.
+
+### PDF Pro
+- **Text editing layer** — undo/redo (до 100 шагов), persistence правок в localStorage, интеграция с Ctrl+Z / Ctrl+Y, кнопки «Отмена» / «Повтор» в UI.
+- **Настоящий DOCX конвертер** — генерация валидного OOXML (.docx):
+  - Структурированные абзацы и стили (Title, Heading2)
+  - Автоматическое определение и форматирование таблиц
+  - Встроенные изображения страниц (для PDF документов до 20 стр.)
+  - Разрывы страниц
+  - Минимальная ZIP-архивация с CRC-32
+- **Импорт DOCX-правок** — чтение текста из .docx и объединение с текущей рабочей областью.
+
+### UX
+- **Unified tool state machine** — `IDLE | ANNOTATE | OCR_REGION | TEXT_EDIT | SEARCH`. Автоматическая деактивация предыдущего инструмента при переключении, устранение конфликтов горячих клавиш.
+- **Адаптивный CSS** для экранов <16:9, low-height (< 700px, < 560px), ultrawide.
+- Новые кнопки в UI: «Экспорт OCR индекс», «Импорт DOCX», «Отмена/Повтор правок», «Отчёт здоровья сессии».
+
+---
+
+## Совместимость
+- Версия рабочих областей 1.x полностью совместима. Правки сохраняются в localStorage с отдельным ключом.
+- Экспорт теперь генерирует `.docx` вместо `.doc`.
+
+## Запуск
+- `python3 dev_server.py` → `http://localhost:4173/app/`
+- Или через Electron: `npm start`

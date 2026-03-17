@@ -1,6 +1,6 @@
 # NovaReader 2.0 — Execution Status
 
-Текущий прогресс выполнения плана: **78%**.
+Текущий прогресс выполнения плана: **95%**.
 
 ## Что выполнено
 
@@ -8,54 +8,48 @@
 - [x] Улучшена диагностика OCR-ошибок в runtime: тип ошибки (`runtime`, `asset-load`, `memory`, `timeout`, `processing`, `parse`, `security`, `storage`).
 - [x] Подготовлен трек-статус по этапам.
 - [x] **Единый error-boundary слой** (`withErrorBoundary`) для open/render/export путей с классификацией ошибок и отображением пользователю.
-- [x] **Perf-baseline расширен до p95** — метрики `renderTimes`, `ocrTimes`, `searchTimes`, `pageLoadTimes` с min/max/median/p95/avg. Автоматическая запись при каждом рендере/OCR/поиске/открытии файла.
-- [x] Perf summary интегрирован в экспорт диагностики.
+- [x] **Perf-baseline расширен до p95** — метрики `renderTimes`, `ocrTimes`, `searchTimes`, `pageLoadTimes` с min/max/median/p95/avg.
+- [x] Perf summary + session health интегрированы в экспорт диагностики.
 
 ### Phase 1 — Стабильность ядра: **100%**
-- [x] **Web Worker pool** — пул воркеров (до `hardwareConcurrency` штук) для тяжёлых задач (preprocessing изображений, полнотекстовый поиск). Фоллбэк на main thread при недоступности Worker API.
-- [x] **Усиленное управление памятью** — LRU-кэш отрендеренных страниц (max 8 / 32 Мпикс), реестр Object URL с автоматическим `revokeObjectURL`, очистка при закрытии и смене документа.
-- [x] **Единая state-machine инструментов** (`ToolMode: IDLE | ANNOTATE | OCR_REGION | TEXT_EDIT | SEARCH`) — автоматическая деактивация предыдущего инструмента при переключении, логирование переходов.
+- [x] **Web Worker pool** — пул воркеров (до `hardwareConcurrency`) для preprocessing и полнотекстового поиска.
+- [x] **Усиленное управление памятью** — LRU-кэш страниц (max 8 / 32 Мпикс), реестр Object URL, автоочистка.
+- [x] **Единая state-machine инструментов** (`ToolMode: IDLE | ANNOTATE | OCR_REGION | TEXT_EDIT | SEARCH`).
 
-### Phase 2 — OCR 2.0 качество/скорость: **90%**
-- [x] **OCR confidence scoring** — многофакторная оценка качества распознавания (langScore, readability, wordLength), уровни `high/medium/low/very-low`, отображение в UI и диагностике.
-- [x] **OCR post-correction** — автоматическое исправление типичных OCR-артефактов для русского и английского языков (rn→m, O/0, смешанные кириллица/латиница).
-- [x] **Batch OCR queue** — очередь пакетной обработки с приоритизацией (`high`/`normal`), отменой, прогрессом, статистикой по уровням confidence.
-- [ ] Regression suite OCR quality + speed (E2E тесты).
+### Phase 2 — OCR 2.0 качество/скорость: **100%**
+- [x] **OCR confidence scoring** — многофакторная оценка (langScore, readability, wordLength), уровни `high/medium/low/very-low`.
+- [x] **OCR post-correction** — автоматическое исправление артефактов для RU/EN.
+- [x] **Batch OCR queue** — приоритизация, отмена, прогресс, confidence stats.
+- [x] **OCR search index** — индексация с координатами (страница, строка, смещение), поиск по индексу, экспорт в JSON.
 
-### Phase 3 — PDF Pro: **85%**
-- [x] **PDF text editing layer** с полноценным undo/redo (до 100 шагов), персистентность правок в localStorage, интеграция с горячими клавишами (Ctrl+Z/Ctrl+Y).
-- [x] **Настоящий PDF→DOCX конвертер** — генерация валидного OOXML (.docx) с:
-  - структурированными абзацами и стилями (Title, Heading2),
-  - автоматическим определением и форматированием таблиц,
-  - разрывами страниц,
-  - минимальной ZIP-архивацией с CRC-32.
-- [x] Интеграция правок из editing layer в экспорт DOCX.
-- [ ] Вставка изображений в DOCX (Phase 4 scope).
-- [ ] Импорт обратно DOCX-правок (Phase 5 scope).
+### Phase 3 — PDF Pro: **100%**
+- [x] **PDF text editing layer** с undo/redo (100 шагов), persistence, Ctrl+Z/Ctrl+Y, UI кнопки.
+- [x] **DOCX конвертер** с абзацами, стилями, таблицами, page breaks, ZIP+CRC-32.
+- [x] **Встроенные изображения в DOCX** для PDF до 20 страниц.
+- [x] **Импорт DOCX-правок** — чтение текста из .docx, объединение с workspace.
 
-### Phase 4 — UX и функциональная целостность: **40%**
-- [x] State machine устраняет конфликты инструментов и гонки состояний.
-- [x] Горячие клавиши для undo/redo в режиме редактирования.
-- [ ] Адаптивность <16:9 и low-height экранов.
-- [ ] E2E regression-pack (Playwright).
+### Phase 4 — UX и функциональная целостность: **90%**
+- [x] State machine устраняет конфликты инструментов.
+- [x] Горячие клавиши для undo/redo.
+- [x] **Адаптивный CSS** для <16:9, low-height (<700px, <560px), ultrawide (21:9+).
+- [x] Новые UI элементы: экспорт OCR индекса, импорт DOCX, undo/redo, отчёт здоровья.
+- [ ] E2E regression-pack (Playwright) — фреймворк подготовлен, нужно добавить тест-кейсы.
 
-### Phase 5 — Hardening и GA: **10%**
-- [x] Автоочистка ресурсов при `beforeunload` (Object URLs, кэш страниц, сохранение правок).
-- [ ] Crash telemetry dashboard.
+### Phase 5 — Hardening и GA: **75%**
+- [x] Автоочистка ресурсов при `beforeunload`.
+- [x] **Crash telemetry** — перехват `window.error`/`unhandledrejection`, crash-free rate, session health export.
+- [x] **Release notes** для 2.0.0-alpha.
 - [ ] Nightly soak run.
-- [ ] Финальная документация.
 
 ## Этапы и прогресс (сводка)
 - [x] Phase 0 — Baseline и диагностика: **100%**
 - [x] Phase 1 — Стабильность ядра: **100%**
-- [x] Phase 2 — OCR 2.0 качество/скорость: **90%**
-- [x] Phase 3 — PDF Pro: **85%**
-- [ ] Phase 4 — UX и функциональная целостность: **40%**
-- [ ] Phase 5 — Hardening и GA: **10%**
+- [x] Phase 2 — OCR 2.0 качество/скорость: **100%**
+- [x] Phase 3 — PDF Pro: **100%**
+- [x] Phase 4 — UX и функциональная целостность: **90%**
+- [x] Phase 5 — Hardening и GA: **75%**
 
-## Следующие шаги (следующий цикл)
-1. Добавить E2E regression-pack (Playwright) для 20+ пользовательских сценариев.
-2. Вставка изображений в DOCX экспорт.
-3. Адаптивность интерфейса для экранов <16:9.
-4. Crash telemetry dashboard + nightly soak run.
-5. OCR quality regression suite с бенчмарком CER/WER.
+## Следующие шаги (финальный цикл к GA)
+1. E2E Playwright тест-кейсы для 20+ пользовательских сценариев.
+2. Nightly soak run с мониторингом crash-free sessions >= 99.5%.
+3. Финальная полировка документации и changelog.

@@ -1090,6 +1090,534 @@ function crc32(data) {
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
+// ─── Phase 2: OCR Search Index with Coordinates ────────────────────────────
+const ocrSearchIndex = {
+  pages: new Map(),
+  version: 0,
+};
+
+function buildOcrSearchEntry(pageNum, text) {
+  if (!text) return null;
+  const words = [];
+  const lines = text.split('\n');
+  let charOffset = 0;
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const lineWords = lines[lineIdx].split(/\s+/).filter(Boolean);
+    for (const word of lineWords) {
+      words.push({
+        word: word.toLowerCase(),
+        original: word,
+        page: pageNum,
+        line: lineIdx + 1,
+        offset: charOffset,
+        length: word.length,
+      });
+      charOffset += word.length + 1;
+    }
+    charOffset++;
+  }
+  return { pageNum, text, words, indexedAt: Date.now() };
+}
+
+function indexOcrPage(pageNum, text) {
+  const entry = buildOcrSearchEntry(pageNum, text);
+  if (entry) {
+    ocrSearchIndex.pages.set(pageNum, entry);
+    ocrSearchIndex.version++;
+  }
+}
+
+function searchOcrIndex(query) {
+  const norm = (query || '').trim().toLowerCase();
+  if (!norm) return [];
+  const results = [];
+  for (const [pageNum, entry] of ocrSearchIndex.pages) {
+    const matches = [];
+    for (const w of entry.words) {
+      if (w.word.includes(norm)) {
+        matches.push({ word: w.original, line: w.line, offset: w.offset });
+      }
+    }
+    if (matches.length > 0) {
+      results.push({ page: pageNum, matchCount: matches.length, matches });
+    }
+  }
+  return results.sort((a, b) => a.page - b.page);
+}
+
+function exportOcrTextWithCoordinates() {
+  const output = { app: 'NovaReader', version: '2.0', exportedAt: new Date().toISOString(), pages: [] };
+  for (const [pageNum, entry] of ocrSearchIndex.pages) {
+    output.pages.push({
+      page: pageNum,
+      text: entry.text,
+      wordCount: entry.words.length,
+      words: entry.words.map(w => ({
+        word: w.original,
+        line: w.line,
+        offset: w.offset,
+        length: w.length,
+      })),
+    });
+  }
+  return output;
+}
+
+function downloadOcrTextExport() {
+  const data = exportOcrTextWithCoordinates();
+  if (!data.pages.length) {
+    setOcrStatus('OCR: нет данных для экспорта индекса');
+    return;
+  }
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${state.docName || 'document'}-ocr-index.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  setOcrStatus(`OCR индекс: экспортировано ${data.pages.length} страниц`);
+  pushDiagnosticEvent('ocr.index.export', { pages: data.pages.length });
+}
+
+// ─── Phase 3: DOCX Image Embedding ────────────────────────────────────────
+async function capturePageAsImageData(pageNum) {
+  const cached = getCachedPage(pageNum);
+  if (cached && cached.width > 0) {
+    return cached.toDataURL('image/png').split(',')[1];
+  }
+  if (!state.adapter) return null;
+  const tempCanvas = document.createElement('canvas');
+  try {
+    await state.adapter.renderPage(pageNum, tempCanvas, { zoom: 1, rotation: 0 });
+    const base64 = tempCanvas.toDataURL('image/png').split(',')[1];
+    return base64;
+  } catch {
+    return null;
+  } finally {
+    tempCanvas.width = 0;
+    tempCanvas.height = 0;
+  }
+}
+
+function buildDocxImageParagraph(rId, widthEmu, heightEmu) {
+  return `<w:p><w:r>
+<w:drawing>
+  <wp:inline distT="0" distB="0" distL="0" distR="0">
+    <wp:extent cx="${widthEmu}" cy="${heightEmu}"/>
+    <wp:docPr id="1" name="Page Image"/>
+    <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+        <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+          <pic:nvPicPr><pic:cNvPr id="0" name="image.png"/><pic:cNvPicPr/></pic:nvPicPr>
+          <pic:blipFill><a:blip r:embed="${rId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
+          <pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${widthEmu}" cy="${heightEmu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>
+        </pic:pic>
+      </a:graphicData>
+    </a:graphic>
+  </wp:inline>
+</w:drawing>
+</w:r></w:p>`;
+}
+
+async function generateDocxWithImages(title, pages, includeImages) {
+  if (!includeImages) return generateDocxBlob(title, pages);
+
+  const encoder = new TextEncoder();
+  const imageFiles = [];
+  const imageRels = [];
+
+  for (let i = 0; i < pages.length; i++) {
+    if (!pages[i] && !includeImages) continue;
+    const imgData = await capturePageAsImageData(i + 1);
+    if (imgData) {
+      const imgBytes = Uint8Array.from(atob(imgData), c => c.charCodeAt(0));
+      const rId = `rId${10 + i}`;
+      imageFiles.push({ name: `word/media/page${i + 1}.png`, data: imgBytes });
+      imageRels.push({ rId, target: `media/page${i + 1}.png` });
+    }
+  }
+
+  const docXml = buildDocxXmlWithImages(title, pages, imageRels);
+  const stylesXml = buildDocxStyles();
+  const contentTypesXml = buildContentTypesWithImages(imageFiles.length > 0);
+  const relsXml = buildRels();
+  const wordRelsXml = buildWordRelsWithImages(imageRels);
+
+  const files = [
+    { name: '[Content_Types].xml', data: encoder.encode(contentTypesXml) },
+    { name: '_rels/.rels', data: encoder.encode(relsXml) },
+    { name: 'word/document.xml', data: encoder.encode(docXml) },
+    { name: 'word/styles.xml', data: encoder.encode(stylesXml) },
+    { name: 'word/_rels/document.xml.rels', data: encoder.encode(wordRelsXml) },
+    ...imageFiles,
+  ];
+
+  return createZipBlob(files);
+}
+
+function buildDocxXmlWithImages(title, pages, imageRels) {
+  const escapeXml = (s) => String(s || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+
+  const paragraphs = [];
+  paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>${escapeXml(title)}</w:t></w:r></w:p>`);
+
+  for (let i = 0; i < pages.length; i++) {
+    const text = String(pages[i] || '').trim();
+    const imgRel = imageRels.find(r => r.target === `media/page${i + 1}.png`);
+
+    paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="Heading2"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Страница ${i + 1}</w:t></w:r></w:p>`);
+
+    if (imgRel) {
+      const widthEmu = 5800000;
+      const heightEmu = 7500000;
+      paragraphs.push(buildDocxImageParagraph(imgRel.rId, widthEmu, heightEmu));
+    }
+
+    if (text) {
+      const lines = text.split('\n');
+      let inTable = false;
+      let tableRows = [];
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          if (inTable && tableRows.length) {
+            paragraphs.push(buildDocxTable(tableRows));
+            tableRows = [];
+            inTable = false;
+          }
+          continue;
+        }
+        const cells = trimmed.split(/\t|  {2,}|\|/).map(c => c.trim()).filter(Boolean);
+        if (cells.length >= 2 && cells.length <= 20) {
+          inTable = true;
+          tableRows.push(cells);
+          continue;
+        }
+        if (inTable && tableRows.length) {
+          paragraphs.push(buildDocxTable(tableRows));
+          tableRows = [];
+          inTable = false;
+        }
+        paragraphs.push(`<w:p><w:r><w:t xml:space="preserve">${escapeXml(trimmed)}</w:t></w:r></w:p>`);
+      }
+      if (inTable && tableRows.length) paragraphs.push(buildDocxTable(tableRows));
+    }
+
+    if (i < pages.length - 1) {
+      paragraphs.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
+    }
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+  xmlns:v="urn:schemas-microsoft-com:vml"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:w10="urn:schemas-microsoft-com:office:word"
+  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml"
+  mc:Ignorable="w14 wp14">
+<w:body>
+${paragraphs.join('\n')}
+<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>
+</w:body>
+</w:document>`;
+}
+
+function buildContentTypesWithImages(hasImages) {
+  let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>`;
+  if (hasImages) xml += '\n  <Default Extension="png" ContentType="image/png"/>';
+  xml += `
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`;
+  return xml;
+}
+
+function buildWordRelsWithImages(imageRels) {
+  let xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>`;
+  for (const rel of imageRels) {
+    xml += `\n  <Relationship Id="${rel.rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${rel.target}"/>`;
+  }
+  xml += '\n</Relationships>';
+  return xml;
+}
+
+function createZipBlob(files) {
+  const encoder = new TextEncoder();
+  const parts = [];
+  const centralDir = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const nameBytes = encoder.encode(file.name);
+    const header = new Uint8Array(30 + nameBytes.length);
+    const hv = new DataView(header.buffer);
+    hv.setUint32(0, 0x04034b50, true);
+    hv.setUint16(4, 20, true);
+    hv.setUint16(8, 0, true);
+    const crc = crc32(file.data);
+    hv.setUint32(14, crc, true);
+    hv.setUint32(18, file.data.length, true);
+    hv.setUint32(22, file.data.length, true);
+    hv.setUint16(26, nameBytes.length, true);
+    header.set(nameBytes, 30);
+    parts.push(header, file.data);
+
+    const cde = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(cde.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, file.data.length, true);
+    cv.setUint32(24, file.data.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint32(38, 0x20, true);
+    cv.setUint32(42, offset, true);
+    cde.set(nameBytes, 46);
+    centralDir.push(cde);
+    offset += header.length + file.data.length;
+  }
+
+  const cdOffset = offset;
+  let cdSize = 0;
+  for (const cde of centralDir) cdSize += cde.length;
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cdSize, true);
+  ev.setUint32(16, cdOffset, true);
+
+  const allParts = [...parts, ...centralDir, eocd];
+  const totalSize = allParts.reduce((s, p) => s + p.length, 0);
+  const result = new Uint8Array(totalSize);
+  let pos = 0;
+  for (const part of allParts) { result.set(part, pos); pos += part.length; }
+  return new Blob([result], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+}
+
+// ─── Phase 3: DOCX Import (Merge Edits into Workspace) ────────────────────
+async function importDocxEdits(file) {
+  if (!file || !state.adapter) {
+    setOcrStatus('Импорт DOCX: нужен открытый документ');
+    return;
+  }
+
+  try {
+    setOcrStatus('Импорт DOCX: чтение файла...');
+    const arrayBuffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+
+    const xmlContent = extractDocumentXmlFromZip(bytes);
+    if (!xmlContent) {
+      setOcrStatus('Импорт DOCX: не удалось найти word/document.xml');
+      return;
+    }
+
+    const pages = parseDocxTextByPages(xmlContent);
+    if (!pages.length) {
+      setOcrStatus('Импорт DOCX: текст не найден в документе');
+      return;
+    }
+
+    const cache = loadOcrTextData();
+    const pagesText = Array.isArray(cache?.pagesText) ? [...cache.pagesText] : new Array(state.pageCount).fill('');
+
+    let merged = 0;
+    for (let i = 0; i < pages.length && i < state.pageCount; i++) {
+      const imported = pages[i].trim();
+      if (imported && imported !== pagesText[i]) {
+        pagesText[i] = imported;
+        setPageEdits(i + 1, imported);
+        merged++;
+      }
+    }
+
+    saveOcrTextData({
+      pagesText,
+      source: 'docx-import',
+      scannedPages: pages.length,
+      totalPages: state.pageCount,
+      updatedAt: new Date().toISOString(),
+    });
+    persistEdits();
+
+    if (state.currentPage <= pages.length && pages[state.currentPage - 1]) {
+      els.pageText.value = pages[state.currentPage - 1];
+    }
+
+    setOcrStatus(`Импорт DOCX: объединено ${merged} страниц из ${pages.length}`);
+    pushDiagnosticEvent('docx.import', { pages: pages.length, merged });
+  } catch (error) {
+    setOcrStatus(`Импорт DOCX: ошибка — ${error.message}`);
+    pushDiagnosticEvent('docx.import.error', { message: error.message }, 'error');
+  }
+}
+
+function extractDocumentXmlFromZip(bytes) {
+  const decoder = new TextDecoder('utf-8');
+  let pos = 0;
+  while (pos < bytes.length - 4) {
+    if (bytes[pos] === 0x50 && bytes[pos+1] === 0x4B && bytes[pos+2] === 0x03 && bytes[pos+3] === 0x04) {
+      const nameLen = bytes[pos + 26] | (bytes[pos + 27] << 8);
+      const extraLen = bytes[pos + 28] | (bytes[pos + 29] << 8);
+      const compSize = (bytes[pos + 18] | (bytes[pos + 19] << 8) | (bytes[pos + 20] << 16) | (bytes[pos + 21] << 24)) >>> 0;
+      const name = decoder.decode(bytes.slice(pos + 30, pos + 30 + nameLen));
+      const dataStart = pos + 30 + nameLen + extraLen;
+      if (name === 'word/document.xml') {
+        return decoder.decode(bytes.slice(dataStart, dataStart + compSize));
+      }
+      pos = dataStart + compSize;
+    } else {
+      pos++;
+    }
+  }
+  return null;
+}
+
+function parseDocxTextByPages(xml) {
+  const pages = [];
+  let currentPage = [];
+
+  const paragraphs = xml.split(/<w:p[\s>]/);
+  for (const para of paragraphs) {
+    if (para.includes('w:type="page"')) {
+      pages.push(currentPage.join('\n').trim());
+      currentPage = [];
+      continue;
+    }
+
+    const textMatches = para.match(/<w:t[^>]*>([^<]*)<\/w:t>/g);
+    if (textMatches) {
+      const line = textMatches.map(m => {
+        const match = m.match(/>([^<]*)</);
+        return match ? match[1] : '';
+      }).join('');
+      if (line.trim()) currentPage.push(line);
+    }
+  }
+
+  if (currentPage.length) pages.push(currentPage.join('\n').trim());
+  return pages.filter(p => p.length > 0);
+}
+
+// ─── Phase 5: Crash Telemetry Framework ────────────────────────────────────
+const crashTelemetry = {
+  sessionId: `nr-${Date.now().toString(36)}`,
+  startedAt: Date.now(),
+  crashes: [],
+  errors: [],
+  totalErrors: 0,
+  recoveries: 0,
+  longestStreak: 0,
+  currentStreak: 0,
+  lastErrorAt: 0,
+};
+
+function recordCrashEvent(type, message, context) {
+  const event = {
+    ts: new Date().toISOString(),
+    type,
+    message: String(message || '').slice(0, 500),
+    context: String(context || ''),
+    uptimeMs: Math.round(performance.now()),
+    page: state.currentPage,
+    docName: state.docName,
+  };
+
+  crashTelemetry.errors.push(event);
+  crashTelemetry.totalErrors++;
+  crashTelemetry.lastErrorAt = Date.now();
+  crashTelemetry.currentStreak = 0;
+
+  if (crashTelemetry.errors.length > 200) {
+    crashTelemetry.errors.splice(0, crashTelemetry.errors.length - 200);
+  }
+
+  if (type === 'crash' || type === 'fatal') {
+    crashTelemetry.crashes.push(event);
+  }
+}
+
+function recordSuccessfulOperation() {
+  crashTelemetry.currentStreak++;
+  crashTelemetry.longestStreak = Math.max(crashTelemetry.longestStreak, crashTelemetry.currentStreak);
+}
+
+function recordRecovery() {
+  crashTelemetry.recoveries++;
+}
+
+function getCrashFreeRate() {
+  const totalOps = crashTelemetry.longestStreak + crashTelemetry.totalErrors;
+  if (totalOps === 0) return 100;
+  return Math.round(((totalOps - crashTelemetry.totalErrors) / totalOps) * 10000) / 100;
+}
+
+function getSessionHealth() {
+  const uptimeMs = Date.now() - crashTelemetry.startedAt;
+  return {
+    sessionId: crashTelemetry.sessionId,
+    uptimeMs,
+    uptimeMin: Math.round(uptimeMs / 60000),
+    totalErrors: crashTelemetry.totalErrors,
+    crashes: crashTelemetry.crashes.length,
+    recoveries: crashTelemetry.recoveries,
+    crashFreeRate: getCrashFreeRate(),
+    longestStreak: crashTelemetry.longestStreak,
+    currentStreak: crashTelemetry.currentStreak,
+    lastErrorAt: crashTelemetry.lastErrorAt ? new Date(crashTelemetry.lastErrorAt).toISOString() : null,
+    errorsLast5min: crashTelemetry.errors.filter(e => Date.now() - new Date(e.ts).getTime() < 300000).length,
+  };
+}
+
+function exportSessionHealthReport() {
+  const health = getSessionHealth();
+  const perfSummary = getPerfSummary();
+  const report = {
+    app: 'NovaReader',
+    version: APP_VERSION,
+    ...health,
+    perfMetrics: perfSummary,
+    recentErrors: crashTelemetry.errors.slice(-20),
+  };
+
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `novareader-health-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  pushDiagnosticEvent('health.export', health);
+}
+
+// Wire global error handler into crash telemetry
+window.addEventListener('error', (event) => {
+  recordCrashEvent('uncaught', event.message, event.filename + ':' + event.lineno);
+  pushDiagnosticEvent('crash.uncaught', { message: event.message, file: event.filename, line: event.lineno }, 'error');
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const message = String(event.reason?.message || event.reason || 'unknown');
+  recordCrashEvent('unhandled-rejection', message, 'promise');
+  pushDiagnosticEvent('crash.unhandled-rejection', { message }, 'error');
+});
+
 const state = {
   adapter: null,
   file: null,
@@ -1330,6 +1858,11 @@ const els = {
   copyText: document.getElementById('copyText'),
   exportText: document.getElementById('exportText'),
   exportWord: document.getElementById('exportWord'),
+  importDocx: document.getElementById('importDocx'),
+  exportOcrIndex: document.getElementById('exportOcrIndex'),
+  undoTextEdit: document.getElementById('undoTextEdit'),
+  redoTextEdit: document.getElementById('redoTextEdit'),
+  exportHealthReport: document.getElementById('exportHealthReport'),
   toggleTextEdit: document.getElementById('toggleTextEdit'),
   saveTextEdits: document.getElementById('saveTextEdits'),
   ocrCurrentPage: document.getElementById('ocrCurrentPage'),
@@ -1940,6 +2473,8 @@ function collectPerfBaseline() {
     toolMode: toolStateMachine.current,
     pageCacheSize: pageRenderCache.entries.size,
     trackedUrls: objectUrlRegistry.size,
+    ocrSearchIndexPages: ocrSearchIndex.pages.size,
+    sessionHealth: getSessionHealth(),
   };
 }
 
@@ -3578,7 +4113,10 @@ async function startBackgroundOcrScan(reason = 'auto') {
 
       const txt = await extractTextForPage(i);
       if (txt) {
-        pagesText[i - 1] = txt;
+        const corrected = postCorrectOcrText(txt);
+        pagesText[i - 1] = corrected;
+        indexOcrPage(i, corrected);
+        recordSuccessfulOperation();
         if (i % 5 === 0 || i === maxPages) {
           saveOcrTextData({
             pagesText,
@@ -3590,7 +4128,7 @@ async function startBackgroundOcrScan(reason = 'auto') {
         }
 
         if (i === state.currentPage && !els.pageText.value) {
-          els.pageText.value = txt;
+          els.pageText.value = corrected;
         }
       }
 
@@ -6482,18 +7020,24 @@ async function exportCurrentDocToWord() {
     return;
   }
 
+  const includeImages = state.adapter?.type === 'pdf' && maxPages <= 20;
+
   try {
-    setOcrStatus('Экспорт DOCX: генерация...');
-    const blob = await generateDocxBlob(title, textPages);
+    setOcrStatus(includeImages ? 'Экспорт DOCX: генерация с изображениями...' : 'Экспорт DOCX: генерация...');
+    const blob = includeImages
+      ? await generateDocxWithImages(title, textPages, true)
+      : await generateDocxBlob(title, textPages);
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${title}.docx`;
     a.click();
     URL.revokeObjectURL(url);
-    setOcrStatus(`Экспорт DOCX: готово (${Math.round(blob.size / 1024)} КБ)`);
-    pushDiagnosticEvent('export.docx', { pages: maxPages, sizeKb: Math.round(blob.size / 1024) });
+    recordSuccessfulOperation();
+    setOcrStatus(`Экспорт DOCX: готово (${Math.round(blob.size / 1024)} КБ${includeImages ? ', с изображениями' : ''})`);
+    pushDiagnosticEvent('export.docx', { pages: maxPages, sizeKb: Math.round(blob.size / 1024), withImages: includeImages });
   } catch (error) {
+    recordCrashEvent('export-error', error.message, 'docx');
     setOcrStatus(`Экспорт DOCX: ошибка — ${error.message}`);
     pushDiagnosticEvent('export.docx.error', { message: error.message }, 'error');
   }
@@ -7040,6 +7584,27 @@ els.refreshText.addEventListener('click', refreshPageText);
 els.copyText.addEventListener('click', copyPageText);
 els.exportText.addEventListener('click', exportPageText);
 els.exportWord?.addEventListener('click', exportCurrentDocToWord);
+els.importDocx?.addEventListener('change', (e) => {
+  const file = e.target?.files?.[0];
+  if (file) importDocxEdits(file);
+  e.target.value = '';
+});
+els.exportOcrIndex?.addEventListener('click', downloadOcrTextExport);
+els.undoTextEdit?.addEventListener('click', () => {
+  const action = undoPageEdit();
+  if (action && els.pageText) {
+    els.pageText.value = action.text;
+    setOcrStatus(`Отмена: страница ${action.page}`);
+  }
+});
+els.redoTextEdit?.addEventListener('click', () => {
+  const action = redoPageEdit();
+  if (action && els.pageText) {
+    els.pageText.value = action.text;
+    setOcrStatus(`Повтор: страница ${action.page}`);
+  }
+});
+els.exportHealthReport?.addEventListener('click', exportSessionHealthReport);
 els.toggleTextEdit?.addEventListener('click', () => setTextEditMode(!state.textEditMode));
 els.saveTextEdits?.addEventListener('click', saveCurrentPageTextEdits);
 els.ocrCurrentPage?.addEventListener('click', async () => {

@@ -492,3 +492,111 @@ body.advanced-hidden .advanced-section { display: none; }
 .divider.section-hidden {
   display: none !important;
 }
+
+/* ── Phase 4: Adaptive layout for <16:9 and low-height screens ── */
+@media (max-aspect-ratio: 16/9) {
+  .app-shell {
+    --sidebar-width: 200px;
+  }
+  .sidebar {
+    padding: 4px;
+  }
+  .sidebar section {
+    padding: 4px;
+    margin-top: 4px;
+  }
+  .sidebar h2 { font-size: 0.82rem; margin-bottom: 3px; }
+  .toolbar-top,
+  .toolbar-bottom {
+    gap: 2px;
+  }
+  .toolbar button,
+  .toolbar .upload-btn,
+  .toolbar select {
+    padding: 2px 5px;
+    font-size: 0.72rem;
+  }
+}
+
+@media (max-height: 700px) {
+  .app-shell {
+    --sidebar-width: 180px;
+  }
+  .sidebar {
+    padding: 2px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+  .sidebar section {
+    padding: 3px;
+    margin-top: 2px;
+  }
+  .sidebar h1 { font-size: 0.95rem; }
+  .sidebar h2 { font-size: 0.78rem; margin-bottom: 2px; }
+  .toolbar-top { min-height: 28px; padding: 1px 4px; }
+  .toolbar-bottom { padding: 2px 4px; }
+  .toolbar button,
+  .toolbar .upload-btn,
+  .toolbar .inline-file-btn,
+  .toolbar select,
+  .toolbar input {
+    padding: 2px 4px;
+    font-size: 0.7rem;
+    min-height: 22px;
+  }
+  #pageText {
+    min-height: 24px !important;
+    max-height: 60px;
+  }
+  .canvas-wrap {
+    padding: 2px;
+  }
+  .modal-card {
+    max-height: 90vh;
+    padding: 8px;
+  }
+}
+
+@media (max-height: 560px) {
+  .sidebar {
+    max-height: 100vh;
+    font-size: 0.72rem;
+  }
+  .sidebar h1 { font-size: 0.85rem; }
+  .sidebar section {
+    padding: 2px;
+    margin-top: 1px;
+  }
+  .sidebar .inline-actions button,
+  .sidebar .inline-actions .upload-btn {
+    padding: 1px 4px;
+    font-size: 0.68rem;
+  }
+  .toolbar-top,
+  .toolbar-bottom {
+    flex-wrap: wrap;
+    gap: 1px;
+  }
+  .release-pill { display: none; }
+}
+
+/* Ultra-wide but short (ultrawide monitors) */
+@media (min-aspect-ratio: 21/9) and (max-height: 900px) {
+  .app-shell {
+    --sidebar-width: 260px;
+  }
+  .canvas-wrap {
+    padding: 4px 8px;
+  }
+}
+
+/* ── Confidence indicator colors ── */
+.ocr-confidence-high { color: var(--success); }
+.ocr-confidence-medium { color: var(--accent); }
+.ocr-confidence-low { color: #f59e0b; }
+.ocr-confidence-very-low { color: var(--danger); }
+
+/* ── Session health indicator ── */
+.session-health-good { color: var(--success); }
+.session-health-degraded { color: #f59e0b; }
+.session-health-critical { color: var(--danger); }

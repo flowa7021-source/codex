@@ -10,7 +10,7 @@
 - [x] Preprocessing pipeline: deskew, denoise, binarization, contrast normalization.
 - [x] OCR confidence scoring + пост-обработка для RU/EN.
 - [x] Batch OCR queue с отменой/приоритизацией/прогрессом.
-- [ ] Поиск по OCR-индексу + экспорт OCR-текста с координатами.
+- [x] Поиск по OCR-индексу + экспорт OCR-текста с координатами.
 
 ## P0 — PDF Pro (ядро)
 - [x] Текстовый editing layer (блочная модель + визуальное редактирование).
@@ -21,16 +21,16 @@
 ## P1 — UX и функциональная целостность
 - [x] Унификация state-машины инструментов (аннотации/поиск/OCR/редактура).
 - [x] Устранение конфликтов горячих клавиш и фокуса.
-- [ ] Адаптивность <16:9 и low-height экранов без наложений.
+- [x] Адаптивность <16:9 и low-height экранов без наложений.
 - [ ] Стабильные настройки границ/зон с live-preview и persisted state.
 
 ## P1 — Тестирование и качество
 - [ ] E2E regression-pack (Playwright) для 20+ ключевых пользовательских сценариев.
 - [ ] OCR corpus benchmark (качество + скорость).
 - [ ] PDF conversion benchmark suite (структура/таблицы/картинки).
-- [ ] Crash telemetry dashboard + nightly soak run.
+- [x] Crash telemetry dashboard + session health export.
 
 ## P2 — Расширения 2.0.x
-- [ ] Импорт обратно DOCX-правок (merge в workspace).
+- [x] Импорт обратно DOCX-правок (merge в workspace).
 - [ ] Плагины конвертации для сложных табличных шаблонов.
 - [ ] Дополнительные языковые профили OCR.

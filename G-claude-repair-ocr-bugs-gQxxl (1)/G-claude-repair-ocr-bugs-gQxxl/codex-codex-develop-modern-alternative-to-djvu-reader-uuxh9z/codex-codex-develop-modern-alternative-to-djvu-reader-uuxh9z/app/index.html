@@ -328,13 +328,20 @@
             <button id="refreshText">Текст текущей страницы</button>
             <button id="copyText">Копировать текст</button>
             <button id="exportText">Экспорт текста .txt</button>
-            <button id="exportWord">Экспорт в Word (.doc)</button>
+            <button id="exportWord">Экспорт в DOCX</button>
+            <label class="inline-file-btn">Импорт DOCX
+              <input id="importDocx" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            </label>
+            <button id="exportOcrIndex">Экспорт OCR индекс</button>
             <button id="toggleTextEdit">Редактирование текста: off</button>
             <button id="saveTextEdits">Сохранить правки текста</button>
+            <button id="undoTextEdit">↩ Отмена</button>
+            <button id="redoTextEdit">↪ Повтор</button>
             <button id="ocrCurrentPage">OCR страницы</button>
             <button id="ocrRegionMode">OCR область: off</button>
             <button id="copyOcrText">Копировать OCR</button>
             <button id="cancelBackgroundOcr">Стоп OCR фон</button>
+            <button id="exportHealthReport">Отчёт здоровья сессии</button>
           </div>
           <textarea id="pageText" readonly placeholder="Здесь появится извлечённый текст текущей страницы"></textarea>
           <p id="ocrStatus" class="muted tiny">OCR: idle</p>
