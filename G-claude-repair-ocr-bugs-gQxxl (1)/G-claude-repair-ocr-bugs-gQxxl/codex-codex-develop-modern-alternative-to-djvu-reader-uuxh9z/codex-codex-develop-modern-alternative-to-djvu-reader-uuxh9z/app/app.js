@@ -1032,6 +1032,110 @@ function clearDiagnostics() {
   }
 }
 
+function percentile(values, p = 95) {
+  if (!Array.isArray(values) || values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const rank = Math.min(sorted.length - 1, Math.max(0, Math.ceil((Number(p) / 100) * sorted.length) - 1));
+  return Math.round(sorted[rank] || 0);
+}
+
+function collectActionPerfSummary() {
+  const events = (state.diagnostics?.events || []).filter((e) => e?.type === 'ui.action.finish');
+  const byAction = {};
+  events.forEach((event) => {
+    const action = String(event?.payload?.action || 'unknown');
+    const ms = Number(event?.payload?.ms || 0);
+    if (!byAction[action]) byAction[action] = [];
+    byAction[action].push(ms);
+  });
+
+  const summary = {};
+  Object.entries(byAction).forEach(([action, values]) => {
+    if (!values.length) return;
+    const total = values.reduce((sum, x) => sum + x, 0);
+    summary[action] = {
+      count: values.length,
+      avgMs: Math.round(total / values.length),
+      p95Ms: percentile(values, 95),
+      maxMs: Math.round(Math.max(...values)),
+    };
+  });
+  return summary;
+}
+
+function collectPerfBaseline() {
+  const nav = performance.getEntriesByType('navigation')?.[0] || null;
+  const longTasks = performance.getEntriesByType('longtask') || [];
+  const resources = performance.getEntriesByType('resource') || [];
+  const memory = performance?.memory
+    ? {
+      usedJSHeapSize: Number(performance.memory.usedJSHeapSize || 0),
+      totalJSHeapSize: Number(performance.memory.totalJSHeapSize || 0),
+      jsHeapSizeLimit: Number(performance.memory.jsHeapSizeLimit || 0),
+    }
+    : null;
+
+  return {
+    ts: new Date().toISOString(),
+    uptimeMs: Math.round(performance.now()),
+    navigation: nav
+      ? {
+        type: nav.type || 'navigate',
+        domContentLoadedMs: Math.round(nav.domContentLoadedEventEnd || 0),
+        loadEventMs: Math.round(nav.loadEventEnd || 0),
+      }
+      : null,
+    longTask: {
+      count: longTasks.length,
+      maxMs: longTasks.length ? Math.round(Math.max(...longTasks.map((x) => x.duration || 0))) : 0,
+      totalMs: longTasks.length ? Math.round(longTasks.reduce((sum, x) => sum + (x.duration || 0), 0)) : 0,
+    },
+    resources: {
+      count: resources.length,
+    },
+    actionPerf: collectActionPerfSummary(),
+    memory,
+  };
+}
+
+function buildPerfAlerts(perf) {
+  const alerts = [];
+  const actionPerf = perf?.actionPerf || {};
+  const thresholds = {
+    'search-submit': 800,
+    'search-enter': 800,
+    'search-prev': 450,
+    'search-next': 450,
+    'ocr-current-page': 3500,
+    'nav-next-page': 350,
+    'nav-prev-page': 350,
+    'view-rotate': 800,
+  };
+
+  Object.entries(thresholds).forEach(([action, p95Limit]) => {
+    const p95 = Number(actionPerf?.[action]?.p95Ms || 0);
+    if (!p95) return;
+    if (p95 > p95Limit) {
+      alerts.push({
+        type: 'action-p95',
+        action,
+        p95Ms: p95,
+        limitMs: p95Limit,
+      });
+    }
+  });
+
+  if (Number(perf?.longTask?.maxMs || 0) > 250) {
+    alerts.push({
+      type: 'longtask-max',
+      valueMs: Number(perf.longTask.maxMs || 0),
+      limitMs: 250,
+    });
+  }
+
+  return alerts;
+}
+
 function formatDiagnosticsForChat(payload) {
   const lines = [];
   lines.push('# NovaReader diagnostics');
@@ -1041,6 +1145,14 @@ function formatDiagnosticsForChat(payload) {
   lines.push(`docName: ${payload.docName || '-'}`);
   lines.push(`page: ${payload.page ?? '-'}`);
   lines.push(`eventCount: ${payload.eventCount}`);
+  lines.push(`uptimeMs: ${payload.perf?.uptimeMs ?? '-'}`);
+  lines.push(`longTaskCount: ${payload.perf?.longTask?.count ?? '-'}`);
+  lines.push(`longTaskMaxMs: ${payload.perf?.longTask?.maxMs ?? '-'}`);
+  lines.push(`resourceCount: ${payload.perf?.resources?.count ?? '-'}`);
+  lines.push(`actionPerfKeys: ${Object.keys(payload.perf?.actionPerf || {}).length}`);
+  lines.push('');
+  lines.push('perf:');
+  lines.push(JSON.stringify(payload.perf || {}, null, 0));
   lines.push('');
   lines.push('events:');
   payload.events.forEach((event, idx) => {
@@ -1060,6 +1172,7 @@ function exportDiagnostics() {
     page: state.currentPage || null,
     eventCount: state.diagnostics.events.length,
     events: state.diagnostics.events,
+    perf: collectPerfBaseline(),
   };
   const text = formatDiagnosticsForChat(payload);
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -1071,7 +1184,12 @@ function exportDiagnostics() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  pushDiagnosticEvent('diagnostics.export', { eventCount: payload.eventCount, format: 'txt' });
+  pushDiagnosticEvent('diagnostics.export', {
+    eventCount: payload.eventCount,
+    format: 'txt',
+    uptimeMs: payload.perf?.uptimeMs || 0,
+    longTaskCount: payload.perf?.longTask?.count || 0,
+  });
 }
 
 async function verifyBundledAssets() {
@@ -1136,11 +1254,23 @@ async function runRuntimeSelfCheck() {
     details: bundledAssets.report,
   };
 
+  const perf = collectPerfBaseline();
+  report.perf = perf;
+  const perfAlerts = buildPerfAlerts(perf);
+  report.perfAlerts = perfAlerts;
+
   const totalMs = Math.round(performance.now() - startedAt);
   const okCount = Object.values(report).filter((x) => x.ok).length;
-  const status = `Runtime check: ${okCount}/4 проверок доступны, ${totalMs}ms`;
+  const status = `Runtime check: ${okCount}/4 проверок доступны, ${totalMs}ms, perf alerts: ${perfAlerts.length}`;
   if (els.runtimeCheckStatus) {
     els.runtimeCheckStatus.textContent = status;
+  }
+
+  if (perfAlerts.length) {
+    pushDiagnosticEvent('runtime.perf.alert', {
+      count: perfAlerts.length,
+      alerts: perfAlerts,
+    }, 'warn');
   }
 
   pushDiagnosticEvent('runtime.selfcheck.finish', {
@@ -1148,7 +1278,7 @@ async function runRuntimeSelfCheck() {
     total: 4,
     ms: totalMs,
     report,
-  }, okCount === 4 ? 'info' : 'warn');
+  }, okCount === 4 && perfAlerts.length === 0 ? 'info' : 'warn');
 }
 
 function setupRuntimeDiagnostics() {
@@ -2421,6 +2551,42 @@ function setOcrStatus(text) {
   if (els.ocrStatus) els.ocrStatus.textContent = text;
 }
 
+function runWithErrorBoundary(actionName, fn, options = {}) {
+  const fallbackStatus = options.fallbackStatus || 'Операция завершилась с ошибкой';
+  const startedAt = performance.now();
+  return Promise.resolve()
+    .then(() => fn())
+    .then((result) => {
+      const ms = Math.round(performance.now() - startedAt);
+      pushDiagnosticEvent('ui.action.finish', {
+        action: actionName,
+        ms,
+        page: state.currentPage || null,
+        docName: state.docName || null,
+      });
+      return result;
+    })
+    .catch((error) => {
+      const message = String(error?.message || 'unknown error');
+      const ms = Math.round(performance.now() - startedAt);
+      if (options.statusTarget === 'ocr') {
+        setOcrStatus(`OCR: ошибка (${message})`);
+      } else if (options.statusTarget === 'search' && els.searchStatus) {
+        els.searchStatus.textContent = `Ошибка: ${message}`;
+      }
+      pushDiagnosticEvent('ui.action.error', {
+        action: actionName,
+        message,
+        ms,
+        page: state.currentPage || null,
+        docName: state.docName || null,
+      }, 'error');
+      if (els.settingsStatus && options.echoToSettings !== false) {
+        els.settingsStatus.textContent = `${fallbackStatus}: ${message}`;
+      }
+    });
+}
+
 function setOcrStatusThrottled(text, minIntervalMs = 70) {
   const now = performance.now();
   const value = String(text || '');
@@ -2461,6 +2627,16 @@ function drawOcrSelectionPreview() {
   ctx.fillRect(x, y, w, h);
   ctx.strokeRect(x, y, w, h);
   ctx.restore();
+}
+
+function classifyOcrError(message) {
+  const m = String(message || '').toLowerCase();
+  if (!m) return 'unknown';
+  if (m.includes('runtime') || m.includes('ocrad')) return 'runtime';
+  if (m.includes('fetch') || m.includes('http') || m.includes('load')) return 'asset-load';
+  if (m.includes('memory') || m.includes('out of memory')) return 'memory';
+  if (m.includes('timeout')) return 'timeout';
+  return 'processing';
 }
 
 async function runOcrOnRectNow(rect) {
@@ -2514,10 +2690,12 @@ async function runOcrOnRectNow(rect) {
       setOcrStatus(`OCR: текст не найден (${totalMs}мс)`);
       pushDiagnosticEvent('ocr.manual.empty', { taskId, totalMs, page: state.currentPage }, 'warn');
     }
-  } catch {
+  } catch (error) {
     const totalMs = Math.round(performance.now() - taskStartedAt);
-    setOcrStatus('OCR: встроенный runtime недоступен');
-    pushDiagnosticEvent('ocr.manual.error', { taskId, totalMs, page: state.currentPage }, 'error');
+    const message = String(error?.message || 'unknown error');
+    const errorType = classifyOcrError(message);
+    setOcrStatus(`OCR: ошибка [${errorType}] (${message})`);
+    pushDiagnosticEvent('ocr.manual.error', { taskId, totalMs, page: state.currentPage, message, errorType }, 'error');
   } finally {
     if (hangWarnTimer) clearTimeout(hangWarnTimer);
   }
@@ -5823,11 +6001,15 @@ function setupDragAndDrop() {
     });
   });
 
-  window.addEventListener('drop', async (e) => {
+  window.addEventListener('drop', (e) => {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer?.files?.[0];
-    if (file) await openFile(file);
+    if (!file) return;
+    runWithErrorBoundary('file-drop-open', () => openFile(file), {
+      fallbackStatus: 'Открытие файла через drag&drop завершилось с ошибкой',
+      echoToSettings: false,
+    });
   });
 }
 
@@ -5867,7 +6049,12 @@ els.closeSettingsModal?.addEventListener('click', closeSettingsModal);
 els.saveSettingsModal?.addEventListener('click', saveSettingsFromModal);
 els.exportDiagnostics?.addEventListener('click', exportDiagnostics);
 els.clearDiagnostics?.addEventListener('click', clearDiagnostics);
-els.runRuntimeSelfCheck?.addEventListener('click', () => { runRuntimeSelfCheck(); });
+els.runRuntimeSelfCheck?.addEventListener('click', () => {
+  runWithErrorBoundary('runtime-self-check', () => runRuntimeSelfCheck(), {
+    fallbackStatus: 'Runtime self-check завершился с ошибкой',
+    echoToSettings: false,
+  });
+});
 els.cfgSidebarWidth?.addEventListener('input', previewUiSizeFromModal);
 els.cfgToolbarScale?.addEventListener('input', previewUiSizeFromModal);
 els.cfgTextMinHeight?.addEventListener('input', previewUiSizeFromModal);
@@ -5878,52 +6065,70 @@ els.cfgTextPanelHeight?.addEventListener('input', previewUiSizeFromModal);
 els.cfgAnnotationCanvasScale?.addEventListener('input', previewUiSizeFromModal);
 els.settingsModal?.addEventListener('click', (e) => { if (e.target === els.settingsModal) closeSettingsModal(); });
 
-els.fileInput.addEventListener('change', async (e) => {
+els.fileInput.addEventListener('change', (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
-  await openFile(file);
-  e.target.value = '';
+  runWithErrorBoundary('file-input-open', () => openFile(file), {
+    fallbackStatus: 'Открытие файла завершилось с ошибкой',
+    echoToSettings: false,
+  }).finally(() => {
+    e.target.value = '';
+  });
 });
 
 els.historyBack.addEventListener('click', navigateHistoryBack);
 els.historyForward.addEventListener('click', navigateHistoryForward);
 
-els.prevPage.addEventListener('click', async () => {
-  if (!state.adapter || state.currentPage <= 1) return;
-  state.currentPage -= 1;
-  await renderCurrentPage();
+els.prevPage.addEventListener('click', () => {
+  runWithErrorBoundary('nav-prev-page', async () => {
+    if (!state.adapter || state.currentPage <= 1) return;
+    state.currentPage -= 1;
+    await renderCurrentPage();
+  }, { fallbackStatus: 'Переход на предыдущую страницу завершился с ошибкой', echoToSettings: false });
 });
 
-els.nextPage.addEventListener('click', async () => {
-  if (!state.adapter || state.currentPage >= state.pageCount) return;
-  state.currentPage += 1;
-  await renderCurrentPage();
+els.nextPage.addEventListener('click', () => {
+  runWithErrorBoundary('nav-next-page', async () => {
+    if (!state.adapter || state.currentPage >= state.pageCount) return;
+    state.currentPage += 1;
+    await renderCurrentPage();
+  }, { fallbackStatus: 'Переход на следующую страницу завершился с ошибкой', echoToSettings: false });
 });
 
-els.goToPage.addEventListener('click', goToPage);
-els.pageInput.addEventListener('keydown', async (e) => {
-  if (e.key === 'Enter') await goToPage();
+els.goToPage.addEventListener('click', () => {
+  runWithErrorBoundary('nav-go-to-page', () => goToPage(), { fallbackStatus: 'Переход к странице завершился с ошибкой', echoToSettings: false });
+});
+els.pageInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    runWithErrorBoundary('nav-go-to-page-enter', () => goToPage(), { fallbackStatus: 'Переход к странице завершился с ошибкой', echoToSettings: false });
+  }
 });
 
-els.zoomIn.addEventListener('click', async () => {
-  state.zoom = Math.min(4, state.zoom + 0.1);
-  await renderCurrentPage();
+els.zoomIn.addEventListener('click', () => {
+  runWithErrorBoundary('view-zoom-in', async () => {
+    state.zoom = Math.min(4, state.zoom + 0.1);
+    await renderCurrentPage();
+  }, { fallbackStatus: 'Увеличение масштаба завершилось с ошибкой', echoToSettings: false });
 });
 
-els.zoomOut.addEventListener('click', async () => {
-  state.zoom = Math.max(0.3, state.zoom - 0.1);
-  await renderCurrentPage();
+els.zoomOut.addEventListener('click', () => {
+  runWithErrorBoundary('view-zoom-out', async () => {
+    state.zoom = Math.max(0.3, state.zoom - 0.1);
+    await renderCurrentPage();
+  }, { fallbackStatus: 'Уменьшение масштаба завершилось с ошибкой', echoToSettings: false });
 });
 
 els.fitWidth.addEventListener('click', fitWidth);
 els.fitPage.addEventListener('click', fitPage);
 
-els.rotate.addEventListener('click', async () => {
-  state.rotation = (state.rotation + 90) % 360;
-  clearOcrRuntimeCaches('rotation-changed');
-  await renderPagePreviews();
-  await renderCurrentPage();
-  if (state.settings?.backgroundOcr) scheduleBackgroundOcrScan('save-settings', 600);
+els.rotate.addEventListener('click', () => {
+  runWithErrorBoundary('view-rotate', async () => {
+    state.rotation = (state.rotation + 90) % 360;
+    clearOcrRuntimeCaches('rotation-changed');
+    await renderPagePreviews();
+    await renderCurrentPage();
+    if (state.settings?.backgroundOcr) scheduleBackgroundOcrScan('save-settings', 600);
+  }, { fallbackStatus: 'Поворот страницы завершился с ошибкой', echoToSettings: false });
 });
 
 els.saveNotes.addEventListener('click', () => saveNotes('manual'));
@@ -5961,17 +6166,26 @@ els.expandSidebarSections?.addEventListener('click', () => {
   setSettingsStatus('Разделы панели развернуты.');
 });
 els.exportWorkspace.addEventListener('click', exportWorkspaceBundleJson);
-els.importWorkspace.addEventListener('change', async (e) => {
+els.importWorkspace.addEventListener('change', (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
-  await importWorkspaceBundleJson(file);
-  e.target.value = '';
+  runWithErrorBoundary('import-workspace', () => importWorkspaceBundleJson(file), {
+    fallbackStatus: 'Импорт workspace завершился с ошибкой',
+    echoToSettings: false,
+  }).finally(() => {
+    e.target.value = '';
+  });
 });
-els.importOcrJson.addEventListener('change', async (e) => {
+els.importOcrJson.addEventListener('change', (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
-  await importOcrJson(file);
-  e.target.value = '';
+  runWithErrorBoundary('import-ocr-json', () => importOcrJson(file), {
+    fallbackStatus: 'Импорт OCR JSON завершился с ошибкой',
+    statusTarget: 'ocr',
+    echoToSettings: false,
+  }).finally(() => {
+    e.target.value = '';
+  });
 });
 els.saveCloudSyncUrl.addEventListener('click', saveCloudSyncUrl);
 els.pushCloudSync.addEventListener('click', async () => {
@@ -6051,11 +6265,19 @@ els.importDjvuDataQuick?.addEventListener('click', () => els.importDjvuDataJson?
 els.refreshText.addEventListener('click', refreshPageText);
 els.copyText.addEventListener('click', copyPageText);
 els.exportText.addEventListener('click', exportPageText);
-els.exportWord?.addEventListener('click', exportCurrentDocToWord);
+els.exportWord?.addEventListener('click', () => {
+  runWithErrorBoundary('export-word', () => exportCurrentDocToWord(), {
+    fallbackStatus: 'Экспорт Word завершился с ошибкой',
+    statusTarget: 'ocr',
+  });
+});
 els.toggleTextEdit?.addEventListener('click', () => setTextEditMode(!state.textEditMode));
 els.saveTextEdits?.addEventListener('click', saveCurrentPageTextEdits);
-els.ocrCurrentPage?.addEventListener('click', async () => {
-  await runOcrForCurrentPage();
+els.ocrCurrentPage?.addEventListener('click', () => {
+  runWithErrorBoundary('ocr-current-page', () => runOcrForCurrentPage(), {
+    fallbackStatus: 'OCR завершился с ошибкой',
+    statusTarget: 'ocr',
+  });
 });
 els.ocrRegionMode?.addEventListener('click', () => {
   setOcrRegionMode(!state.ocrRegionMode);
@@ -6095,31 +6317,51 @@ els.importAnnBundle.addEventListener('change', async (e) => {
   e.target.value = '';
 });
 
-els.importDjvuDataJson.addEventListener('change', async (e) => {
+els.importDjvuDataJson.addEventListener('change', (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
-  await importDjvuDataJson(file);
-  e.target.value = '';
+  runWithErrorBoundary('import-djvu-data', () => importDjvuDataJson(file), {
+    fallbackStatus: 'Импорт DjVu data завершился с ошибкой',
+    echoToSettings: false,
+  }).finally(() => {
+    e.target.value = '';
+  });
 });
-els.searchBtn.addEventListener('click', async () => {
-  await searchInPdf(els.searchInput.value);
+els.searchBtn.addEventListener('click', () => {
+  runWithErrorBoundary('search-submit', () => searchInPdf(els.searchInput.value), {
+    fallbackStatus: 'Поиск завершился с ошибкой',
+    statusTarget: 'search',
+    echoToSettings: false,
+  });
 });
-els.searchInput.addEventListener('keydown', async (e) => {
+els.searchInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    await searchInPdf(els.searchInput.value);
+    runWithErrorBoundary('search-enter', () => searchInPdf(els.searchInput.value), {
+      fallbackStatus: 'Поиск завершился с ошибкой',
+      statusTarget: 'search',
+      echoToSettings: false,
+    });
   }
 });
 els.searchScope.addEventListener('change', () => {
   saveSearchScope();
 });
 
-els.searchPrev.addEventListener('click', async () => {
-  await jumpToSearchResult(state.searchCursor - 1);
+els.searchPrev.addEventListener('click', () => {
+  runWithErrorBoundary('search-prev', () => jumpToSearchResult(state.searchCursor - 1), {
+    fallbackStatus: 'Переход к предыдущему результату поиска завершился с ошибкой',
+    statusTarget: 'search',
+    echoToSettings: false,
+  });
 });
 
-els.searchNext.addEventListener('click', async () => {
-  await jumpToSearchResult(state.searchCursor + 1);
+els.searchNext.addEventListener('click', () => {
+  runWithErrorBoundary('search-next', () => jumpToSearchResult(state.searchCursor + 1), {
+    fallbackStatus: 'Переход к следующему результату поиска завершился с ошибкой',
+    statusTarget: 'search',
+    echoToSettings: false,
+  });
 });
 
 const debouncedUpdateSearchToolbarRows = debounce(updateSearchToolbarRows, 150);
