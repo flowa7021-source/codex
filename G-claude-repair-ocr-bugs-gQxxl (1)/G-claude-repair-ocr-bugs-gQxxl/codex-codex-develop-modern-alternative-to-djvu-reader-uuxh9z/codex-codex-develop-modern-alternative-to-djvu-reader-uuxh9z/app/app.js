@@ -1032,6 +1032,40 @@ function clearDiagnostics() {
   }
 }
 
+function collectPerfBaseline() {
+  const nav = performance.getEntriesByType('navigation')?.[0] || null;
+  const longTasks = performance.getEntriesByType('longtask') || [];
+  const resources = performance.getEntriesByType('resource') || [];
+  const memory = performance?.memory
+    ? {
+      usedJSHeapSize: Number(performance.memory.usedJSHeapSize || 0),
+      totalJSHeapSize: Number(performance.memory.totalJSHeapSize || 0),
+      jsHeapSizeLimit: Number(performance.memory.jsHeapSizeLimit || 0),
+    }
+    : null;
+
+  return {
+    ts: new Date().toISOString(),
+    uptimeMs: Math.round(performance.now()),
+    navigation: nav
+      ? {
+        type: nav.type || 'navigate',
+        domContentLoadedMs: Math.round(nav.domContentLoadedEventEnd || 0),
+        loadEventMs: Math.round(nav.loadEventEnd || 0),
+      }
+      : null,
+    longTask: {
+      count: longTasks.length,
+      maxMs: longTasks.length ? Math.round(Math.max(...longTasks.map((x) => x.duration || 0))) : 0,
+      totalMs: longTasks.length ? Math.round(longTasks.reduce((sum, x) => sum + (x.duration || 0), 0)) : 0,
+    },
+    resources: {
+      count: resources.length,
+    },
+    memory,
+  };
+}
+
 function formatDiagnosticsForChat(payload) {
   const lines = [];
   lines.push('# NovaReader diagnostics');
@@ -1041,6 +1075,13 @@ function formatDiagnosticsForChat(payload) {
   lines.push(`docName: ${payload.docName || '-'}`);
   lines.push(`page: ${payload.page ?? '-'}`);
   lines.push(`eventCount: ${payload.eventCount}`);
+  lines.push(`uptimeMs: ${payload.perf?.uptimeMs ?? '-'}`);
+  lines.push(`longTaskCount: ${payload.perf?.longTask?.count ?? '-'}`);
+  lines.push(`longTaskMaxMs: ${payload.perf?.longTask?.maxMs ?? '-'}`);
+  lines.push(`resourceCount: ${payload.perf?.resources?.count ?? '-'}`);
+  lines.push('');
+  lines.push('perf:');
+  lines.push(JSON.stringify(payload.perf || {}, null, 0));
   lines.push('');
   lines.push('events:');
   payload.events.forEach((event, idx) => {
@@ -1060,6 +1101,7 @@ function exportDiagnostics() {
     page: state.currentPage || null,
     eventCount: state.diagnostics.events.length,
     events: state.diagnostics.events,
+    perf: collectPerfBaseline(),
   };
   const text = formatDiagnosticsForChat(payload);
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
@@ -1071,7 +1113,12 @@ function exportDiagnostics() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  pushDiagnosticEvent('diagnostics.export', { eventCount: payload.eventCount, format: 'txt' });
+  pushDiagnosticEvent('diagnostics.export', {
+    eventCount: payload.eventCount,
+    format: 'txt',
+    uptimeMs: payload.perf?.uptimeMs || 0,
+    longTaskCount: payload.perf?.longTask?.count || 0,
+  });
 }
 
 async function verifyBundledAssets() {
