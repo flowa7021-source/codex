@@ -2463,6 +2463,16 @@ function drawOcrSelectionPreview() {
   ctx.restore();
 }
 
+function classifyOcrError(message) {
+  const m = String(message || '').toLowerCase();
+  if (!m) return 'unknown';
+  if (m.includes('runtime') || m.includes('ocrad')) return 'runtime';
+  if (m.includes('fetch') || m.includes('http') || m.includes('load')) return 'asset-load';
+  if (m.includes('memory') || m.includes('out of memory')) return 'memory';
+  if (m.includes('timeout')) return 'timeout';
+  return 'processing';
+}
+
 async function runOcrOnRectNow(rect) {
   if (!state.adapter || !rect) return;
   const taskId = ++state.ocrTaskId;
@@ -2517,8 +2527,9 @@ async function runOcrOnRectNow(rect) {
   } catch (error) {
     const totalMs = Math.round(performance.now() - taskStartedAt);
     const message = String(error?.message || 'unknown error');
-    setOcrStatus(`OCR: ошибка (${message})`);
-    pushDiagnosticEvent('ocr.manual.error', { taskId, totalMs, page: state.currentPage, message }, 'error');
+    const errorType = classifyOcrError(message);
+    setOcrStatus(`OCR: ошибка [${errorType}] (${message})`);
+    pushDiagnosticEvent('ocr.manual.error', { taskId, totalMs, page: state.currentPage, message, errorType }, 'error');
   } finally {
     if (hangWarnTimer) clearTimeout(hangWarnTimer);
   }
