@@ -2787,7 +2787,7 @@ function clearDocumentAnnotationStorage() {
 
 function updateOverlayInteractionState() {
   const enabled = !!(state.drawEnabled || state.ocrRegionMode);
-  els.annotationCanvas.classList.toggle('drawing-enabled', enabled);
+  if (els.annotationCanvas) els.annotationCanvas.classList.toggle('drawing-enabled', enabled);
 }
 
 function setDrawMode(enabled) {
@@ -2798,8 +2798,10 @@ function setDrawMode(enabled) {
   }
   state.drawEnabled = enabled;
   updateOverlayInteractionState();
-  els.annotateToggle.textContent = `✎ ${enabled ? 'on' : 'off'}`;
-  els.annotateToggle.classList.toggle('active', enabled);
+  if (els.annotateToggle) {
+    els.annotateToggle.textContent = `✎ ${enabled ? 'on' : 'off'}`;
+    els.annotateToggle.classList.toggle('active', enabled);
+  }
 }
 
 function appSettingsKey() {
@@ -4339,10 +4341,12 @@ function beginStroke(e) {
     return;
   }
 
+  if (!els.drawTool || !els.drawColor || !els.drawSize) return;
   state.isDrawing = true;
-  const shapeTool = ['rect', 'arrow', 'line', 'circle'].includes(els.drawTool.value);
+  const toolValue = els.drawTool.value;
+  const shapeTool = ['rect', 'arrow', 'line', 'circle'].includes(toolValue);
   state.currentStroke = {
-    tool: els.drawTool.value,
+    tool: toolValue,
     color: els.drawColor.value,
     size: Number(els.drawSize.value),
     points: shapeTool ? [point, point] : [point],
@@ -4769,7 +4773,7 @@ async function pushWorkspaceToCloud() {
     setStage4Status('Сначала откройте документ.', 'error');
     return;
   }
-  const endpoint = (els.cloudSyncUrl.value || '').trim();
+  const endpoint = (els.cloudSyncUrl?.value || '').trim();
   if (!endpoint) {
     setStage4Status('Укажите Cloud endpoint URL.', 'error');
     return;
@@ -4792,7 +4796,7 @@ async function pullWorkspaceFromCloud() {
     setStage4Status('Сначала откройте документ.', 'error');
     return;
   }
-  const endpoint = (els.cloudSyncUrl.value || '').trim();
+  const endpoint = (els.cloudSyncUrl?.value || '').trim();
   if (!endpoint) {
     setStage4Status('Укажите Cloud endpoint URL.', 'error');
     return;
@@ -4883,7 +4887,7 @@ async function importOcrJson(file) {
       source: payload?.source || 'ocr-import',
     };
     saveOcrTextData(normalized);
-    if (state.adapter.type === 'djvu' && typeof state.adapter.setData === 'function') {
+    if (state.adapter.type === 'djvu' && typeof state.adapter.setData === 'function' && typeof state.adapter.exportData === 'function') {
       state.adapter.setData({ ...state.adapter.exportData(), pagesText: normalized.pagesText, pageCount: normalized.pageCount });
       state.pageCount = state.adapter.getPageCount();
       els.pageInput.max = String(state.pageCount);
@@ -7603,7 +7607,7 @@ els.ocrRegionMode?.addEventListener('click', () => {
   setOcrRegionMode(!state.ocrRegionMode);
 });
 els.copyOcrText?.addEventListener('click', async () => {
-  if (!els.pageText.value) return;
+  if (!els.pageText?.value) return;
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(els.pageText.value);
@@ -7778,19 +7782,19 @@ document.addEventListener('keydown', async (e) => {
     return;
   }
 
-  if (combo && combo === hotkeys.next) els.nextPage.click();
-  if (combo && combo === hotkeys.prev) els.prevPage.click();
-  if (combo && combo === hotkeys.zoomIn) els.zoomIn.click();
-  if (combo && combo === hotkeys.zoomOut) els.zoomOut.click();
-  if (combo && combo === hotkeys.fitWidth) els.fitWidth.click();
-  if (combo && combo === hotkeys.fitPage) els.fitPage.click();
+  if (combo && combo === hotkeys.next) els.nextPage?.click();
+  if (combo && combo === hotkeys.prev) els.prevPage?.click();
+  if (combo && combo === hotkeys.zoomIn) els.zoomIn?.click();
+  if (combo && combo === hotkeys.zoomOut) els.zoomOut?.click();
+  if (combo && combo === hotkeys.fitWidth) els.fitWidth?.click();
+  if (combo && combo === hotkeys.fitPage) els.fitPage?.click();
   if (combo && combo === hotkeys.ocrPage) {
     e.preventDefault();
     els.ocrCurrentPage?.click();
   }
   if (combo && combo === hotkeys.searchFocus) {
     e.preventDefault();
-    els.searchInput.focus();
+    els.searchInput?.focus();
   }
   if (key === 'b' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
@@ -7798,7 +7802,7 @@ document.addEventListener('keydown', async (e) => {
   }
   if ((e.ctrlKey || e.metaKey) && key === 'f' && hotkeys.searchFocus === 'ctrl+f') {
     e.preventDefault();
-    els.searchInput.focus();
+    els.searchInput?.focus();
   }
   if ((e.ctrlKey || e.metaKey) && key === 'z') {
     if (state.drawEnabled) {
