@@ -18,7 +18,7 @@ import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from
 import { analyzeTextDensity, computeOcrZoom } from './modules/ocr-adaptive-dpi.js';
 import { getPageQualitySummary } from './modules/ocr-word-confidence.js';
 import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText } from './modules/ocr-storage.js';
-import { initTesseract, recognizeTesseract, isTesseractAvailable, getTesseractStatus, terminateTesseract } from './modules/tesseract-adapter.js';
+import { initTesseract, recognizeTesseract, isTesseractAvailable, getTesseractStatus, terminateTesseract, resetTesseractAvailability } from './modules/tesseract-adapter.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -2345,6 +2345,22 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   const taskId = Number(options.taskId || 0);
   const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
 
+  // Early exit: check Tesseract availability BEFORE spending time on preprocessing
+  const lang = getOcrLang();
+  const tesseractAvail = await isTesseractAvailable();
+  if (tesseractAvail) {
+    const initOk = await initTesseract(lang === 'auto' ? 'auto' : lang);
+    pushDiagnosticEvent('ocr.tesseract.init', { available: true, initialized: initOk, lang });
+    if (!initOk) {
+      pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-init-failed', lang, ms: Math.round(performance.now() - startedAt) });
+      return '';
+    }
+  } else {
+    pushDiagnosticEvent('ocr.tesseract.init', { available: false, initialized: false, lang }, 'error');
+    pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-unavailable', lang, ms: Math.round(performance.now() - startedAt) });
+    return '';
+  }
+
   const preprocessStart = performance.now();
   const isAccurate = state.settings?.ocrQualityMode === 'accurate';
   const recipeList = isAccurate
@@ -2423,18 +2439,10 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   const preprocessMs = Math.round(performance.now() - preprocessStart);
 
   const recognizeStart = performance.now();
-  const lang = getOcrLang();
+  // lang already resolved at top of function; Tesseract already confirmed initialized
   let best = '';
   let bestScore = -Infinity;
   let detectedLang = lang;
-  // Pre-initialize Tesseract for current language (avoids init delay on first variant)
-  const tesseractAvail = await isTesseractAvailable();
-  if (tesseractAvail) {
-    const initOk = await initTesseract(lang === 'auto' ? 'auto' : lang);
-    pushDiagnosticEvent('ocr.tesseract.init', { available: true, initialized: initOk, lang });
-  } else {
-    pushDiagnosticEvent('ocr.tesseract.init', { available: false, initialized: false, lang }, 'error');
-  }
   for (let i = 0; i < variants.length; i += 1) {
     if (taskId && taskId !== state.ocrTaskId) return best;
     if (onProgress) onProgress({ phase: 'recognize', current: i + 1, total: variants.length });
@@ -2463,7 +2471,7 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
       detectedLang = effectiveLang;
     }
     // If Tesseract gave a solid result on first variant, skip remaining variants
-    if (tesseractAvail && i === 0 && best.length >= 20 && bestScore > 50) {
+    if (i === 0 && best.length >= 20 && bestScore > 50) {
       break;
     }
     await yieldToMainThread();
@@ -4802,6 +4810,7 @@ const _openFileImpl = async function openFileImpl(file) {
   state.djvuBinaryDetected = false;
   invalidateAnnotationCaches();
   clearOcrRuntimeCaches('file-open');
+  resetTesseractAvailability(); // allow Tesseract retry on each new file
 
   const lower = file.name.toLowerCase();
 
@@ -4809,7 +4818,13 @@ const _openFileImpl = async function openFileImpl(file) {
     try {
       const pdf = await ensurePdfJs();
       const data = await progressiveLoader.loadFileProgressive(file);
-      const pdfDoc = await pdf.getDocument({ data }).promise;
+      // For large files (>100MB), disable eager page fetching to reduce memory
+      const pdfOptions = { data };
+      if (file.size > 100 * 1024 * 1024) {
+        pdfOptions.disableAutoFetch = true;
+        pdfOptions.disableStream = true;
+      }
+      const pdfDoc = await pdf.getDocument(pdfOptions).promise;
       state.adapter = new PDFAdapter(pdfDoc);
     } catch {
       state.adapter = new UnsupportedAdapter(file.name);
@@ -5815,6 +5830,34 @@ function updatePreviewSelection() {
   });
 }
 
+function _drawPreviewPlaceholder(canvas, pageNum) {
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#10141b';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '12px sans-serif';
+  ctx.fillText(`Стр. ${pageNum}`, 12, 20);
+}
+
+async function _renderDeferredPreviews(from, to) {
+  if (!state.adapter) return;
+  const buttons = els.pagePreviewList.querySelectorAll('button[data-page]');
+  for (const btn of buttons) {
+    const page = Number(btn.dataset.page);
+    if (page < from || page > to) continue;
+    const canvas = btn.querySelector('canvas');
+    if (!canvas || canvas.dataset.needsRender !== '1') continue;
+    try {
+      const viewport = await state.adapter.getPageViewport(page, 1, state.rotation);
+      const scale = Math.min(120 / Math.max(1, viewport.width), 160 / Math.max(1, viewport.height));
+      await state.adapter.renderPage(page, canvas, { zoom: scale, rotation: state.rotation });
+      delete canvas.dataset.needsRender;
+    } catch { /* keep placeholder */ }
+    // Yield between previews to not block the main thread
+    await yieldToMainThread();
+  }
+}
+
 async function renderPagePreviews() {
   els.pagePreviewList.innerHTML = '';
 
@@ -5827,6 +5870,8 @@ async function renderPagePreviews() {
   }
 
   const maxPages = state.adapter.type === 'pdf' ? Math.min(state.pageCount, 24) : Math.min(state.pageCount, 4);
+  // Render first batch immediately (fast initial paint), defer rest
+  const immediateBatch = Math.min(maxPages, 6);
 
   for (let i = 1; i <= maxPages; i += 1) {
     const li = document.createElement('li');
@@ -5839,17 +5884,19 @@ async function renderPagePreviews() {
     canvas.width = 120;
     canvas.height = 160;
 
-    try {
-      const viewport = await state.adapter.getPageViewport(i, 1, state.rotation);
-      const scale = Math.min(120 / Math.max(1, viewport.width), 160 / Math.max(1, viewport.height));
-      await state.adapter.renderPage(i, canvas, { zoom: scale, rotation: state.rotation });
-    } catch {
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#10141b';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#cbd5e1';
-      ctx.font = '12px sans-serif';
-      ctx.fillText(`Стр. ${i}`, 12, 20);
+    // Only render first batch synchronously; the rest are placeholders
+    // that will be rendered after the main page is displayed
+    if (i <= immediateBatch) {
+      try {
+        const viewport = await state.adapter.getPageViewport(i, 1, state.rotation);
+        const scale = Math.min(120 / Math.max(1, viewport.width), 160 / Math.max(1, viewport.height));
+        await state.adapter.renderPage(i, canvas, { zoom: scale, rotation: state.rotation });
+      } catch {
+        _drawPreviewPlaceholder(canvas, i);
+      }
+    } else {
+      _drawPreviewPlaceholder(canvas, i);
+      canvas.dataset.needsRender = '1';
     }
 
     const label = document.createElement('span');
@@ -5865,6 +5912,11 @@ async function renderPagePreviews() {
 
     li.appendChild(btn);
     els.pagePreviewList.appendChild(li);
+  }
+
+  // Render deferred thumbnails in the background after file open completes
+  if (maxPages > immediateBatch) {
+    requestAnimationFrame(() => _renderDeferredPreviews(immediateBatch + 1, maxPages));
   }
 
   if (state.pageCount > maxPages) {
@@ -6420,14 +6472,21 @@ els.pageInput.addEventListener('keydown', async (e) => {
   if (e.key === 'Enter') await goToPage();
 });
 
-els.zoomIn.addEventListener('click', async () => {
-  state.zoom = Math.min(4, state.zoom + 0.1);
+// Debounced render for rapid zoom clicks — avoids queueing 10+ renders in a row
+const debouncedZoomRender = debounce(async () => {
   await renderCurrentPage();
+}, 120);
+
+els.zoomIn.addEventListener('click', () => {
+  state.zoom = Math.min(4, +(state.zoom + 0.1).toFixed(2));
+  els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
+  debouncedZoomRender();
 });
 
-els.zoomOut.addEventListener('click', async () => {
-  state.zoom = Math.max(0.3, state.zoom - 0.1);
-  await renderCurrentPage();
+els.zoomOut.addEventListener('click', () => {
+  state.zoom = Math.max(0.3, +(state.zoom - 0.1).toFixed(2));
+  els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
+  debouncedZoomRender();
 });
 
 els.fitWidth.addEventListener('click', fitWidth);

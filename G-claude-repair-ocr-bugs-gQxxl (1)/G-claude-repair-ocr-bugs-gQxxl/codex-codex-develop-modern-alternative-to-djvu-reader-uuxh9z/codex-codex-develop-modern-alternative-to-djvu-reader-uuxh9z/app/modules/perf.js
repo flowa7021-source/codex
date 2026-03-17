@@ -72,8 +72,9 @@ export function createOcrWorkerBlob() {
         acc = 0;
         for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= totalPx * 0.95) { p95 = i; break; } }
         const spread = Math.max(1, p95 - p5);
-        const sqMean = Array.from(d).filter((_, i) => i % 4 === 0).reduce((s, v) => s + v*v, 0) / totalPx;
-        const stdDev = Math.sqrt(Math.max(0, sqMean - mean*mean));
+        let sqSum = 0;
+        for (let i = 0; i < d.length; i += 4) { sqSum += d[i] * d[i]; }
+        const stdDev = Math.sqrt(Math.max(0, sqSum / totalPx - mean * mean));
 
         for (let i = 0; i < d.length; i += 4) {
           const stretched = ((d[i] - p5) * 255) / spread;
@@ -174,8 +175,8 @@ export function runInWorker(type, payload) {
 // ─── Phase 1: Enhanced Memory Management ───────────────────────────────────
 export const pageRenderCache = {
   entries: new Map(),
-  maxEntries: 8,
-  maxTotalPixels: 32_000_000,
+  maxEntries: 16,             // increased from 8 for large docs with frequent navigation
+  maxTotalPixels: 64_000_000, // increased from 32M — safe with 4GB heap limit
   totalPixels: 0,
 };
 
@@ -214,7 +215,8 @@ export function evictPageFromCache(pageNum) {
 }
 
 export function clearPageRenderCache() {
-  for (const [key] of pageRenderCache.entries) {
+  const keys = [...pageRenderCache.entries.keys()];
+  for (const key of keys) {
     evictPageFromCache(key);
   }
 }

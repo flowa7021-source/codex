@@ -9,6 +9,8 @@ let _currentLang = null;
 let _initializing = false;
 let _initPromise = null;
 let _available = null; // null = not checked, true/false
+let _initFailCount = 0; // track consecutive init failures for backoff
+const MAX_INIT_RETRIES = 3; // max retries before giving up for this session
 
 // Resolve local paths relative to this module
 function resolveVendorPath(relativePath) {
@@ -45,23 +47,28 @@ const LANG_MAP = {
  * @returns {Promise<boolean>}
  */
 export async function isTesseractAvailable() {
-  if (_available !== null) return _available;
+  // If permanently failed after MAX_INIT_RETRIES, give up
+  if (_available === false && _initFailCount >= MAX_INIT_RETRIES) return false;
+
+  // If already confirmed available (module loaded OK), return true
+  if (_available === true) return true;
 
   // Strategy 1: Try to load the ESM module directly (works on all protocols)
   try {
     await loadTesseractModule();
     _available = true;
-    return _available;
+    return true;
   } catch { /* continue to next strategy */ }
 
   // Strategy 2: HTTP HEAD check (works on http/https only)
   try {
     const resp = await fetch(PATHS.workerJs, { method: 'HEAD', cache: 'force-cache' });
-    _available = resp.ok;
-  } catch {
-    _available = false;
-  }
-  return _available;
+    if (resp.ok) { _available = true; return true; }
+  } catch { /* ignore */ }
+
+  // Module/files truly not found — mark unavailable
+  _available = false;
+  return false;
 }
 
 /**
@@ -103,6 +110,9 @@ export async function initTesseract(lang = 'eng') {
   // If already initialized with the same language, reuse
   if (_worker && _currentLang === tessLang) return true;
 
+  // If too many consecutive failures, don't retry
+  if (_initFailCount >= MAX_INIT_RETRIES) return false;
+
   // If currently initializing, wait for it
   if (_initializing && _initPromise) {
     await _initPromise;
@@ -114,7 +124,7 @@ export async function initTesseract(lang = 'eng') {
     try {
       // Terminate previous worker if switching language
       if (_worker) {
-        await _worker.terminate();
+        try { await _worker.terminate(); } catch { /* ignore */ }
         _worker = null;
         _currentLang = null;
       }
@@ -132,12 +142,15 @@ export async function initTesseract(lang = 'eng') {
 
       _currentLang = tessLang;
       _available = true;
+      _initFailCount = 0; // reset on success
       return true;
     } catch (err) {
-      console.warn('Tesseract init failed:', err);
+      _initFailCount++;
+      console.warn(`Tesseract init failed (attempt ${_initFailCount}/${MAX_INIT_RETRIES}):`, err?.message || err);
       _worker = null;
       _currentLang = null;
-      _available = false;
+      // Don't set _available = false here — the module exists, only worker creation failed.
+      // _available tracks whether the Tesseract MODULE is present, not whether createWorker succeeded.
       return false;
     } finally {
       _initializing = false;
@@ -203,7 +216,19 @@ export function getTesseractStatus() {
     ready: !!_worker && !!_currentLang,
     lang: _currentLang,
     available: _available,
+    initFailCount: _initFailCount,
   };
+}
+
+/**
+ * Reset availability flag so Tesseract can be retried.
+ * Useful after a file-open or settings change.
+ */
+export function resetTesseractAvailability() {
+  _initFailCount = 0;
+  // Only reset _available if it was set to false due to init failure
+  // (keep null or true as-is)
+  if (_available === false) _available = null;
 }
 
 /**

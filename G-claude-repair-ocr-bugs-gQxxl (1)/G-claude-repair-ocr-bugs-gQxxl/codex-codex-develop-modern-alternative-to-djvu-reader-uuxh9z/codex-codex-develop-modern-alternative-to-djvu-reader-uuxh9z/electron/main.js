@@ -1,6 +1,16 @@
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
 
+// ─── Performance flags for large files (500MB+) ─────────────────────────────
+// Increase V8 heap limit from default ~1.7GB to 4GB so huge documents
+// don't trigger OOM crashes. Also enable GPU rasterization for canvas perf.
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096');
+app.commandLine.appendSwitch('enable-gpu-rasterization');
+app.commandLine.appendSwitch('enable-zero-copy');
+// Disable renderer backgrounding so page rendering stays fast when
+// the window temporarily loses focus during long operations.
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1480,

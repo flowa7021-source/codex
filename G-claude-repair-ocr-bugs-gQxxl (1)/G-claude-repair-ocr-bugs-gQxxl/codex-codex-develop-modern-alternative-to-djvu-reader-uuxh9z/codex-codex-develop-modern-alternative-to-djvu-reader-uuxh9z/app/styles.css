@@ -438,6 +438,8 @@ input:focus, select:focus, textarea:focus {
   box-shadow: var(--shadow);
   background: white;
   image-rendering: auto;
+  will-change: contents;         /* hint GPU to prepare for frequent repaints */
+  contain: layout style paint;   /* isolate repaints from rest of DOM */
 }
 #annotationCanvas {
   position: absolute;
