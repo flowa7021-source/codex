@@ -1,0 +1,105 @@
+import { state, els } from './state.js';
+import { pushDiagnosticEvent } from './diagnostics.js';
+import { renderAnnotations, updateOverlayInteractionState } from './drawing.js';
+import { setOcrStatus } from './ocr.js';
+
+export const ToolMode = {
+  IDLE: 'idle',
+  ANNOTATE: 'annotate',
+  OCR_REGION: 'ocr-region',
+  TEXT_EDIT: 'text-edit',
+  SEARCH: 'search',
+};
+
+export const toolStateMachine = {
+  current: ToolMode.IDLE,
+  previous: ToolMode.IDLE,
+  listeners: [],
+
+  transition(newMode) {
+    if (newMode === this.current) return;
+    const oldMode = this.current;
+    this.previous = oldMode;
+    this.current = newMode;
+
+    if (oldMode === ToolMode.ANNOTATE) deactivateAnnotateMode();
+    if (oldMode === ToolMode.OCR_REGION) deactivateOcrRegionMode();
+    if (oldMode === ToolMode.TEXT_EDIT) deactivateTextEditMode();
+    if (oldMode === ToolMode.SEARCH) deactivateSearchMode();
+
+    if (newMode === ToolMode.ANNOTATE) activateAnnotateMode();
+    if (newMode === ToolMode.OCR_REGION) activateOcrRegionMode();
+    if (newMode === ToolMode.TEXT_EDIT) activateTextEditMode();
+    if (newMode === ToolMode.SEARCH) activateSearchMode();
+
+    pushDiagnosticEvent('tool.transition', { from: oldMode, to: newMode });
+    for (const fn of this.listeners) fn(newMode, oldMode);
+  },
+
+  toggle(mode) {
+    this.transition(this.current === mode ? ToolMode.IDLE : mode);
+  },
+
+  onTransition(fn) {
+    this.listeners.push(fn);
+  },
+};
+
+export function deactivateAnnotateMode() {
+  state.drawEnabled = false;
+  if (els.annotateToggle) {
+    els.annotateToggle.classList.remove('active');
+    els.annotateToggle.textContent = '✎ off';
+  }
+  renderAnnotations();
+}
+
+export function activateAnnotateMode() {
+  state.drawEnabled = true;
+  if (els.annotateToggle) {
+    els.annotateToggle.classList.add('active');
+    els.annotateToggle.textContent = '✎ on';
+  }
+  updateOverlayInteractionState();
+}
+
+export function deactivateOcrRegionMode() {
+  state.ocrRegionMode = false;
+  state.isSelectingOcr = false;
+  state.ocrSelection = null;
+  if (els.ocrRegionMode) els.ocrRegionMode.classList.remove('active');
+  renderAnnotations();
+}
+
+export function activateOcrRegionMode() {
+  state.ocrRegionMode = true;
+  if (els.ocrRegionMode) els.ocrRegionMode.classList.add('active');
+  updateOverlayInteractionState();
+  setOcrStatus('OCR: выделите область на странице');
+}
+
+export function deactivateTextEditMode() {
+  state.textEditMode = false;
+  if (els.pageText) els.pageText.readOnly = true;
+  if (els.toggleTextEdit) {
+    els.toggleTextEdit.textContent = 'Ред.';
+    els.toggleTextEdit.classList.remove('active');
+  }
+}
+
+export function activateTextEditMode() {
+  state.textEditMode = true;
+  if (els.pageText) els.pageText.readOnly = false;
+  if (els.toggleTextEdit) {
+    els.toggleTextEdit.textContent = 'Ред.';
+    els.toggleTextEdit.classList.add('active');
+  }
+}
+
+export function deactivateSearchMode() {
+  // Search mode deactivation is passive - just unfocus
+}
+
+export function activateSearchMode() {
+  if (els.searchInput) els.searchInput.focus();
+}
