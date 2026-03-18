@@ -2,7 +2,11 @@
 // High-quality OCR engine adapter. Runs Tesseract.js entirely offline using
 // bundled WASM core and local traineddata files (no network calls).
 //
+// Supports both single-worker mode (for on-demand page OCR) and parallel
+// scheduler mode (for background multi-page scanning).
+//
 // Usage: await initTesseract('rus'); const text = await recognizeTesseract(canvas);
+// Pool:  await initTesseractPool('rus', 4); const text = await recognizeWithPool(canvas);
 
 let _worker = null;
 let _currentLang = null;
@@ -14,6 +18,14 @@ let _lastInitError = ''; // last error message for diagnostics
 let _lastFailTime = 0; // timestamp of last failure for cooldown
 const MAX_INIT_RETRIES = 3; // max retries before giving up for this session
 const INIT_FAIL_COOLDOWN_MS = 5000; // minimum delay between retry attempts after failure
+
+// ─── Worker Pool (Scheduler) state ──────────────────────────────────────────
+let _scheduler = null;
+let _poolWorkers = [];
+let _poolLang = null;
+let _poolSize = 0;
+let _poolInitializing = false;
+let _poolInitPromise = null;
 
 // Resolve local paths relative to this module
 function resolveVendorPath(relativePath) {
@@ -116,6 +128,54 @@ function hasSIMD() {
 }
 
 /**
+ * Common worker creation options.
+ */
+function _getWorkerOpts() {
+  return {
+    workerPath: PATHS.workerJs,
+    corePath: hasSIMD() ? PATHS.coreSimdLstm : PATHS.coreLstm,
+    langPath: PATHS.langDataDir,
+    cacheMethod: 'none',
+    gzip: false,
+    workerBlobURL: false,
+  };
+}
+
+/**
+ * Create a single Tesseract worker with language fallback.
+ * @param {object} Tesseract - loaded Tesseract module
+ * @param {string} tessLang - Tesseract language string
+ * @param {object} workerOpts - worker creation options
+ * @returns {Promise<object>} created worker
+ */
+async function _createWorkerWithFallback(Tesseract, tessLang, workerOpts) {
+  try {
+    return await Tesseract.createWorker(tessLang, 1, workerOpts);
+  } catch (primaryErr) {
+    if (tessLang.includes('+')) {
+      const fallbackLang = tessLang.split('+')[0];
+      console.warn(`Tesseract multi-lang "${tessLang}" failed, trying "${fallbackLang}":`, primaryErr?.message);
+      return await Tesseract.createWorker(fallbackLang, 1, workerOpts);
+    }
+    throw primaryErr;
+  }
+}
+
+/**
+ * Configure a worker with optimal OCR parameters.
+ */
+async function _configureWorker(worker) {
+  try {
+    await worker.setParameters({
+      tessedit_pageseg_mode: '6',
+      preserve_interword_spaces: '1',
+      textord_heavy_nr: '1',
+      tessedit_do_invert: '0',
+    });
+  } catch { /* setParameters may not be supported in all versions */ }
+}
+
+/**
  * Initialize Tesseract worker with a specific language.
  * All resources loaded from local vendor/ — no network calls.
  * @param {string} lang - language code (rus, eng, deu, fra, spa, ita, por, auto)
@@ -152,49 +212,16 @@ export async function initTesseract(lang = 'eng') {
       }
 
       const Tesseract = await loadTesseractModule();
-      const corePath = hasSIMD() ? PATHS.coreSimdLstm : PATHS.coreLstm;
+      const workerOpts = _getWorkerOpts();
 
-      const workerOpts = {
-        workerPath: PATHS.workerJs,
-        corePath: corePath,
-        langPath: PATHS.langDataDir,
-        cacheMethod: 'none', // Don't use IndexedDB cache — load from local files
-        gzip: false, // Our traineddata files are not gzipped
-        // workerBlobURL: false is CRITICAL for Electron (file:// protocol).
-        // Default true creates a blob:-origin worker that cannot importScripts
-        // from file:// URLs, causing silent init failures.
-        workerBlobURL: false,
-      };
-
-      try {
-        _worker = await Tesseract.createWorker(tessLang, 1, workerOpts);
-      } catch (primaryErr) {
-        // If multi-language (e.g. 'eng+rus') fails, try falling back to first language
-        if (tessLang.includes('+')) {
-          const fallbackLang = tessLang.split('+')[0];
-          console.warn(`Tesseract multi-lang "${tessLang}" failed, trying "${fallbackLang}":`, primaryErr?.message);
-          _worker = await Tesseract.createWorker(fallbackLang, 1, workerOpts);
-        } else {
-          throw primaryErr;
-        }
-      }
-
+      _worker = await _createWorkerWithFallback(Tesseract, tessLang, workerOpts);
       _currentLang = tessLang;
       _available = true;
-      _initFailCount = 0; // reset on success
+      _initFailCount = 0;
       _lastInitError = '';
       _lastFailTime = 0;
 
-      // Configure Tesseract parameters for higher quality recognition
-      try {
-        await _worker.setParameters({
-          tessedit_pageseg_mode: '6',    // Assume a single uniform block of text
-          preserve_interword_spaces: '1', // Keep spaces between words
-          textord_heavy_nr: '1',         // Heavy noise removal
-          tessedit_do_invert: '0',       // Don't try inverted (we handle it ourselves)
-        });
-      } catch { /* setParameters may not be supported in all versions */ }
-
+      await _configureWorker(_worker);
       return true;
     } catch (err) {
       _initFailCount++;
@@ -203,8 +230,6 @@ export async function initTesseract(lang = 'eng') {
       console.warn(`Tesseract init failed (attempt ${_initFailCount}/${MAX_INIT_RETRIES}):`, _lastInitError);
       _worker = null;
       _currentLang = null;
-      // Don't set _available = false here — the module exists, only worker creation failed.
-      // _available tracks whether the Tesseract MODULE is present, not whether createWorker succeeded.
       return false;
     } finally {
       _initializing = false;
@@ -213,6 +238,151 @@ export async function initTesseract(lang = 'eng') {
 
   return _initPromise;
 }
+
+// ─── Worker Pool (Scheduler) ────────────────────────────────────────────────
+
+/**
+ * Get the recommended pool size based on hardware.
+ * @returns {number}
+ */
+export function getRecommendedPoolSize() {
+  const cores = navigator.hardwareConcurrency || 2;
+  // Use at most half the cores (min 2, max 4) to avoid starving the UI thread
+  return Math.max(2, Math.min(4, Math.floor(cores / 2)));
+}
+
+/**
+ * Initialize a pool of Tesseract workers managed by a scheduler.
+ * The scheduler automatically distributes recognition jobs across workers.
+ * @param {string} lang - language code
+ * @param {number} [size] - number of workers (defaults to getRecommendedPoolSize())
+ * @returns {Promise<boolean>} true if pool initialized successfully
+ */
+export async function initTesseractPool(lang = 'eng', size) {
+  const tessLang = LANG_MAP[lang] || lang;
+  const targetSize = size || getRecommendedPoolSize();
+
+  // Already initialized with same config
+  if (_scheduler && _poolLang === tessLang && _poolSize === targetSize) return true;
+
+  if (_initFailCount >= MAX_INIT_RETRIES) return false;
+  if (_lastFailTime > 0 && (performance.now() - _lastFailTime) < INIT_FAIL_COOLDOWN_MS) return false;
+
+  // Wait for in-progress initialization
+  if (_poolInitializing && _poolInitPromise) {
+    await _poolInitPromise;
+    if (_poolLang === tessLang && _poolSize === targetSize) return true;
+  }
+
+  _poolInitializing = true;
+  _poolInitPromise = (async () => {
+    try {
+      // Tear down existing pool
+      await terminateTesseractPool();
+
+      const Tesseract = await loadTesseractModule();
+      if (typeof Tesseract.createScheduler !== 'function') {
+        console.warn('Tesseract.createScheduler not available, falling back to single worker');
+        return await initTesseract(lang);
+      }
+
+      const workerOpts = _getWorkerOpts();
+      const scheduler = Tesseract.createScheduler();
+      const workers = [];
+
+      for (let i = 0; i < targetSize; i++) {
+        const w = await _createWorkerWithFallback(Tesseract, tessLang, workerOpts);
+        await _configureWorker(w);
+        scheduler.addWorker(w);
+        workers.push(w);
+      }
+
+      _scheduler = scheduler;
+      _poolWorkers = workers;
+      _poolLang = tessLang;
+      _poolSize = targetSize;
+      _available = true;
+      _initFailCount = 0;
+      _lastInitError = '';
+      _lastFailTime = 0;
+
+      console.log(`Tesseract pool initialized: ${targetSize} workers, lang="${tessLang}"`);
+      return true;
+    } catch (err) {
+      _initFailCount++;
+      _lastInitError = String(err?.message || err || 'unknown error');
+      _lastFailTime = performance.now();
+      console.warn(`Tesseract pool init failed (attempt ${_initFailCount}/${MAX_INIT_RETRIES}):`, _lastInitError);
+      await terminateTesseractPool();
+      return false;
+    } finally {
+      _poolInitializing = false;
+    }
+  })();
+
+  return _poolInitPromise;
+}
+
+/**
+ * Recognize text using the scheduler pool.
+ * Falls back to single worker if pool is not initialized.
+ * @param {HTMLCanvasElement} canvas
+ * @param {object} [options]
+ * @returns {Promise<{ text: string, confidence: number, words: Array }>}
+ */
+export async function recognizeWithPool(canvas, options = {}) {
+  if (!_scheduler) {
+    // Fall back to single worker
+    return recognizeTesseract(canvas, options);
+  }
+
+  try {
+    const result = await _scheduler.addJob('recognize', canvas);
+    const text = result?.data?.text || '';
+    const confidence = result?.data?.confidence || 0;
+    const words = (result?.data?.words || []).map((w) => ({
+      text: w.text,
+      confidence: w.confidence,
+      bbox: w.bbox,
+    }));
+    return { text: text.trim(), confidence, words };
+  } catch (err) {
+    console.warn('Tesseract pool recognize error:', err);
+    const errMsg = String(err?.message || err || '');
+    if (errMsg.includes('terminated') || errMsg.includes('Worker') || errMsg.includes('disposed') || errMsg.includes('dead')) {
+      // Pool is broken — tear it down
+      await terminateTesseractPool();
+      _lastInitError = `pool recognize failed: ${errMsg}`;
+    }
+    return { text: '', confidence: 0, words: [] };
+  }
+}
+
+/**
+ * Check if the pool is active and ready.
+ * @returns {boolean}
+ */
+export function isTesseractPoolReady() {
+  return !!_scheduler && _poolWorkers.length > 0;
+}
+
+/**
+ * Terminate all pool workers and the scheduler.
+ */
+export async function terminateTesseractPool() {
+  if (_scheduler) {
+    try { _scheduler.terminate(); } catch { /* ignore */ }
+    _scheduler = null;
+  }
+  for (const w of _poolWorkers) {
+    try { await w.terminate(); } catch { /* ignore */ }
+  }
+  _poolWorkers = [];
+  _poolLang = null;
+  _poolSize = 0;
+}
+
+// ─── Single Worker Recognition ──────────────────────────────────────────────
 
 /**
  * Recognize text from a canvas using Tesseract.js.
@@ -279,6 +449,8 @@ export function getTesseractStatus() {
     available: _available,
     initFailCount: _initFailCount,
     lastError: _lastInitError,
+    poolReady: isTesseractPoolReady(),
+    poolSize: _poolSize,
   };
 }
 
@@ -304,6 +476,7 @@ export async function terminateTesseract() {
     _worker = null;
     _currentLang = null;
   }
+  await terminateTesseractPool();
 }
 
 /**

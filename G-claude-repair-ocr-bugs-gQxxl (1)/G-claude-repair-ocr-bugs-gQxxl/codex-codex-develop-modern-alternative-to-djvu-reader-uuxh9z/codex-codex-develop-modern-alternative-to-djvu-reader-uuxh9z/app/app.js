@@ -18,7 +18,7 @@ import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from
 import { analyzeTextDensity, computeOcrZoom, hasSmallText } from './modules/ocr-adaptive-dpi.js';
 import { getPageQualitySummary, markLowConfidenceWords } from './modules/ocr-word-confidence.js';
 import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText, deleteOcrData, listOcrDocuments, getOcrStorageSize } from './modules/ocr-storage.js';
-import { initTesseract, recognizeTesseract, recognizeWithBoxes, isTesseractAvailable, getTesseractStatus, terminateTesseract, resetTesseractAvailability } from './modules/tesseract-adapter.js';
+import { initTesseract, recognizeTesseract, recognizeWithBoxes, isTesseractAvailable, getTesseractStatus, terminateTesseract, resetTesseractAvailability, initTesseractPool, recognizeWithPool, terminateTesseractPool, isTesseractPoolReady, getRecommendedPoolSize } from './modules/tesseract-adapter.js';
 import { convertPdfToDocx, extractStructuredContent } from './modules/docx-converter.js';
 import { mergePdfDocuments, splitPdfDocument, splitPdfIntoIndividual, fillPdfForm, getPdfFormFields, addWatermarkToPdf, addStampToPdf, addSignatureToPdf, exportAnnotationsIntoPdf, rotatePdfPages, getPdfMetadata, parsePageRange as parsePageRangeLib } from './modules/pdf-operations.js';
 import { PdfRedactor, REDACTION_PATTERNS } from './modules/pdf-redact.js';
@@ -2713,18 +2713,20 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
       let rawText = '';
       let words = [];
       try {
-        const tessResult = await recognizeTesseract(variant, { lang });
+        // Use pool if available (background scan), else single worker
+        const recognizeFn = isTesseractPoolReady() ? recognizeWithPool : recognizeTesseract;
+        const tessResult = await recognizeFn(variant, { lang });
         if (tessResult && tessResult.text) {
           rawText = tessResult.text;
           words = tessResult.words || [];
         }
-        if (!rawText && !getTesseractStatus().ready) {
+        if (!rawText && !getTesseractStatus().ready && !isTesseractPoolReady()) {
           pushDiagnosticEvent('ocr.engine.missing', { variant: i });
           break;
         }
       } catch (ocrErr) {
         pushDiagnosticEvent('ocr.engine.error', { variant: i, error: ocrErr?.message || String(ocrErr) });
-        if (!getTesseractStatus().ready) {
+        if (!getTesseractStatus().ready && !isTesseractPoolReady()) {
           pushDiagnosticEvent('ocr.engine.dead', { variant: i, error: ocrErr?.message || String(ocrErr) }, 'error');
           break;
         }
@@ -3351,64 +3353,103 @@ async function startBackgroundOcrScan(reason = 'auto') {
     return;
   }
   const lang = getOcrLang();
-  const initOk = await initTesseract(lang === 'auto' ? 'auto' : lang);
-  if (!initOk) {
-    pushDiagnosticEvent('ocr.background.skip', { reason: 'tesseract-init-failed', lang }, 'warn');
-    setOcrStatus('OCR: фоновое распознавание невозможно — ошибка инициализации');
-    return;
+  const tessLang = lang === 'auto' ? 'auto' : lang;
+
+  // Try to initialize a parallel worker pool for faster background scanning
+  const poolSize = getRecommendedPoolSize();
+  let usePool = false;
+  try {
+    usePool = await initTesseractPool(tessLang, poolSize);
+    if (usePool) {
+      pushDiagnosticEvent('ocr.background.pool', { poolSize, lang: tessLang });
+    }
+  } catch {
+    usePool = false;
   }
 
+  // Fallback to single worker if pool failed
+  if (!usePool) {
+    const initOk = await initTesseract(tessLang);
+    if (!initOk) {
+      pushDiagnosticEvent('ocr.background.skip', { reason: 'tesseract-init-failed', lang }, 'warn');
+      setOcrStatus('OCR: фоновое распознавание невозможно — ошибка инициализации');
+      return;
+    }
+  }
+
+  const concurrency = usePool ? poolSize : 1;
   const token = Date.now();
   state.backgroundOcrToken = token;
   state.backgroundOcrRunning = true;
-  pushDiagnosticEvent('ocr.background.start', { reason, pageCount: state.pageCount });
+  pushDiagnosticEvent('ocr.background.start', { reason, pageCount: state.pageCount, concurrency });
 
   const existing = loadOcrTextData();
   const pagesText = Array.isArray(existing?.pagesText) ? [...existing.pagesText] : new Array(state.pageCount).fill('');
   const maxPages = state.pageCount;
   let consecutiveEmpty = 0;
+  let scannedCount = 0;
 
   try {
-    for (let i = 1; i <= maxPages; i += 1) {
-      if (state.backgroundOcrToken !== token) {
-        return;
-      }
+    // Build list of pages that need OCR
+    const pagesToScan = [];
+    for (let i = 1; i <= maxPages; i++) {
+      if (!pagesText[i - 1]) pagesToScan.push(i);
+    }
+
+    // Process pages in parallel batches
+    for (let batchStart = 0; batchStart < pagesToScan.length; batchStart += concurrency) {
+      if (state.backgroundOcrToken !== token) return;
       if (state.docName === null || state.docName === undefined) return;
-      if (pagesText[i - 1]) { consecutiveEmpty = 0; continue; }
 
-      const txt = await extractTextForPage(i);
-      if (txt) {
-        consecutiveEmpty = 0;
-        const corrected = postCorrectOcrText(txt);
-        pagesText[i - 1] = corrected;
-        indexOcrPage(i, corrected);
-        recordSuccessfulOperation();
-        if (i % 5 === 0 || i === maxPages) {
-          saveOcrTextData({
-            pagesText,
-            source: 'auto-ocr',
-            scannedPages: i,
-            totalPages: state.pageCount,
-            updatedAt: new Date().toISOString(),
-          });
+      const batch = pagesToScan.slice(batchStart, batchStart + concurrency);
+      const batchPromises = batch.map(async (pageNum) => {
+        if (state.backgroundOcrToken !== token) return { pageNum, text: '' };
+        try {
+          const txt = await extractTextForPage(pageNum);
+          return { pageNum, text: txt || '' };
+        } catch {
+          return { pageNum, text: '' };
         }
+      });
 
-        if (i === state.currentPage && !els.pageText.value) {
-          els.pageText.value = corrected;
+      const results = await Promise.all(batchPromises);
+
+      for (const { pageNum, text } of results) {
+        if (state.backgroundOcrToken !== token) return;
+        if (text) {
+          consecutiveEmpty = 0;
+          const corrected = postCorrectOcrText(text);
+          pagesText[pageNum - 1] = corrected;
+          indexOcrPage(pageNum, corrected);
+          recordSuccessfulOperation();
+
+          if (pageNum === state.currentPage && !els.pageText.value) {
+            els.pageText.value = corrected;
+          }
+        } else {
+          consecutiveEmpty++;
         }
-      } else {
-        consecutiveEmpty++;
-        // If Tesseract worker died, stop wasting CPU on remaining pages
-        if (consecutiveEmpty >= 5 && !getTesseractStatus().ready) {
-          pushDiagnosticEvent('ocr.background.abort', { reason: 'engine-dead', page: i, consecutiveEmpty }, 'error');
-          setOcrStatus('OCR: фоновое распознавание прервано — движок недоступен');
-          break;
-        }
+        scannedCount++;
       }
 
-      if (i % 3 === 0) {
-        setOcrStatus(`OCR: фоновое распознавание ${i}/${maxPages}`);
+      // Check if engine died
+      if (consecutiveEmpty >= 5 && !getTesseractStatus().ready && !isTesseractPoolReady()) {
+        pushDiagnosticEvent('ocr.background.abort', { reason: 'engine-dead', scannedCount, consecutiveEmpty }, 'error');
+        setOcrStatus('OCR: фоновое распознавание прервано — движок недоступен');
+        break;
       }
+
+      // Periodic save and status update
+      if (scannedCount % 5 === 0 || batchStart + concurrency >= pagesToScan.length) {
+        saveOcrTextData({
+          pagesText,
+          source: 'auto-ocr',
+          scannedPages: scannedCount,
+          totalPages: state.pageCount,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+      setOcrStatus(`OCR: фоновое распознавание ${scannedCount}/${pagesToScan.length} (×${concurrency})`);
       await yieldToMainThread();
     }
 
@@ -3421,10 +3462,14 @@ async function startBackgroundOcrScan(reason = 'auto') {
     });
     setOcrStatus('OCR: фоновое распознавание завершено');
     try { toastSuccess('OCR: фоновое распознавание завершено'); } catch {}
-    pushDiagnosticEvent('ocr.background.finish', { scannedPages: maxPages });
+    pushDiagnosticEvent('ocr.background.finish', { scannedPages: scannedCount, concurrency });
   } finally {
     if (state.backgroundOcrToken === token) {
       state.backgroundOcrRunning = false;
+    }
+    // Tear down pool after background scan to free memory
+    if (usePool) {
+      terminateTesseractPool().catch(() => {});
     }
   }
 }
