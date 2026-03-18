@@ -56,6 +56,10 @@ import { buildTextLayer, highlightSearchMatches, clearSearchHighlights, getSelec
 import { analyzeLayout, detectTable, sortByReadingOrder, tableToHtml } from './modules/layout-analysis.js';
 import { BatchOcrEngine } from './modules/batch-ocr-enhanced.js';
 import { initRibbonToolbar, switchTab, setContextualTab } from './modules/ribbon-toolbar.js';
+import { TabManager } from './modules/tab-manager.js';
+import { parsePageRange as parsePrintRange, getPagesToPrint, arrangeBooklet, arrangeNup, triggerPrint } from './modules/pdf-print.js';
+import { createPdfFromImages, createBlankPdf, canvasesToPdf } from './modules/pdf-create.js';
+import { initQuickActions, hideQuickActions } from './modules/quick-actions.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -10080,3 +10084,18 @@ window._textLayer = { buildTextLayer, highlightSearchMatches, clearSearchHighlig
 window._layoutAnalysis = { analyzeLayout, detectTable, sortByReadingOrder, tableToHtml };
 window._batchOcrEngine = BatchOcrEngine;
 window._ribbon = { initRibbonToolbar, switchTab, setContextualTab };
+window._tabManager = TabManager;
+window._print = { parsePrintRange, getPagesToPrint, arrangeBooklet, arrangeNup, triggerPrint };
+window._pdfCreate = { createPdfFromImages, createBlankPdf, canvasesToPdf };
+window._quickActions = { initQuickActions, hideQuickActions };
+
+// ─── Initialize Quick Actions ─────────────────────────────────────────────
+initQuickActions({
+  container: document.querySelector('.document-viewport') || document.body,
+  onAction: (id, text) => {
+    if (id === 'search' && text) {
+      const searchInput = document.getElementById('searchInput');
+      if (searchInput) { searchInput.value = text; searchInput.dispatchEvent(new Event('input')); }
+    }
+  },
+});
