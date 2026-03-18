@@ -541,6 +541,8 @@ body.sidebar-compact .sidebar-panel > section { padding: 4px; }
   pointer-events: all;
   cursor: text;
   transform-origin: 0% 0%;
+  overflow: hidden;
+  display: inline-block;
 }
 .text-layer > span::selection {
   background: rgba(0, 100, 255, 0.4);

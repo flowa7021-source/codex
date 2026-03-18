@@ -5386,6 +5386,12 @@ async function renderTextLayer(pageNum, zoom, rotation) {
       container.style.width = `${displayW}px`;
       container.style.height = `${displayH}px`;
 
+      // Use DocumentFragment for batch DOM insertion
+      const fragment = document.createDocumentFragment();
+      // Measurement canvas for accurate letter-spacing
+      const measureCanvas = document.createElement('canvas');
+      const measureCtx = measureCanvas.getContext('2d');
+
       for (const item of textContent.items) {
         const str = item.str;
         if (!str) continue;
@@ -5398,15 +5404,17 @@ async function renderTextLayer(pageNum, zoom, rotation) {
         // PDF text transform: [scaleX, skewY, skewX, scaleY, translateX, translateY]
         const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
         const scaleFactor = 1 / dpr;
+        const displayFontSize = fontSize * scaleFactor;
 
         // Position in display coordinates
         const x = tx[4] * scaleFactor;
-        const y = displayH - (tx[5] * scaleFactor) - (fontSize * scaleFactor);
+        const y = displayH - (tx[5] * scaleFactor) - displayFontSize;
 
         span.style.left = `${x}px`;
         span.style.top = `${y}px`;
-        span.style.fontSize = `${fontSize * scaleFactor}px`;
+        span.style.fontSize = `${displayFontSize}px`;
         span.style.fontFamily = item.fontName || 'sans-serif';
+        span.style.lineHeight = '1';
 
         // Apply rotation/skew from transform matrix
         const angle = Math.atan2(tx[1], tx[0]);
@@ -5414,17 +5422,26 @@ async function renderTextLayer(pageNum, zoom, rotation) {
           span.style.transform = `rotate(${-angle}rad)`;
         }
 
-        // Scale width to match original character spacing
-        if (item.width > 0) {
-          const estimatedWidth = fontSize * str.length * 0.5;
+        // Calculate precise letter-spacing using canvas measurement
+        if (item.width > 0 && str.length > 0) {
           const actualWidth = item.width * renderScale * scaleFactor;
-          if (estimatedWidth > 0 && Math.abs(actualWidth - estimatedWidth) > 2) {
-            span.style.letterSpacing = `${((actualWidth - estimatedWidth) / Math.max(1, str.length - 1))}px`;
+          if (str.length > 1) {
+            measureCtx.font = `${displayFontSize}px ${item.fontName || 'sans-serif'}`;
+            const measuredWidth = measureCtx.measureText(str).width;
+            if (measuredWidth > 0 && Math.abs(actualWidth - measuredWidth) > 0.5) {
+              const spacing = (actualWidth - measuredWidth) / (str.length - 1);
+              span.style.letterSpacing = `${spacing}px`;
+            }
+          } else {
+            // Single character — set width directly
+            span.style.width = `${actualWidth}px`;
+            span.style.textAlign = 'center';
           }
         }
 
-        container.appendChild(span);
+        fragment.appendChild(span);
       }
+      container.appendChild(fragment);
     } catch (err) {
       console.warn('Text layer render failed:', err);
     }
@@ -5460,25 +5477,63 @@ async function _renderOcrTextLayer(pageNum, zoom, dpr) {
   container.style.width = `${displayW}px`;
   container.style.height = `${displayH}px`;
 
-  for (const word of words) {
-    if (!word.text || !word.bbox) continue;
+  // Pre-create a measurement canvas for accurate letter-spacing calculation
+  const measureCanvas = document.createElement('canvas');
+  const measureCtx = measureCanvas.getContext('2d');
+
+  // Group words into lines for better text flow
+  const sortedWords = [...words].filter(w => w.text && w.bbox).sort((a, b) => {
+    const dy = a.bbox.y0 - b.bbox.y0;
+    const avgH = ((a.bbox.y1 - a.bbox.y0) + (b.bbox.y1 - b.bbox.y0)) / 2;
+    return Math.abs(dy) < avgH * 0.4 ? a.bbox.x0 - b.bbox.x0 : dy;
+  });
+
+  // Use DocumentFragment for batch DOM insertion (faster)
+  const fragment = document.createDocumentFragment();
+
+  for (const word of sortedWords) {
     const span = document.createElement('span');
     span.textContent = word.text;
-    span.dataset.confidence = String(word.confidence || 0);
+    if (word.confidence != null) {
+      span.dataset.confidence = String(word.confidence);
+    }
 
     const x = word.bbox.x0 * scaleX;
     const y = word.bbox.y0 * scaleY;
     const w = (word.bbox.x1 - word.bbox.x0) * scaleX;
     const h = (word.bbox.y1 - word.bbox.y0) * scaleY;
 
+    // Font size: use the bounding box height with slight reduction for
+    // descenders/ascenders. The 0.78 factor accounts for typical
+    // ascent ratio (font em-square vs visible bbox).
+    const fontSize = Math.max(6, h * 0.78);
+
     span.style.left = `${x}px`;
     span.style.top = `${y}px`;
-    span.style.fontSize = `${Math.max(6, h * 0.85)}px`;
+    span.style.fontSize = `${fontSize}px`;
     span.style.width = `${w}px`;
     span.style.height = `${h}px`;
+    span.style.lineHeight = `${h}px`;
 
-    container.appendChild(span);
+    // Calculate letter-spacing to stretch/compress text to match bbox width
+    if (word.text.length > 1) {
+      measureCtx.font = `${fontSize}px sans-serif`;
+      const measuredWidth = measureCtx.measureText(word.text).width;
+      if (measuredWidth > 0 && Math.abs(w - measuredWidth) > 1) {
+        const spacing = (w - measuredWidth) / (word.text.length - 1);
+        // Clamp to reasonable range to avoid extreme distortion
+        const clampedSpacing = Math.max(-fontSize * 0.3, Math.min(fontSize * 0.5, spacing));
+        span.style.letterSpacing = `${clampedSpacing}px`;
+      }
+    } else if (word.text.length === 1) {
+      // Single character: center within bbox
+      span.style.textAlign = 'center';
+    }
+
+    fragment.appendChild(span);
   }
+
+  container.appendChild(fragment);
 }
 
 // ─── Search Highlight in Text Layer ─────────────────────────────────────────
