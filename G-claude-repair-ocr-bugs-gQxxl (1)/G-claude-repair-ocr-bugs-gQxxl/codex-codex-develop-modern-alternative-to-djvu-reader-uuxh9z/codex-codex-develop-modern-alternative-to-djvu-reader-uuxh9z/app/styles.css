@@ -76,7 +76,7 @@ body {
 .app-shell {
   display: grid;
   grid-template-columns: var(--left-panel-width) 1fr var(--right-panel-width);
-  grid-template-rows: var(--command-bar-height) 1fr var(--status-bar-height);
+  grid-template-rows: var(--command-bar-height) auto 1fr var(--status-bar-height);
   height: 100vh;
   max-width: 100vw;
   overflow: hidden;
@@ -1158,6 +1158,179 @@ body.advanced-hidden .advanced-section { display: none; }
 .session-health-good { color: var(--success); }
 .session-health-degraded { color: var(--warn); }
 .session-health-critical { color: var(--danger); }
+
+/* ═══════════════════════════════════════════════════
+   TAB BAR (Document tabs — Chrome/Acrobat style)
+   ═══════════════════════════════════════════════════ */
+.tab-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-end;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  height: 32px;
+  min-height: 32px;
+  padding: 0 4px;
+  gap: 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  user-select: none;
+}
+.tab-bar::-webkit-scrollbar { height: 0; }
+.tab-bar:empty, .tab-bar-tabs:empty + .tab-bar-new { margin-left: 4px; }
+
+.tab-bar-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.doc-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 5px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 0.78rem;
+  border-radius: 6px 6px 0 0;
+  border: 1px solid transparent;
+  border-bottom: none;
+  max-width: 180px;
+  min-width: 60px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.15s, color 0.15s;
+}
+.doc-tab:hover { background: var(--panel-2); color: var(--text); }
+.doc-tab.active {
+  background: var(--viewport-bg);
+  color: var(--text);
+  border-color: var(--border);
+  font-weight: 500;
+}
+.doc-tab .tab-close {
+  width: 14px;
+  height: 14px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 14px;
+  text-align: center;
+  border-radius: 3px;
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+}
+.doc-tab .tab-close:hover { background: var(--danger); color: white; }
+.doc-tab .tab-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.tab-bar-new {
+  width: 26px;
+  height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tab-bar-new:hover { background: var(--panel-2); color: var(--text); }
+
+/* ═══════════════════════════════════════════════════
+   PRINT DIALOG
+   ═══════════════════════════════════════════════════ */
+.modal-card-sm { max-width: 480px; }
+
+.print-range-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.radio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.radio-row input[type="radio"] {
+  accent-color: var(--accent);
+}
+.print-range-input {
+  margin-left: 24px;
+  padding: 3px 8px;
+  width: 160px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+.print-range-input:disabled { opacity: 0.4; }
+
+.print-preview-area {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.print-preview-area canvas {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: white;
+}
+
+/* ═══════════════════════════════════════════════════
+   SHORTCUTS REFERENCE
+   ═══════════════════════════════════════════════════ */
+.shortcuts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+}
+.shortcut-category h4 {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.shortcut-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.shortcut-item kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  background: var(--panel-3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  color: var(--text);
+  min-width: 20px;
+  text-align: center;
+}
 
 /* ═══════════════════════════════════════════════════
    RESPONSIVE

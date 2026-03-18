@@ -9276,6 +9276,265 @@ if (document.getElementById('orgInsertPages')) {
 })();
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// NovaReader 3.0 — Document Tab Bar
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function initTabBar() {
+  const tabBarTabs = document.getElementById('tabBarTabs');
+  const tabBarNewBtn = document.getElementById('tabBarNewTab');
+  if (!tabBarTabs) return;
+
+  // Tab registry: each tab = { id, name, file, type, element }
+  const tabs = [];
+  let activeTabId = null;
+  let nextTabId = 1;
+
+  function createTab(name, file, type = 'pdf') {
+    const id = nextTabId++;
+    const tab = document.createElement('div');
+    tab.className = 'doc-tab';
+    tab.dataset.tabId = id;
+    tab.innerHTML = `
+      <span class="tab-icon">${type === 'pdf' ? '📄' : type === 'djvu' ? '📘' : type === 'epub' ? '📗' : '🖼'}</span>
+      <span class="tab-label">${name}</span>
+      <button class="tab-close" title="Закрыть">✕</button>
+    `;
+
+    tab.addEventListener('click', (e) => {
+      if (e.target.closest('.tab-close')) return;
+      switchToTab(id);
+    });
+
+    tab.querySelector('.tab-close').addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeTab(id);
+    });
+
+    const entry = { id, name, file, type, element: tab };
+    tabs.push(entry);
+    tabBarTabs.appendChild(tab);
+    switchToTab(id);
+    return entry;
+  }
+
+  function switchToTab(id) {
+    activeTabId = id;
+    tabBarTabs.querySelectorAll('.doc-tab').forEach(t => {
+      t.classList.toggle('active', parseInt(t.dataset.tabId) === id);
+    });
+    // Future: restore document state for this tab
+  }
+
+  function closeTab(id) {
+    const idx = tabs.findIndex(t => t.id === id);
+    if (idx < 0) return;
+
+    const entry = tabs[idx];
+    entry.element.remove();
+    tabs.splice(idx, 1);
+
+    if (activeTabId === id && tabs.length > 0) {
+      const nextIdx = Math.min(idx, tabs.length - 1);
+      switchToTab(tabs[nextIdx].id);
+    }
+  }
+
+  // Listen for file open events to create tabs
+  const origFileInput = document.getElementById('fileInput');
+  if (origFileInput) {
+    origFileInput.addEventListener('change', () => {
+      const file = origFileInput.files?.[0];
+      if (!file) return;
+      const ext = file.name.split('.').pop()?.toLowerCase() || '';
+      const type = ext === 'djvu' ? 'djvu' : ext === 'epub' ? 'epub' : ext === 'pdf' ? 'pdf' : 'image';
+      createTab(file.name, file, type);
+    });
+  }
+
+  // New tab button opens file dialog
+  if (tabBarNewBtn) {
+    tabBarNewBtn.addEventListener('click', () => {
+      origFileInput?.click();
+    });
+  }
+
+  // Create initial tab if a file is already loaded
+  if (state.docName) {
+    createTab(state.docName, state.file, state.adapter?.type || 'pdf');
+  }
+
+  window._novaTabs = { createTab, switchToTab, closeTab, tabs };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NovaReader 3.0 — Print Dialog
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function initPrintDialog() {
+  const modal = document.getElementById('printModal');
+  const closeBtn = document.getElementById('closePrintModal');
+  const cancelBtn = document.getElementById('printCancel');
+  const executeBtn = document.getElementById('printExecute');
+  const previewCanvas = document.getElementById('printPreviewCanvas');
+  const previewInfo = document.getElementById('printPreviewInfo');
+  const customRange = document.getElementById('printCustomRange');
+  const scaleSelect = document.getElementById('printScale');
+  const customScale = document.getElementById('printCustomScale');
+
+  if (!modal) return;
+
+  function openPrintDialog() {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    updatePreview();
+  }
+
+  function closePrintDialog() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  // Range radio buttons
+  modal.querySelectorAll('input[name="printRange"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      if (customRange) customRange.disabled = radio.value !== 'custom';
+    });
+  });
+
+  // Scale select
+  if (scaleSelect && customScale) {
+    scaleSelect.addEventListener('change', () => {
+      customScale.disabled = scaleSelect.value !== 'custom';
+    });
+  }
+
+  // Preview
+  async function updatePreview() {
+    if (!previewCanvas || !state.adapter) return;
+    try {
+      const page = state.pageNum || 1;
+      await state.adapter.renderPage(page, previewCanvas, { zoom: 0.3, rotation: 0 });
+      if (previewInfo) {
+        previewInfo.textContent = `Стр. ${page} из ${state.pageCount || '?'}`;
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Execute print
+  if (executeBtn) {
+    executeBtn.addEventListener('click', async () => {
+      if (!state.adapter) return;
+
+      const rangeRadio = modal.querySelector('input[name="printRange"]:checked');
+      const range = rangeRadio?.value || 'all';
+      const dpi = parseInt(document.getElementById('printDpi')?.value || '300', 10);
+      const includeAnnotations = document.getElementById('printAnnotations')?.checked ?? true;
+
+      let pages = [];
+      if (range === 'current') {
+        pages = [state.pageNum || 1];
+      } else if (range === 'custom' && customRange?.value) {
+        pages = parsePageRangeLib(customRange.value, state.pageCount);
+      } else {
+        pages = Array.from({ length: state.pageCount }, (_, i) => i + 1);
+      }
+
+      if (!pages.length) {
+        if (previewInfo) previewInfo.textContent = 'Неверный диапазон страниц';
+        return;
+      }
+
+      closePrintDialog();
+
+      // Render pages to print
+      setOcrStatus(`Подготовка к печати: ${pages.length} стр.`);
+
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) {
+        setOcrStatus('Браузер заблокировал всплывающее окно печати');
+        return;
+      }
+
+      printWindow.document.write('<html><head><title>Печать</title><style>');
+      printWindow.document.write('body{margin:0;} canvas{page-break-after:always;display:block;width:100%;} @media print{canvas{page-break-after:always;}}');
+      printWindow.document.write('</style></head><body>');
+
+      const scale = dpi / 72;
+      for (const pageNum of pages) {
+        const canvas = document.createElement('canvas');
+        await state.adapter.renderPage(pageNum, canvas, { zoom: scale, rotation: 0 });
+        printWindow.document.body.appendChild(canvas);
+      }
+
+      printWindow.document.write('</body></html>');
+      printWindow.document.close();
+
+      setTimeout(() => {
+        printWindow.print();
+        setOcrStatus(`Печать: ${pages.length} стр. отправлено`);
+      }, 500);
+
+      pushDiagnosticEvent('print', { pages: pages.length, dpi });
+    });
+  }
+
+  if (closeBtn) closeBtn.addEventListener('click', closePrintDialog);
+  if (cancelBtn) cancelBtn.addEventListener('click', closePrintDialog);
+
+  // Ctrl+P opens print dialog
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+      e.preventDefault();
+      openPrintDialog();
+    }
+  });
+
+  window._novaPrint = { openPrintDialog, closePrintDialog };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NovaReader 3.0 — Shortcuts Quick Reference
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function initShortcutsRef() {
+  const modal = document.getElementById('shortcutsModal');
+  const closeBtn = document.getElementById('closeShortcutsModal');
+  if (!modal) return;
+
+  function openShortcuts() {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeShortcuts() {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  if (closeBtn) closeBtn.addEventListener('click', closeShortcuts);
+
+  // Press "?" to show shortcuts reference
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+    if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      if (modal.classList.contains('open')) closeShortcuts();
+      else openShortcuts();
+    }
+    if (e.key === 'Escape' && modal.classList.contains('open')) {
+      closeShortcuts();
+    }
+  });
+
+  // Close on backdrop click
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeShortcuts();
+  });
+
+  window._novaShortcuts = { openShortcuts, closeShortcuts };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — Right Panel + Floating Search + Tool Switching
 // ═══════════════════════════════════════════════════════════════════════════════
 

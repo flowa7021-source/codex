@@ -99,6 +99,16 @@
       </header>
 
       <!-- ═══════════════════════════════════════════════════════
+           TAB BAR: Multiple document tabs (Chrome-style)
+           ═══════════════════════════════════════════════════════ -->
+      <div class="tab-bar" id="tabBar">
+        <div class="tab-bar-tabs" id="tabBarTabs">
+          <!-- Tabs inserted dynamically -->
+        </div>
+        <button class="tab-bar-new" id="tabBarNewTab" title="Открыть новый файл">+</button>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════════════
            ROW 2, COL 1: Left Panel (thumbnails, bookmarks, outline)
            ═══════════════════════════════════════════════════════ -->
       <aside class="left-panel sidebar" id="sidebar">
@@ -776,6 +786,100 @@
 
         <div class="modal-actions">
           <button id="saveSettingsModal" class="btn-accent">Сохранить настройки</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Print Dialog ═══ -->
+    <div id="printModal" class="modal" aria-hidden="true">
+      <div class="modal-card modal-card-sm">
+        <div class="modal-head">
+          <h3>Печать документа</h3>
+          <button id="closePrintModal" class="btn-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <section>
+            <h4>Диапазон страниц</h4>
+            <div class="print-range-group">
+              <label class="radio-row"><input type="radio" name="printRange" value="all" checked /> Все страницы</label>
+              <label class="radio-row"><input type="radio" name="printRange" value="current" /> Текущая страница</label>
+              <label class="radio-row"><input type="radio" name="printRange" value="custom" /> Диапазон:</label>
+              <input id="printCustomRange" type="text" placeholder="1-3, 5, 7-10" class="print-range-input" disabled />
+            </div>
+          </section>
+          <section>
+            <h4>Параметры</h4>
+            <div class="settings-grid">
+              <label>Масштаб <select id="printScale">
+                <option value="fit">По размеру листа</option>
+                <option value="actual">Реальный размер</option>
+                <option value="custom">Пользовательский</option>
+              </select></label>
+              <label>Масштаб (%) <input id="printCustomScale" type="number" min="25" max="400" value="100" disabled /></label>
+              <label>Ориентация <select id="printOrientation">
+                <option value="auto">Авто</option>
+                <option value="portrait">Книжная</option>
+                <option value="landscape">Альбомная</option>
+              </select></label>
+              <label>Качество (DPI) <select id="printDpi">
+                <option value="150">150 (быстро)</option>
+                <option value="300" selected>300 (стандарт)</option>
+                <option value="600">600 (высокое)</option>
+              </select></label>
+            </div>
+            <label class="checkbox-row"><input id="printAnnotations" type="checkbox" checked /> <span>Включить аннотации</span></label>
+            <label class="checkbox-row"><input id="printHeaders" type="checkbox" /> <span>Добавить колонтитулы</span></label>
+          </section>
+          <section>
+            <h4>Предпросмотр</h4>
+            <div class="print-preview-area">
+              <canvas id="printPreviewCanvas" width="200" height="280"></canvas>
+              <p id="printPreviewInfo" class="status-line"></p>
+            </div>
+          </section>
+        </div>
+        <div class="modal-actions">
+          <button id="printExecute" class="btn-accent">Печать</button>
+          <button id="printCancel" class="btn-ghost">Отмена</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ Keyboard Shortcuts Quick Reference ═══ -->
+    <div id="shortcutsModal" class="modal" aria-hidden="true">
+      <div class="modal-card modal-card-sm">
+        <div class="modal-head">
+          <h3>Горячие клавиши</h3>
+          <button id="closeShortcutsModal" class="btn-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="shortcuts-grid" id="shortcutsGrid">
+            <div class="shortcut-category">
+              <h4>Навигация</h4>
+              <div class="shortcut-item"><kbd>PageDown</kbd> <span>Следующая страница</span></div>
+              <div class="shortcut-item"><kbd>PageUp</kbd> <span>Предыдущая страница</span></div>
+              <div class="shortcut-item"><kbd>Home</kbd> <span>Первая страница</span></div>
+              <div class="shortcut-item"><kbd>End</kbd> <span>Последняя страница</span></div>
+            </div>
+            <div class="shortcut-category">
+              <h4>Масштаб</h4>
+              <div class="shortcut-item"><kbd>Ctrl+=</kbd> <span>Увеличить</span></div>
+              <div class="shortcut-item"><kbd>Ctrl+-</kbd> <span>Уменьшить</span></div>
+              <div class="shortcut-item"><kbd>Ctrl+9</kbd> <span>По ширине</span></div>
+              <div class="shortcut-item"><kbd>Ctrl+0</kbd> <span>Вся страница</span></div>
+            </div>
+            <div class="shortcut-category">
+              <h4>Инструменты</h4>
+              <div class="shortcut-item"><kbd>Ctrl+F</kbd> <span>Поиск</span></div>
+              <div class="shortcut-item"><kbd>Ctrl+P</kbd> <span>Печать</span></div>
+              <div class="shortcut-item"><kbd>Ctrl+Shift+O</kbd> <span>Оптимизация PDF</span></div>
+              <div class="shortcut-item"><kbd>Ctrl+Shift+A</kbd> <span>Доступность</span></div>
+              <div class="shortcut-item"><kbd>Ctrl+Shift+R</kbd> <span>Редактирование ПД</span></div>
+              <div class="shortcut-item"><kbd>Ctrl+Shift+C</kbd> <span>Сравнение</span></div>
+              <div class="shortcut-item"><kbd>Ctrl+Shift+B</kbd> <span>Пакетное OCR</span></div>
+              <div class="shortcut-item"><kbd>?</kbd> <span>Эта справка</span></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
