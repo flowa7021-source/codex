@@ -63,6 +63,12 @@ import { initQuickActions, hideQuickActions } from './modules/quick-actions.js';
 import { initHotkeys, onHotkey, registerHotkeyHandlers, isSpaceHeld, getBindings, getCheatsheet } from './modules/hotkeys.js';
 import { CbzAdapter, parseCbz } from './modules/cbz-adapter.js';
 
+// ─── Wave 8: Decomposition Facade Modules ────────────────────────────────
+import * as AppPersistence from './modules/app-persistence.js';
+import { OcrSearchIndex } from './modules/ocr-search.js';
+import { renderPage as pipelineRenderPage, schedulePreRender, invalidateCache, getCacheStats } from './modules/render-pipeline.js';
+import { AnnotationController } from './modules/annotations-core.js';
+
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
   const { silent = false, fallback = null, rethrow = false } = options;
@@ -10092,6 +10098,17 @@ window._pdfCreate = { createPdfFromImages, createBlankPdf, canvasesToPdf };
 window._quickActions = { initQuickActions, hideQuickActions };
 window._hotkeys = { initHotkeys, onHotkey, registerHotkeyHandlers, isSpaceHeld, getBindings, getCheatsheet };
 window._cbzAdapter = CbzAdapter;
+
+// ─── Wave 8: Decomposition Module Globals ─────────────────────────────────
+window._appPersistence = AppPersistence;
+window._ocrSearchIndex = new OcrSearchIndex();
+window._renderPipeline = { renderPage: pipelineRenderPage, schedulePreRender, invalidateCache, getCacheStats };
+window._annotationController = new AnnotationController({
+  loadStrokes: AppPersistence.loadStrokes,
+  saveStrokes: AppPersistence.saveStrokes,
+  loadComments: AppPersistence.loadComments,
+  saveComments: AppPersistence.saveComments,
+});
 
 // ─── Initialize Quick Actions ─────────────────────────────────────────────
 initQuickActions({
