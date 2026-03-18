@@ -69,6 +69,11 @@ import { OcrSearchIndex } from './modules/ocr-search.js';
 import { renderPage as pipelineRenderPage, schedulePreRender, invalidateCache, getCacheStats } from './modules/render-pipeline.js';
 import { AnnotationController } from './modules/annotations-core.js';
 
+// ─── Wave 10: Page Organizer, Floating Search, XPS Support ───────────────
+import { getPageInfoList, reorderPages, deletePages, rotatePages, extractPages, insertPages, insertBlankPage, duplicatePages, reversePages, createOrganizerState, togglePageSelection, selectPageRange, computeReorderFromDrag } from './modules/page-organizer.js';
+import { initFloatingSearch } from './modules/floating-search.js';
+import { XpsAdapter, parseXps } from './modules/xps-adapter.js';
+
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
   const { silent = false, fallback = null, rethrow = false } = options;
@@ -10109,6 +10114,23 @@ window._annotationController = new AnnotationController({
   loadComments: AppPersistence.loadComments,
   saveComments: AppPersistence.saveComments,
 });
+
+// ─── Wave 10: Page Organizer, Floating Search, XPS ────────────────────────
+window._pageOrganizer = { getPageInfoList, reorderPages, deletePages, rotatePages, extractPages, insertPages, insertBlankPage, duplicatePages, reversePages, createOrganizerState, togglePageSelection, selectPageRange, computeReorderFromDrag };
+window._floatingSearch = initFloatingSearch(
+  document.querySelector('.document-viewport') || document.body,
+  {
+    onSearch: (query, options) => {
+      if (typeof window._ocrSearchIndex !== 'undefined') {
+        const results = window._ocrSearchIndex.search(query, options);
+        return { total: results.length, matches: results };
+      }
+      return { total: 0, matches: [] };
+    },
+    onClose: () => {},
+  }
+);
+window._xpsAdapter = XpsAdapter;
 
 // ─── Initialize Quick Actions ─────────────────────────────────────────────
 initQuickActions({
