@@ -19,6 +19,8 @@ import { analyzeTextDensity, computeOcrZoom, hasSmallText } from './modules/ocr-
 import { getPageQualitySummary, markLowConfidenceWords } from './modules/ocr-word-confidence.js';
 import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText, deleteOcrData, listOcrDocuments, getOcrStorageSize } from './modules/ocr-storage.js';
 import { initTesseract, recognizeTesseract, recognizeWithBoxes, isTesseractAvailable, getTesseractStatus, terminateTesseract, resetTesseractAvailability } from './modules/tesseract-adapter.js';
+import { convertPdfToDocx, extractStructuredContent } from './modules/docx-converter.js';
+import { mergePdfDocuments, splitPdfDocument, splitPdfIntoIndividual, fillPdfForm, getPdfFormFields, addWatermarkToPdf, addStampToPdf, addSignatureToPdf, exportAnnotationsIntoPdf, rotatePdfPages, getPdfMetadata, parsePageRange as parsePageRangeLib } from './modules/pdf-operations.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -5811,7 +5813,7 @@ function openSignaturePad() {
   document.body.appendChild(modal);
 }
 
-// ─── PDF Merge ─────────────────────────────────────────────────────────────
+// ─── PDF Merge (via pdf-lib — preserves text, fonts, links, forms) ─────────
 async function mergePdfFiles() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -5824,29 +5826,8 @@ async function mergePdfFiles() {
       return;
     }
     try {
-      setOcrStatus(`Объединение ${files.length} файлов...`);
-      const pdfjsLib = await ensurePdfJs();
-      const allPages = [];
-
-      for (const file of files) {
-        const arrayBuf = await file.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i);
-          const viewport = page.getViewport({ scale: 2 });
-          const canvas = document.createElement('canvas');
-          canvas.width = viewport.width;
-          canvas.height = viewport.height;
-          const ctx = canvas.getContext('2d');
-          await page.render({ canvasContext: ctx, viewport }).promise;
-          allPages.push({ canvas, width: viewport.width, height: viewport.height });
-        }
-      }
-
-      // Build merged PDF from page images
-      const mergedBlob = buildMergedPdfFromCanvases(allPages);
-      // Cleanup
-      allPages.forEach(p => { p.canvas.width = 0; p.canvas.height = 0; });
+      setOcrStatus(`Объединение ${files.length} файлов (без потери данных)...`);
+      const mergedBlob = await mergePdfDocuments(files);
 
       const url = safeCreateObjectURL(mergedBlob);
       const a = document.createElement('a');
@@ -5854,9 +5835,11 @@ async function mergePdfFiles() {
       a.download = 'merged.pdf';
       a.click();
       URL.revokeObjectURL(url);
-      setOcrStatus(`Объединено: ${allPages.length} страниц из ${files.length} файлов`);
+      setOcrStatus(`Объединено: ${files.length} файлов (${Math.round(mergedBlob.size / 1024)} КБ)`);
+      pushDiagnosticEvent('pdf.merge', { files: files.length, sizeKb: Math.round(mergedBlob.size / 1024) });
     } catch (err) {
       setOcrStatus(`Ошибка объединения: ${err?.message || 'неизвестная'}`);
+      pushDiagnosticEvent('pdf.merge.error', { message: err?.message }, 'error');
     }
   });
   input.click();
@@ -5942,7 +5925,7 @@ function buildMergedPdfFromCanvases(pages) {
   return new Blob([result], { type: 'application/pdf' });
 }
 
-// ─── PDF Split ──────────────────────────────────────────────────────────────
+// ─── PDF Split (via pdf-lib — preserves all content) ────────────────────────
 async function splitPdfPages() {
   if (!state.adapter || state.adapter.type !== 'pdf') {
     setOcrStatus('Разделение доступно только для PDF');
@@ -5951,28 +5934,21 @@ async function splitPdfPages() {
   const rangeStr = prompt(`Введите диапазон страниц (напр. "1-3" или "1,3,5-7").\nВсего страниц: ${state.pageCount}`);
   if (!rangeStr) return;
 
-  const pageNums = parsePageRange(rangeStr, state.pageCount);
+  const pageNums = parsePageRangeLib(rangeStr, state.pageCount);
   if (!pageNums.length) {
     setOcrStatus('Неверный диапазон страниц');
     return;
   }
 
   try {
-    setOcrStatus(`Извлечение ${pageNums.length} страниц...`);
-    const pages = [];
-    for (const pn of pageNums) {
-      const page = await state.adapter.pdfDoc.getPage(pn);
-      const viewport = page.getViewport({ scale: 2 });
-      const canvas = document.createElement('canvas');
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      const ctx = canvas.getContext('2d');
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      pages.push({ canvas, width: viewport.width, height: viewport.height });
-    }
+    setOcrStatus(`Извлечение ${pageNums.length} страниц (без потери данных)...`);
+    const arrayBuffer = await state.file.arrayBuffer();
+    const blob = await splitPdfDocument(arrayBuffer, pageNums);
 
-    const blob = buildMergedPdfFromCanvases(pages);
-    pages.forEach(p => { p.canvas.width = 0; p.canvas.height = 0; });
+    if (!blob) {
+      setOcrStatus('Ошибка: не удалось извлечь страницы');
+      return;
+    }
 
     const url = safeCreateObjectURL(blob);
     const a = document.createElement('a');
@@ -5980,9 +5956,11 @@ async function splitPdfPages() {
     a.download = `${state.docName || 'document'}-pages-${rangeStr}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
-    setOcrStatus(`Извлечено ${pageNums.length} страниц`);
+    setOcrStatus(`Извлечено ${pageNums.length} страниц (${Math.round(blob.size / 1024)} КБ)`);
+    pushDiagnosticEvent('pdf.split', { pages: pageNums.length, sizeKb: Math.round(blob.size / 1024) });
   } catch (err) {
     setOcrStatus(`Ошибка: ${err?.message || 'неизвестная'}`);
+    pushDiagnosticEvent('pdf.split.error', { message: err?.message }, 'error');
   }
 }
 
@@ -7050,6 +7028,46 @@ function saveCurrentPageTextEdits() {
 async function exportCurrentDocToWord() {
   if (!state.adapter) return;
   const title = String(state.docName || 'document').replace(/\.[^.]+$/, '');
+
+  // Use the new docx library converter for PDF files with native text
+  if (state.adapter?.type === 'pdf' && state.adapter.pdfDoc) {
+    try {
+      setOcrStatus('Экспорт DOCX: извлечение структуры...');
+      const pageCount = state.pageCount || 1;
+
+      // Capture page image function for text+images mode
+      const captureImage = async (pageNum) => {
+        const imgData = await capturePageAsImageData(pageNum);
+        if (!imgData) return null;
+        return Uint8Array.from(atob(imgData), c => c.charCodeAt(0));
+      };
+
+      const includeImages = pageCount <= 30;
+      const blob = await convertPdfToDocx(state.adapter.pdfDoc, title, pageCount, {
+        mode: includeImages ? 'text+images' : 'text',
+        capturePageImage: includeImages ? captureImage : null,
+        ocrWordCache: _ocrWordCache,
+        includeFooter: true,
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${title}.docx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      recordSuccessfulOperation();
+      setOcrStatus(`Экспорт DOCX: готово (${Math.round(blob.size / 1024)} КБ, ${pageCount} стр.)`);
+      pushDiagnosticEvent('export.docx', { pages: pageCount, sizeKb: Math.round(blob.size / 1024), engine: 'docx-lib' });
+      return;
+    } catch (err) {
+      console.warn('New DOCX converter failed, falling back to legacy:', err);
+      pushDiagnosticEvent('export.docx.fallback', { error: err.message });
+      // Fall through to legacy converter
+    }
+  }
+
+  // Legacy fallback for non-PDF files or if new converter fails
   const cache = loadOcrTextData();
   const pages = Array.isArray(cache?.pagesText) ? [...cache.pagesText] : [];
   const currentText = String(els.pageText?.value || '').trim();
@@ -7057,7 +7075,6 @@ async function exportCurrentDocToWord() {
     pages[state.currentPage - 1] = currentText;
   }
 
-  // Merge in manual edits from PDF edit layer
   for (const [pageNum, editText] of pdfEditState.edits) {
     if (editText && (!pages[pageNum - 1] || pages[pageNum - 1].length < editText.length)) {
       pages[pageNum - 1] = editText;
@@ -7831,8 +7848,47 @@ els.exportAnnSvg?.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-els.exportAnnPdf?.addEventListener('click', () => {
+els.exportAnnPdf?.addEventListener('click', async () => {
   if (!state.adapter) return;
+
+  // If we have the original PDF file, use pdf-lib to embed annotations directly
+  if (state.adapter?.type === 'pdf' && state.file) {
+    try {
+      setOcrStatus('Экспорт PDF с аннотациями (pdf-lib)...');
+      const arrayBuffer = await state.file.arrayBuffer();
+      // Build annotation store from all pages
+      const annotStore = new Map();
+      for (let p = 1; p <= state.pageCount; p++) {
+        const key = `annotations_${state.docName}_page_${p}`;
+        try {
+          const stored = localStorage.getItem(key);
+          if (stored) {
+            const data = JSON.parse(stored);
+            if (data?.strokes?.length) annotStore.set(p, data.strokes);
+          }
+        } catch { /* skip */ }
+      }
+      if (annotStore.size === 0) {
+        setOcrStatus('Нет аннотаций для экспорта');
+        return;
+      }
+      const canvasSize = { width: els.canvas.width, height: els.canvas.height };
+      const blob = await exportAnnotationsIntoPdf(arrayBuffer, annotStore, canvasSize);
+      const url = safeCreateObjectURL(blob);
+      if (!url) return;
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${state.docName || 'document'}-annotated.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setOcrStatus(`PDF с аннотациями: ${annotStore.size} страниц, ${Math.round(blob.size / 1024)} КБ`);
+      return;
+    } catch (err) {
+      console.warn('pdf-lib annotation export failed, falling back:', err);
+    }
+  }
+
+  // Legacy fallback: single page raster export
   const strokes = loadStrokes();
   const pageImageDataUrl = els.canvas.toDataURL('image/png');
   const blob = exportAnnotationsAsPdf(strokes, els.annotationCanvas.width, els.annotationCanvas.height, pageImageDataUrl);
@@ -7913,25 +7969,69 @@ els.insertImageInput?.addEventListener('change', (e) => {
   e.target.value = '';
 });
 
-// ─── Watermark ──────────────────────────────────────────────────────────────
-els.addWatermark?.addEventListener('click', () => {
+// ─── Watermark (pdf-lib: saves into actual PDF) ────────────────────────────
+els.addWatermark?.addEventListener('click', async () => {
   if (!state.adapter) return;
   const text = prompt('Текст водяного знака:', 'КОНФИДЕНЦИАЛЬНО');
   if (!text) return;
+
+  // Visual preview on canvas
   addWatermarkToPage(text);
-  setOcrStatus(`Водяной знак "${text}" добавлен`);
+
+  // If PDF, also save into PDF file via pdf-lib
+  if (state.adapter?.type === 'pdf' && state.file) {
+    try {
+      setOcrStatus('Добавление водяного знака в PDF...');
+      const arrayBuffer = await state.file.arrayBuffer();
+      const blob = await addWatermarkToPdf(arrayBuffer, text, {
+        fontSize: 60,
+        opacity: 0.25,
+        rotation: -45,
+      });
+      const url = safeCreateObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${state.docName || 'document'}-watermark.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setOcrStatus(`Водяной знак "${text}" — PDF сохранён`);
+    } catch (err) {
+      setOcrStatus(`Водяной знак "${text}" добавлен на canvas (PDF ошибка: ${err.message})`);
+    }
+  } else {
+    setOcrStatus(`Водяной знак "${text}" добавлен`);
+  }
 });
 
-// ─── Stamps ─────────────────────────────────────────────────────────────────
-els.addStamp?.addEventListener('click', () => {
+// ─── Stamps (pdf-lib: saves into actual PDF) ────────────────────────────────
+els.addStamp?.addEventListener('click', async () => {
   if (!state.adapter) return;
   const types = ['approved', 'rejected', 'draft', 'confidential', 'copy'];
   const labels = ['УТВЕРЖДЕНО', 'ОТКЛОНЕНО', 'ЧЕРНОВИК', 'КОНФИДЕНЦИАЛЬНО', 'КОПИЯ'];
   const choice = prompt(`Выберите штамп (1-5):\n${labels.map((l, i) => `${i + 1}. ${l}`).join('\n')}`, '1');
   const idx = parseInt(choice, 10) - 1;
   if (idx >= 0 && idx < types.length) {
+    // Visual preview on canvas
     addStampToPage(types[idx]);
-    setOcrStatus(`Штамп "${labels[idx]}" добавлен`);
+
+    // If PDF, save into PDF via pdf-lib
+    if (state.adapter?.type === 'pdf' && state.file) {
+      try {
+        const arrayBuffer = await state.file.arrayBuffer();
+        const blob = await addStampToPdf(arrayBuffer, types[idx], { pageNum: state.currentPage });
+        const url = safeCreateObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${state.docName || 'document'}-stamp.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setOcrStatus(`Штамп "${labels[idx]}" — PDF сохранён`);
+      } catch (err) {
+        setOcrStatus(`Штамп "${labels[idx]}" добавлен на canvas`);
+      }
+    } else {
+      setOcrStatus(`Штамп "${labels[idx]}" добавлен`);
+    }
   }
 });
 
