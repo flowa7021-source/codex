@@ -30,6 +30,91 @@
 | 8 | **Отсутствует TypeScript/JSDoc typing** | 32K LOC без типов | Рефакторинг на ощупь |
 | 9 | **Нет graceful degradation для stubs** | cloud-integration возвращает пустые массивы | Пользователь не знает, что фича не работает |
 | 10 | **Дублирование кода** | Toast/error pattern повторяется 50+ раз | DRY нарушен, баги размножаются |
+| 11 | **Race condition в state** | `state.backgroundOcrRunning` мутируется из нескольких async-функций | Token-check хрупок, нет mutex/locking |
+| 12 | **Memory leak: monitorMemory()** | Рекурсивный `setTimeout` без механизма остановки | `destroyMemoryManager()` не может остановить мониторинг |
+| 13 | **Timer leaks** | 13 `setTimeout` / `setInterval`, только 6 `clearTimeout` | Утечки таймеров при смене документа |
+| 14 | **4 функции >100 строк** | `runOcrOnPreparedCanvas` 233 LOC, `drawStroke` 190 LOC | Невозможно читать и тестировать |
+| 15 | **Нет `"type": "module"` в package.json** | MODULE_TYPELESS_PACKAGE_JSON warning | Шум в тестах, неявное поведение Node.js |
+
+---
+
+## ВОЛНА Q0: Критические баги (исправить НЕМЕДЛЕННО)
+
+> Эти проблемы вызывают реальные сбои в runtime. Исправить ДО любых улучшений.
+
+### Q0.1 [M] Race condition в state management
+
+**Файл:** `app.js`, строки 3092-3467
+**Проблема:** `state.backgroundOcrRunning`, `state.ocrJobRunning` мутируются из нескольких async-функций одновременно. Token-based check (`state.backgroundOcrToken !== token`) — хрупок.
+
+**Решение:**
+```javascript
+// app/modules/async-lock.js
+export class AsyncLock {
+  #locked = false;
+  #queue = [];
+  async acquire() {
+    if (this.#locked) {
+      await new Promise(resolve => this.#queue.push(resolve));
+    }
+    this.#locked = true;
+  }
+  release() {
+    this.#locked = false;
+    if (this.#queue.length) this.#queue.shift()();
+  }
+}
+
+// Использование:
+const ocrLock = new AsyncLock();
+async function startBackgroundOcrScan() {
+  await ocrLock.acquire();
+  try { /* ... */ }
+  finally { ocrLock.release(); }
+}
+```
+
+### Q0.2 [S] Memory leak в monitorMemory()
+
+**Файл:** `memory-manager.js`, строки 159-174
+**Проблема:** `setTimeout(monitorMemory, 10000)` — рекурсивный цикл без возможности остановки.
+
+**Исправление:**
+```javascript
+let _monitorTimerId = null;
+function monitorMemory() {
+  // ... check memory ...
+  _monitorTimerId = setTimeout(monitorMemory, 10000);
+}
+export function destroyMemoryManager() {
+  if (_monitorTimerId) clearTimeout(_monitorTimerId);
+  _monitorTimerId = null;
+}
+```
+
+### Q0.3 [S] Timer leaks — несбалансированные setTimeout/setInterval
+
+**Проблема:** 13 setTimeout, только 6 clearTimeout. Таймеры не очищаются при закрытии документа.
+
+**Исправление:** Создать timer registry:
+```javascript
+// Все таймеры через:
+const _timers = new Set();
+export function safeTimeout(fn, ms) {
+  const id = setTimeout(() => { _timers.delete(id); fn(); }, ms);
+  _timers.add(id);
+  return id;
+}
+export function clearAllTimers() {
+  _timers.forEach(clearTimeout);
+  _timers.clear();
+}
+```
+Вызвать `clearAllTimers()` в `closeDocument()` и `openFile()`.
+
+### Q0.4 [S] `"type": "module"` в package.json
+
+Добавить `"type": "module"` в package.json для устранения MODULE_TYPELESS_PACKAGE_JSON warning.
 
 ---
 
@@ -391,6 +476,12 @@ on('ocr:page-done', ({ page, text }) => updateSearchIndex(page, text));
 
 ## ПРИОРИТЕТЫ РЕАЛИЗАЦИИ
 
+### Sprint 0 (День 1): Критические баги
+0. **Q0.1** Race condition fix (AsyncLock) — _предотвращение data corruption_
+0. **Q0.2** monitorMemory leak fix — _memory leak_
+0. **Q0.3** Timer registry + cleanup — _timer leaks_
+0. **Q0.4** `"type": "module"` в package.json — _1 строка_
+
 ### Sprint 1 (Неделя 1-2): Фундамент
 1. **Q1.2** ESLint + Prettier + pre-commit — _гейт качества_
 2. **Q1.3** CI pipeline (lint + test gate) — _автоматическая проверка_
@@ -431,14 +522,17 @@ on('ocr:page-done', ({ page, text }) => updateSearchIndex(page, text));
 |---------|--------|------|
 | Файл app.js | 11 000 LOC | <500 LOC (router) |
 | Silent catch blocks | 50+ | 0 |
+| Race conditions | 1 critical (OCR state) | 0 (AsyncLock) |
+| Memory leaks | 2 (monitor + timers) | 0 |
 | Unit test coverage | ~11% | 80% |
-| ESLint errors | Неизвестно | 0 |
-| i18n coverage | ~0% (хардкод) | 100% |
+| ESLint errors | Неизвестно (нет lint) | 0 |
+| i18n coverage | ~0% (540 хардкод) | 100% |
 | OCR скорость | ~5с/стр (pool) | <3с/стр |
 | CI pipeline | Build only | Lint → Test → Build |
-| Max function length | 300+ строк | <80 строк |
+| Max function length | 233 строки | <80 строк |
 | Console.log в production | ~100 | 0 (через logger) |
 | Stub modules честность | Скрыто | UI disabled + tooltip |
+| Unbalanced timers | 7 leak-candidates | 0 (timer registry) |
 
 ---
 
