@@ -80,6 +80,8 @@ import { nrPrompt, nrConfirm } from './modules/modal-prompt.js';
 import { AsyncLock } from './modules/async-lock.js';
 import { clearAllTimers, safeTimeout, safeInterval, getTimerStats } from './modules/safe-timers.js';
 import { createLogger } from './modules/logger.js';
+import { emit as busEmit, on as busOn } from './modules/event-bus.js';
+import { crashTelemetry, recordCrashEvent, recordSuccessfulOperation, recordRecovery, getCrashFreeRate, getSessionHealth, getRecentErrors, initCrashTelemetry } from './modules/crash-telemetry.js';
 
 // ─── Module-level loggers ───────────────────────────────────────────────────
 const logOcr = createLogger('ocr');
@@ -1098,75 +1100,8 @@ function parseDocxTextByPages(xml) {
   return pages.filter(p => p.length > 0);
 }
 
-// ─── Phase 5: Crash Telemetry Framework ────────────────────────────────────
-const crashTelemetry = {
-  sessionId: `nr-${Date.now().toString(36)}`,
-  startedAt: Date.now(),
-  crashes: [],
-  errors: [],
-  totalErrors: 0,
-  recoveries: 0,
-  longestStreak: 0,
-  currentStreak: 0,
-  lastErrorAt: 0,
-};
-
-function recordCrashEvent(type, message, context) {
-  const event = {
-    ts: new Date().toISOString(),
-    type,
-    message: String(message || '').slice(0, 500),
-    context: String(context || ''),
-    uptimeMs: Math.round(performance.now()),
-    page: state.currentPage,
-    docName: state.docName,
-  };
-
-  crashTelemetry.errors.push(event);
-  crashTelemetry.totalErrors++;
-  crashTelemetry.lastErrorAt = Date.now();
-  crashTelemetry.currentStreak = 0;
-
-  if (crashTelemetry.errors.length > 200) {
-    crashTelemetry.errors.splice(0, crashTelemetry.errors.length - 200);
-  }
-
-  if (type === 'crash' || type === 'fatal') {
-    crashTelemetry.crashes.push(event);
-  }
-}
-
-function recordSuccessfulOperation() {
-  crashTelemetry.currentStreak++;
-  crashTelemetry.longestStreak = Math.max(crashTelemetry.longestStreak, crashTelemetry.currentStreak);
-}
-
-function recordRecovery() {
-  crashTelemetry.recoveries++;
-}
-
-function getCrashFreeRate() {
-  const totalOps = crashTelemetry.longestStreak + crashTelemetry.totalErrors;
-  if (totalOps === 0) return 100;
-  return Math.round(((totalOps - crashTelemetry.totalErrors) / totalOps) * 10000) / 100;
-}
-
-function getSessionHealth() {
-  const uptimeMs = Date.now() - crashTelemetry.startedAt;
-  return {
-    sessionId: crashTelemetry.sessionId,
-    uptimeMs,
-    uptimeMin: Math.round(uptimeMs / 60000),
-    totalErrors: crashTelemetry.totalErrors,
-    crashes: crashTelemetry.crashes.length,
-    recoveries: crashTelemetry.recoveries,
-    crashFreeRate: getCrashFreeRate(),
-    longestStreak: crashTelemetry.longestStreak,
-    currentStreak: crashTelemetry.currentStreak,
-    lastErrorAt: crashTelemetry.lastErrorAt ? new Date(crashTelemetry.lastErrorAt).toISOString() : null,
-    errorsLast5min: crashTelemetry.errors.filter(e => Date.now() - new Date(e.ts).getTime() < 300000).length,
-  };
-}
+// ─── Phase 5: Crash Telemetry — now in modules/crash-telemetry.js ──────────
+initCrashTelemetry();
 
 function exportSessionHealthReport() {
   const health = getSessionHealth();
@@ -1177,7 +1112,7 @@ function exportSessionHealthReport() {
     version: APP_VERSION,
     ...health,
     perfMetrics: perfSummary,
-    recentErrors: crashTelemetry.errors.slice(-20),
+    recentErrors: getRecentErrors(20),
     ocr: {
       engine: tessStatus,
       supportedLanguages: getSupportedLanguages().map((l) => ({ code: l, name: getLanguageName(l) })),
@@ -1194,18 +1129,6 @@ function exportSessionHealthReport() {
   URL.revokeObjectURL(url);
   pushDiagnosticEvent('health.export', health);
 }
-
-// Wire global error handler into crash telemetry
-window.addEventListener('error', (event) => {
-  recordCrashEvent('uncaught', event.message, event.filename + ':' + event.lineno);
-  pushDiagnosticEvent('crash.uncaught', { message: event.message, file: event.filename, line: event.lineno }, 'error');
-});
-
-window.addEventListener('unhandledrejection', (event) => {
-  const message = String(event.reason?.message || event.reason || 'unknown');
-  recordCrashEvent('unhandled-rejection', message, 'promise');
-  pushDiagnosticEvent('crash.unhandled-rejection', { message }, 'error');
-});
 
 class PDFAdapter {
   static TEXT_CACHE_MAX = 30;
