@@ -252,6 +252,96 @@ function isAllCaps(text) {
   return letters === letters.toUpperCase();
 }
 
+// ─── Extract embedded images from a PDF page via operator list ───────────────
+async function extractPageImages(page, viewport) {
+  const images = [];
+  try {
+    const ops = await page.getOperatorList();
+    const OPS = {
+      paintImageXObject: 85,
+      paintInlineImageXObject: 86,
+      paintImageXObjectRepeat: 87,
+    };
+    const pageWidth = viewport.width;
+    const pageHeight = viewport.height;
+
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      if (ops.fnArray[i] === OPS.paintImageXObject ||
+          ops.fnArray[i] === OPS.paintInlineImageXObject) {
+        const imgName = ops.argsArray[i]?.[0];
+        if (!imgName) continue;
+
+        try {
+          // Try page-level objects first, then common (shared) objects
+          let imgData = null;
+          try { imgData = page.objs.get(imgName); } catch { /* ignore */ }
+          if (!imgData) {
+            try { imgData = page.commonObjs.get(imgName); } catch { /* ignore */ }
+          }
+          if (!imgData || !imgData.data) continue;
+
+          // Convert raw image data to PNG via canvas
+          const w = imgData.width;
+          const h = imgData.height;
+          if (w < 20 || h < 20) continue; // Skip tiny images (icons, dots)
+
+          const canvas = typeof OffscreenCanvas !== 'undefined'
+            ? new OffscreenCanvas(w, h)
+            : document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          const idata = ctx.createImageData(w, h);
+
+          // imgData.data can be Uint8ClampedArray (RGBA) or Uint8Array (RGB/RGBA)
+          if (imgData.data.length === w * h * 4) {
+            idata.data.set(imgData.data);
+          } else if (imgData.data.length === w * h * 3) {
+            // RGB → RGBA
+            for (let px = 0, di = 0; px < imgData.data.length; px += 3, di += 4) {
+              idata.data[di] = imgData.data[px];
+              idata.data[di + 1] = imgData.data[px + 1];
+              idata.data[di + 2] = imgData.data[px + 2];
+              idata.data[di + 3] = 255;
+            }
+          } else {
+            continue; // Unknown format
+          }
+
+          ctx.putImageData(idata, 0, 0);
+
+          let pngBlob;
+          if (typeof canvas.convertToBlob === 'function') {
+            pngBlob = await canvas.convertToBlob({ type: 'image/png' });
+          } else {
+            pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          }
+          if (!pngBlob) continue;
+
+          const pngData = new Uint8Array(await pngBlob.arrayBuffer());
+
+          // Estimate position in page coordinates (approximate — centered)
+          const displayW = Math.min(w, pageWidth * 0.9);
+          const displayH = h * (displayW / w);
+
+          images.push({
+            data: pngData,
+            width: Math.round(displayW),
+            height: Math.round(displayH),
+            originalWidth: w,
+            originalHeight: h,
+          });
+        } catch {
+          // Skip this image on any error
+        }
+      }
+    }
+  } catch {
+    // getOperatorList may fail on some pages
+  }
+  return images;
+}
+
 // ─── Extract structured text content from PDF page via PDF.js ───────────────
 export async function extractStructuredContent(pdfDoc, pageNum) {
   const page = await pdfDoc.getPage(pageNum);
@@ -259,6 +349,9 @@ export async function extractStructuredContent(pdfDoc, pageNum) {
   const viewport = page.getViewport({ scale: 1 });
   const pageWidth = viewport.width;
   const pageHeight = viewport.height;
+
+  // Extract embedded images from this page
+  const images = await extractPageImages(page, viewport);
 
   // Transform items: PDF.js gives transform[4]=x, transform[5]=y (from bottom)
   // Convert to top-down Y coordinates
@@ -286,7 +379,7 @@ export async function extractStructuredContent(pdfDoc, pageNum) {
       return Math.abs(dy) < threshold ? a.x - b.x : dy;
     });
 
-  if (!items.length) return { blocks: [], pageWidth, pageHeight };
+  if (!items.length) return { blocks: [], pageWidth, pageHeight, images };
 
   // Group into lines (items with similar Y, using running average Y)
   const lines = [];
@@ -337,7 +430,7 @@ export async function extractStructuredContent(pdfDoc, pageNum) {
     allBlocks = processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, pageWidth);
   }
 
-  return { blocks: allBlocks, pageWidth, pageHeight };
+  return { blocks: allBlocks, pageWidth, pageHeight, images };
 }
 
 // Process a set of lines (from one column or the whole page) into blocks
@@ -523,6 +616,7 @@ function buildRuns(lineItems) {
     monospace: isMonospaceFont(item.fontName),
     fontFamily: mapPdfFont(item.fontName),
     fontSize: item.fontSize,
+    color: item.color || null,
   }));
 
   if (raw.length <= 1) return raw;
@@ -533,6 +627,7 @@ function buildRuns(lineItems) {
     const curr = raw[i];
     if (prev.bold === curr.bold && prev.italic === curr.italic &&
         prev.fontFamily === curr.fontFamily &&
+        prev.color === curr.color &&
         Math.abs(prev.fontSize - curr.fontSize) < 0.5) {
       prev.text += ' ' + curr.text;
     } else {
@@ -540,6 +635,28 @@ function buildRuns(lineItems) {
     }
   }
   return merged;
+}
+
+/**
+ * Build a TextRun from a run object, with optional color support.
+ */
+function makeTextRun(run, opts = {}) {
+  const props = {
+    text: run.text + ' ',
+    bold: opts.bold ?? run.bold,
+    italics: run.italic,
+    font: run.fontFamily,
+    size: Math.round(Math.min(opts.maxSize || 36, Math.max(opts.minSize || 12, run.fontSize)) * 2),
+  };
+  // Add color only if it's not black (default)
+  if (run.color && run.color !== '000000' && run.color !== '#000000') {
+    const c = run.color.startsWith('#') ? run.color.slice(1) : run.color;
+    if (/^[0-9a-fA-F]{6}$/.test(c)) {
+      props.color = c;
+    }
+  }
+  if (opts.color) props.color = opts.color;
+  return new TextRun(props);
 }
 
 function buildParagraphBlock(line, avgFontSize, leftMargin) {
@@ -636,14 +753,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
         if (block.type === 'heading') {
           children.push(new Paragraph({
             heading: block.level,
-            children: block.runs.map(run => new TextRun({
-              text: run.text + ' ',
-              bold: true,
-              italics: run.italic,
-              font: run.fontFamily,
-              // Heading sizes: use the actual font size from PDF, converted to half-points
-              size: Math.round(Math.min(56, Math.max(20, run.fontSize)) * 2),
-            })),
+            children: block.runs.map(run => makeTextRun(run, { bold: true, minSize: 20, maxSize: 56 })),
             spacing: { before: 240, after: 120 },
             alignment: block.alignment || AlignmentType.LEFT,
           }));
@@ -651,18 +761,10 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
           const spacing = {};
           if (block.paragraphBreak) spacing.before = 120;
           spacing.after = 40;
-          // Line spacing: 1.15x for readability
           spacing.line = Math.round(block.fontSize * 1.15 * 20);
 
           children.push(new Paragraph({
-            children: block.runs.map(run => new TextRun({
-              text: run.text + ' ',
-              bold: run.bold,
-              italics: run.italic,
-              font: run.fontFamily,
-              // Direct font size in half-points — no inflation
-              size: Math.round(Math.min(36, Math.max(12, run.fontSize)) * 2),
-            })),
+            children: block.runs.map(run => makeTextRun(run)),
             indent: block.indent > 0 ? { left: block.indent * 720 } : undefined,
             spacing,
             alignment: block.alignment || AlignmentType.LEFT,
@@ -671,14 +773,25 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
           children.push(buildDocxTable(block));
         } else if (block.type === 'list') {
           children.push(new Paragraph({
-            children: block.runs ? block.runs.map(run => new TextRun({
-              text: run.text + ' ',
-              bold: run.bold,
-              italics: run.italic,
-              font: run.fontFamily,
-              size: Math.round(Math.min(28, Math.max(12, run.fontSize || 12)) * 2),
-            })) : [new TextRun(block.text)],
+            children: block.runs
+              ? block.runs.map(run => makeTextRun(run, { minSize: 12, maxSize: 28 }))
+              : [new TextRun(block.text)],
             bullet: { level: block.level || 0 },
+          }));
+        }
+      }
+
+      // Insert extracted inline images from the PDF page
+      if (content.images && content.images.length && mode !== 'images-only') {
+        for (const img of content.images) {
+          children.push(new Paragraph({
+            children: [new ImageRun({
+              data: img.data,
+              transformation: { width: Math.min(img.width, 500), height: Math.min(img.height, 700) },
+              type: 'png',
+            })],
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 100, after: 100 },
           }));
         }
       }
