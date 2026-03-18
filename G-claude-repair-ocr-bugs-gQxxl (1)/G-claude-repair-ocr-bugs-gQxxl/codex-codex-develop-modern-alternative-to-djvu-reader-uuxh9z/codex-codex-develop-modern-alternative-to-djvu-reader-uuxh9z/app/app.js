@@ -3780,7 +3780,7 @@ async function importAnnotationsJson(file) {
     renderAnnotations();
     renderCommentList();
   } catch {
-    alert('Не удалось импортировать JSON аннотаций. Проверьте формат файла.');
+    toastError('Не удалось импортировать JSON аннотаций. Проверьте формат файла.');
   }
 }
 
@@ -3881,7 +3881,7 @@ async function importAnnotationBundleJson(file) {
     renderAnnotations();
     renderCommentList();
   } catch {
-    alert('Не удалось импортировать bundle JSON аннотаций. Проверьте формат файла.');
+    toastError('Не удалось импортировать bundle JSON аннотаций. Проверьте формат файла.');
   }
 }
 
@@ -4007,7 +4007,7 @@ async function applyWorkspacePayload(payload, { skipConfirm = false } = {}) {
 
   const sourceDoc = payload.docName || 'unknown';
   if (!skipConfirm && payload.docName && payload.docName !== state.docName) {
-    const proceed = confirm(`Backup создан для «${sourceDoc}». Импортировать в «${state.docName}»?`);
+    const proceed = await nrConfirm(`Backup создан для «${sourceDoc}». Импортировать в «${state.docName}»?`);
     if (!proceed) {
       setWorkspaceStatus('Импорт отменён пользователем.');
       return false;
@@ -6485,7 +6485,7 @@ async function importNotesJson(file) {
     els.notes.value = merged.body;
     saveNotes('manual');
   } catch {
-    alert('Не удалось импортировать заметки JSON. Проверьте формат файла.');
+    toastError('Не удалось импортировать заметки JSON. Проверьте формат файла.');
   }
 }
 
@@ -8752,7 +8752,7 @@ if (document.getElementById('pdfRedact')) {
         return;
       }
 
-      const apply = confirm(`Найдено ${totalMarks} совпадений. Применить редактирование? Это действие необратимо.`);
+      const apply = await nrConfirm(`Найдено ${totalMarks} совпадений. Применить редактирование? Это действие необратимо.`);
       if (!apply) {
         pdfRedactor.clearAll();
         return;
@@ -8841,7 +8841,7 @@ if (document.getElementById('pdfAccessibility')) {
       }
 
       if (result.issues.some(i => i.autoFixable)) {
-        const fix = confirm(msg + '\nИсправить автоматически исправляемые проблемы?');
+        const fix = await nrConfirm(msg + '\nИсправить автоматически исправляемые проблемы?');
         if (fix) {
           const fixed = await autoFixAccessibility(arrayBuffer, {
             title: state.docName || 'Document',
@@ -8859,7 +8859,7 @@ if (document.getElementById('pdfAccessibility')) {
       }
 
       setOcrStatus(`Доступность: ${result.score}/100 — ${result.summary.errors} ошибок, ${result.summary.warnings} предупреждений`);
-      alert(msg);
+      toastInfo(msg);
       pushDiagnosticEvent('pdf.accessibility', { score: result.score, level: result.level, errors: result.summary.errors });
     } catch (err) {
       setOcrStatus(`Ошибка проверки доступности: ${err?.message || 'неизвестная'}`);
@@ -9045,7 +9045,7 @@ if (document.getElementById('orgDelete')) {
       setOcrStatus('Невозможно удалить единственную страницу');
       return;
     }
-    const confirmed = confirm(`Удалить страницу ${state.pageNum} из документа?`);
+    const confirmed = await nrConfirm(`Удалить страницу ${state.currentPage} из документа?`);
     if (!confirmed) return;
 
     try {
