@@ -75,6 +75,7 @@ import { initFloatingSearch } from './modules/floating-search.js';
 import { XpsAdapter, parseXps } from './modules/xps-adapter.js';
 import { registerProvider, getProviders, authenticate, listFiles, openFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider } from './modules/cloud-integration.js';
 import { summarizeText, extractTags, semanticSearch, generateToc } from './modules/ai-features.js';
+import { nrPrompt, nrConfirm } from './modules/modal-prompt.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -757,13 +758,14 @@ function _groupWordsIntoLines(words) {
   if (!words || !words.length) return [];
   const sorted = [...words].filter(w => w.bbox).sort((a, b) => {
     const dy = a.bbox.y0 - b.bbox.y0;
-    return Math.abs(dy) < 5 ? a.bbox.x0 - b.bbox.x0 : dy;
+    const avgH = ((a.bbox.y1 - a.bbox.y0) + (b.bbox.y1 - b.bbox.y0)) / 2;
+    return Math.abs(dy) < avgH * 0.5 ? a.bbox.x0 - b.bbox.x0 : dy;
   });
 
   const lines = [];
   let currentLine = [sorted[0]];
   let currentY = sorted[0].bbox.y0;
-  const threshold = Math.max(5, Math.abs(sorted[0].bbox.y1 - sorted[0].bbox.y0) * 0.5);
+  const threshold = Math.abs(sorted[0].bbox.y1 - sorted[0].bbox.y0) * 0.5;
 
   for (let i = 1; i < sorted.length; i++) {
     const word = sorted[i];
@@ -1233,15 +1235,14 @@ class PDFAdapter {
     canvas.style.width = `${Math.round(viewport.width / dpr)}px`;
     canvas.style.height = `${Math.round(viewport.height / dpr)}px`;
 
-    // alpha:false — tells the browser this is an opaque canvas, enabling
-    // faster compositing and eliminating transparent-background artifacts.
     const ctx = canvas.getContext('2d', { alpha: false });
+    // High quality image scaling for embedded images in the PDF
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     // Fill white background before PDF.js renders (prevents flash of black)
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Only track/cancel render tasks for the main display canvas (els.canvas).
-    // Off-screen canvases (OCR probe, thumbnails) use independent render tasks.
     const isMainCanvas = canvas === els?.canvas;
     if (isMainCanvas && this._currentRenderTask) {
       try { this._currentRenderTask.cancel(); } catch { /* already finished */ }
@@ -1251,8 +1252,9 @@ class PDFAdapter {
     const renderTask = page.render({
       canvasContext: ctx,
       viewport,
-      // PDF.js rendering hints for higher quality
       background: 'rgba(255,255,255,1)',
+      // Enable high-quality anti-aliasing for text and vector graphics
+      intent: 'display',
     });
     if (isMainCanvas) this._currentRenderTask = renderTask;
     try {
@@ -2699,6 +2701,8 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
   let best = '';
   let bestScore = -Infinity;
   let bestWords = [];
+  let bestVariantW = 0;
+  let bestVariantH = 0;
   let detectedLang = lang;
   let taskCancelled = false;
   try {
@@ -2720,14 +2724,12 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
         }
       } catch (ocrErr) {
         pushDiagnosticEvent('ocr.engine.error', { variant: i, error: ocrErr?.message || String(ocrErr) });
-        // If worker died, stop trying more variants — they'll all fail too
         if (!getTesseractStatus().ready) {
           pushDiagnosticEvent('ocr.engine.dead', { variant: i, error: ocrErr?.message || String(ocrErr) }, 'error');
           break;
         }
         continue;
       }
-      // When lang is 'auto', detect the language from raw OCR output
       const effectiveLang = (lang === 'auto' && rawText && rawText.length >= 20) ? detectLanguage(rawText) : lang;
       const candidate = normalizeOcrTextByLang(rawText, effectiveLang);
       const score = scoreOcrTextByLang(candidate, effectiveLang);
@@ -2735,17 +2737,33 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
         best = candidate;
         bestScore = score;
         bestWords = words;
+        bestVariantW = variant?.width || 0;
+        bestVariantH = variant?.height || 0;
         detectedLang = effectiveLang;
       }
-      // If Tesseract gave a solid result on first variant, skip remaining variants
       if (i === 0 && best.length >= 20 && bestScore > 50) {
         break;
       }
       await yieldToMainThread();
     }
   } finally {
-    // Always release canvas references regardless of how the loop ended
     freeAllVariants();
+  }
+
+  // Normalize word bboxes to [0,1] relative coordinates so they are
+  // independent of the OCR source canvas resolution. The text layer
+  // renderer multiplies these by display dimensions for correct placement.
+  if (bestWords.length > 0 && bestVariantW > 0 && bestVariantH > 0) {
+    for (const w of bestWords) {
+      if (w.bbox) {
+        w.bbox = {
+          x0: w.bbox.x0 / bestVariantW,
+          y0: w.bbox.y0 / bestVariantH,
+          x1: w.bbox.x1 / bestVariantW,
+          y1: w.bbox.y1 / bestVariantH,
+        };
+      }
+    }
   }
   const recognizeMs = Math.round(performance.now() - recognizeStart);
   if (taskCancelled) return best;
@@ -3589,7 +3607,7 @@ function getCanvasPointFromEvent(e) {
   return { x, y };
 }
 
-function beginStroke(e) {
+async function beginStroke(e) {
   if (!state.adapter) return;
 
   if (state.ocrRegionMode) {
@@ -3606,7 +3624,7 @@ function beginStroke(e) {
   const point = normalizePoint(p.x, p.y);
 
   if (els.drawTool.value === 'comment') {
-    const text = prompt('Текст комментария:');
+    const text = await nrPrompt('Текст комментария:');
     if (!text) return;
     const comments = loadComments();
     comments.push({ point, text: text.trim() });
@@ -5435,26 +5453,26 @@ async function renderTextLayer(pageNum, zoom, rotation) {
   if (state.adapter.type === 'pdf') {
     try {
       const page = await state.adapter.pdfDoc.getPage(pageNum);
-      const renderScale = zoom * dpr;
-      const viewport = page.getViewport({ scale: renderScale, rotation });
+      // Use display-scale viewport (zoom only, no dpr) for text positioning.
+      // The text layer is sized to CSS pixels, not canvas pixels.
+      const displayViewport = page.getViewport({ scale: zoom, rotation });
       const textContent = await page.getTextContent({ normalizeWhitespace: true });
 
       if (!textContent?.items?.length) {
-        // No native text → try OCR word data
         await _renderOcrTextLayer(pageNum, zoom, dpr);
         return;
       }
 
-      const displayW = parseFloat(els.canvas.style.width) || (viewport.width / dpr);
-      const displayH = parseFloat(els.canvas.style.height) || (viewport.height / dpr);
+      const displayW = parseFloat(els.canvas.style.width) || displayViewport.width;
+      const displayH = parseFloat(els.canvas.style.height) || displayViewport.height;
       container.style.width = `${displayW}px`;
       container.style.height = `${displayH}px`;
 
-      // Use DocumentFragment for batch DOM insertion
       const fragment = document.createDocumentFragment();
-      // Measurement canvas for accurate letter-spacing
       const measureCanvas = document.createElement('canvas');
       const measureCtx = measureCanvas.getContext('2d');
+      // Viewport transform: converts PDF coords → display (CSS) coords
+      const vtx = displayViewport.transform;
 
       for (const item of textContent.items) {
         const str = item.str;
@@ -5465,40 +5483,39 @@ async function renderTextLayer(pageNum, zoom, rotation) {
         const span = document.createElement('span');
         span.textContent = str;
 
-        // PDF text transform: [scaleX, skewY, skewX, scaleY, translateX, translateY]
-        const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
-        const scaleFactor = 1 / dpr;
-        const displayFontSize = fontSize * scaleFactor;
+        // Font size in PDF units, then scale to display
+        const fontHeight = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
+        const displayFontSize = fontHeight * zoom;
 
-        // Position in display coordinates
-        const x = tx[4] * scaleFactor;
-        const y = displayH - (tx[5] * scaleFactor) - displayFontSize;
+        // Apply viewport transform to the PDF text origin (tx[4], tx[5])
+        // vtx = [a, b, c, d, e, f] where: x' = a*x + c*y + e, y' = b*x + d*y + f
+        const x = vtx[0] * tx[4] + vtx[2] * tx[5] + vtx[4];
+        const y = vtx[1] * tx[4] + vtx[3] * tx[5] + vtx[5];
 
         span.style.left = `${x}px`;
-        span.style.top = `${y}px`;
+        span.style.top = `${y - displayFontSize}px`;
         span.style.fontSize = `${displayFontSize}px`;
         span.style.fontFamily = item.fontName || 'sans-serif';
         span.style.lineHeight = '1';
 
-        // Apply rotation/skew from transform matrix
+        // Rotation from text transform
         const angle = Math.atan2(tx[1], tx[0]);
         if (Math.abs(angle) > 0.01) {
           span.style.transform = `rotate(${-angle}rad)`;
         }
 
-        // Calculate precise letter-spacing using canvas measurement
+        // Letter-spacing to match PDF text width
         if (item.width > 0 && str.length > 0) {
-          const actualWidth = item.width * renderScale * scaleFactor;
+          const scaledWidth = item.width * zoom;
           if (str.length > 1) {
             measureCtx.font = `${displayFontSize}px ${item.fontName || 'sans-serif'}`;
             const measuredWidth = measureCtx.measureText(str).width;
-            if (measuredWidth > 0 && Math.abs(actualWidth - measuredWidth) > 0.5) {
-              const spacing = (actualWidth - measuredWidth) / (str.length - 1);
+            if (measuredWidth > 0 && Math.abs(scaledWidth - measuredWidth) > 0.5) {
+              const spacing = (scaledWidth - measuredWidth) / (str.length - 1);
               span.style.letterSpacing = `${spacing}px`;
             }
           } else {
-            // Single character — set width directly
-            span.style.width = `${actualWidth}px`;
+            span.style.width = `${scaledWidth}px`;
             span.style.textAlign = 'center';
           }
         }
@@ -5523,7 +5540,6 @@ async function _renderOcrTextLayer(pageNum, zoom, dpr) {
   // Check OCR word cache
   let words = _ocrWordCache.get(pageNum);
   if (!words) {
-    // Try to get from OCR storage
     const ocr = loadOcrTextData();
     if (ocr?.pagesWords?.[pageNum - 1]) {
       words = ocr.pagesWords[pageNum - 1];
@@ -5531,28 +5547,25 @@ async function _renderOcrTextLayer(pageNum, zoom, dpr) {
   }
   if (!words || !words.length) return;
 
-  const canvasW = els.canvas.width;
-  const canvasH = els.canvas.height;
-  const displayW = parseFloat(els.canvas.style.width) || canvasW;
-  const displayH = parseFloat(els.canvas.style.height) || canvasH;
-  const scaleX = displayW / canvasW;
-  const scaleY = displayH / canvasH;
+  // Word bboxes are in [0,1] normalized coordinates (relative to OCR source canvas).
+  // We map them to CSS display dimensions for correct on-screen positioning.
+  const displayW = parseFloat(els.canvas.style.width) || (els.canvas.width / dpr);
+  const displayH = parseFloat(els.canvas.style.height) || (els.canvas.height / dpr);
 
   container.style.width = `${displayW}px`;
   container.style.height = `${displayH}px`;
 
-  // Pre-create a measurement canvas for accurate letter-spacing calculation
   const measureCanvas = document.createElement('canvas');
   const measureCtx = measureCanvas.getContext('2d');
 
-  // Group words into lines for better text flow
+  // Sort words into reading order
   const sortedWords = [...words].filter(w => w.text && w.bbox).sort((a, b) => {
     const dy = a.bbox.y0 - b.bbox.y0;
     const avgH = ((a.bbox.y1 - a.bbox.y0) + (b.bbox.y1 - b.bbox.y0)) / 2;
+    // avgH is now in [0,1] range; compare proportionally
     return Math.abs(dy) < avgH * 0.4 ? a.bbox.x0 - b.bbox.x0 : dy;
   });
 
-  // Use DocumentFragment for batch DOM insertion (faster)
   const fragment = document.createDocumentFragment();
 
   for (const word of sortedWords) {
@@ -5562,14 +5575,12 @@ async function _renderOcrTextLayer(pageNum, zoom, dpr) {
       span.dataset.confidence = String(word.confidence);
     }
 
-    const x = word.bbox.x0 * scaleX;
-    const y = word.bbox.y0 * scaleY;
-    const w = (word.bbox.x1 - word.bbox.x0) * scaleX;
-    const h = (word.bbox.y1 - word.bbox.y0) * scaleY;
+    // Map normalized [0,1] coords → display pixels
+    const x = word.bbox.x0 * displayW;
+    const y = word.bbox.y0 * displayH;
+    const w = (word.bbox.x1 - word.bbox.x0) * displayW;
+    const h = (word.bbox.y1 - word.bbox.y0) * displayH;
 
-    // Font size: use the bounding box height with slight reduction for
-    // descenders/ascenders. The 0.78 factor accounts for typical
-    // ascent ratio (font em-square vs visible bbox).
     const fontSize = Math.max(6, h * 0.78);
 
     span.style.left = `${x}px`;
@@ -5579,18 +5590,15 @@ async function _renderOcrTextLayer(pageNum, zoom, dpr) {
     span.style.height = `${h}px`;
     span.style.lineHeight = `${h}px`;
 
-    // Calculate letter-spacing to stretch/compress text to match bbox width
     if (word.text.length > 1) {
       measureCtx.font = `${fontSize}px sans-serif`;
       const measuredWidth = measureCtx.measureText(word.text).width;
       if (measuredWidth > 0 && Math.abs(w - measuredWidth) > 1) {
         const spacing = (w - measuredWidth) / (word.text.length - 1);
-        // Clamp to reasonable range to avoid extreme distortion
         const clampedSpacing = Math.max(-fontSize * 0.3, Math.min(fontSize * 0.5, spacing));
         span.style.letterSpacing = `${clampedSpacing}px`;
       }
     } else if (word.text.length === 1) {
-      // Single character: center within bbox
       span.style.textAlign = 'center';
     }
 
@@ -6090,7 +6098,7 @@ async function splitPdfPages() {
     setOcrStatus('Разделение доступно только для PDF');
     return;
   }
-  const rangeStr = prompt(`Введите диапазон страниц (напр. "1-3" или "1,3,5-7").\nВсего страниц: ${state.pageCount}`);
+  const rangeStr = await nrPrompt(`Введите диапазон страниц (напр. "1-3" или "1,3,5-7").\nВсего страниц: ${state.pageCount}`);
   if (!rangeStr) return;
 
   const pageNums = parsePageRangeLib(rangeStr, state.pageCount);
@@ -6863,8 +6871,8 @@ function renderBookmarks() {
 
     const renameBtn = document.createElement('button');
     renameBtn.textContent = 'Переим.';
-    renameBtn.addEventListener('click', () => {
-      const next = prompt('Новое название закладки:', entry.label);
+    renameBtn.addEventListener('click', async () => {
+      const next = await nrPrompt('Новое название закладки:', entry.label);
       if (!next) return;
       const all = loadBookmarks();
       const idx = all.findIndex((x) => x.page === entry.page && x.label === entry.label);
@@ -6891,9 +6899,9 @@ function renderBookmarks() {
   });
 }
 
-function addBookmark() {
+async function addBookmark() {
   if (!state.adapter) return;
-  const label = prompt('Название закладки:', `Метка ${state.currentPage}`) || `Метка ${state.currentPage}`;
+  const label = (await nrPrompt('Название закладки:', `Метка ${state.currentPage}`)) || `Метка ${state.currentPage}`;
   const bookmarks = loadBookmarks();
   if (!bookmarks.some((x) => x.page === state.currentPage && x.label === label)) {
     bookmarks.push({ page: state.currentPage, label });
@@ -8213,7 +8221,7 @@ els.insertImageInput?.addEventListener('change', (e) => {
 // ─── Watermark (pdf-lib: saves into actual PDF) ────────────────────────────
 els.addWatermark?.addEventListener('click', async () => {
   if (!state.adapter) return;
-  const text = prompt('Текст водяного знака:', 'КОНФИДЕНЦИАЛЬНО');
+  const text = await nrPrompt('Текст водяного знака:', 'КОНФИДЕНЦИАЛЬНО');
   if (!text) return;
 
   // Visual preview on canvas
@@ -8249,7 +8257,7 @@ els.addStamp?.addEventListener('click', async () => {
   if (!state.adapter) return;
   const types = ['approved', 'rejected', 'draft', 'confidential', 'copy'];
   const labels = ['УТВЕРЖДЕНО', 'ОТКЛОНЕНО', 'ЧЕРНОВИК', 'КОНФИДЕНЦИАЛЬНО', 'КОПИЯ'];
-  const choice = prompt(`Выберите штамп (1-5):\n${labels.map((l, i) => `${i + 1}. ${l}`).join('\n')}`, '1');
+  const choice = await nrPrompt(`Выберите штамп (1-5):\n${labels.map((l, i) => `${i + 1}. ${l}`).join('\n')}`, '1');
   const idx = parseInt(choice, 10) - 1;
   if (idx >= 0 && idx < types.length) {
     // Visual preview on canvas
@@ -8707,7 +8715,7 @@ if (document.getElementById('pdfRedact')) {
     const file = requirePdfFile();
     if (!file) return;
 
-    const patternName = prompt(
+    const patternName = await nrPrompt(
       'Выберите тип данных для редактирования:\n' +
       Object.keys(REDACTION_PATTERNS).join(', ') +
       '\n\nИли введите произвольный regex:');
@@ -8919,13 +8927,13 @@ if (document.getElementById('pdfHeaderFooter')) {
     const file = requirePdfFile();
     if (!file) return;
 
-    const format = prompt(
+    const format = await nrPrompt(
       'Шаблон колонтитула (переменные: {{page}}, {{total}}, {{date}}, {{title}}):\n' +
       'Пример: "{{page}} / {{total}}"',
       '{{page}} / {{total}}');
     if (!format) return;
 
-    const position = prompt('Позиция: top (верх) или bottom (низ)?', 'bottom');
+    const position = await nrPrompt('Позиция: top (верх) или bottom (низ)?', 'bottom');
     if (!position) return;
 
     try {
@@ -8954,9 +8962,9 @@ if (document.getElementById('pdfBatesNumber')) {
     const file = requirePdfFile();
     if (!file) return;
 
-    const prefix = prompt('Префикс Бейтса (напр. "DOC-"):', 'DOC-');
+    const prefix = await nrPrompt('Префикс Бейтса (напр. "DOC-"):', 'DOC-');
     if (prefix === null) return;
-    const startStr = prompt('Начальный номер:', '1');
+    const startStr = await nrPrompt('Начальный номер:', '1');
     if (!startStr) return;
 
     try {
@@ -9068,7 +9076,7 @@ if (document.getElementById('orgExtract')) {
   document.getElementById('orgExtract').addEventListener('click', async () => {
     const file = requirePdfFile();
     if (!file) return;
-    const rangeStr = prompt(`Извлечь страницы (напр. "1-3" или "2,5,7").\nТекущая: ${state.pageNum}, Всего: ${state.pageCount}`, String(state.pageNum));
+    const rangeStr = await nrPrompt(`Извлечь страницы (напр. "1-3" или "2,5,7").\nТекущая: ${state.currentPage}, Всего: ${state.pageCount}`, String(state.currentPage));
     if (!rangeStr) return;
 
     const pageNums = parsePageRangeLib(rangeStr, state.pageCount);
@@ -9944,9 +9952,9 @@ openDatabase().catch(() => { /* IndexedDB not available */ });
       toastWarning('Откройте PDF документ');
       return;
     }
-    const search = prompt('Найти текст:');
+    const search = await nrPrompt('Найти текст:');
     if (!search) return;
-    const replace = prompt('Заменить на:');
+    const replace = await nrPrompt('Заменить на:');
     if (replace === null) return;
     try {
       const result = await findAndReplace(state.pdfBytes, search, replace);
@@ -10155,8 +10163,8 @@ initQuickActions({
 // ─── Initialize Extended Hotkeys ──────────────────────────────────────────
 initHotkeys();
 registerHotkeyHandlers({
-  goToPage: () => {
-    const page = prompt('Перейти к странице:');
+  goToPage: async () => {
+    const page = await nrPrompt('Перейти к странице:');
     if (page) { const n = parseInt(page, 10); if (n >= 1 && n <= state.pageCount) { state.currentPage = n; renderCurrentPage(); } }
   },
   firstPage: () => { state.currentPage = 1; renderCurrentPage(); },

@@ -453,8 +453,9 @@ body.sidebar-compact .sidebar-panel > section { padding: 4px; }
   border-radius: 2px;
   box-shadow: 0 1px 4px rgba(0,0,0,0.2), 0 4px 16px rgba(0,0,0,0.12);
   background: white;
-  image-rendering: -webkit-optimize-contrast;
-  image-rendering: high-quality;
+  /* Use auto (bilinear) for smooth text when downscaling HiDPI canvas */
+  image-rendering: auto;
+  -webkit-font-smoothing: antialiased;
   will-change: contents;
   contain: layout style paint;
 }

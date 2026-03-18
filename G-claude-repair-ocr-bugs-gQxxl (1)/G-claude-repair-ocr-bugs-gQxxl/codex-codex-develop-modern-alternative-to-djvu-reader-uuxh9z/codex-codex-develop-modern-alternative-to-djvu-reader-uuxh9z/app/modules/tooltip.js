@@ -81,7 +81,10 @@ function hideTooltip() {
 }
 
 function onPointerEnter(e) {
-  const target = e.target.closest('[data-tooltip], [title]');
+  // e.target may be a text node or SVG element — guard against missing .closest()
+  const el = e.target instanceof Element ? e.target : e.target?.parentElement;
+  if (!el || typeof el.closest !== 'function') return;
+  const target = el.closest('[data-tooltip], [title]');
   if (!target) return;
   clearTimeout(hideTimer);
   clearTimeout(showTimer);
@@ -89,7 +92,9 @@ function onPointerEnter(e) {
 }
 
 function onPointerLeave(e) {
-  const target = e.target.closest('[data-tooltip], [title]');
+  const el = e.target instanceof Element ? e.target : e.target?.parentElement;
+  if (!el || typeof el.closest !== 'function') return;
+  const target = el.closest('[data-tooltip], [title]');
   if (!target) return;
   clearTimeout(showTimer);
   hideTimer = setTimeout(hideTooltip, HIDE_DELAY);
