@@ -199,6 +199,33 @@ const translations = {
     // Unsupported
     'unsupported.title': 'Формат пока не поддержан',
     'unsupported.hint': 'Откройте поддерживаемый формат: PDF, DjVu, ePub или изображение.',
+
+    // View Modes
+    'viewmode.single': 'Одна страница',
+    'viewmode.twoUp': 'Две страницы',
+    'viewmode.book': 'Книжный разворот',
+    'viewmode.continuous': 'Непрерывная прокрутка',
+    'viewmode.presentation': 'Презентация',
+
+    // Themes
+    'theme.dark': 'Тёмная',
+    'theme.light': 'Светлая',
+    'theme.sepia': 'Сепия',
+    'theme.highContrast': 'Высокий контраст',
+    'theme.auto': 'Авто (системная)',
+
+    // Context Menu
+    'ctx.copy': 'Копировать текст',
+    'ctx.selectAll': 'Выделить всё',
+    'ctx.ocrArea': 'OCR этой области',
+    'ctx.zoomIn': 'Увеличить',
+    'ctx.zoomOut': 'Уменьшить',
+    'ctx.fitWidth': 'По ширине',
+    'ctx.fitPage': 'По странице',
+
+    // Export
+    'export.html': 'Экспорт HTML',
+    'export.htmlDone': 'Экспорт HTML завершён',
   },
 
   en: {
@@ -399,6 +426,33 @@ const translations = {
     // Unsupported
     'unsupported.title': 'Format not yet supported',
     'unsupported.hint': 'Open a supported format: PDF, DjVu, ePub or image.',
+
+    // View Modes
+    'viewmode.single': 'Single Page',
+    'viewmode.twoUp': 'Two Pages',
+    'viewmode.book': 'Book Spread',
+    'viewmode.continuous': 'Continuous Scroll',
+    'viewmode.presentation': 'Presentation',
+
+    // Themes
+    'theme.dark': 'Dark',
+    'theme.light': 'Light',
+    'theme.sepia': 'Sepia',
+    'theme.highContrast': 'High Contrast',
+    'theme.auto': 'Auto (System)',
+
+    // Context Menu
+    'ctx.copy': 'Copy Text',
+    'ctx.selectAll': 'Select All',
+    'ctx.ocrArea': 'OCR This Area',
+    'ctx.zoomIn': 'Zoom In',
+    'ctx.zoomOut': 'Zoom Out',
+    'ctx.fitWidth': 'Fit Width',
+    'ctx.fitPage': 'Fit Page',
+
+    // Export
+    'export.html': 'Export HTML',
+    'export.htmlDone': 'HTML export complete',
   },
 };
 

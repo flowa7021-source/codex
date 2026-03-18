@@ -2,7 +2,11 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1b1b1f" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f0f0f4" media="(prefers-color-scheme: light)" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>NovaReader</title>
     <script type="importmap">
     {
@@ -15,6 +19,8 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <!-- Skip navigation for accessibility -->
+    <a href="#viewerCanvas" class="skip-nav">Перейти к документу</a>
     <div class="app-shell">
       <!-- ═══════════════════════════════════════════════════════
            ROW 1: Command Bar (unified compact toolbar)
@@ -64,6 +70,20 @@
           <button id="toggleContinuousScroll" class="cb-btn" title="Непрерывная прокрутка">
             <svg width="16" height="16" viewBox="0 0 16 16"><rect x="4" y="1" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="4" y="7" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><path d="M8 13v2M6 14l2 1 2-1" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
+          <!-- View Mode Selector -->
+          <div class="dropdown" id="viewModeDropdown">
+            <button class="cb-btn dropdown-trigger" title="Режим просмотра" aria-haspopup="true" aria-expanded="false">
+              <svg width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+            </button>
+            <div class="dropdown-menu" role="menu">
+              <button class="dropdown-item active" data-view-mode="single" role="menuitem">Одна страница</button>
+              <button class="dropdown-item" data-view-mode="two-up" role="menuitem">Две страницы</button>
+              <button class="dropdown-item" data-view-mode="book" role="menuitem">Книжный разворот</button>
+              <button class="dropdown-item" data-view-mode="continuous" role="menuitem">Непрерывная прокрутка</button>
+              <div class="dropdown-sep"></div>
+              <button class="dropdown-item" data-view-mode="presentation" role="menuitem">Презентация</button>
+            </div>
+          </div>
         </div>
 
         <div class="cb-spacer"></div>
@@ -532,6 +552,7 @@
             <div class="rp-actions">
               <button id="exportText" class="btn-xs">📄 .txt</button>
               <button id="exportWord" class="btn-xs">📝 .docx</button>
+              <button id="exportHtml" class="btn-xs">🌐 .html</button>
               <button id="exportOcrIndex" class="btn-xs">OCR index</button>
               <button id="exportHealthReport" class="btn-xs">Health</button>
             </div>
@@ -707,7 +728,7 @@
             <section>
               <h4>Оформление</h4>
               <div class="settings-grid">
-                <label>Тема <select id="cfgTheme"><option value="dark">Тёмная</option><option value="light">Светлая</option></select></label>
+                <label>Тема <select id="cfgTheme"><option value="dark">Тёмная</option><option value="light">Светлая</option><option value="sepia">Сепия</option><option value="high-contrast">Высокий контраст</option><option value="auto">Авто (системная)</option></select></label>
                 <label>Язык <select id="cfgAppLang"><option value="ru">Русский</option><option value="en">English</option></select></label>
               </div>
             </section>

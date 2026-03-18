@@ -28,6 +28,16 @@ import { addHeaderFooter, addBatesNumbering, flattenPdf, checkAccessibility, aut
 import { annotationManager, HIGHLIGHT_COLORS } from './modules/pdf-annotations-pro.js';
 import { batchOcr, createSearchablePdf, detectScannedDocument, autoDetectLanguage } from './modules/ocr-batch.js';
 
+// ─── Phase 2+ Module Imports ───────────────────────────────────────────────
+import { toast, toastSuccess, toastError, toastWarning, toastInfo, toastProgress, dismissAllToasts } from './modules/toast.js';
+import { initTooltips } from './modules/tooltip.js';
+import { initContextMenu } from './modules/context-menu.js';
+import { initA11y, announce, prefersReducedMotion } from './modules/a11y.js';
+import { undoRedoManager, bindUndoRedoKeys } from './modules/undo-redo.js';
+import { VIEW_MODES, initViewModes, setViewMode, getCurrentMode, navigateInMode, getTwoUpPages, renderTwoUp } from './modules/view-modes.js';
+import { preprocessForOcr } from './modules/ocr-preprocess.js';
+import { convertToHtml, downloadHtml } from './modules/html-converter.js';
+
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
   const { silent = false, fallback = null, rethrow = false } = options;
@@ -80,6 +90,8 @@ function showUserError(context, errorType, message) {
   if (statusEl) {
     statusEl.textContent = `Ошибка [${label}]: ${errorType} — ${message}`;
   }
+  // Also show a toast notification for visibility
+  try { toastError(`${label}: ${message}`); } catch {}
 }
 
 // ─── Phase 2: OCR Confidence Scoring ───────────────────────────────────────
@@ -2469,6 +2481,17 @@ function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean', inve
   if (state.settings?.ocrQualityMode === 'accurate') {
     medianDenoiseMonochrome(img);
     morphologyCloseMonochrome(img);
+    // Enhanced preprocessing: use advanced Sauvola binarization + deskew
+    try {
+      ctx.putImageData(img, 0, 0);
+      const enhanced = preprocessForOcr(canvas, { deskew: true, denoise: false, binarize: false, removeBorders: true });
+      if (enhanced !== canvas && enhanced.width > 0) {
+        canvas.width = enhanced.width;
+        canvas.height = enhanced.height;
+        ctx.drawImage(enhanced, 0, 0);
+        return canvas;
+      }
+    } catch { /* fallback to standard pipeline */ }
   }
 
   const thresholdShift = state.settings?.ocrQualityMode === 'accurate' ? 8 : 0;
@@ -3341,6 +3364,7 @@ async function startBackgroundOcrScan(reason = 'auto') {
       updatedAt: new Date().toISOString(),
     });
     setOcrStatus('OCR: фоновое распознавание завершено');
+    try { toastSuccess('OCR: фоновое распознавание завершено'); } catch {}
     pushDiagnosticEvent('ocr.background.finish', { scannedPages: maxPages });
   } finally {
     if (state.backgroundOcrToken === token) {
@@ -5206,6 +5230,8 @@ const _openFileImpl = async function openFileImpl(file) {
   renderEtaStatus();
   startReadingTimer();
   recordPerfMetric('pageLoadTimes', Math.round(performance.now() - openStartedAt));
+  try { toastInfo(`${state.docName || 'Документ'} — ${state.pageCount} стр.`); } catch {}
+  try { announce(`Документ ${state.docName} открыт, ${state.pageCount} страниц`); } catch {}
 };
 const openFile = withErrorBoundary(_openFileImpl, 'file-open');
 
@@ -6197,14 +6223,28 @@ function renderRecent() {
   });
 }
 
+const THEME_CLASSES = ['light', 'sepia', 'high-contrast', 'theme-auto'];
+
+function applyTheme(theme) {
+  THEME_CLASSES.forEach(c => document.body.classList.remove(c));
+  if (theme === 'light') document.body.classList.add('light');
+  else if (theme === 'sepia') document.body.classList.add('sepia');
+  else if (theme === 'high-contrast') document.body.classList.add('high-contrast');
+  else if (theme === 'auto') document.body.classList.add('theme-auto');
+  // 'dark' is the default — no class needed
+  localStorage.setItem('novareader-theme', theme);
+}
+
 function loadTheme() {
   const theme = localStorage.getItem('novareader-theme') || 'dark';
-  document.body.classList.toggle('light', theme === 'light');
+  applyTheme(theme);
 }
 
 function toggleTheme() {
-  const isLight = document.body.classList.toggle('light');
-  localStorage.setItem('novareader-theme', isLight ? 'light' : 'dark');
+  const themes = ['dark', 'light', 'sepia', 'high-contrast', 'auto'];
+  const current = localStorage.getItem('novareader-theme') || 'dark';
+  const nextIdx = (themes.indexOf(current) + 1) % themes.length;
+  applyTheme(themes[nextIdx]);
 }
 
 function getNotesModel() {
@@ -9729,6 +9769,77 @@ if (document.getElementById('orgInsertPages')) {
 
   // Expose for other modules
   window._novaUI = { openRightPanel, closeRightPanel: closeRightPanelFn, toggleFloatingSearch };
+})();
+
+// ─── Initialize Phase 2+ Modules ─────────────────────────────────────────────
+initTooltips();
+initContextMenu();
+initA11y();
+bindUndoRedoKeys();
+
+// Initialize view modes with app dependencies
+initViewModes({
+  renderPage: null, // Will be connected after full render pipeline is ready
+  getPageCount: () => state.pageCount,
+  getCurrentPage: () => state.currentPage,
+  setCurrentPage: (n) => goToPage(n),
+  getZoom: () => state.zoom,
+  viewport: document.querySelector('.document-viewport'),
+  canvas: els.canvas,
+});
+
+// Expose toast for use throughout the app
+window._toast = { toast, toastSuccess, toastError, toastWarning, toastInfo, toastProgress, dismissAllToasts };
+
+// Expose view modes
+window._viewModes = { setViewMode, getCurrentMode, VIEW_MODES };
+
+// ─── View Mode Dropdown Handler ──────────────────────────────────────────────
+(function initViewModeDropdown() {
+  const dd = document.getElementById('viewModeDropdown');
+  if (!dd) return;
+  const trigger = dd.querySelector('.dropdown-trigger');
+  const menu = dd.querySelector('.dropdown-menu');
+
+  trigger?.addEventListener('click', () => {
+    dd.classList.toggle('open');
+    trigger.setAttribute('aria-expanded', dd.classList.contains('open') ? 'true' : 'false');
+  });
+
+  menu?.querySelectorAll('[data-view-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.viewMode;
+      setViewMode(mode);
+      menu.querySelectorAll('.dropdown-item').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      dd.classList.remove('open');
+      trigger?.setAttribute('aria-expanded', 'false');
+    });
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!dd.contains(e.target)) {
+      dd.classList.remove('open');
+      trigger?.setAttribute('aria-expanded', 'false');
+    }
+  });
+})();
+
+// ─── HTML Export Button Handler ──────────────────────────────────────────────
+(function initHtmlExport() {
+  const btn = document.getElementById('exportHtml');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!state.adapter || state.pageCount === 0) return;
+    const pages = [];
+    for (let i = 1; i <= state.pageCount; i++) {
+      const text = await extractTextForPage(i);
+      pages.push({ text: text || '', items: [] });
+    }
+    const html = convertToHtml(pages, { title: state.docName || 'Document' });
+    downloadHtml(html, (state.docName || 'document').replace(/\.[^.]+$/, '') + '.html');
+    toastSuccess('Экспорт HTML завершён');
+  });
 })();
 
 // ─── Expose globals for E2E testing and diagnostics ──────────────────────────
