@@ -1,0 +1,13 @@
+appId: com.novareader.app
+productName: NovaReader
+directories:
+  output: dist
+  buildResources: assets
+files:
+  - dist/**/*
+  - electron/**/*.js
+  - package.json
+win:
+  target: portable
+portable:
+  artifactName: NovaReader-${version}-portable.exe
