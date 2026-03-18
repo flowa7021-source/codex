@@ -8540,6 +8540,141 @@ const _origUpdatePageUI = typeof _updatePageUI === 'function' ? _updatePageUI : 
 setInterval(updateStatusBar, 2000);
 updateStatusBar();
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// NovaReader 3.0 — Right Panel + Floating Search + Tool Switching
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function initNovaReader3UI() {
+  const appShell = document.querySelector('.app-shell');
+  const rightPanel = document.getElementById('rightPanel');
+  const rpTitle = document.getElementById('rpTitle');
+  const closeRightPanel = document.getElementById('closeRightPanel');
+  const searchFloating = document.getElementById('searchFloating');
+  const closeSearchBtn = document.getElementById('closeSearch');
+
+  const TOOL_TITLES = {
+    'search': 'Поиск',
+    'annotations': 'Аннотации',
+    'text-ocr': 'Текст / OCR',
+    'forms': 'Формы PDF',
+    'tools': 'Инструменты',
+    'organize': 'Организация страниц',
+  };
+
+  let activeToolPanel = null;
+
+  // ── Open a right panel by tool name ──
+  function openRightPanel(toolName) {
+    if (!appShell || !rightPanel) return;
+
+    // Close all panels
+    rightPanel.querySelectorAll('.rp-panel').forEach(p => p.classList.remove('active'));
+
+    // Activate selected panel
+    const panel = rightPanel.querySelector(`.rp-panel[data-rp-panel="${toolName}"]`);
+    if (panel) {
+      panel.classList.add('active');
+      appShell.classList.add('right-panel-open');
+      if (rpTitle) rpTitle.textContent = TOOL_TITLES[toolName] || 'Инструменты';
+      activeToolPanel = toolName;
+    }
+
+    // Update toolbar button states
+    document.querySelectorAll('.cb-tool-btn[data-tool]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tool === toolName);
+    });
+  }
+
+  function closeRightPanelFn() {
+    if (!appShell) return;
+    appShell.classList.remove('right-panel-open');
+    rightPanel?.querySelectorAll('.rp-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.cb-tool-btn[data-tool]').forEach(btn => btn.classList.remove('active'));
+    activeToolPanel = null;
+  }
+
+  // ── Tool buttons in command bar ──
+  document.querySelectorAll('.cb-tool-btn[data-tool]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tool = btn.dataset.tool;
+
+      // Search tool opens floating search bar instead of right panel
+      if (tool === 'search') {
+        toggleFloatingSearch(true);
+        return;
+      }
+
+      // Toggle: if same tool clicked, close panel
+      if (activeToolPanel === tool) {
+        closeRightPanelFn();
+      } else {
+        openRightPanel(tool);
+      }
+    });
+  });
+
+  // Close right panel button
+  if (closeRightPanel) {
+    closeRightPanel.addEventListener('click', closeRightPanelFn);
+  }
+
+  // ── Floating search ──
+  function toggleFloatingSearch(show) {
+    if (!searchFloating) return;
+    if (show === undefined) show = !searchFloating.classList.contains('open');
+    searchFloating.classList.toggle('open', show);
+    if (show) {
+      const input = searchFloating.querySelector('#searchInput');
+      if (input) setTimeout(() => input.focus(), 50);
+    }
+  }
+
+  if (closeSearchBtn) {
+    closeSearchBtn.addEventListener('click', () => toggleFloatingSearch(false));
+  }
+
+  // Ctrl+F opens floating search
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+      e.preventDefault();
+      toggleFloatingSearch(true);
+    }
+    if (e.key === 'Escape' && searchFloating?.classList.contains('open')) {
+      toggleFloatingSearch(false);
+    }
+  });
+
+  // ── Sidebar toggle (Acrobat Pro style) ──
+  const toggleSidebarBtn = document.getElementById('toggleSidebar');
+  if (toggleSidebarBtn) {
+    toggleSidebarBtn.addEventListener('click', () => {
+      if (appShell) {
+        appShell.classList.toggle('sidebar-hidden');
+        toggleSidebarBtn.classList.toggle('active', !appShell.classList.contains('sidebar-hidden'));
+      }
+    });
+  }
+
+  // ── Make sidebar tabs work with new left panel layout ──
+  document.querySelectorAll('.lp-tabs button[data-sidebar-tab], .sidebar-tabs button[data-sidebar-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tabNav = btn.closest('.lp-tabs, .sidebar-tabs');
+      const sidebar = btn.closest('.left-panel, .sidebar');
+      if (!tabNav || !sidebar) return;
+
+      tabNav.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+      sidebar.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+
+      const panel = sidebar.querySelector(`.sidebar-panel[data-sidebar-panel="${btn.dataset.sidebarTab}"]`);
+      if (panel) panel.classList.add('active');
+    });
+  });
+
+  // Expose for other modules
+  window._novaUI = { openRightPanel, closeRightPanel: closeRightPanelFn, toggleFloatingSearch };
+})();
+
 // ─── Expose globals for E2E testing and diagnostics ──────────────────────────
 window.crashTelemetry = crashTelemetry;
 window.ocrSearchIndex = ocrSearchIndex;

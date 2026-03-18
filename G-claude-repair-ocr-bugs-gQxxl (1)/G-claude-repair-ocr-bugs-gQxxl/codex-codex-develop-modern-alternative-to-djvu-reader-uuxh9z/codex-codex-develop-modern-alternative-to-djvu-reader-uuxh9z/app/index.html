@@ -8,28 +8,119 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="sidebar" id="sidebar">
-        <!-- ═══ Sidebar Tab Bar ═══ -->
-        <nav class="sidebar-tabs">
-          <button class="active" data-sidebar-tab="nav" title="Навигация">
-            <span class="tab-icon">📑</span>
-            <span class="tab-label">Навиг.</span>
+      <!-- ═══════════════════════════════════════════════════════
+           ROW 1: Command Bar (unified compact toolbar)
+           ═══════════════════════════════════════════════════════ -->
+      <header class="command-bar" id="commandBar">
+        <!-- Navigation -->
+        <div class="cb-group">
+          <button id="historyBack" class="cb-btn" title="Назад в истории">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M11 2L5 8l6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="historyForward" class="cb-btn" title="Вперёд в истории">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5 2l6 6-6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+
+        <div class="cb-sep"></div>
+
+        <!-- Page navigation -->
+        <div class="cb-group">
+          <button id="prevPage" class="cb-btn" title="Предыдущая страница">
+            <svg width="14" height="14" viewBox="0 0 14 14"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+          </button>
+          <input id="pageInput" type="number" min="1" value="1" class="cb-page-input" title="Номер страницы" />
+          <span id="pageStatus" class="cb-label">/ 0</span>
+          <button id="nextPage" class="cb-btn" title="Следующая страница">
+            <svg width="14" height="14" viewBox="0 0 14 14"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+          </button>
+          <button id="goToPage" class="cb-btn is-hidden" title="Перейти к странице">↵</button>
+        </div>
+
+        <div class="cb-sep"></div>
+
+        <!-- Zoom -->
+        <div class="cb-group">
+          <button id="zoomOut" class="cb-btn" title="Уменьшить">−</button>
+          <span id="zoomStatus" class="cb-label cb-zoom-label">100%</span>
+          <button id="zoomIn" class="cb-btn" title="Увеличить">+</button>
+          <button id="fitWidth" class="cb-btn" title="По ширине">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 8h12M2 8l3-3M2 8l3 3M14 8l-3-3M14 8l-3 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="fitPage" class="cb-btn" title="Вся страница">
+            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+          </button>
+          <button id="rotate" class="cb-btn" title="Повернуть 90°">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M13 7a5 5 0 10-1 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M14 4l-2 3h3" fill="currentColor"/></svg>
+          </button>
+        </div>
+
+        <div class="cb-spacer"></div>
+
+        <!-- Tool selectors (open right panel) -->
+        <div class="cb-group cb-tools">
+          <button class="cb-tool-btn" data-tool="search" title="Поиск (Ctrl+F)">
+            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </button>
+          <button class="cb-tool-btn" data-tool="annotations" title="Аннотации">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2.5 11.5l8-8 2 2-8 8-3 1z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="cb-tool-btn" data-tool="text-ocr" title="Текст / OCR">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 4h10M3 8h7M3 12h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          </button>
+          <button class="cb-tool-btn" data-tool="forms" title="Формы PDF">
+            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5 7h6M5 10h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          </button>
+          <button class="cb-tool-btn" data-tool="tools" title="Инструменты">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M6.5 2.5a4 4 0 015 5l3 3-2 2-3-3a4 4 0 01-5-5l2 2 1.5-1.5z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
+          </button>
+          <button class="cb-tool-btn" data-tool="organize" title="Организация страниц">
+            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="8" y="1" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="1" y="9" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="8" y="9" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>
+          </button>
+        </div>
+
+        <div class="cb-sep"></div>
+
+        <!-- View controls -->
+        <div class="cb-group">
+          <button id="themeToggle" class="cb-btn" title="Сменить тему">
+            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 2.5v11a5.5 5.5 0 000-11z" fill="currentColor"/></svg>
+          </button>
+          <button id="fullscreen" class="cb-btn" title="Полный экран">
+            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+          <button id="toggleSidebar" class="cb-btn cb-toggle active" title="Левая панель">
+            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="2" width="13" height="12" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5.5 2v12" stroke="currentColor" stroke-width="1.2"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ROW 2, COL 1: Left Panel (thumbnails, bookmarks, outline)
+           ═══════════════════════════════════════════════════════ -->
+      <aside class="left-panel sidebar" id="sidebar">
+        <nav class="lp-tabs sidebar-tabs">
+          <button class="active" data-sidebar-tab="nav" title="Страницы">
+            <svg width="18" height="18" viewBox="0 0 18 18"><rect x="2" y="1" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="10" y="1" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="2" y="10" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="10" y="10" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+          </button>
+          <button data-sidebar-tab="bookmarks-tab" title="Закладки">
+            <svg width="18" height="18" viewBox="0 0 18 18"><path d="M4 2h10v14l-5-3-5 3z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
+          </button>
+          <button data-sidebar-tab="outline-tab" title="Структура">
+            <svg width="18" height="18" viewBox="0 0 18 18"><path d="M4 4h10M4 9h8M4 14h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           </button>
           <button data-sidebar-tab="notes" title="Заметки">
-            <span class="tab-icon">📝</span>
-            <span class="tab-label">Заметки</span>
+            <svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="2" width="12" height="14" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M6 6h6M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
           </button>
           <button data-sidebar-tab="analytics" title="Аналитика">
-            <span class="tab-icon">📊</span>
-            <span class="tab-label">Аналит.</span>
+            <svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="10" width="3" height="6" rx="0.5" stroke="currentColor" stroke-width="1" fill="none"/><rect x="7.5" y="6" width="3" height="10" rx="0.5" stroke="currentColor" stroke-width="1" fill="none"/><rect x="12" y="2" width="3" height="14" rx="0.5" stroke="currentColor" stroke-width="1" fill="none"/></svg>
           </button>
           <button data-sidebar-tab="settings" title="Настройки">
-            <span class="tab-icon">⚙</span>
-            <span class="tab-label">Настр.</span>
+            <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.3 3.3l1.4 1.4M13.3 13.3l1.4 1.4M3.3 14.7l1.4-1.4M13.3 4.7l1.4-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
           </button>
         </nav>
 
-        <!-- ═══ Tab: Navigation ═══ -->
+        <!-- Tab: Pages (thumbnails first!) -->
         <div class="sidebar-panel active" data-sidebar-panel="nav">
           <div class="sidebar-header">
             <h1>NovaReader</h1>
@@ -41,6 +132,11 @@
             <input id="fileInput" type="file" accept=".pdf,.djvu,.epub,.png,.jpg,.jpeg,.webp,.gif,.bmp" />
           </label>
 
+          <section data-sidebar-section="previews" class="lp-thumbnails-section">
+            <h2 class="section-toggle">Страницы</h2>
+            <ul id="pagePreviewList" class="thumbnail-grid"></ul>
+          </section>
+
           <section data-sidebar-section="recent">
             <h2 class="section-toggle">Недавние</h2>
             <ul id="recentList"></ul>
@@ -48,7 +144,10 @@
               <button id="clearRecent" class="btn-ghost btn-xs">Очистить</button>
             </div>
           </section>
+        </div>
 
+        <!-- Tab: Bookmarks -->
+        <div class="sidebar-panel" data-sidebar-panel="bookmarks-tab">
           <section data-sidebar-section="bookmarks">
             <h2 class="section-toggle">Закладки</h2>
             <ul id="bookmarkList"></ul>
@@ -72,19 +171,17 @@
             </div>
             <p id="bookmarksStatus" class="status-line"></p>
           </section>
+        </div>
 
+        <!-- Tab: Outline -->
+        <div class="sidebar-panel" data-sidebar-panel="outline-tab">
           <section data-sidebar-section="outline">
             <h2 class="section-toggle">Оглавление</h2>
             <ul id="outlineList"></ul>
           </section>
-
-          <section data-sidebar-section="previews">
-            <h2 class="section-toggle">Превью страниц</h2>
-            <ul id="pagePreviewList"></ul>
-          </section>
         </div>
 
-        <!-- ═══ Tab: Notes ═══ -->
+        <!-- Tab: Notes -->
         <div class="sidebar-panel" data-sidebar-panel="notes">
           <section data-sidebar-section="notes">
             <h2>Заметки</h2>
@@ -117,7 +214,6 @@
               </div>
             </div>
           </section>
-
           <section>
             <h2>Workspace</h2>
             <div class="section-actions">
@@ -130,7 +226,7 @@
           </section>
         </div>
 
-        <!-- ═══ Tab: Analytics ═══ -->
+        <!-- Tab: Analytics -->
         <div class="sidebar-panel" data-sidebar-panel="analytics">
           <section data-sidebar-section="progress">
             <h2 class="section-toggle">Прогресс чтения</h2>
@@ -148,7 +244,6 @@
               <button id="resetReadingTime" class="btn-ghost btn-xs">Сбросить время</button>
             </div>
           </section>
-
           <section data-sidebar-section="searchResults" class="advanced-section">
             <h2 class="section-toggle">Результаты поиска</h2>
             <ul id="searchResultsList"></ul>
@@ -179,7 +274,6 @@
               <button id="copySearchResults" class="btn-ghost btn-xs">Копировать</button>
             </div>
           </section>
-
           <section data-sidebar-section="searchHistory" class="advanced-section">
             <h2 class="section-toggle">История поиска</h2>
             <ul id="searchHistoryList"></ul>
@@ -198,12 +292,10 @@
               </label>
             </div>
           </section>
-
           <section class="advanced-section">
             <h2 class="section-toggle">Статистика</h2>
             <p id="docStats" class="status-line"></p>
           </section>
-
           <section class="advanced-section">
             <h2 class="section-toggle">Переходы</h2>
             <ul id="visitTrailList"></ul>
@@ -211,7 +303,6 @@
               <button id="clearVisitTrail" class="btn-ghost btn-xs">Очистить</button>
             </div>
           </section>
-
           <section class="advanced-section">
             <h2 class="section-toggle">Комментарии</h2>
             <ul id="commentList"></ul>
@@ -221,7 +312,7 @@
           </section>
         </div>
 
-        <!-- ═══ Tab: Settings ═══ -->
+        <!-- Tab: Settings -->
         <div class="sidebar-panel" data-sidebar-panel="settings">
           <section id="settingsSection">
             <h2>Настройки</h2>
@@ -238,7 +329,6 @@
             </div>
             <p id="settingsStatus" class="status-line"></p>
           </section>
-
           <section>
             <h2>Cloud &amp; Collab</h2>
             <label class="btn-ghost btn-xs file-inline">Импорт OCR .json
@@ -256,7 +346,6 @@
             </div>
             <p id="stage4Status" class="status-line"></p>
           </section>
-
           <section>
             <h2>Диагностика</h2>
             <div class="section-actions">
@@ -271,178 +360,27 @@
         </div>
       </aside>
 
-      <div id="sidebarResizeHandle" class="resize-handle resize-handle-vertical"></div>
-
-      <main class="viewer-area">
-        <!-- ═══ Top toolbar (simplified) ═══ -->
-        <header class="toolbar toolbar-top">
-          <div class="toolbar-group" data-toolbar-section="navigation">
-            <button id="historyBack" title="Назад в истории">←</button>
-            <button id="historyForward" title="Вперёд в истории">→</button>
-            <div class="tb-sep"></div>
-            <button id="prevPage" title="Предыдущая страница">◀</button>
-            <span id="pageStatus" class="tb-label">0 / 0</span>
-            <button id="nextPage" title="Следующая страница">▶</button>
-            <input id="pageInput" type="number" min="1" value="1" class="input-page" title="Номер страницы" />
-            <button id="goToPage" title="Перейти к странице">↵</button>
-          </div>
-
-          <div class="tb-sep" data-toolbar-section="navigation"></div>
-
-          <div class="toolbar-group" data-toolbar-section="zoom">
-            <button id="zoomOut" title="Уменьшить масштаб">−</button>
-            <span id="zoomStatus" class="tb-label">100%</span>
-            <button id="zoomIn" title="Увеличить масштаб">+</button>
-            <button id="fitWidth" title="По ширине окна">↔</button>
-            <button id="fitPage" title="Вся страница">⊡</button>
-            <button id="rotate" title="Повернуть на 90°">↻</button>
-          </div>
-
-          <div class="tb-sep" data-toolbar-section="zoom"></div>
-
-          <div class="toolbar-group" data-toolbar-section="view">
-            <button id="themeToggle" title="Сменить тему">◑</button>
-            <button id="fullscreen" title="Полный экран">⛶</button>
-            <button id="toggleSidebar" title="Показать/скрыть сайдбар" class="tb-toggle active">☰</button>
-            <button id="toggleToolsBar" title="Показать/скрыть инструменты" class="tb-toggle active">▤</button>
-            <button id="toggleTextTools" title="Текстовая панель" class="tb-toggle active">¶</button>
-          </div>
-        </header>
-
-        <!-- ═══ Bottom toolbar — tabbed ═══ -->
-        <div class="toolbar toolbar-bottom">
-          <nav class="bottom-tab-bar">
-            <button class="active" data-bottom-tab="search" title="Поиск по документу">🔍 Поиск</button>
-            <button data-bottom-tab="annot" title="Аннотации и рисование">✎ Аннотации</button>
-            <button data-bottom-tab="text" title="Текст и OCR">📄 Текст/OCR</button>
-            <button data-bottom-tab="tools" title="Инструменты PDF">📎 Инструменты</button>
-          </nav>
-
-          <!-- Tab: Search -->
-          <div class="bottom-tab-panel active" data-bottom-panel="search">
-            <input id="searchInput" type="text" placeholder="Поиск в документе…" />
-            <select id="searchScope">
-              <option value="all">Весь документ</option>
-              <option value="current">Текущая страница</option>
-            </select>
-            <button id="searchBtn">Найти</button>
-            <button id="searchPrev" title="Предыдущий результат">↑</button>
-            <button id="searchNext" title="Следующий результат">↓</button>
-            <span id="searchStatus" class="status-inline"></span>
-            <div class="tb-sep"></div>
-            <button id="toggleSearchTools" class="tb-toggle" title="Расширенный поиск">⌕</button>
-            <button id="downloadFile" title="Скачать файл">⬇ Скачать</button>
-            <button id="printPage" title="Печать страницы">🖨 Печать</button>
-            <button id="importDjvuDataQuick" class="is-hidden">DjVu</button>
-            <span id="docInfo" class="status-inline"></span>
-          </div>
-
-          <!-- Tab: Annotations -->
-          <div class="bottom-tab-panel" data-bottom-panel="annot" id="annotToolsGroup">
-            <button id="annotateToggle" class="tb-toggle">✎ Рисование</button>
-            <select id="drawTool">
-              <option value="pen">Перо</option>
-              <option value="highlighter">Маркер</option>
-              <option value="eraser">Ластик</option>
-              <option value="comment">💬 Коммент.</option>
-              <option value="rect">▭ Прямоуг.</option>
-              <option value="arrow">→ Стрелка</option>
-              <option value="line">╱ Линия</option>
-              <option value="circle">◯ Круг</option>
-            </select>
-            <input id="drawColor" type="color" value="#ffd84d" title="Цвет" />
-            <input id="drawSize" type="range" min="2" max="24" value="6" title="Толщина" />
-            <button id="undoStroke" title="Отменить">↩</button>
-            <button id="clearStrokes" title="Очистить аннотации">🗑</button>
-            <div class="tb-sep"></div>
-            <div class="dropdown">
-              <button class="btn-xs dropdown-trigger">Экспорт ▾</button>
-              <div class="dropdown-menu">
-                <button id="exportAnnotated">Экспорт PNG</button>
-                <button id="exportAnnSvg">Экспорт SVG</button>
-                <button id="exportAnnPdf">Экспорт PDF</button>
-                <button id="exportAnnJson">Экспорт страницы .json</button>
-                <button id="exportAnnBundle">Экспорт документа .json</button>
-              </div>
-            </div>
-            <div class="dropdown">
-              <button class="btn-xs dropdown-trigger">Импорт ▾</button>
-              <div class="dropdown-menu">
-                <label class="file-inline">Импорт страницы .json
-                  <input id="importAnnJson" type="file" accept="application/json,.json" />
-                </label>
-                <label class="file-inline">Импорт документа .json
-                  <input id="importAnnBundle" type="file" accept="application/json,.json" />
-                </label>
-              </div>
-            </div>
-            <button id="toggleAnnotTools" class="tb-toggle" title="Панель аннотаций">Панель</button>
-            <span id="annStats" class="status-inline"></span>
-          </div>
-
-          <!-- Tab: Text/OCR -->
-          <div class="bottom-tab-panel" data-bottom-panel="text">
-            <button id="refreshText" class="btn-xs" title="Извлечь текст страницы">Текст</button>
-            <button id="copyText" class="btn-xs" title="Копировать текст">📋 Копир.</button>
-            <button id="toggleTextEdit" class="btn-xs tb-toggle" title="Режим редактирования">Ред.</button>
-            <button id="saveTextEdits" class="btn-xs" title="Сохранить правки">💾</button>
-            <button id="undoTextEdit" class="btn-xs" title="Отмена">↩</button>
-            <button id="redoTextEdit" class="btn-xs" title="Повтор">↪</button>
-            <div class="tb-sep"></div>
-            <button id="ocrCurrentPage" class="btn-xs" title="Распознать текущую страницу">OCR</button>
-            <button id="ocrRegionMode" class="btn-xs tb-toggle" title="Выделить область для OCR">Область</button>
-            <button id="copyOcrText" class="btn-xs" title="Копировать OCR текст">📋 OCR</button>
-            <button id="cancelBackgroundOcr" class="btn-xs" title="Остановить фоновый OCR">⏹ Фон</button>
-            <button id="toggleOcrConfidence" class="btn-xs tb-toggle" title="Показать качество OCR">Качество</button>
-            <div class="tb-sep"></div>
-            <div class="dropdown">
-              <button class="btn-xs dropdown-trigger">Экспорт ▾</button>
-              <div class="dropdown-menu">
-                <button id="exportText">Экспорт .txt</button>
-                <button id="exportWord">Экспорт .docx</button>
-                <button id="exportOcrIndex">Экспорт OCR index</button>
-                <button id="exportHealthReport">Health Report</button>
-              </div>
-            </div>
-            <label class="btn-xs file-inline" title="Импорт DOCX">↙ .docx
-              <input id="importDocx" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
-            </label>
-            <button id="toggleTextToolsInline" class="btn-collapse" title="Свернуть текст-панель">▾</button>
-          </div>
-
-          <!-- Tab: Tools -->
-          <div class="bottom-tab-panel" data-bottom-panel="tools">
-            <button id="pdfFormFill" class="btn-xs" title="Заполнение форм PDF">Формы</button>
-            <div class="dropdown">
-              <button class="btn-xs dropdown-trigger">Формы ▾</button>
-              <div class="dropdown-menu">
-                <button id="pdfFormExport">Экспорт данных формы</button>
-                <label class="file-inline">Импорт данных формы
-                  <input id="pdfFormImport" type="file" accept="application/json,.json" />
-                </label>
-                <button id="pdfFormClear">Очистить формы</button>
-              </div>
-            </div>
-            <div class="tb-sep"></div>
-            <button id="pdfBlockEdit" class="btn-xs tb-toggle" title="Редактор блоков">Блоки</button>
-            <label class="btn-xs file-inline" title="Вставить изображение">🖼 Вставить
-              <input id="insertImageInput" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" />
-            </label>
-            <button id="addWatermark" class="btn-xs" title="Добавить водяной знак">💧 Знак</button>
-            <button id="addStamp" class="btn-xs" title="Добавить штамп">🔖 Штамп</button>
-            <button id="addSignature" class="btn-xs" title="Нарисовать подпись">✍ Подпись</button>
-            <div class="tb-sep"></div>
-            <button id="mergePages" class="btn-xs" title="Объединить PDF файлы">📎 Объединить</button>
-            <button id="splitPages" class="btn-xs" title="Разделить PDF по страницам">✂ Разделить</button>
-            <button id="addBookmarkToolbar" class="btn-xs" title="Добавить закладку">📑 Закладка</button>
-            <div class="tb-sep"></div>
-            <button id="conversionInvoice" class="btn-xs" title="Плагин: счёт-фактура">Счёт</button>
-            <button id="conversionReport" class="btn-xs" title="Плагин: отчёт">Отчёт</button>
-            <button id="conversionTable" class="btn-xs" title="Плагин: таблица">Таблица</button>
-          </div>
+      <!-- ═══════════════════════════════════════════════════════
+           ROW 2, COL 2: Document Viewport
+           ═══════════════════════════════════════════════════════ -->
+      <main class="document-viewport viewer-area" id="documentViewport">
+        <!-- Floating Search Bar (Ctrl+F) -->
+        <div class="search-floating" id="searchFloating">
+          <svg class="search-floating-icon" width="16" height="16" viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <input id="searchInput" type="text" placeholder="Поиск в документе…" class="search-floating-input" />
+          <select id="searchScope" class="search-floating-scope">
+            <option value="all">Весь документ</option>
+            <option value="current">Текущая стр.</option>
+          </select>
+          <button id="searchBtn" class="cb-btn" title="Найти">↵</button>
+          <button id="searchPrev" class="cb-btn" title="Предыдущий">▲</button>
+          <button id="searchNext" class="cb-btn" title="Следующий">▼</button>
+          <span id="searchStatus" class="search-floating-status"></span>
+          <button id="toggleSearchTools" class="cb-btn" title="Расширенный поиск">⌕</button>
+          <button id="closeSearch" class="cb-btn" title="Закрыть (Esc)">✕</button>
         </div>
 
-        <!-- ═══ Canvas ═══ -->
+        <!-- Canvas Area -->
         <section class="canvas-wrap" id="canvasWrap">
           <div class="canvas-stack" id="canvasStack">
             <canvas id="viewerCanvas"></canvas>
@@ -451,15 +389,217 @@
           </div>
           <p id="emptyState" class="empty-msg">Откройте PDF, DjVu, ePub или изображение для просмотра</p>
         </section>
-
-        <div id="canvasResizeHandle" class="resize-handle resize-handle-horizontal"></div>
-
-        <!-- ═══ Text tools panel ═══ -->
-        <section class="text-tools" id="textToolsSection">
-          <textarea id="pageText" readonly placeholder="Текст страницы появится здесь…"></textarea>
-          <p id="ocrStatus" class="status-line"></p>
-        </section>
       </main>
+
+      <!-- ═══════════════════════════════════════════════════════
+           ROW 2, COL 3: Right Panel (context tools)
+           ═══════════════════════════════════════════════════════ -->
+      <aside class="right-panel" id="rightPanel">
+        <div class="rp-header">
+          <span class="rp-title" id="rpTitle">Инструменты</span>
+          <button class="rp-close cb-btn" id="closeRightPanel" title="Закрыть панель">✕</button>
+        </div>
+
+        <!-- Panel: Annotations -->
+        <div class="rp-panel" data-rp-panel="annotations">
+          <div class="rp-section">
+            <h3 class="rp-section-title">Рисование</h3>
+            <div class="rp-tool-grid">
+              <button id="annotateToggle" class="rp-tool-btn tb-toggle" title="Включить рисование">✎ Рисование</button>
+            </div>
+            <div class="rp-controls">
+              <label class="rp-label">Инструмент
+                <select id="drawTool" class="rp-select">
+                  <option value="pen">Перо</option>
+                  <option value="highlighter">Маркер</option>
+                  <option value="eraser">Ластик</option>
+                  <option value="comment">💬 Комментарий</option>
+                  <option value="rect">▭ Прямоугольник</option>
+                  <option value="arrow">→ Стрелка</option>
+                  <option value="line">╱ Линия</option>
+                  <option value="circle">◯ Круг</option>
+                </select>
+              </label>
+              <label class="rp-label">Цвет
+                <input id="drawColor" type="color" value="#ffd84d" class="rp-color" />
+              </label>
+              <label class="rp-label">Толщина
+                <input id="drawSize" type="range" min="2" max="24" value="6" class="rp-range" />
+              </label>
+            </div>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">Действия</h3>
+            <div class="rp-actions">
+              <button id="undoStroke" class="btn-xs">↩ Отмена</button>
+              <button id="clearStrokes" class="btn-xs">🗑 Очистить</button>
+            </div>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">Экспорт / Импорт</h3>
+            <div class="rp-actions">
+              <button id="exportAnnotated" class="btn-xs">PNG</button>
+              <button id="exportAnnSvg" class="btn-xs">SVG</button>
+              <button id="exportAnnPdf" class="btn-xs">PDF</button>
+              <button id="exportAnnJson" class="btn-xs">JSON стр.</button>
+              <button id="exportAnnBundle" class="btn-xs">JSON док.</button>
+            </div>
+            <div class="rp-actions">
+              <label class="btn-xs file-inline">↙ Импорт стр.
+                <input id="importAnnJson" type="file" accept="application/json,.json" />
+              </label>
+              <label class="btn-xs file-inline">↙ Импорт док.
+                <input id="importAnnBundle" type="file" accept="application/json,.json" />
+              </label>
+            </div>
+            <span id="annStats" class="status-inline"></span>
+          </div>
+        </div>
+
+        <!-- Panel: Text/OCR -->
+        <div class="rp-panel" data-rp-panel="text-ocr">
+          <div class="rp-section">
+            <h3 class="rp-section-title">Текст страницы</h3>
+            <div class="rp-actions">
+              <button id="refreshText" class="btn-xs">Извлечь</button>
+              <button id="copyText" class="btn-xs">📋 Копировать</button>
+              <button id="toggleTextEdit" class="btn-xs tb-toggle">Редактирование</button>
+            </div>
+            <div class="rp-actions">
+              <button id="saveTextEdits" class="btn-xs">💾 Сохранить</button>
+              <button id="undoTextEdit" class="btn-xs">↩</button>
+              <button id="redoTextEdit" class="btn-xs">↪</button>
+            </div>
+            <textarea id="pageText" readonly placeholder="Текст страницы…" class="rp-textarea"></textarea>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">OCR Распознавание</h3>
+            <div class="rp-actions">
+              <button id="ocrCurrentPage" class="btn-xs btn-accent">OCR страницы</button>
+              <button id="ocrRegionMode" class="btn-xs tb-toggle">Область</button>
+              <button id="copyOcrText" class="btn-xs">📋 OCR</button>
+            </div>
+            <div class="rp-actions">
+              <button id="cancelBackgroundOcr" class="btn-xs">⏹ Остановить</button>
+              <button id="toggleOcrConfidence" class="btn-xs tb-toggle">Качество</button>
+            </div>
+            <p id="ocrStatus" class="status-line"></p>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">Экспорт</h3>
+            <div class="rp-actions">
+              <button id="exportText" class="btn-xs">📄 .txt</button>
+              <button id="exportWord" class="btn-xs">📝 .docx</button>
+              <button id="exportOcrIndex" class="btn-xs">OCR index</button>
+              <button id="exportHealthReport" class="btn-xs">Health</button>
+            </div>
+            <label class="btn-xs file-inline">↙ Импорт .docx
+              <input id="importDocx" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Panel: Forms -->
+        <div class="rp-panel" data-rp-panel="forms">
+          <div class="rp-section">
+            <h3 class="rp-section-title">PDF Формы</h3>
+            <div class="rp-actions">
+              <button id="pdfFormFill" class="btn-xs btn-accent">Заполнить формы</button>
+            </div>
+            <div class="rp-actions">
+              <button id="pdfFormExport" class="btn-xs">Экспорт данных</button>
+              <label class="btn-xs file-inline">Импорт данных
+                <input id="pdfFormImport" type="file" accept="application/json,.json" />
+              </label>
+              <button id="pdfFormClear" class="btn-xs">Очистить</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel: Tools -->
+        <div class="rp-panel" data-rp-panel="tools">
+          <div class="rp-section">
+            <h3 class="rp-section-title">Редактор блоков</h3>
+            <div class="rp-actions">
+              <button id="pdfBlockEdit" class="btn-xs tb-toggle btn-accent">Редактор блоков</button>
+              <label class="btn-xs file-inline">🖼 Вставить
+                <input id="insertImageInput" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" />
+              </label>
+            </div>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">Штампы и подписи</h3>
+            <div class="rp-actions">
+              <button id="addWatermark" class="btn-xs">💧 Водяной знак</button>
+              <button id="addStamp" class="btn-xs">🔖 Штамп</button>
+              <button id="addSignature" class="btn-xs">✍ Подпись</button>
+            </div>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">Документ</h3>
+            <div class="rp-actions">
+              <button id="mergePages" class="btn-xs">📎 Объединить PDF</button>
+              <button id="splitPages" class="btn-xs">✂ Разделить PDF</button>
+            </div>
+            <div class="rp-actions">
+              <button id="addBookmarkToolbar" class="btn-xs">📑 Закладка</button>
+              <button id="downloadFile" class="btn-xs">⬇ Скачать</button>
+              <button id="printPage" class="btn-xs">🖨 Печать</button>
+            </div>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">Конвертация</h3>
+            <div class="rp-actions">
+              <button id="conversionInvoice" class="btn-xs">Счёт</button>
+              <button id="conversionReport" class="btn-xs">Отчёт</button>
+              <button id="conversionTable" class="btn-xs">Таблица</button>
+            </div>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">Pro-инструменты</h3>
+            <div class="rp-actions">
+              <button id="pdfRedact" class="btn-xs">🔒 Редактирование</button>
+              <button id="pdfOptimize" class="btn-xs">📦 Оптимизировать</button>
+              <button id="pdfFlatten" class="btn-xs">📋 Выровнять</button>
+            </div>
+            <div class="rp-actions">
+              <button id="pdfAccessibility" class="btn-xs">♿ Доступность</button>
+              <button id="pdfCompare" class="btn-xs">🔍 Сравнить</button>
+              <button id="pdfHeaderFooter" class="btn-xs">📄 Колонтитулы</button>
+            </div>
+            <div class="rp-actions">
+              <button id="pdfBatesNumber" class="btn-xs">🔢 Нумерация Бейтса</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Panel: Page Organizer -->
+        <div class="rp-panel" data-rp-panel="organize">
+          <div class="rp-section">
+            <h3 class="rp-section-title">Организация страниц</h3>
+            <div class="rp-actions">
+              <button id="orgRotateCW" class="btn-xs">↻ Повернуть</button>
+              <button id="orgRotateCCW" class="btn-xs">↺ Против ЧС</button>
+              <button id="orgDelete" class="btn-xs">🗑 Удалить</button>
+            </div>
+            <div class="rp-actions">
+              <button id="orgExtract" class="btn-xs">📤 Извлечь</button>
+              <label class="btn-xs file-inline">📥 Вставить
+                <input id="orgInsertPages" type="file" accept=".pdf" />
+              </label>
+            </div>
+            <p class="status-line muted">Перетаскивайте миниатюры для переупорядочивания</p>
+          </div>
+        </div>
+
+        <!-- Panel: Search results detail -->
+        <div class="rp-panel" data-rp-panel="search">
+          <div class="rp-section">
+            <h3 class="rp-section-title">Результаты поиска</h3>
+            <div id="searchResultsRightPanel"></div>
+          </div>
+        </div>
+      </aside>
 
       <!-- ═══ Status Bar ═══ -->
       <footer class="status-bar" id="statusBar">
@@ -472,10 +612,24 @@
         <span class="status-bar-item" id="sbFileSize">—</span>
         <span class="status-bar-sep"></span>
         <span class="status-bar-item" id="sbReadingTime">Чтение: 0 мин</span>
+        <span class="status-bar-sep"></span>
+        <span class="status-bar-item" id="docInfo"></span>
       </footer>
     </div>
 
-    <!-- ═══ Settings Modal (tabbed) ═══ -->
+    <!-- Compatibility: hidden elements referenced by state.js -->
+    <div class="is-hidden" aria-hidden="true">
+      <button id="toggleToolsBar"></button>
+      <button id="toggleTextTools"></button>
+      <button id="toggleAnnotTools"></button>
+      <button id="toggleTextToolsInline"></button>
+      <div id="textToolsSection"></div>
+      <div id="sidebarResizeHandle"></div>
+      <div id="canvasResizeHandle"></div>
+      <button id="importDjvuDataQuick"></button>
+    </div>
+
+    <!-- ═══ Settings Modal ═══ -->
     <div id="settingsModal" class="modal" aria-hidden="true">
       <div class="modal-card">
         <div class="modal-head">
@@ -492,14 +646,13 @@
         </nav>
 
         <div class="modal-body">
-          <!-- Tab: General -->
           <div class="modal-tab-panel active" data-modal-panel="general">
             <section>
               <h4>Панели</h4>
-              <label class="checkbox-row"><input id="cfgShowSidebar" type="checkbox" checked /> <span>Сайдбар</span></label>
+              <label class="checkbox-row"><input id="cfgShowSidebar" type="checkbox" checked /> <span>Левая панель</span></label>
               <label class="checkbox-row"><input id="cfgShowSearch" type="checkbox" checked /> <span>Поиск</span></label>
               <label class="checkbox-row"><input id="cfgShowAnnot" type="checkbox" checked /> <span>Аннотации</span></label>
-              <label class="checkbox-row"><input id="cfgShowText" type="checkbox" checked /> <span>Текстовая панель</span></label>
+              <label class="checkbox-row"><input id="cfgShowText" type="checkbox" checked /> <span>Текст / OCR</span></label>
             </section>
             <section>
               <h4>Видимость разделов</h4>
@@ -508,29 +661,18 @@
             </section>
           </div>
 
-          <!-- Tab: Appearance -->
           <div class="modal-tab-panel" data-modal-panel="appearance">
             <section>
               <h4>Оформление</h4>
               <div class="settings-grid">
-                <label>Тема
-                  <select id="cfgTheme">
-                    <option value="dark">Тёмная</option>
-                    <option value="light">Светлая</option>
-                  </select>
-                </label>
-                <label>Язык
-                  <select id="cfgAppLang">
-                    <option value="ru">Русский</option>
-                    <option value="en">English</option>
-                  </select>
-                </label>
+                <label>Тема <select id="cfgTheme"><option value="dark">Тёмная</option><option value="light">Светлая</option></select></label>
+                <label>Язык <select id="cfgAppLang"><option value="ru">Русский</option><option value="en">English</option></select></label>
               </div>
             </section>
             <section>
               <h4>Размеры</h4>
               <div class="settings-grid">
-                <label>Сайдбар (px) <input id="cfgSidebarWidth" type="number" min="160" max="400" value="280" /></label>
+                <label>Левая панель (px) <input id="cfgSidebarWidth" type="number" min="160" max="400" value="260" /></label>
                 <label>Масштаб панели (%) <input id="cfgToolbarScale" type="number" min="10" max="100" value="100" /></label>
                 <label>Текст мин. (px) <input id="cfgTextMinHeight" type="number" min="24" max="180" value="50" /></label>
                 <label>Текст панель (px) <input id="cfgTextPanelHeight" type="number" min="72" max="400" value="140" /></label>
@@ -538,28 +680,19 @@
             </section>
           </div>
 
-          <!-- Tab: OCR -->
           <div class="modal-tab-panel" data-modal-panel="ocr">
             <section>
               <h4>Распознавание текста</h4>
               <div class="settings-grid">
                 <label>Язык OCR
                   <select id="cfgOcrLang">
-                    <option value="auto">Auto</option>
-                    <option value="rus">Русский</option>
-                    <option value="eng">English</option>
-                    <option value="deu">Deutsch</option>
-                    <option value="fra">Français</option>
-                    <option value="spa">Español</option>
-                    <option value="ita">Italiano</option>
-                    <option value="por">Português</option>
+                    <option value="auto">Auto</option><option value="rus">Русский</option><option value="eng">English</option>
+                    <option value="deu">Deutsch</option><option value="fra">Français</option><option value="spa">Español</option>
+                    <option value="ita">Italiano</option><option value="por">Português</option>
                   </select>
                 </label>
                 <label>Точность
-                  <select id="cfgOcrQualityMode">
-                    <option value="balanced">Баланс</option>
-                    <option value="accurate">Точность</option>
-                  </select>
+                  <select id="cfgOcrQualityMode"><option value="balanced">Баланс</option><option value="accurate">Точность</option></select>
                 </label>
               </div>
               <label class="checkbox-row"><input id="cfgOcrCyrillicOnly" type="checkbox" checked /> <span>Кириллица: очищать латиницу</span></label>
@@ -584,7 +717,6 @@
             </section>
           </div>
 
-          <!-- Tab: Hotkeys -->
           <div class="modal-tab-panel" data-modal-panel="hotkeys">
             <section>
               <h4>Горячие клавиши</h4>
@@ -608,13 +740,12 @@
             </section>
           </div>
 
-          <!-- Tab: Advanced -->
           <div class="modal-tab-panel" data-modal-panel="advanced">
             <section>
               <h4>Продвинутые размеры</h4>
               <div class="settings-grid">
                 <label>Область просмотра (px) <input id="cfgPageAreaHeight" type="number" min="520" max="2600" value="860" /></label>
-                <label>Верх. панель (px) <input id="cfgTopToolbarHeight" type="number" min="28" max="72" value="44" /></label>
+                <label>Верх. панель (px) <input id="cfgTopToolbarHeight" type="number" min="28" max="72" value="40" /></label>
                 <label>Ниж. панель (px) <input id="cfgBottomToolbarHeight" type="number" min="48" max="220" value="86" /></label>
                 <label>Аннот. холст (%) <input id="cfgAnnotationCanvasScale" type="number" min="50" max="100" value="90" /></label>
               </div>
