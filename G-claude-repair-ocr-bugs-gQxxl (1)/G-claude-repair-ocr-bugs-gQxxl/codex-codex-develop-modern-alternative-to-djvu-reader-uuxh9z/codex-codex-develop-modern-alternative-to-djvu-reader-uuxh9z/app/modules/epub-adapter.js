@@ -126,6 +126,35 @@ function extractChapterTitle(html) {
   return null;
 }
 
+/** Extract CSS content referenced in the EPUB */
+function extractCssFromEpub(bytes, opfXml, basePath) {
+  const cssFiles = [];
+  const cssMatches = opfXml.matchAll(/<item\s[^>]*?href="([^"]*\.css)"[^>]*/gi);
+  for (const m of cssMatches) {
+    const href = basePath + m[1];
+    const content = extractFileFromZip(bytes, href);
+    if (content) cssFiles.push({ href, content });
+  }
+  // Also extract inline <style> from chapter HTML
+  return cssFiles;
+}
+
+/** Extract embedded fonts from the EPUB */
+function extractFontsFromEpub(bytes, opfXml, basePath) {
+  const fonts = [];
+  const fontMatches = opfXml.matchAll(/<item\s[^>]*?href="([^"]*\.(ttf|otf|woff|woff2))"[^>]*/gi);
+  for (const m of fontMatches) {
+    const href = basePath + m[1];
+    const data = extractBinaryFromZip(bytes, href);
+    if (data) {
+      const ext = m[2].toLowerCase();
+      const mimeTypes = { ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2' };
+      fonts.push({ href, data, mime: mimeTypes[ext] || 'font/ttf', name: href.split('/').pop() });
+    }
+  }
+  return fonts;
+}
+
 export async function parseEpub(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
 
@@ -147,7 +176,8 @@ export async function parseEpub(arrayBuffer) {
     if (content) {
       const title = extractChapterTitle(content);
       const text = stripHtmlTags(content);
-      chapters.push({ title: title || `Chapter ${chapters.length + 1}`, text, href: item.href });
+      // Preserve raw HTML for CSS rendering
+      chapters.push({ title: title || `Chapter ${chapters.length + 1}`, text, html: content, href: item.href });
     }
   }
 
@@ -159,7 +189,11 @@ export async function parseEpub(arrayBuffer) {
     }
   }
 
-  return { chapters, toc, bytes };
+  // Extract CSS and fonts
+  const css = extractCssFromEpub(bytes, opfXml, basePath);
+  const fonts = extractFontsFromEpub(bytes, opfXml, basePath);
+
+  return { chapters, toc, bytes, css, fonts };
 }
 
 function parseToc(ncxXml) {
@@ -171,6 +205,14 @@ function parseToc(ncxXml) {
   return items;
 }
 
+export const EPUB_READER_DEFAULTS = {
+  fontSize: 16,
+  lineHeight: 1.6,
+  fontFamily: 'serif',
+  marginH: 40,
+  theme: 'auto', // 'auto', 'light', 'dark', 'sepia'
+};
+
 export class EpubAdapter {
   constructor(epubData, fileName) {
     this.fileName = fileName;
@@ -178,7 +220,31 @@ export class EpubAdapter {
     this.chapters = epubData.chapters;
     this.toc = epubData.toc;
     this.epubBytes = epubData.bytes;
+    this.css = epubData.css || [];
+    this.fonts = epubData.fonts || [];
     this.pageCount = this.chapters.length || 1;
+    this.readerSettings = { ...EPUB_READER_DEFAULTS };
+    this._fontUrls = [];
+    this._loadFonts();
+  }
+
+  /** Load embedded fonts as blob URLs */
+  _loadFonts() {
+    for (const f of this.fonts) {
+      try {
+        const blob = new Blob([f.data], { type: f.mime });
+        const url = URL.createObjectURL(blob);
+        this._fontUrls.push(url);
+        const familyName = f.name.replace(/\.[^.]+$/, '');
+        const fontFace = new FontFace(familyName, `url(${url})`);
+        fontFace.load().then(loaded => document.fonts.add(loaded)).catch(() => {});
+      } catch {}
+    }
+  }
+
+  /** Update reader settings */
+  setReaderSettings(settings) {
+    Object.assign(this.readerSettings, settings);
   }
 
   getPageCount() {
@@ -194,6 +260,7 @@ export class EpubAdapter {
 
   async renderPage(pageNumber, canvas, { zoom, rotation }) {
     const chapter = this.chapters[pageNumber - 1];
+    const rs = this.readerSettings;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
     const baseW = 800;
     const baseH = 1100;
@@ -224,33 +291,34 @@ export class EpubAdapter {
       ctx.translate(-w / 2, -h / 2);
     }
 
-    // Background
-    const isDark = document.body.classList.contains('theme-dark') || document.documentElement.dataset.theme === 'dark';
-    ctx.fillStyle = isDark ? '#1a1d23' : '#fffef8';
+    // Theme-aware background
+    const theme = rs.theme === 'auto' ? this._detectTheme() : rs.theme;
+    const colors = this._getThemeColors(theme);
+    ctx.fillStyle = colors.bg;
     ctx.fillRect(0, 0, w, h);
 
     if (!chapter) {
-      ctx.fillStyle = isDark ? '#9aa6b8' : '#666';
-      ctx.font = `${16 * zoom}px sans-serif`;
-      ctx.fillText('Empty chapter', 40 * zoom, 60 * zoom);
+      ctx.fillStyle = colors.muted;
+      ctx.font = `${16 * zoom}px ${rs.fontFamily}`;
+      ctx.fillText('Empty chapter', rs.marginH * zoom, 60 * zoom);
       ctx.restore();
       return;
     }
 
     // Title
-    const titleSize = Math.round(22 * zoom);
-    const bodySize = Math.round(14 * zoom);
-    const lineHeight = Math.round(bodySize * 1.6);
-    const margin = Math.round(40 * zoom);
+    const titleSize = Math.round((rs.fontSize + 8) * zoom);
+    const bodySize = Math.round(rs.fontSize * zoom);
+    const lineHeight = Math.round(bodySize * rs.lineHeight);
+    const margin = Math.round(rs.marginH * zoom);
     const maxWidth = w - margin * 2;
 
-    ctx.fillStyle = isDark ? '#e2e8f0' : '#1a1a1a';
-    ctx.font = `bold ${titleSize}px serif`;
+    ctx.fillStyle = colors.title;
+    ctx.font = `bold ${titleSize}px ${rs.fontFamily}`;
     ctx.fillText(chapter.title || `Chapter ${pageNumber}`, margin, margin + titleSize);
 
     // Body text
-    ctx.font = `${bodySize}px serif`;
-    ctx.fillStyle = isDark ? '#cbd5e1' : '#333';
+    ctx.font = `${bodySize}px ${rs.fontFamily}`;
+    ctx.fillStyle = colors.text;
 
     const text = chapter.text || '';
     const words = text.split(/\s+/);
@@ -276,6 +344,20 @@ export class EpubAdapter {
     }
 
     ctx.restore();
+  }
+
+  _detectTheme() {
+    if (document.body.classList.contains('sepia')) return 'sepia';
+    if (document.body.classList.contains('light')) return 'light';
+    return 'dark';
+  }
+
+  _getThemeColors(theme) {
+    switch (theme) {
+      case 'light': return { bg: '#fffef8', text: '#333', title: '#1a1a1a', muted: '#666' };
+      case 'sepia': return { bg: '#f5ead0', text: '#3a2e1a', title: '#2a1e0a', muted: '#7a6e5a' };
+      case 'dark': default: return { bg: '#1a1d23', text: '#cbd5e1', title: '#e2e8f0', muted: '#9aa6b8' };
+    }
   }
 
   async getText(pageNumber) {

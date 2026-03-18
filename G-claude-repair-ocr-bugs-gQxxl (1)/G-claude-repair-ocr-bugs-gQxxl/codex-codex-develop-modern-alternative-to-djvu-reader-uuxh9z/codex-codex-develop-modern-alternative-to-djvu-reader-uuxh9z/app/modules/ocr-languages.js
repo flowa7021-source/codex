@@ -96,6 +96,69 @@ const languageProfiles = {
       [/\be\b(?=[a-z])/g, 'é'],
     ],
   },
+  // ─── New languages (Phase 3.2) ──────────────────────────────────────────
+  chi_sim: {
+    name: 'Chinese (Simplified)',
+    alphabet: /[\u4e00-\u9fff]/g,
+    commonWords: ['的', '是', '了', '在', '不', '和', '有', '这', '人', '中', '大', '为', '上', '个', '国', '我', '以', '要', '他', '时', '来', '用', '们', '到', '说', '她', '作', '会', '着', '就'],
+    fixes: [],
+  },
+  chi_tra: {
+    name: 'Chinese (Traditional)',
+    alphabet: /[\u4e00-\u9fff\u3400-\u4dbf]/g,
+    commonWords: ['的', '是', '了', '在', '不', '和', '有', '這', '人', '中', '大', '為', '上', '個', '國', '我', '以', '要', '他', '時', '來', '用', '們', '到', '說', '她', '作', '會', '著', '就'],
+    fixes: [],
+  },
+  jpn: {
+    name: 'Japanese',
+    alphabet: /[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]/g,
+    commonWords: ['の', 'に', 'は', 'を', 'た', 'が', 'で', 'て', 'と', 'し', 'れ', 'さ', 'ある', 'いる', 'する', 'から', 'こと', 'この', 'それ', 'なる', 'ない', 'よう', 'もの', 'です', 'ます', 'その', 'ため', 'また', 'ども', 'など'],
+    fixes: [],
+  },
+  kor: {
+    name: 'Korean',
+    alphabet: /[\uac00-\ud7af\u1100-\u11ff]/g,
+    commonWords: ['이', '는', '을', '의', '에', '가', '하', '는', '고', '다', '한', '로', '에서', '과', '도', '수', '들', '그', '것', '이다', '위', '와', '않', '대', '되', '후', '무', '사', '전', '주'],
+    fixes: [],
+  },
+  ara: {
+    name: 'Arabic',
+    alphabet: /[\u0600-\u06ff\u0750-\u077f]/g,
+    commonWords: ['في', 'من', 'على', 'إلى', 'أن', 'هذا', 'التي', 'هو', 'الذي', 'كان', 'عن', 'أو', 'ما', 'مع', 'بين', 'هي', 'لا', 'بعد', 'كل', 'ذلك', 'عند', 'قد', 'لم', 'ثم', 'حتى', 'تم', 'يا', 'منذ', 'أيضا', 'فقط'],
+    fixes: [],
+  },
+  hin: {
+    name: 'Hindi',
+    alphabet: /[\u0900-\u097f]/g,
+    commonWords: ['का', 'के', 'में', 'है', 'की', 'को', 'और', 'से', 'ने', 'पर', 'एक', 'यह', 'कि', 'हैं', 'भी', 'नहीं', 'तो', 'कर', 'था', 'हो', 'वह', 'इस', 'या', 'अपने', 'जो', 'बाद', 'साथ', 'अब', 'उन', 'गया'],
+    fixes: [],
+  },
+  tur: {
+    name: 'Turkish',
+    alphabet: /[A-Za-zÇçĞğİıÖöŞşÜü]/g,
+    commonWords: ['bir', 'bu', 've', 'de', 'için', 'ile', 'da', 'olan', 'olarak', 'en', 'gibi', 'daha', 'çok', 'var', 'sonra', 'ne', 'kadar', 'üzerinde', 'ancak', 'yıl', 'ise', 'tarafından', 'ya', 'her', 'den', 'ama', 'bunu', 'arasında', 'önce', 'büyük'],
+    fixes: [
+      [/\brn/g, 'm'],
+      [/I/g, 'İ'],
+    ],
+  },
+  pol: {
+    name: 'Polish',
+    alphabet: /[A-Za-zĄąĆćĘęŁłŃńÓóŚśŹźŻż]/g,
+    commonWords: ['i', 'w', 'na', 'nie', 'z', 'się', 'do', 'to', 'że', 'jest', 'jak', 'ale', 'co', 'o', 'tak', 'za', 'od', 'już', 'po', 'by', 'ze', 'czy', 'tylko', 'jego', 'jej', 'ich', 'gdy', 'ten', 'może', 'tego'],
+    fixes: [
+      [/\brn/g, 'm'],
+      [/l\b/g, 'ł'],
+    ],
+  },
+  ces: {
+    name: 'Czech',
+    alphabet: /[A-Za-záčďéěíňóřšťúůýžÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ]/g,
+    commonWords: ['a', 'v', 'je', 'na', 'se', 'že', 'to', 'z', 'do', 'pro', 'ale', 'si', 'o', 's', 'jako', 'jeho', 'byl', 'by', 'tak', 'po', 'jsou', 'jak', 'i', 'nebo', 'ten', 'už', 'za', 'když', 'být', 'co'],
+    fixes: [
+      [/\brn/g, 'm'],
+    ],
+  },
 };
 
 export function getLanguageProfile(lang) {

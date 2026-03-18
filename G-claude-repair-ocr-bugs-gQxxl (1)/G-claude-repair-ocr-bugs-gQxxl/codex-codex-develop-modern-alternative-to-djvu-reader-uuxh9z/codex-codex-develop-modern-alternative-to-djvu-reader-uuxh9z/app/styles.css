@@ -1690,3 +1690,134 @@ body.high-contrast .cb-tool-btn {
     --viewport-bg: #d5d7dc;
   }
 }
+
+/* ═══════════════════════════════════════════════════
+   Enhanced Zoom
+   ═══════════════════════════════════════════════════ */
+.marquee-zoom-overlay {
+  position: absolute;
+  border: 2px dashed var(--accent);
+  background: rgba(79, 156, 255, 0.08);
+  pointer-events: none;
+  z-index: 20;
+  display: none;
+}
+.zoom-presets {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.zoom-preset-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.zoom-preset-btn:hover { background: var(--panel-2); }
+.zoom-preset-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* ═══════════════════════════════════════════════════
+   Minimap
+   ═══════════════════════════════════════════════════ */
+.minimap {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 100px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  z-index: 15;
+  opacity: 0.85;
+  transition: opacity 0.15s;
+}
+.minimap:hover { opacity: 1; }
+.minimap-canvas { width: 100%; display: block; }
+.minimap-viewport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border: 2px solid var(--accent);
+  background: rgba(79, 156, 255, 0.12);
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════
+   Thumbnail Grid
+   ═══════════════════════════════════════════════════ */
+.thumbnail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+  padding: 8px;
+}
+.thumbnail-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.thumbnail-cell:hover { border-color: var(--accent); }
+.thumbnail-canvas { width: 100%; height: auto; border-radius: 2px; }
+.thumbnail-label { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+/* ═══════════════════════════════════════════════════
+   Touch / Mobile Enhancements
+   ═══════════════════════════════════════════════════ */
+body.touch-device .cb-btn,
+body.touch-device .cb-tool-btn {
+  min-width: 44px;
+  min-height: 44px;
+}
+body.touch-device .btn-xs {
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+}
+body.touch-device .dropdown-item {
+  min-height: 44px;
+  padding: 10px 14px;
+}
+body.touch-device .ctx-item {
+  min-height: 44px;
+  padding: 10px 14px;
+}
+body.virtual-keyboard-open .status-bar {
+  display: none;
+}
+body.virtual-keyboard-open .command-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* Swipe indicator */
+.swipe-indicator {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.5);
+  color: #fff;
+  border-radius: 8px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 50;
+}
+.swipe-indicator.left { left: 8px; }
+.swipe-indicator.right { right: 8px; }

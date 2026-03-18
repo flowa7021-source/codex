@@ -37,6 +37,10 @@ import { undoRedoManager, bindUndoRedoKeys } from './modules/undo-redo.js';
 import { VIEW_MODES, initViewModes, setViewMode, getCurrentMode, navigateInMode, getTwoUpPages, renderTwoUp } from './modules/view-modes.js';
 import { preprocessForOcr } from './modules/ocr-preprocess.js';
 import { convertToHtml, downloadHtml } from './modules/html-converter.js';
+import { initEnhancedZoom, ZOOM_PRESETS, zoomToNextPreset, zoomToPrevPreset, zoomToPreset, smoothZoomTo, startMarqueeZoom, saveDocumentZoom, loadDocumentZoom } from './modules/enhanced-zoom.js';
+import { initTouchGestures, isTouchDevice, setupVirtualKeyboardAdaptation } from './modules/touch-gestures.js';
+import { saveReadingPosition, loadReadingPosition, initMinimap, updateMinimap, setupLinkFollowing, renderThumbnailGrid } from './modules/navigation.js';
+import { batchConverter } from './modules/batch-convert.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -9841,6 +9845,41 @@ window._viewModes = { setViewMode, getCurrentMode, VIEW_MODES };
     toastSuccess('Экспорт HTML завершён');
   });
 })();
+
+// ─── Initialize Enhanced Zoom ────────────────────────────────────────────────
+initEnhancedZoom({
+  getZoom: () => state.zoom,
+  setZoom: (z) => { state.zoom = z; els.zoomStatus.textContent = `${Math.round(z * 100)}%`; },
+  render: () => renderCurrentPage(),
+  canvasWrap: els.canvasWrap,
+  canvas: els.canvas,
+});
+
+// ─── Initialize Touch Gestures ───────────────────────────────────────────────
+initTouchGestures({
+  nextPage: () => els.nextPage?.click(),
+  prevPage: () => els.prevPage?.click(),
+  viewport: document.querySelector('.document-viewport'),
+});
+setupVirtualKeyboardAdaptation();
+
+// ─── Initialize Minimap ──────────────────────────────────────────────────────
+initMinimap(
+  document.querySelector('.document-viewport'),
+  els.canvas,
+  els.canvasWrap
+);
+
+// ─── Save/Restore Reading Position ───────────────────────────────────────────
+window.addEventListener('beforeunload', () => {
+  if (state.docName && state.currentPage) {
+    saveReadingPosition(state.docName, { page: state.currentPage, zoom: state.zoom });
+  }
+});
+
+// Expose enhanced zoom & batch converter
+window._enhancedZoom = { ZOOM_PRESETS, zoomToPreset, startMarqueeZoom, smoothZoomTo };
+window._batchConverter = batchConverter;
 
 // ─── Expose globals for E2E testing and diagnostics ──────────────────────────
 window.crashTelemetry = crashTelemetry;
