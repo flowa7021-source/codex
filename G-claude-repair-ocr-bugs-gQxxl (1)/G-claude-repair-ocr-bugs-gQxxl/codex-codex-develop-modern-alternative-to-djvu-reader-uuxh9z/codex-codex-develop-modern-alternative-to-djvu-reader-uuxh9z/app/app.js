@@ -41,6 +41,13 @@ import { initEnhancedZoom, ZOOM_PRESETS, zoomToNextPreset, zoomToPrevPreset, zoo
 import { initTouchGestures, isTouchDevice, setupVirtualKeyboardAdaptation } from './modules/touch-gestures.js';
 import { saveReadingPosition, loadReadingPosition, initMinimap, updateMinimap, setupLinkFollowing, renderThumbnailGrid } from './modules/navigation.js';
 import { batchConverter } from './modules/batch-convert.js';
+import { applyTextEdits, addTextBlock, findAndReplace, spellCheck, getAvailableFonts } from './modules/pdf-text-edit.js';
+import { setPassword, cleanMetadata, getSecurityInfo, sanitizePdf } from './modules/pdf-security.js';
+import { correctOcrText, buildDictionary, computeBigramFreqs, recoverParagraphs, computeQualityScore } from './modules/ocr-post-correct.js';
+import { extractTextInReadingOrder, extractMultiPageText, downloadText } from './modules/text-extractor.js';
+import { WorkerPool, initOcrPool, getOcrPool, runInWorker } from './modules/worker-pool.js';
+import { openDatabase, cachePageRender, getCachedPageRender, cacheOcrResult, getCachedOcrResult, saveAnnotations, loadAnnotations, clearDocumentCache, getStorageUsage, clearAllCache } from './modules/indexed-storage.js';
+import { initErrorHandler, reportError, classifyError, registerRecovery, onError, saveStateSnapshot, restoreStateSnapshot, withRetry, getErrorLog, ERROR_CODES } from './modules/error-handler.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -9881,9 +9888,119 @@ window.addEventListener('beforeunload', () => {
 window._enhancedZoom = { ZOOM_PRESETS, zoomToPreset, startMarqueeZoom, smoothZoomTo };
 window._batchConverter = batchConverter;
 
+// ─── Initialize Error Handler ─────────────────────────────────────────────
+initErrorHandler();
+registerRecovery(ERROR_CODES.MEMORY, () => {
+  clearPageRenderCache();
+  revokeAllTrackedUrls();
+  toastWarning('Нехватка памяти — кэш очищен');
+});
+registerRecovery(ERROR_CODES.RENDER, () => {
+  toastInfo('Ошибка рендеринга — повторная попытка...');
+  try { renderCurrentPage(); } catch {}
+});
+onError((err) => {
+  if (err.severity === 'fatal') {
+    toastError(`Критическая ошибка: ${err.message}`);
+  }
+});
+
+// ─── Initialize IndexedDB ─────────────────────────────────────────────────
+openDatabase().catch(() => { /* IndexedDB not available */ });
+
+// ─── PDF Text Edit Button Handler ─────────────────────────────────────────
+(function initTextEditUI() {
+  const findReplaceBtn = document.getElementById('pdfFindReplace');
+  if (!findReplaceBtn) return;
+  findReplaceBtn.addEventListener('click', async () => {
+    if (!state.pdfBytes || state.pageCount === 0) {
+      toastWarning('Откройте PDF документ');
+      return;
+    }
+    const search = prompt('Найти текст:');
+    if (!search) return;
+    const replace = prompt('Заменить на:');
+    if (replace === null) return;
+    try {
+      const result = await findAndReplace(state.pdfBytes, search, replace);
+      if (result.replacements > 0) {
+        state.pdfBytes = new Uint8Array(await result.blob.arrayBuffer());
+        renderCurrentPage();
+        toastSuccess(`Заменено: ${result.replacements}`);
+      } else {
+        toastInfo('Совпадений не найдено');
+      }
+    } catch (err) {
+      toastError('Ошибка поиска/замены: ' + err.message);
+    }
+  });
+})();
+
+// ─── PDF Security Button Handler ──────────────────────────────────────────
+(function initSecurityUI() {
+  const cleanMetaBtn = document.getElementById('cleanMetadata');
+  if (!cleanMetaBtn) return;
+  cleanMetaBtn.addEventListener('click', async () => {
+    if (!state.pdfBytes) { toastWarning('Откройте PDF документ'); return; }
+    try {
+      const result = await cleanMetadata(state.pdfBytes);
+      state.pdfBytes = new Uint8Array(await result.blob.arrayBuffer());
+      toastSuccess(`Метаданные удалены: ${result.removed.join(', ')}`);
+    } catch (err) {
+      toastError('Ошибка: ' + err.message);
+    }
+  });
+
+  const sanitizeBtn = document.getElementById('sanitizePdf');
+  if (!sanitizeBtn) return;
+  sanitizeBtn.addEventListener('click', async () => {
+    if (!state.pdfBytes) { toastWarning('Откройте PDF документ'); return; }
+    try {
+      const result = await sanitizePdf(state.pdfBytes);
+      state.pdfBytes = new Uint8Array(await result.blob.arrayBuffer());
+      toastSuccess(`Санитизировано: ${result.sanitized.join(', ') || 'ничего не найдено'}`);
+    } catch (err) {
+      toastError('Ошибка: ' + err.message);
+    }
+  });
+})();
+
+// ─── Plain Text Export Handler ────────────────────────────────────────────
+(function initTextExport() {
+  const btn = document.getElementById('exportPlainText');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!state.adapter || state.pageCount === 0) return;
+    const progress = toastProgress('Извлечение текста...', 0);
+    try {
+      let allText = '';
+      for (let i = 1; i <= state.pageCount; i++) {
+        const text = await extractTextForPage(i);
+        allText += `--- Страница ${i} ---\n${text || ''}\n\n`;
+        progress.update(Math.round((i / state.pageCount) * 100));
+      }
+      const filename = (state.docName || 'document').replace(/\.[^.]+$/, '') + '.txt';
+      downloadText(allText, filename);
+      progress.update(100);
+      setTimeout(() => progress.dismiss(), 500);
+      toastSuccess('Текст экспортирован');
+    } catch (err) {
+      progress.dismiss();
+      toastError('Ошибка экспорта: ' + err.message);
+    }
+  });
+})();
+
 // ─── Expose globals for E2E testing and diagnostics ──────────────────────────
 window.crashTelemetry = crashTelemetry;
 window.ocrSearchIndex = ocrSearchIndex;
 window.searchOcrIndex = searchOcrIndex;
 window.pageRenderCache = pageRenderCache;
 window.objectUrlRegistry = objectUrlRegistry;
+window._pdfSecurity = { setPassword, cleanMetadata, getSecurityInfo, sanitizePdf };
+window._textEdit = { applyTextEdits, addTextBlock, findAndReplace, spellCheck, getAvailableFonts };
+window._ocrCorrect = { correctOcrText, buildDictionary, recoverParagraphs, computeQualityScore };
+window._textExtractor = { extractTextInReadingOrder, extractMultiPageText, downloadText };
+window._workerPool = { WorkerPool, initOcrPool, getOcrPool, runInWorker };
+window._indexedStorage = { openDatabase, cachePageRender, getCachedPageRender, clearDocumentCache, getStorageUsage, clearAllCache };
+window._errorHandler = { reportError, getErrorLog, withRetry, saveStateSnapshot, restoreStateSnapshot };

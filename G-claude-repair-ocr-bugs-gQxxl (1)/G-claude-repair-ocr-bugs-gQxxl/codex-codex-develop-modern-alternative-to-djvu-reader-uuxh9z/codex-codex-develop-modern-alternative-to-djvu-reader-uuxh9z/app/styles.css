@@ -1821,3 +1821,107 @@ body.virtual-keyboard-open .command-bar {
 }
 .swipe-indicator.left { left: 8px; }
 .swipe-indicator.right { right: 8px; }
+
+/* ═══════════════════════════════════════════════════
+   Error Handler Overlay
+   ═══════════════════════════════════════════════════ */
+.error-recovery-toast {
+  border-left: 3px solid var(--danger, #e53935);
+}
+.error-recovery-toast .retry-btn {
+  background: var(--danger, #e53935);
+  color: #fff;
+  border: none;
+  padding: 4px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.75rem;
+  margin-top: 4px;
+}
+.error-recovery-toast .retry-btn:hover {
+  opacity: 0.85;
+}
+
+/* ═══════════════════════════════════════════════════
+   PDF Security Indicators
+   ═══════════════════════════════════════════════════ */
+.security-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.security-badge.protected {
+  background: rgba(76, 175, 80, 0.15);
+  color: #4caf50;
+}
+.security-badge.sanitized {
+  background: rgba(33, 150, 243, 0.15);
+  color: #2196f3;
+}
+
+/* ═══════════════════════════════════════════════════
+   OCR Post-Correction Highlights
+   ═══════════════════════════════════════════════════ */
+.ocr-correction {
+  background: rgba(255, 193, 7, 0.2);
+  border-bottom: 1px dashed #ffc107;
+  cursor: help;
+  position: relative;
+}
+.ocr-correction:hover::after {
+  content: attr(data-original);
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  background: var(--panel-2);
+  color: var(--text-primary);
+  padding: 2px 6px;
+  border-radius: var(--radius);
+  font-size: 0.7rem;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  z-index: 10;
+}
+
+/* ═══════════════════════════════════════════════════
+   Text Extractor / Reading Order Preview
+   ═══════════════════════════════════════════════════ */
+.text-extract-preview {
+  max-height: 400px;
+  overflow-y: auto;
+  background: var(--panel-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  font-family: monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════════
+   Storage Usage Indicator
+   ═══════════════════════════════════════════════════ */
+.storage-bar {
+  height: 6px;
+  background: var(--panel-2);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+.storage-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.storage-info {
+  font-size: 0.7rem;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+}

@@ -554,11 +554,29 @@
               <button id="exportWord" class="btn-xs">📝 .docx</button>
               <button id="exportHtml" class="btn-xs">🌐 .html</button>
               <button id="exportOcrIndex" class="btn-xs">OCR index</button>
+              <button id="exportPlainText" class="btn-xs">📋 Текст (умный)</button>
               <button id="exportHealthReport" class="btn-xs">Health</button>
             </div>
             <label class="btn-xs file-inline">↙ Импорт .docx
               <input id="importDocx" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
             </label>
+          </div>
+
+          <!-- PDF Text Edit -->
+          <div class="rp-section">
+            <h3 class="rp-section-title">Редактирование текста</h3>
+            <div class="rp-actions">
+              <button id="pdfFindReplace" class="btn-xs">🔍 Найти/Заменить</button>
+            </div>
+          </div>
+
+          <!-- PDF Security -->
+          <div class="rp-section">
+            <h3 class="rp-section-title">Безопасность PDF</h3>
+            <div class="rp-actions">
+              <button id="cleanMetadata" class="btn-xs">🧹 Очистить метаданные</button>
+              <button id="sanitizePdf" class="btn-xs">🛡 Санитизировать</button>
+            </div>
           </div>
         </div>
 
