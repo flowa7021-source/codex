@@ -2,6 +2,11 @@
 // Pluggable cloud storage: Google Drive, OneDrive, Dropbox.
 // Each provider implements a common interface for open/save/list operations.
 
+/** @type {'stub'|'partial'|'ready'} Module readiness status */
+export const MODULE_STATUS = 'stub';
+/** What's needed to make this module functional */
+export const MODULE_REQUIRES = ['Google OAuth2 Client ID', 'Microsoft MSAL config', 'Dropbox App Key'];
+
 /**
  * @typedef {object} CloudFile
  * @property {string} id

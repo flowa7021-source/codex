@@ -2,6 +2,11 @@
 // Smart summary, auto-tagging, semantic search, auto-TOC generation.
 // Uses pluggable AI backend (local heuristics + optional API).
 
+/** @type {'stub'|'partial'|'ready'} Module readiness — 'partial' = heuristic-only, no AI API */
+export const MODULE_STATUS = 'partial';
+/** What's needed for full functionality */
+export const MODULE_REQUIRES = ['AI API endpoint (optional — heuristics work offline)'];
+
 /**
  * @typedef {object} AiBackend
  * @property {string} name

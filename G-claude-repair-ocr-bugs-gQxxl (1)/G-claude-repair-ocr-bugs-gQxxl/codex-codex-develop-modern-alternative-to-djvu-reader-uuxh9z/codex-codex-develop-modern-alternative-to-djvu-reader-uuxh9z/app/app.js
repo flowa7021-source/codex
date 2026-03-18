@@ -73,7 +73,8 @@ import { AnnotationController } from './modules/annotations-core.js';
 import { getPageInfoList, reorderPages, deletePages, rotatePages, extractPages, insertPages, insertBlankPage, duplicatePages, reversePages, createOrganizerState, togglePageSelection, selectPageRange, computeReorderFromDrag } from './modules/page-organizer.js';
 import { initFloatingSearch } from './modules/floating-search.js';
 import { XpsAdapter, parseXps } from './modules/xps-adapter.js';
-import { registerProvider, getProviders, authenticate, listFiles, openFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider } from './modules/cloud-integration.js';
+import { registerProvider, getProviders, authenticate, listFiles, openFile as cloudOpenFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider, MODULE_STATUS as CLOUD_STATUS } from './modules/cloud-integration.js';
+import { MODULE_STATUS as AI_STATUS } from './modules/ai-features.js';
 import { summarizeText, extractTags, semanticSearch, generateToc } from './modules/ai-features.js';
 import { nrPrompt, nrConfirm } from './modules/modal-prompt.js';
 import { AsyncLock } from './modules/async-lock.js';
@@ -10869,6 +10870,30 @@ window.addEventListener('memory-warning', (e) => {
   toastWarning(`Высокое потребление памяти: ${e.detail.usedMB} МБ`);
   forceCleanup();
 });
+
+// ─── Q2.3: Graceful degradation for stub/partial modules ─────────────────
+{
+  // Cloud integration is a stub — disable cloud UI elements
+  if (CLOUD_STATUS === 'stub') {
+    const cloudBtns = [els.pushCloudSync, els.pullCloudSync, els.saveCloudSyncUrl];
+    for (const btn of cloudBtns) {
+      if (btn) {
+        btn.disabled = true;
+        btn.title = 'Облачная интеграция: требуется настройка OAuth2';
+      }
+    }
+    const cloudInput = document.getElementById('cloudSyncUrl');
+    if (cloudInput) {
+      cloudInput.disabled = true;
+      cloudInput.placeholder = 'Cloud: требуется настройка (stub)';
+    }
+  }
+  // AI features are partial (heuristic-only) — show notice
+  if (AI_STATUS === 'partial') {
+    const aiBtn = document.getElementById('aiSummarize');
+    if (aiBtn) aiBtn.title = 'AI: локальная эвристика (без внешнего API)';
+  }
+}
 
 // ─── Initialize Drag & Drop ──────────────────────────────────────────────
 initDragDrop({

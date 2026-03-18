@@ -3,6 +3,10 @@
 // Header/Footer, Bates Numbering, Flatten, Accessibility Checker
 // ═══════════════════════════════════════════════════════════════════════
 
+/** @type {'stub'|'partial'|'ready'} */
+export const MODULE_STATUS = 'partial';
+export const MODULE_REQUIRES = ['Header/footer templates partially implemented'];
+
 import { PDFDocument, rgb, StandardFonts, degrees, PDFName, PDFDict, PDFArray } from 'pdf-lib';
 
 // ─────────────────────────────────────────────────────────────────────
