@@ -145,12 +145,11 @@ describe('recoverParagraphs', () => {
     assert.ok(result.includes('First paragraph.\n\nSecond paragraph.'));
   });
 
-  it('handles hyphenation by removing trailing hyphen', () => {
+  it('handles hyphenation by merging split words', () => {
     const text = 'This is a hyphen-\nated word here.';
     const result = recoverParagraphs(text);
-    // Hyphen removed, next line merged: "hyphen" + " " + "ated word here."
     assert.ok(!result.includes('hyphen-'));
-    assert.ok(result.includes('hyphen ated'));
+    assert.ok(result.includes('hyphenated'));
   });
 
   it('handles empty input', () => {

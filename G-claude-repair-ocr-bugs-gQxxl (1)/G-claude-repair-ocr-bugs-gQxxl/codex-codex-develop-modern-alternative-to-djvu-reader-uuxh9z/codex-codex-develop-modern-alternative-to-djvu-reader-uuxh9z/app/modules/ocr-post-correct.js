@@ -217,8 +217,17 @@ export function recoverParagraphs(text, options = {}) {
     if (line.endsWith('-') && i + 1 < lines.length) {
       const nextLine = lines[i + 1]?.trim();
       if (nextLine && /^[\p{Ll}]/u.test(nextLine)) {
-        // Merge hyphenated word
-        current.push(line.slice(0, -1));
+        // Merge hyphenated word: join prefix with start of next line
+        const firstSpaceIdx = nextLine.indexOf(' ');
+        if (firstSpaceIdx === -1) {
+          // Next line is a single word — concatenate entirely
+          current.push(line.slice(0, -1) + nextLine);
+        } else {
+          // Concatenate prefix with first word, keep rest of next line
+          current.push(line.slice(0, -1) + nextLine.slice(0, firstSpaceIdx));
+          current.push(nextLine.slice(firstSpaceIdx + 1));
+        }
+        i++; // skip next line (already consumed)
         continue;
       }
     }
