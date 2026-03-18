@@ -3705,6 +3705,12 @@ async function importAnnotationsJson(file) {
 }
 
 function showShortcutsHelp() {
+  // Use the new shortcuts modal if available, else fallback
+  if (window._novaShortcuts?.openShortcuts) {
+    window._novaShortcuts.openShortcuts();
+    return;
+  }
+  // Fallback: create inline modal
   const lines = [
     `След. страница — ${hotkeys.next}`,
     `Пред. страница — ${hotkeys.prev}`,
@@ -3714,11 +3720,12 @@ function showShortcutsHelp() {
     `По странице — ${hotkeys.fitPage}`,
     `Фокус поиска — ${hotkeys.searchFocus}`,
     `OCR страницы — ${hotkeys.ocrPage}`,
-    'Добавить закладку — Ctrl+B',
-    `Аннотации — ${hotkeys.annotate}`,
-    'Undo штриха — Ctrl+Z',
-    'Alt+← / Alt+→ — навигация по истории',
-    'Esc — выключить аннотации/OCR область',
+    'Ctrl+P — печать',
+    'Ctrl+Shift+O — оптимизация PDF',
+    'Ctrl+Shift+A — доступность',
+    'Ctrl+Shift+R — редактирование ПД',
+    'Ctrl+Shift+C — сравнение документов',
+    'Ctrl+Shift+B — пакетное OCR',
     '? — это окно',
   ];
   const overlay = document.createElement('div');
