@@ -2,7 +2,7 @@
 import { APP_VERSION, NOVAREADER_PLAN_PROGRESS_PERCENT, SIDEBAR_SECTION_CONFIG, TOOLBAR_SECTION_CONFIG, OCR_MIN_DPI, CSS_BASE_DPI, OCR_MAX_SIDE_PX, OCR_MAX_PIXELS, OCR_SLOW_TASK_WARN_MS, OCR_HANG_WARN_MS, OCR_SOURCE_MAX_PIXELS, OCR_SOURCE_CACHE_MAX_PIXELS, OCR_SOURCE_CACHE_TTL_MS } from './modules/constants.js';
 import { throttle, debounce, yieldToMainThread, loadImage, downloadBlob } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
-import { ensurePdfJs, ensureDjVuJs } from './modules/loaders.js';
+import { ensurePdfJs, ensureDjVuJs, getPdfjsLib } from './modules/loaders.js';
 import { perfMetrics, recordPerfMetric, getPerfSummary, cacheRenderedPage, getCachedPage, clearPageRenderCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
 import { ToolMode, toolStateMachine, activateAnnotateMode, deactivateAnnotateMode, activateOcrRegionMode, deactivateOcrRegionMode, activateTextEditMode, deactivateTextEditMode, activateSearchMode, deactivateSearchMode, initToolModeDeps } from './modules/tool-modes.js';
 import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
@@ -5438,10 +5438,105 @@ function safeCreateObjectURL(data) {
 // Stores OCR word-level data per page for reuse by DOCX export & search
 const _ocrWordCache = new Map();
 
+// Track active TextLayer instance for cleanup
+let _activeTextLayer = null;
+
+/**
+ * Render PDF.js AnnotationLayer (links, form widgets, etc.)
+ */
+async function _renderPdfAnnotationLayer(page, viewport) {
+  const container = els.pdfAnnotationLayer;
+  if (!container) return;
+  container.innerHTML = '';
+  container.style.width = `${viewport.width}px`;
+  container.style.height = `${viewport.height}px`;
+
+  const pdfjsLib = getPdfjsLib();
+  if (!pdfjsLib?.AnnotationLayer) return;
+
+  try {
+    const annotations = await page.getAnnotations({ intent: 'display' });
+    if (!annotations?.length) return;
+
+    const parameters = {
+      viewport: viewport.clone({ dontFlip: true }),
+      div: container,
+      annotations,
+      page,
+      linkService: {
+        getDestinationHash: (dest) => `#`,
+        getAnchorUrl: (hash) => hash,
+        addLinkAttributes: (link, url) => {
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+        },
+        isPageVisible: () => true,
+        isPageCached: () => true,
+      },
+      renderForms: false,
+    };
+
+    const annotationLayer = new pdfjsLib.AnnotationLayer(parameters);
+    await annotationLayer.render(parameters);
+  } catch (err) {
+    console.warn('AnnotationLayer render failed:', err);
+  }
+}
+
+/**
+ * Fallback: manual text layer rendering for older pdf.js without TextLayer class
+ */
+function _renderManualTextLayer(container, textContent, viewport, zoom) {
+  const fragment = document.createDocumentFragment();
+  const transform = viewport.transform;
+
+  for (const item of textContent.items) {
+    if (!item.str || !item.str.trim()) continue;
+
+    const span = document.createElement('span');
+    span.textContent = item.str;
+
+    // Apply viewport transform to get display coordinates
+    const tx = item.transform;
+    // PDF transform: [scaleX, skewY, skewX, scaleY, translateX, translateY]
+    const x = transform[0] * tx[4] + transform[2] * tx[5] + transform[4];
+    const y = transform[1] * tx[4] + transform[3] * tx[5] + transform[5];
+    const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
+    const scaledFontSize = fontSize * zoom;
+
+    span.style.left = `${x}px`;
+    span.style.top = `${y - scaledFontSize}px`;
+    span.style.fontSize = `${scaledFontSize}px`;
+    span.style.fontFamily = item.fontName || 'sans-serif';
+    span.style.position = 'absolute';
+    span.style.whiteSpace = 'nowrap';
+    span.style.color = 'transparent';
+    span.style.lineHeight = '1';
+
+    if (item.width) {
+      span.style.width = `${item.width * zoom}px`;
+      span.style.letterSpacing = '0px';
+      span.style.overflow = 'hidden';
+    }
+
+    fragment.appendChild(span);
+  }
+
+  container.appendChild(fragment);
+}
+
 async function renderTextLayer(pageNum, zoom, rotation) {
   const container = els.textLayerDiv;
   if (!container) return;
+
+  // Clean up previous TextLayer instance
+  if (_activeTextLayer) {
+    try { _activeTextLayer.cancel(); } catch { /* already done */ }
+    _activeTextLayer = null;
+  }
   container.innerHTML = '';
+  if (els.pdfAnnotationLayer) els.pdfAnnotationLayer.innerHTML = '';
   container.style.width = els.canvas.style.width;
   container.style.height = els.canvas.style.height;
 
@@ -5449,80 +5544,47 @@ async function renderTextLayer(pageNum, zoom, rotation) {
 
   const dpr = Math.max(1, window.devicePixelRatio || 1);
 
-  // ── Path 1: PDF.js native text content ──
+  // ── Path 1: PDF.js official TextLayer API ──
   if (state.adapter.type === 'pdf') {
+    const pdfjsLib = getPdfjsLib();
+    const page = await state.adapter.pdfDoc.getPage(pageNum);
+    const displayViewport = page.getViewport({ scale: zoom, rotation });
+
     try {
-      const page = await state.adapter.pdfDoc.getPage(pageNum);
-      // Use display-scale viewport (zoom only, no dpr) for text positioning.
-      // The text layer is sized to CSS pixels, not canvas pixels.
-      const displayViewport = page.getViewport({ scale: zoom, rotation });
       const textContent = await page.getTextContent({ normalizeWhitespace: true });
 
       if (!textContent?.items?.length) {
+        container.classList.add('ocr-text-layer');
         await _renderOcrTextLayer(pageNum, zoom, dpr);
         return;
       }
+      container.classList.remove('ocr-text-layer');
 
+      // Size container to match display dimensions
       const displayW = parseFloat(els.canvas.style.width) || displayViewport.width;
       const displayH = parseFloat(els.canvas.style.height) || displayViewport.height;
       container.style.width = `${displayW}px`;
       container.style.height = `${displayH}px`;
 
-      const fragment = document.createDocumentFragment();
-      const measureCanvas = document.createElement('canvas');
-      const measureCtx = measureCanvas.getContext('2d');
-      // Viewport transform: converts PDF coords → display (CSS) coords
-      const vtx = displayViewport.transform;
+      // Use official PDF.js TextLayer if available
+      if (pdfjsLib?.TextLayer) {
+        // Set --scale-factor CSS variable required by PDF.js TextLayer
+        container.style.setProperty('--scale-factor', String(zoom));
 
-      for (const item of textContent.items) {
-        const str = item.str;
-        if (!str) continue;
-        const tx = item.transform;
-        if (!tx) continue;
+        const textLayer = new pdfjsLib.TextLayer({
+          container,
+          textContentSource: textContent,
+          viewport: displayViewport,
+        });
+        _activeTextLayer = textLayer;
+        await textLayer.render();
 
-        const span = document.createElement('span');
-        span.textContent = str;
-
-        // Font size in PDF units, then scale to display
-        const fontHeight = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
-        const displayFontSize = fontHeight * zoom;
-
-        // Apply viewport transform to the PDF text origin (tx[4], tx[5])
-        // vtx = [a, b, c, d, e, f] where: x' = a*x + c*y + e, y' = b*x + d*y + f
-        const x = vtx[0] * tx[4] + vtx[2] * tx[5] + vtx[4];
-        const y = vtx[1] * tx[4] + vtx[3] * tx[5] + vtx[5];
-
-        span.style.left = `${x}px`;
-        span.style.top = `${y - displayFontSize}px`;
-        span.style.fontSize = `${displayFontSize}px`;
-        span.style.fontFamily = item.fontName || 'sans-serif';
-        span.style.lineHeight = '1';
-
-        // Rotation from text transform
-        const angle = Math.atan2(tx[1], tx[0]);
-        if (Math.abs(angle) > 0.01) {
-          span.style.transform = `rotate(${-angle}rad)`;
-        }
-
-        // Letter-spacing to match PDF text width
-        if (item.width > 0 && str.length > 0) {
-          const scaledWidth = item.width * zoom;
-          if (str.length > 1) {
-            measureCtx.font = `${displayFontSize}px ${item.fontName || 'sans-serif'}`;
-            const measuredWidth = measureCtx.measureText(str).width;
-            if (measuredWidth > 0 && Math.abs(scaledWidth - measuredWidth) > 0.5) {
-              const spacing = (scaledWidth - measuredWidth) / (str.length - 1);
-              span.style.letterSpacing = `${spacing}px`;
-            }
-          } else {
-            span.style.width = `${scaledWidth}px`;
-            span.style.textAlign = 'center';
-          }
-        }
-
-        fragment.appendChild(span);
+        // Also render AnnotationLayer for interactive elements (links, widgets)
+        _renderPdfAnnotationLayer(page, displayViewport).catch(() => {});
+      } else {
+        // Fallback: manual text layer (for older pdf.js without TextLayer class)
+        _renderManualTextLayer(container, textContent, displayViewport, zoom);
       }
-      container.appendChild(fragment);
     } catch (err) {
       console.warn('Text layer render failed:', err);
     }

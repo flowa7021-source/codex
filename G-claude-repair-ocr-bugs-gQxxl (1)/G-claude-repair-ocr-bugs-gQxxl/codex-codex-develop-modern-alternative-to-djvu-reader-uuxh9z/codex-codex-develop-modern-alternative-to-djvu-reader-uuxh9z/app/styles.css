@@ -522,20 +522,41 @@ body.sidebar-compact .sidebar-panel > section { padding: 4px; }
   pointer-events: none;
 }
 
-/* ═══ Text Layer ═══ */
+/* ═══ Text Layer (PDF.js official + NovaReader overrides) ═══ */
 .text-layer {
   position: absolute;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  overflow: hidden;
-  opacity: 0.25;
+  text-align: initial;
+  inset: 0;
+  overflow: clip;
+  opacity: 1;
   line-height: 1.0;
   z-index: 2;
   pointer-events: auto;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+}
+/* PDF.js official TextLayer uses --scale-factor for correct positioning */
+.text-layer :is(span, br) {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
 }
 .text-layer > span {
+  pointer-events: all;
+  overflow: hidden;
+}
+.text-layer > span::selection {
+  background: rgba(0, 100, 255, 0.35);
+  color: transparent;
+}
+.text-layer > span::-moz-selection {
+  background: rgba(0, 100, 255, 0.35);
+  color: transparent;
+}
+/* OCR-based text layer (non-PDF.js) — fallback styling */
+.text-layer.ocr-text-layer > span {
   position: absolute;
   white-space: pre;
   color: transparent;
@@ -545,14 +566,7 @@ body.sidebar-compact .sidebar-panel > section { padding: 4px; }
   overflow: hidden;
   display: inline-block;
 }
-.text-layer > span::selection {
-  background: rgba(0, 100, 255, 0.4);
-  color: transparent;
-}
-.text-layer > span::-moz-selection {
-  background: rgba(0, 100, 255, 0.4);
-  color: transparent;
-}
+/* Editing mode */
 .text-layer.editing > span {
   color: rgba(0, 0, 0, 0.7);
   background: rgba(255, 255, 200, 0.3);
@@ -563,6 +577,7 @@ body.sidebar-compact .sidebar-panel > section { padding: 4px; }
   background: rgba(255, 255, 100, 0.5);
   outline: 1px solid #3b82f6;
 }
+/* Search highlights */
 .text-layer .search-highlight {
   background: rgba(255, 216, 77, 0.6) !important;
   color: transparent;
@@ -571,6 +586,25 @@ body.sidebar-compact .sidebar-panel > section { padding: 4px; }
 .text-layer .search-highlight.active {
   background: rgba(255, 149, 0, 0.8) !important;
   outline: 2px solid #ff6600;
+}
+/* PDF.js AnnotationLayer */
+.annotationLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+.annotationLayer section {
+  position: absolute;
+  pointer-events: auto;
+}
+.annotationLayer .linkAnnotation > a {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+}
+.annotationLayer .linkAnnotation > a:hover {
+  background: rgba(255, 255, 0, 0.15);
 }
 .text-layer .inline-editor {
   position: absolute;

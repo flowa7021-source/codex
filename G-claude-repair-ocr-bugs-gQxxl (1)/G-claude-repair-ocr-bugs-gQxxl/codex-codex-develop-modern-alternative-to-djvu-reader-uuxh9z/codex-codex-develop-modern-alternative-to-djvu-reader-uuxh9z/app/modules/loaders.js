@@ -28,6 +28,11 @@ export async function ensurePdfJs() {
   return pdfLoadPromise;
 }
 
+/** Get the loaded pdfjsLib reference (null if not yet loaded) */
+export function getPdfjsLib() {
+  return pdfjsLib;
+}
+
 export async function ensureDjVuJs() {
   if (djvuLib) return djvuLib;
   if (djvuLoadPromise) return djvuLoadPromise;

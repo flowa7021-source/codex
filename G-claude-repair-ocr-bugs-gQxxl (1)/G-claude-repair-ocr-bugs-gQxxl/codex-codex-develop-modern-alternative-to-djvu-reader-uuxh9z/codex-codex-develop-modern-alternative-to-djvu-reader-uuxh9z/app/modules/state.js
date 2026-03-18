@@ -291,6 +291,7 @@ export const els = {
   mergePages: document.getElementById('mergePages'),
   splitPages: document.getElementById('splitPages'),
   textLayerDiv: document.getElementById('textLayerDiv'),
+  pdfAnnotationLayer: document.getElementById('pdfAnnotationLayer'),
   canvasStack: document.getElementById('canvasStack'),
   addBookmarkToolbar: document.getElementById('addBookmarkToolbar'),
   conversionInvoice: document.getElementById('conversionInvoice'),
