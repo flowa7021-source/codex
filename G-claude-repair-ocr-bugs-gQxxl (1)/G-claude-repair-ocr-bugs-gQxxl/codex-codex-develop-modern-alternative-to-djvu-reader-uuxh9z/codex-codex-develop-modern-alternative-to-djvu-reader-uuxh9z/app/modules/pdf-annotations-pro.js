@@ -171,10 +171,27 @@ export class AnnotationManager {
         case ANNOTATION_TYPES.UNDERLINE: {
           ctx.strokeStyle = ann.color || '#ff0000';
           ctx.lineWidth = 1.5 * scale;
-          ctx.beginPath();
-          ctx.moveTo(b.x * scale, (b.y + b.h) * scale);
-          ctx.lineTo((b.x + b.w) * scale, (b.y + b.h) * scale);
-          ctx.stroke();
+          const uy = (b.y + b.h) * scale;
+          if (ann.squiggly) {
+            // Squiggly/wavy underline
+            ctx.beginPath();
+            const waveH = 2.5 * scale;
+            const waveW = 5 * scale;
+            const startX = b.x * scale;
+            const totalW = b.w * scale;
+            for (let wx = 0; wx < totalW; wx += waveW) {
+              const py = (Math.floor(wx / waveW) % 2 === 0) ? uy - waveH : uy + waveH;
+              if (wx === 0) ctx.moveTo(startX + wx, uy);
+              ctx.lineTo(startX + wx + waveW / 2, py);
+              ctx.lineTo(startX + Math.min(wx + waveW, totalW), uy);
+            }
+            ctx.stroke();
+          } else {
+            ctx.beginPath();
+            ctx.moveTo(b.x * scale, uy);
+            ctx.lineTo((b.x + b.w) * scale, uy);
+            ctx.stroke();
+          }
           break;
         }
         case ANNOTATION_TYPES.STRIKETHROUGH: {

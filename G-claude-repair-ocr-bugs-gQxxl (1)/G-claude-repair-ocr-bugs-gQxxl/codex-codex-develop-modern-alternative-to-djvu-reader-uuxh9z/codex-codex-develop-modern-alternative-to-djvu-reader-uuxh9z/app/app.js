@@ -25,7 +25,7 @@ import { PdfRedactor, REDACTION_PATTERNS } from './modules/pdf-redact.js';
 import { pdfCompare } from './modules/pdf-compare.js';
 import { pdfOptimizer } from './modules/pdf-optimize.js';
 import { addHeaderFooter, addBatesNumbering, flattenPdf, checkAccessibility, autoFixAccessibility, addPageNumbers } from './modules/pdf-pro-tools.js';
-import { annotationManager, HIGHLIGHT_COLORS } from './modules/pdf-annotations-pro.js';
+import { annotationManager, HIGHLIGHT_COLORS, ANNOTATION_TYPES } from './modules/pdf-annotations-pro.js';
 import { batchOcr, createSearchablePdf, detectScannedDocument, autoDetectLanguage } from './modules/ocr-batch.js';
 
 // ─── Phase 2+ Module Imports ───────────────────────────────────────────────
@@ -3591,6 +3591,100 @@ function drawStroke(ctx, stroke) {
     return;
   }
 
+  // Text highlight preview (semi-transparent rect)
+  if (stroke.tool === 'text-highlight') {
+    const end = denormalizePoint(stroke.points[stroke.points.length - 1]);
+    const x = Math.min(start.x, end.x);
+    const y = Math.min(start.y, end.y);
+    const w = Math.abs(end.x - start.x);
+    const h = Math.abs(end.y - start.y);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = stroke.color;
+    ctx.fillRect(x, y, w, h);
+    ctx.restore();
+    return;
+  }
+
+  // Underline preview
+  if (stroke.tool === 'text-underline') {
+    const end = denormalizePoint(stroke.points[stroke.points.length - 1]);
+    const x = Math.min(start.x, end.x);
+    const y = Math.max(start.y, end.y);
+    const w = Math.abs(end.x - start.x);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + w, y);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  // Strikethrough preview
+  if (stroke.tool === 'text-strikethrough') {
+    const end = denormalizePoint(stroke.points[stroke.points.length - 1]);
+    const x = Math.min(start.x, end.x);
+    const midY = (start.y + end.y) / 2;
+    const w = Math.abs(end.x - start.x);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, midY);
+    ctx.lineTo(x + w, midY);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  // Squiggly underline preview
+  if (stroke.tool === 'text-squiggly') {
+    const end = denormalizePoint(stroke.points[stroke.points.length - 1]);
+    const x = Math.min(start.x, end.x);
+    const y = Math.max(start.y, end.y);
+    const w = Math.abs(end.x - start.x);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    const waveH = 3;
+    const waveW = 6;
+    for (let wx = 0; wx < w; wx += waveW) {
+      const py = (Math.floor(wx / waveW) % 2 === 0) ? y - waveH : y + waveH;
+      if (wx === 0) ctx.moveTo(x + wx, y);
+      ctx.lineTo(x + wx + waveW / 2, py);
+      ctx.lineTo(x + Math.min(wx + waveW, w), y);
+    }
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  // Text box preview (bordered rect with optional text)
+  if (stroke.tool === 'text-box') {
+    const end = denormalizePoint(stroke.points[stroke.points.length - 1]);
+    const x = Math.min(start.x, end.x);
+    const y = Math.min(start.y, end.y);
+    const w = Math.abs(end.x - start.x);
+    const h = Math.abs(end.y - start.y);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(x, y, w, h);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = stroke.color;
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, w, h);
+    ctx.restore();
+    return;
+  }
+
   ctx.beginPath();
   ctx.moveTo(start.x, start.y);
 
@@ -3638,11 +3732,54 @@ function renderAnnotations() {
     ctx.restore();
   });
 
+  // Render pro annotations (highlight, underline, sticky notes, etc.)
+  annotationManager.drawOnCanvas(ctx, state.currentPage);
+
   if (state.ocrSelection) drawOcrSelectionPreview();
 
   ctx.restore(); // undo DPR scale
 
-  els.annStats.textContent = `Штрихов: ${strokes.length} • Комментариев: ${comments.length}`;
+  const proCount = annotationManager.getForPage(state.currentPage).length;
+  els.annStats.textContent = `Штрихов: ${strokes.length} • Комментариев: ${comments.length}${proCount ? ` • Аннотаций: ${proCount}` : ''}`;
+}
+
+/**
+ * Apply text markup (highlight/underline/strikethrough) from text selection.
+ * Gets bounding rects of the selection within the text layer and creates annotations.
+ */
+function _applyTextMarkupFromSelection(selection, toolValue) {
+  const typeMap = {
+    'text-highlight': ANNOTATION_TYPES.HIGHLIGHT,
+    'text-underline': ANNOTATION_TYPES.UNDERLINE,
+    'text-strikethrough': ANNOTATION_TYPES.STRIKETHROUGH,
+    'text-squiggly': ANNOTATION_TYPES.UNDERLINE,
+  };
+  const type = typeMap[toolValue];
+  if (!type) return;
+
+  const range = selection.getRangeAt(0);
+  const rects = range.getClientRects();
+  if (!rects.length) return;
+
+  const containerRect = els.textLayerDiv.getBoundingClientRect();
+  const color = els.drawColor?.value || '#ffd84d';
+
+  for (const rect of rects) {
+    if (rect.width < 2 || rect.height < 2) continue;
+    const bounds = {
+      x: rect.left - containerRect.left,
+      y: rect.top - containerRect.top,
+      w: rect.width,
+      h: rect.height,
+    };
+    annotationManager.add(state.currentPage, {
+      type,
+      bounds,
+      color,
+      squiggly: toolValue === 'text-squiggly',
+    });
+  }
+  renderAnnotations();
 }
 
 function getCanvasPointFromEvent(e) {
@@ -3679,10 +3816,38 @@ async function beginStroke(e) {
     return;
   }
 
+  // Sticky note: click to place, prompt for text
+  if (els.drawTool.value === 'sticky-note') {
+    const text = await nrPrompt('Текст заметки:');
+    if (!text) return;
+    annotationManager.add(state.currentPage, {
+      type: ANNOTATION_TYPES.STICKY_NOTE,
+      bounds: { x: p.x, y: p.y, w: 20, h: 20 },
+      color: els.drawColor.value,
+      text: text.trim(),
+    });
+    renderAnnotations();
+    return;
+  }
+
+  // Text-based markup tools: apply to text selection if any, else use region drag
+  const textMarkupTools = ['text-highlight', 'text-underline', 'text-strikethrough', 'text-squiggly'];
+  if (textMarkupTools.includes(els.drawTool.value)) {
+    // Check if there's a text selection in the text layer
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed && els.textLayerDiv?.contains(sel.anchorNode)) {
+      _applyTextMarkupFromSelection(sel, els.drawTool.value);
+      sel.removeAllRanges();
+      return;
+    }
+    // No text selected — fall through to rect-drag mode for manual region markup
+  }
+
   if (!els.drawTool || !els.drawColor || !els.drawSize) return;
   state.isDrawing = true;
   const toolValue = els.drawTool.value;
-  const shapeTool = ['rect', 'arrow', 'line', 'circle'].includes(toolValue);
+  const shapeTool = ['rect', 'arrow', 'line', 'circle', 'text-box',
+    'text-highlight', 'text-underline', 'text-strikethrough', 'text-squiggly'].includes(toolValue);
   state.currentStroke = {
     tool: toolValue,
     color: els.drawColor.value,
@@ -3706,7 +3871,8 @@ function moveStroke(e) {
   const p = getCanvasPointFromEvent(e);
   const point = normalizePoint(p.x, p.y);
 
-  if (['rect', 'arrow', 'line', 'circle'].includes(state.currentStroke.tool)) {
+  if (['rect', 'arrow', 'line', 'circle', 'text-box',
+    'text-highlight', 'text-underline', 'text-strikethrough', 'text-squiggly'].includes(state.currentStroke.tool)) {
     state.currentStroke.points[1] = point;
   } else {
     state.currentStroke.points.push(point);
@@ -3741,6 +3907,57 @@ async function endStroke() {
   }
 
   if (!state.isDrawing || !state.currentStroke) return;
+
+  const tool = state.currentStroke.tool;
+
+  // Pro annotation tools — save to annotationManager instead of strokes
+  const proToolMap = {
+    'text-highlight': ANNOTATION_TYPES.HIGHLIGHT,
+    'text-underline': ANNOTATION_TYPES.UNDERLINE,
+    'text-strikethrough': ANNOTATION_TYPES.STRIKETHROUGH,
+    'text-squiggly': ANNOTATION_TYPES.UNDERLINE, // rendered with squiggly style
+    'text-box': ANNOTATION_TYPES.TEXT_BOX,
+  };
+
+  if (proToolMap[tool]) {
+    const pts = state.currentStroke.points;
+    if (pts.length >= 2) {
+      const p0 = pts[0];
+      const p1 = pts[1];
+      const bounds = {
+        x: Math.min(p0.x, p1.x) * els.annotationCanvas.width / getAnnotationDpr(),
+        y: Math.min(p0.y, p1.y) * els.annotationCanvas.height / getAnnotationDpr(),
+        w: Math.abs(p1.x - p0.x) * els.annotationCanvas.width / getAnnotationDpr(),
+        h: Math.abs(p1.y - p0.y) * els.annotationCanvas.height / getAnnotationDpr(),
+      };
+      if (bounds.w > 4 && bounds.h > 2) {
+        const annData = {
+          type: proToolMap[tool],
+          bounds,
+          color: state.currentStroke.color,
+          squiggly: tool === 'text-squiggly',
+        };
+        if (tool === 'text-box') {
+          // Prompt for text asynchronously
+          state.isDrawing = false;
+          state.currentStroke = null;
+          const text = await nrPrompt('Текст:');
+          if (text) {
+            annData.text = text.trim();
+            annotationManager.add(state.currentPage, annData);
+          }
+          renderAnnotations();
+          return;
+        }
+        annotationManager.add(state.currentPage, annData);
+      }
+    }
+    state.isDrawing = false;
+    state.currentStroke = null;
+    renderAnnotations();
+    return;
+  }
+
   const strokes = loadStrokes();
   strokes.push(state.currentStroke);
   saveStrokes(strokes);
@@ -3750,6 +3967,14 @@ async function endStroke() {
 }
 
 function undoStroke() {
+  // Try undoing pro annotations first (most recent)
+  const proAnns = annotationManager.getForPage(state.currentPage);
+  if (proAnns.length) {
+    const last = proAnns[proAnns.length - 1];
+    annotationManager.remove(last.id);
+    renderAnnotations();
+    return;
+  }
   const strokes = loadStrokes();
   if (!strokes.length) return;
   strokes.pop();
@@ -3759,6 +3984,9 @@ function undoStroke() {
 
 function clearStrokes() {
   saveStrokes([]);
+  // Also clear pro annotations for current page
+  const proAnns = annotationManager.getForPage(state.currentPage);
+  for (const ann of [...proAnns]) annotationManager.remove(ann.id);
   renderAnnotations();
 }
 
@@ -7764,6 +7992,61 @@ function setupAnnotationEvents() {
       }
     }
   });
+
+  // Text layer context menu for quick markup on text selection
+  if (els.textLayerDiv) {
+    els.textLayerDiv.addEventListener('mouseup', () => {
+      // Remove existing popup
+      document.querySelector('.text-markup-popup')?.remove();
+
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+      if (!els.textLayerDiv.contains(sel.anchorNode)) return;
+
+      const range = sel.getRangeAt(0);
+      const rect = range.getBoundingClientRect();
+      if (rect.width < 3) return;
+
+      const popup = document.createElement('div');
+      popup.className = 'text-markup-popup';
+      popup.style.cssText = `
+        position: fixed; left: ${rect.left}px; top: ${rect.top - 36}px;
+        z-index: 10000; display: flex; gap: 2px; background: var(--bg-card, #1e1e2e);
+        border: 1px solid var(--border, #444); border-radius: 6px; padding: 3px 5px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      `;
+      const tools = [
+        { tool: 'text-highlight', icon: '🖍', title: 'Выделить' },
+        { tool: 'text-underline', icon: '⎁', title: 'Подчеркнуть' },
+        { tool: 'text-strikethrough', icon: '⊟', title: 'Зачеркнуть' },
+        { tool: 'text-squiggly', icon: '〰', title: 'Волнистая' },
+      ];
+      for (const t of tools) {
+        const btn = document.createElement('button');
+        btn.textContent = t.icon;
+        btn.title = t.title;
+        btn.style.cssText = 'border:none; background:transparent; cursor:pointer; font-size:16px; padding:3px 6px; border-radius:4px; color: var(--text,#eee);';
+        btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--hover, #333)'; });
+        btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
+        btn.addEventListener('click', () => {
+          _applyTextMarkupFromSelection(window.getSelection(), t.tool);
+          window.getSelection()?.removeAllRanges();
+          popup.remove();
+        });
+        popup.appendChild(btn);
+      }
+      document.body.appendChild(popup);
+
+      // Auto-remove on click outside
+      const removePopup = (ev) => {
+        if (!popup.contains(ev.target)) {
+          popup.remove();
+          document.removeEventListener('mousedown', removePopup);
+        }
+      };
+      setTimeout(() => document.addEventListener('mousedown', removePopup), 50);
+    });
+  }
 }
 
 els.clearRecent.addEventListener('click', clearRecent);
