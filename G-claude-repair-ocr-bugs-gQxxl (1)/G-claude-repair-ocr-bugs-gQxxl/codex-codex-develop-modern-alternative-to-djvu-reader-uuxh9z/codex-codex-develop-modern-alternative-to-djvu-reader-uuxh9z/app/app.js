@@ -76,6 +76,17 @@ import { XpsAdapter, parseXps } from './modules/xps-adapter.js';
 import { registerProvider, getProviders, authenticate, listFiles, openFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider } from './modules/cloud-integration.js';
 import { summarizeText, extractTags, semanticSearch, generateToc } from './modules/ai-features.js';
 import { nrPrompt, nrConfirm } from './modules/modal-prompt.js';
+import { AsyncLock } from './modules/async-lock.js';
+import { clearAllTimers, safeTimeout, safeInterval, getTimerStats } from './modules/safe-timers.js';
+import { createLogger } from './modules/logger.js';
+
+// ─── Module-level loggers ───────────────────────────────────────────────────
+const logOcr = createLogger('ocr');
+const logRender = createLogger('render');
+const logFile = createLogger('file');
+
+// ─── Async locks for state protection ───────────────────────────────────────
+const ocrBackgroundLock = new AsyncLock();
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -3346,6 +3357,9 @@ async function startBackgroundOcrScan(reason = 'auto') {
   if (state.docName == null) return;
   if (state.backgroundOcrRunning) return;
 
+  // Acquire lock to prevent concurrent background OCR mutations
+  const releaseLock = await ocrBackgroundLock.acquire();
+
   // Pre-check: ensure Tesseract can initialize before scanning all pages
   const tessAvail = await isTesseractAvailable();
   if (!tessAvail) {
@@ -3471,6 +3485,7 @@ async function startBackgroundOcrScan(reason = 'auto') {
     if (usePool) {
       terminateTesseractPool().catch(() => {});
     }
+    releaseLock();
   }
 }
 
@@ -5406,6 +5421,7 @@ const _openFileImpl = async function openFileImpl(file) {
   revokeCurrentObjectUrl();
   clearPageRenderCache();
   revokeAllTrackedUrls();
+  clearAllTimers(); // Q0.3: prevent timer leaks from previous document
   state.file = file;
   state.docName = file.name;
   state.currentPage = 1;

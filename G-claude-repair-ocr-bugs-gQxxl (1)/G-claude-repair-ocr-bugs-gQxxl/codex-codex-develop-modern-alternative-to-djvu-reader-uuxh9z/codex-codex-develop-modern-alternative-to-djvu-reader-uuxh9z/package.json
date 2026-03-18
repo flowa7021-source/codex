@@ -2,6 +2,7 @@
   "name": "novareader-desktop",
   "version": "2.0.0-alpha",
   "description": "NovaReader desktop build (no Python/server runtime)",
+  "type": "module",
   "main": "electron/main.js",
   "author": "NovaReader",
   "license": "MIT",

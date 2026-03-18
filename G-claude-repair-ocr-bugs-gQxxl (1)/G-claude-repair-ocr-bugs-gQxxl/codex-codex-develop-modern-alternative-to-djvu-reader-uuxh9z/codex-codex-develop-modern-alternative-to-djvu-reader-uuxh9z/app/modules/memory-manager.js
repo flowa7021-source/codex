@@ -14,6 +14,7 @@ const urlRegistry = new Map();
 
 let cleanupTimer = null;
 let memoryWarningShown = false;
+let monitorTimer = null;
 
 /**
  * Initialize memory management: URL tracking, canvas pooling, memory monitoring.
@@ -167,10 +168,12 @@ async function monitorMemory() {
         }));
       }
     }
-  } catch { /* ignore */ }
+  } catch (err) {
+    console.warn('[memory-manager] monitorMemory error:', err?.message);
+  }
 
-  // Check periodically
-  setTimeout(monitorMemory, 10000);
+  // Check periodically — tracked so destroyMemoryManager() can stop it
+  monitorTimer = setTimeout(monitorMemory, 10000);
 }
 
 /**
@@ -180,6 +183,10 @@ export function destroyMemoryManager() {
   if (cleanupTimer) {
     clearInterval(cleanupTimer);
     cleanupTimer = null;
+  }
+  if (monitorTimer) {
+    clearTimeout(monitorTimer);
+    monitorTimer = null;
   }
   revokeAllUrls();
   canvasPool.length = 0;
