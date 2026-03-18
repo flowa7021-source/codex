@@ -48,6 +48,10 @@ import { extractTextInReadingOrder, extractMultiPageText, downloadText } from '.
 import { WorkerPool, initOcrPool, getOcrPool, runInWorker } from './modules/worker-pool.js';
 import { openDatabase, cachePageRender, getCachedPageRender, cacheOcrResult, getCachedOcrResult, saveAnnotations, loadAnnotations, clearDocumentCache, getStorageUsage, clearAllCache } from './modules/indexed-storage.js';
 import { initErrorHandler, reportError, classifyError, registerRecovery, onError, saveStateSnapshot, restoreStateSnapshot, withRetry, getErrorLog, ERROR_CODES } from './modules/error-handler.js';
+import { convertToPdfA, checkPdfACompliance } from './modules/pdf-a-converter.js';
+import { initDragDrop, initAnnotationDrop } from './modules/drag-drop.js';
+import { VirtualScroll } from './modules/virtual-scroll.js';
+import { initMemoryManager, createTrackedUrl, revokeTrackedUrl, revokeAllUrls, acquireCanvas, releaseCanvas, getMemoryStats, forceCleanup } from './modules/memory-manager.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -9991,6 +9995,67 @@ openDatabase().catch(() => { /* IndexedDB not available */ });
   });
 })();
 
+// ─── Initialize Memory Manager ────────────────────────────────────────────
+initMemoryManager();
+window.addEventListener('memory-warning', (e) => {
+  toastWarning(`Высокое потребление памяти: ${e.detail.usedMB} МБ`);
+  forceCleanup();
+});
+
+// ─── Initialize Drag & Drop ──────────────────────────────────────────────
+initDragDrop({
+  viewport: document.querySelector('.document-viewport'),
+  thumbnailGrid: document.querySelector('.thumbnail-grid'),
+  openFile: (file) => {
+    const input = els.fileInput;
+    if (input) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      input.dispatchEvent(new Event('change'));
+    }
+  },
+  mergePdf: async (files) => {
+    try {
+      const buffers = await Promise.all(files.map(f => f.arrayBuffer()));
+      const uints = buffers.map(b => new Uint8Array(b));
+      const merged = await mergePdfDocuments(uints);
+      state.pdfBytes = new Uint8Array(await merged.arrayBuffer());
+      toastSuccess(`Объединено ${files.length} PDF файлов`);
+    } catch (err) {
+      toastError('Ошибка объединения: ' + err.message);
+    }
+  },
+  reorderPages: (from, to) => {
+    toastInfo(`Страница ${from} → ${to}`);
+  },
+});
+
+// ─── PDF/A Export Handler ─────────────────────────────────────────────────
+(function initPdfAExport() {
+  const btn = document.getElementById('exportPdfA');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!state.pdfBytes) { toastWarning('Откройте PDF документ'); return; }
+    try {
+      const result = await convertToPdfA(state.pdfBytes, { title: state.docName });
+      const filename = (state.docName || 'document').replace(/\.[^.]+$/, '') + '-pdfa.pdf';
+      const url = URL.createObjectURL(result.blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toastSuccess('PDF/A экспортирован');
+      if (result.report.issues.length > 0) {
+        toastWarning(`Предупреждения: ${result.report.issues.join('; ')}`);
+      }
+    } catch (err) {
+      toastError('Ошибка PDF/A: ' + err.message);
+    }
+  });
+})();
+
 // ─── Expose globals for E2E testing and diagnostics ──────────────────────────
 window.crashTelemetry = crashTelemetry;
 window.ocrSearchIndex = ocrSearchIndex;
@@ -10004,3 +10069,6 @@ window._textExtractor = { extractTextInReadingOrder, extractMultiPageText, downl
 window._workerPool = { WorkerPool, initOcrPool, getOcrPool, runInWorker };
 window._indexedStorage = { openDatabase, cachePageRender, getCachedPageRender, clearDocumentCache, getStorageUsage, clearAllCache };
 window._errorHandler = { reportError, getErrorLog, withRetry, saveStateSnapshot, restoreStateSnapshot };
+window._pdfA = { convertToPdfA, checkPdfACompliance };
+window._virtualScroll = VirtualScroll;
+window._memoryManager = { getMemoryStats, forceCleanup, acquireCanvas, releaseCanvas };
