@@ -18,6 +18,7 @@ permissions:
 
 env:
   SOURCE_PROJECT_DIR: G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z
+  SHORT_PATH: C:\nr
 
 jobs:
   build-exe:
@@ -27,11 +28,14 @@ jobs:
     defaults:
       run:
         shell: pwsh
-        working-directory: ${{ github.workspace }}/${{ env.SOURCE_PROJECT_DIR }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Create short path junction
+        shell: cmd
+        run: mklink /J "C:\nr" "%GITHUB_WORKSPACE%\G-claude-repair-ocr-bugs-gQxxl (1)\G-claude-repair-ocr-bugs-gQxxl\codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z\codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z"
 
       - name: setup Node.js
         uses: actions/setup-node@v4
@@ -45,69 +49,46 @@ jobs:
           Write-Host "GITHUB_ACTIONS=$env:GITHUB_ACTIONS"
           Write-Host "CI=$env:CI"
           Write-Host "GITHUB_REF=$env:GITHUB_REF"
+          Write-Host "SHORT_PATH=$env:SHORT_PATH"
+          Write-Host "Junction exists: $(Test-Path $env:SHORT_PATH)"
 
       - name: Install dependencies
         env:
           npm_config_audit: "false"
           npm_config_fund: "false"
           CYPRESS_INSTALL_BINARY: "0"
-        run: |
-          $projectPath = (Get-Location).Path
-          subst X: /d 2>$null
-          subst X: "$projectPath"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to map X: for npm ci" }
-          try {
-            Set-Location X:\
-            npm ci --no-audit --no-fund
-          }
-          finally {
-            Set-Location $projectPath
-            subst X: /d 2>$null
-          }
+        working-directory: C:\nr
+        run: npm ci --no-audit --no-fund
 
       - name: build portable EXE
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: |
-          $projectPath = (Get-Location).Path
-          subst X: /d 2>$null
-          subst X: "$projectPath"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to map X: for build" }
-          try {
-            Set-Location X:\
-            npm run build:win:nosign
-          }
-          finally {
-            Set-Location $projectPath
-            subst X: /d 2>$null
-          }
+        working-directory: C:\nr
+        run: npm run build:win:nosign
 
       - name: Generate SHA256
+        working-directory: C:\nr
         run: |
-          $projectPath = (Get-Location).Path
-          subst X: /d 2>$null
-          subst X: "$projectPath"
-          if ($LASTEXITCODE -ne 0) { throw "Failed to map X: for hashing" }
-          try {
-            Set-Location X:\
-            $file = Get-ChildItem dist -Filter 'NovaReader-*.exe' -File |
-              Where-Object { $_.Name -notlike 'NovaReader-Setup-*' } |
-              Select-Object -First 1
-            if (-not $file) { throw 'Portable EXE was not generated' }
-            $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLower()
-            "$hash *$($file.Name)" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding ascii
-          }
-          finally {
-            Set-Location $projectPath
-            subst X: /d 2>$null
-          }
+          $file = Get-ChildItem dist -Filter 'NovaReader-*.exe' -File |
+            Where-Object { $_.Name -notlike 'NovaReader-Setup-*' } |
+            Select-Object -First 1
+          if (-not $file) { throw 'Portable EXE was not generated' }
+          $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLower()
+          "$hash *$($file.Name)" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding ascii
+          Write-Host "Built: $($file.Name)"
+          Write-Host "SHA256: $hash"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: novareader-windows-exe
           path: |
-            ${{ env.SOURCE_PROJECT_DIR }}/dist/NovaReader-*.exe
-            ${{ env.SOURCE_PROJECT_DIR }}/dist/SHA256SUMS.txt
+            C:\nr\dist\NovaReader-*.exe
+            C:\nr\dist\SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
+
+      - name: Cleanup junction
+        if: always()
+        shell: cmd
+        run: if exist "C:\nr" rmdir "C:\nr"
