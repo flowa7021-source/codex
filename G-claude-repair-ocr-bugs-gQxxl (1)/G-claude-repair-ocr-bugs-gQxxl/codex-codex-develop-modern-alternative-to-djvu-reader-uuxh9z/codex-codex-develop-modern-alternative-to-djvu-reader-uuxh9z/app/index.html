@@ -53,6 +53,9 @@
           <button id="rotate" class="cb-btn" title="Повернуть 90°">
             <svg width="16" height="16" viewBox="0 0 16 16"><path d="M13 7a5 5 0 10-1 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M14 4l-2 3h3" fill="currentColor"/></svg>
           </button>
+          <button id="toggleContinuousScroll" class="cb-btn" title="Непрерывная прокрутка">
+            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="4" y="1" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="4" y="7" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><path d="M8 13v2M6 14l2 1 2-1" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
         </div>
 
         <div class="cb-spacer"></div>
@@ -380,7 +383,7 @@
           <button id="closeSearch" class="cb-btn" title="Закрыть (Esc)">✕</button>
         </div>
 
-        <!-- Canvas Area -->
+        <!-- Canvas Area (single page mode) -->
         <section class="canvas-wrap" id="canvasWrap">
           <div class="canvas-stack" id="canvasStack">
             <canvas id="viewerCanvas"></canvas>
@@ -388,6 +391,11 @@
             <canvas id="annotationCanvas"></canvas>
           </div>
           <p id="emptyState" class="empty-msg">Откройте PDF, DjVu, ePub или изображение для просмотра</p>
+        </section>
+
+        <!-- Continuous Scroll container (hidden by default) -->
+        <section class="continuous-scroll-wrap" id="continuousScrollWrap" style="display:none;">
+          <div class="continuous-scroll-container" id="continuousScrollContainer"></div>
         </section>
       </main>
 
@@ -484,6 +492,19 @@
               <button id="toggleOcrConfidence" class="btn-xs tb-toggle">Качество</button>
             </div>
             <p id="ocrStatus" class="status-line"></p>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">Пакетное OCR</h3>
+            <div class="rp-actions">
+              <button id="batchOcrAll" class="btn-xs btn-accent">OCR всего документа</button>
+              <button id="batchOcrCancel" class="btn-xs">⏹ Отмена</button>
+            </div>
+            <div class="rp-actions">
+              <button id="createSearchablePdf" class="btn-xs">Searchable PDF</button>
+              <button id="detectScanned" class="btn-xs">Определить скан</button>
+            </div>
+            <progress id="batchOcrProgress" value="0" max="100" style="width:100%; height:6px; margin-top:4px; display:none;"></progress>
+            <p id="batchOcrStatus" class="status-line"></p>
           </div>
           <div class="rp-section">
             <h3 class="rp-section-title">Экспорт</h3>

@@ -8983,6 +8983,299 @@ if (document.getElementById('orgInsertPages')) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// NovaReader 3.0 — Continuous Scroll Mode
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function initContinuousScroll() {
+  const toggleBtn = document.getElementById('toggleContinuousScroll');
+  const canvasWrap = document.getElementById('canvasWrap');
+  const scrollWrap = document.getElementById('continuousScrollWrap');
+  const scrollContainer = document.getElementById('continuousScrollContainer');
+  let continuousMode = false;
+  let renderedPages = new Set();
+
+  if (!toggleBtn || !scrollWrap || !scrollContainer) return;
+
+  toggleBtn.addEventListener('click', async () => {
+    continuousMode = !continuousMode;
+    toggleBtn.classList.toggle('active', continuousMode);
+
+    if (continuousMode) {
+      await enterContinuousMode();
+    } else {
+      exitContinuousMode();
+    }
+  });
+
+  async function enterContinuousMode() {
+    if (!state.adapter || !state.pageCount) return;
+    canvasWrap.style.display = 'none';
+    scrollWrap.style.display = '';
+    scrollContainer.innerHTML = '';
+    renderedPages.clear();
+
+    // Create placeholder elements for each page
+    for (let i = 1; i <= state.pageCount; i++) {
+      const label = document.createElement('div');
+      label.className = 'cs-page-label';
+      label.textContent = `Страница ${i}`;
+      scrollContainer.appendChild(label);
+
+      const canvas = document.createElement('canvas');
+      canvas.id = `cs-page-${i}`;
+      canvas.dataset.pageNum = i;
+      canvas.width = 800;
+      canvas.height = 1100;
+      canvas.style.width = '100%';
+      canvas.style.maxWidth = '800px';
+      canvas.style.background = '#e8e8e8';
+      scrollContainer.appendChild(canvas);
+    }
+
+    // Use IntersectionObserver for lazy rendering
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          const pageNum = parseInt(entry.target.dataset.pageNum, 10);
+          if (!renderedPages.has(pageNum)) {
+            renderedPages.add(pageNum);
+            renderScrollPage(pageNum, entry.target);
+          }
+        }
+      }
+    }, { rootMargin: '200px 0px' });
+
+    scrollContainer.querySelectorAll('canvas[data-page-num]').forEach(c => observer.observe(c));
+
+    // Scroll to current page
+    const target = document.getElementById(`cs-page-${state.pageNum || 1}`);
+    if (target) target.scrollIntoView({ behavior: 'auto', block: 'start' });
+  }
+
+  async function renderScrollPage(pageNum, canvas) {
+    try {
+      const zoom = state.zoom || 1;
+      await state.adapter.renderPage(pageNum, canvas, { zoom, rotation: 0 });
+      canvas.style.background = 'white';
+    } catch (err) {
+      canvas.style.background = '#fdd';
+    }
+  }
+
+  function exitContinuousMode() {
+    scrollWrap.style.display = 'none';
+    canvasWrap.style.display = '';
+    scrollContainer.innerHTML = '';
+    renderedPages.clear();
+  }
+
+  window._novaContinuousScroll = { enterContinuousMode, exitContinuousMode };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NovaReader 3.0 — Batch OCR UI Integration
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function initBatchOcrUI() {
+  const batchOcrAllBtn = document.getElementById('batchOcrAll');
+  const batchOcrCancelBtn = document.getElementById('batchOcrCancel');
+  const createSearchablePdfBtn = document.getElementById('createSearchablePdf');
+  const detectScannedBtn = document.getElementById('detectScanned');
+  const progressBar = document.getElementById('batchOcrProgress');
+  const statusEl = document.getElementById('batchOcrStatus');
+
+  function setBatchStatus(text) {
+    if (statusEl) statusEl.textContent = text;
+  }
+
+  // Batch OCR all pages
+  if (batchOcrAllBtn) {
+    batchOcrAllBtn.addEventListener('click', async () => {
+      if (!state.adapter || state.adapter.type !== 'pdf') {
+        setBatchStatus('Откройте PDF для пакетного OCR');
+        return;
+      }
+
+      if (progressBar) { progressBar.style.display = ''; progressBar.value = 0; }
+      setBatchStatus('Запуск пакетного OCR...');
+
+      try {
+        const result = await batchOcr.processAll({
+          renderPage: async (pageNum) => {
+            const canvas = document.createElement('canvas');
+            await state.adapter.renderPage(pageNum, canvas, { zoom: 2, rotation: 0 });
+            return canvas;
+          },
+          recognizeFn: async (canvas, lang) => {
+            const result = await recognizeWithBoxes(canvas, lang);
+            return { text: result.text, words: result.words, confidence: result.confidence };
+          },
+          totalPages: state.pageCount,
+          language: autoDetectLanguage(''),
+          onProgress: (pageNum, total, status) => {
+            setBatchStatus(status);
+            if (progressBar && total > 0) {
+              progressBar.value = Math.round((pageNum / total) * 100);
+            }
+          },
+        });
+
+        if (progressBar) progressBar.style.display = 'none';
+        setBatchStatus(result.cancelled
+          ? `OCR отменён: обработано ${result.processed} из ${result.total} страниц`
+          : `OCR завершён: ${result.processed} страниц`);
+        pushDiagnosticEvent('batch-ocr.done', { processed: result.processed, total: result.total });
+      } catch (err) {
+        if (progressBar) progressBar.style.display = 'none';
+        setBatchStatus(`Ошибка OCR: ${err?.message || 'неизвестная'}`);
+      }
+    });
+  }
+
+  // Cancel batch OCR
+  if (batchOcrCancelBtn) {
+    batchOcrCancelBtn.addEventListener('click', () => {
+      batchOcr.cancel();
+      setBatchStatus('Отмена OCR...');
+    });
+  }
+
+  // Create searchable PDF
+  if (createSearchablePdfBtn) {
+    createSearchablePdfBtn.addEventListener('click', async () => {
+      if (!state.file || state.adapter?.type !== 'pdf') {
+        setBatchStatus('Откройте PDF для создания searchable PDF');
+        return;
+      }
+
+      if (batchOcr.results.size === 0) {
+        setBatchStatus('Сначала запустите пакетное OCR');
+        return;
+      }
+
+      try {
+        setBatchStatus('Создание searchable PDF...');
+        const arrayBuffer = await state.file.arrayBuffer();
+        const result = await createSearchablePdf(arrayBuffer, batchOcr.results);
+        const url = safeCreateObjectURL(result.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${state.docName || 'document'}-searchable.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setBatchStatus(`Searchable PDF создан: ${result.pagesProcessed} страниц`);
+        pushDiagnosticEvent('searchable-pdf.created', { pages: result.pagesProcessed });
+      } catch (err) {
+        setBatchStatus(`Ошибка: ${err?.message || 'неизвестная'}`);
+      }
+    });
+  }
+
+  // Detect scanned document
+  if (detectScannedBtn) {
+    detectScannedBtn.addEventListener('click', async () => {
+      if (!state.adapter || state.adapter.type !== 'pdf') {
+        setBatchStatus('Откройте PDF для анализа');
+        return;
+      }
+
+      try {
+        setBatchStatus('Анализ документа...');
+        const result = await detectScannedDocument(state.adapter.pdfDoc);
+        let msg = result.isScanned
+          ? `Сканированный документ (${result.scannedPages}/${result.totalChecked} стр.)`
+          : `Текстовый документ (${result.totalChecked - result.scannedPages}/${result.totalChecked} с текстом)`;
+        if (result.recommendation) msg += `\n${result.recommendation}`;
+        setBatchStatus(msg);
+        pushDiagnosticEvent('scan-detect', { isScanned: result.isScanned, confidence: result.confidence });
+      } catch (err) {
+        setBatchStatus(`Ошибка анализа: ${err?.message || 'неизвестная'}`);
+      }
+    });
+  }
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NovaReader 3.0 — Drag & Drop + Extended Hotkeys
+// ═══════════════════════════════════════════════════════════════════════════════
+
+(function initDragDropAndHotkeys() {
+  const viewport = document.getElementById('documentViewport');
+
+  // ── Drag & Drop ──
+  if (viewport) {
+    viewport.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      viewport.classList.add('drag-over');
+    });
+
+    viewport.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      viewport.classList.remove('drag-over');
+    });
+
+    viewport.addEventListener('drop', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      viewport.classList.remove('drag-over');
+
+      const files = e.dataTransfer?.files;
+      if (files?.length > 0) {
+        const file = files[0];
+        // Trigger the existing file-open logic
+        const openInput = document.getElementById('fileInput') || document.querySelector('input[type="file"][accept*="pdf"]');
+        if (openInput) {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          openInput.files = dt.files;
+          openInput.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      }
+    });
+  }
+
+  // ── Extended Hotkeys ──
+  document.addEventListener('keydown', (e) => {
+    // Skip if user is typing in input/textarea
+    if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+
+    const ctrl = e.ctrlKey || e.metaKey;
+
+    // Ctrl+Shift+O: PDF Optimize
+    if (ctrl && e.shiftKey && e.key === 'O') {
+      e.preventDefault();
+      document.getElementById('pdfOptimize')?.click();
+      return;
+    }
+    // Ctrl+Shift+A: Accessibility check
+    if (ctrl && e.shiftKey && e.key === 'A') {
+      e.preventDefault();
+      document.getElementById('pdfAccessibility')?.click();
+      return;
+    }
+    // Ctrl+Shift+R: Redaction
+    if (ctrl && e.shiftKey && e.key === 'R') {
+      e.preventDefault();
+      document.getElementById('pdfRedact')?.click();
+      return;
+    }
+    // Ctrl+Shift+C: Compare
+    if (ctrl && e.shiftKey && e.key === 'C') {
+      e.preventDefault();
+      document.getElementById('pdfCompare')?.click();
+      return;
+    }
+    // Ctrl+Shift+B: Batch OCR
+    if (ctrl && e.shiftKey && e.key === 'B') {
+      e.preventDefault();
+      document.getElementById('batchOcrAll')?.click();
+      return;
+    }
+  });
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — Right Panel + Floating Search + Tool Switching
 // ═══════════════════════════════════════════════════════════════════════════════
 
