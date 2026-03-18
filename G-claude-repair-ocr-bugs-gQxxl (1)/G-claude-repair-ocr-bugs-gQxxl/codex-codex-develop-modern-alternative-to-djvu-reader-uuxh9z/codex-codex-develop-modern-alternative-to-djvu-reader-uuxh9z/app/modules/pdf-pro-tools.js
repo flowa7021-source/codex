@@ -161,8 +161,9 @@ export async function flattenPdf(pdfBytes, options = {}) {
       const fields = form.getFields();
       formsFlattened = fields.length;
       form.flatten();
-    } catch {
+    } catch (err) {
       // No form or form flatten not supported
+      console.warn('[pdf-pro-tools] form flatten:', err?.message);
       formsFlattened = 0;
     }
   }
@@ -177,7 +178,7 @@ export async function flattenPdf(pdfBytes, options = {}) {
           annotationsFlattened += annots instanceof PDFArray ? annots.size() : 1;
           pageDict.delete(PDFName.of('Annots'));
         }
-      } catch { /* ignore */ }
+      } catch (err) { /* ignore */ console.warn('[pdf-pro-tools] annotation flatten:', err?.message); }
     }
   }
 
@@ -217,7 +218,7 @@ export async function checkAccessibility(pdfBytes) {
   let hasLang = false;
   try {
     if (catalog.get(PDFName.of('Lang'))) hasLang = true;
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[pdf-pro-tools] language check:', err?.message); }
   if (!hasLang) {
     issues.push({
       severity: 'error',
@@ -239,7 +240,7 @@ export async function checkAccessibility(pdfBytes) {
       }
     }
     if (catalog.get(PDFName.of('StructTreeRoot'))) isTagged = true;
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[pdf-pro-tools] tagged PDF check:', err?.message); }
 
   if (!isTagged) {
     issues.push({
@@ -256,7 +257,7 @@ export async function checkAccessibility(pdfBytes) {
   let hasBookmarks = false;
   try {
     if (catalog.get(PDFName.of('Outlines'))) hasBookmarks = true;
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[pdf-pro-tools] bookmarks check:', err?.message); }
 
   if (pageCount > 20 && !hasBookmarks) {
     issues.push({
@@ -288,7 +289,7 @@ export async function checkAccessibility(pdfBytes) {
         autoFixable: false,
       });
     }
-  } catch { /* no form */ }
+  } catch (err) { /* no form */ console.warn('[pdf-pro-tools] form fields check:', err?.message); }
 
   // 6. Page size consistency
   const pages = pdfDoc.getPages();
@@ -370,7 +371,7 @@ export async function autoFixAccessibility(pdfBytes, fixes = {}) {
       catalog.set(PDFName.of('Lang'), pdfDoc.context.obj(language));
       fixCount++;
     }
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[pdf-pro-tools] language fix:', err?.message); }
 
   // Add MarkInfo if missing
   try {
@@ -380,7 +381,7 @@ export async function autoFixAccessibility(pdfBytes, fixes = {}) {
       catalog.set(PDFName.of('MarkInfo'), markInfo);
       fixCount++;
     }
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[pdf-pro-tools] MarkInfo fix:', err?.message); }
 
   return {
     blob: new Blob([await pdfDoc.save()], { type: 'application/pdf' }),

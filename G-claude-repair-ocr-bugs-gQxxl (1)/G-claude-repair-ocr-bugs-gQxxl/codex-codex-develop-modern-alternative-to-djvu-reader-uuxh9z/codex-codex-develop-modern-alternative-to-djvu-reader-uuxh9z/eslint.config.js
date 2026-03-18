@@ -1,0 +1,111 @@
+// ─── ESLint Flat Config (v9+) ───────────────────────────────────────────────
+// Uses the new flat config format. Run: npx eslint app/
+
+export default [
+  {
+    files: ['app/**/*.js', 'electron/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        // Browser globals
+        window: 'readonly',
+        document: 'readonly',
+        console: 'readonly',
+        performance: 'readonly',
+        navigator: 'readonly',
+        URL: 'readonly',
+        Blob: 'readonly',
+        File: 'readonly',
+        FileReader: 'readonly',
+        Image: 'readonly',
+        HTMLCanvasElement: 'readonly',
+        HTMLElement: 'readonly',
+        OffscreenCanvas: 'readonly',
+        CustomEvent: 'readonly',
+        EventTarget: 'readonly',
+        DOMParser: 'readonly',
+        XMLSerializer: 'readonly',
+        fetch: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        requestAnimationFrame: 'readonly',
+        requestIdleCallback: 'readonly',
+        indexedDB: 'readonly',
+        localStorage: 'readonly',
+        alert: 'readonly',
+        confirm: 'readonly',
+        prompt: 'readonly',
+        TextDecoder: 'readonly',
+        TextEncoder: 'readonly',
+        crypto: 'readonly',
+        structuredClone: 'readonly',
+        // Node.js globals (for electron/tests)
+        process: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        global: 'readonly',
+        Buffer: 'readonly',
+      },
+    },
+    rules: {
+      // Errors
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-undef': 'error',
+      'no-empty': ['warn', { allowEmptyCatch: false }],
+      'eqeqeq': ['error', 'smart'],
+      'no-var': 'error',
+      'prefer-const': ['warn', { destructuring: 'all' }],
+      'no-duplicate-imports': 'error',
+
+      // Style (warnings for gradual adoption)
+      'no-console': 'off', // Will enable later when logger migration complete
+      'no-debugger': 'warn',
+      'no-alert': 'off', // App uses modal-prompt.js, but some legacy alert() remains
+      'no-trailing-spaces': 'warn',
+      'semi': ['warn', 'always'],
+    },
+  },
+  {
+    // Test files
+    files: ['tests/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+        setInterval: 'readonly',
+        clearInterval: 'readonly',
+        Buffer: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        global: 'readonly',
+        describe: 'readonly',
+        it: 'readonly',
+        test: 'readonly',
+        before: 'readonly',
+        after: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+      },
+    },
+    rules: {
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+      'no-empty': 'off',
+    },
+  },
+  {
+    // Ignore patterns
+    ignores: [
+      'node_modules/**',
+      'dist/**',
+      'dist-vite/**',
+      '*.min.js',
+    ],
+  },
+];

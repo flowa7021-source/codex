@@ -141,7 +141,7 @@ function showUserError(context, errorType, message) {
     statusEl.textContent = `Ошибка [${label}]: ${errorType} — ${message}`;
   }
   // Also show a toast notification for visibility
-  try { toastError(`${label}: ${message}`); } catch {}
+  try { toastError(`${label}: ${message}`); } catch (err) { console.warn('[app] toast in error boundary failed:', err?.message); }
 }
 
 // ─── Phase 2: OCR Confidence Scoring ───────────────────────────────────────
@@ -309,7 +309,7 @@ function persistEdits() {
   try {
     localStorage.setItem(key, JSON.stringify(payload));
     pdfEditState.dirty = false;
-  } catch { /* storage quota */ }
+  } catch (err) { console.warn('[app] storage quota exceeded:', err?.message); }
 }
 
 function loadPersistedEdits() {
@@ -324,7 +324,7 @@ function loadPersistedEdits() {
         pdfEditState.edits.set(Number(page), text);
       }
     }
-  } catch { /* ignore */ }
+  } catch (err) { console.warn('[app] non-critical error:', err?.message); }
 }
 
 // ─── Phase 3: True PDF→DOCX Converter ─────────────────────────────────────
@@ -701,7 +701,7 @@ async function capturePageAsImageData(pageNum) {
     await state.adapter.renderPage(pageNum, tempCanvas, { zoom: 1, rotation: 0 });
     const base64 = tempCanvas.toDataURL('image/png').split(',')[1];
     return base64;
-  } catch {
+  } catch (err) {
     return null;
   } finally {
     tempCanvas.width = 0;
@@ -1256,7 +1256,7 @@ class PDFAdapter {
 
     const isMainCanvas = canvas === els?.canvas;
     if (isMainCanvas && this._currentRenderTask) {
-      try { this._currentRenderTask.cancel(); } catch { /* already finished */ }
+      try { this._currentRenderTask.cancel(); } catch (_) { /* already finished */ }
       this._currentRenderTask = null;
     }
 
@@ -1726,7 +1726,7 @@ function loadDjvuData() {
   try {
     const raw = localStorage.getItem(djvuTextKey());
     return raw ? JSON.parse(raw) : null;
-  } catch {
+  } catch (err) {
     return null;
   }
 }
@@ -1942,7 +1942,7 @@ function loadAppSettings() {
     state.settings = { ...defaultSettings(), ...(parsed || {}) };
     state.settings.sidebarSections = { ...defaultSettings().sidebarSections, ...(state.settings.sidebarSections || {}) };
     state.settings.toolbarSections = { ...defaultSettings().toolbarSections, ...(state.settings.toolbarSections || {}) };
-  } catch {
+  } catch (err) {
     state.settings = defaultSettings();
   }
 }
@@ -2427,7 +2427,7 @@ async function buildOcrSourceCanvas(pageNumber) {
     if (smallText && adaptiveZoom < 3.0) adaptiveZoom = Math.min(3.0, adaptiveZoom * 1.4);
     probeCanvas.width = 0; probeCanvas.height = 0; // free memory
     pushDiagnosticEvent('ocr.adaptive-dpi', { page: pageNumber, suggestedScale: analysis.suggestedScale, zoom: adaptiveZoom, density: analysis.density, strokeWidth: analysis.avgStrokeWidth, smallText });
-  } catch { /* fall through to default zoom */ }
+  } catch (err) { console.warn('[app] adaptive zoom fallback:', err?.message); }
   await state.adapter.renderPage(pageNumber, canvas, { zoom: adaptiveZoom, rotation: state.rotation || 0 });
   const normalized = constrainOcrSourceCanvasPixels(canvas, OCR_SOURCE_MAX_PIXELS);
   if (normalized.scaled) {
@@ -2455,7 +2455,7 @@ async function estimatePageSkewAngle(pageNumber) {
     const skew = estimateSkewAngleFromBinary(img);
     state.pageSkewAngles[pageNumber] = skew;
     return skew;
-    } catch {
+    } catch (err) {
       state.pageSkewAngles[pageNumber] = 0;
       return 0;
     } finally {
@@ -2542,7 +2542,7 @@ function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean', inve
         ctx.drawImage(enhanced, 0, 0);
         return canvas;
       }
-    } catch { /* fallback to standard pipeline */ }
+    } catch (err) { console.warn('[app] render pipeline fallback:', err?.message); }
   }
 
   const thresholdShift = state.settings?.ocrQualityMode === 'accurate' ? 8 : 0;
@@ -2809,7 +2809,7 @@ async function runOcrOnPreparedCanvas(canvas, options = {}) {
         cache.pagesWords[options.pageNum - 1] = bestWords;
         saveOcrTextData(cache);
       }
-    } catch { /* non-critical */ }
+    } catch (err) { console.warn('[app] non-critical:', err?.message); }
   }
 
   return best;
@@ -3288,7 +3288,7 @@ async function extractTextForPage(pageNumber) {
   let text = '';
   try {
     text = String(await state.adapter.getText(pageNumber) || '').trim();
-  } catch {
+  } catch (err) {
     text = '';
   }
   if (text) return text;
@@ -3313,10 +3313,10 @@ async function extractTextForPage(pageNumber) {
         while (pagesText.length < pageNumber) pagesText.push('');
         pagesText[pageNumber - 1] = ocrResult;
         saveOcrTextData({ ...existing, pagesText, updatedAt: new Date().toISOString() });
-      } catch { /* persist best-effort */ }
+      } catch (err) { console.warn('[app] persist best-effort failed:', err?.message); }
     }
     return ocrResult;
-  } catch {
+  } catch (err) {
     return '';
   }
 }
@@ -3377,7 +3377,7 @@ async function startBackgroundOcrScan(reason = 'auto') {
     if (usePool) {
       pushDiagnosticEvent('ocr.background.pool', { poolSize, lang: tessLang });
     }
-  } catch {
+  } catch (err) {
     usePool = false;
   }
 
@@ -3421,7 +3421,7 @@ async function startBackgroundOcrScan(reason = 'auto') {
         try {
           const txt = await extractTextForPage(pageNum);
           return { pageNum, text: txt || '' };
-        } catch {
+        } catch (err) {
           return { pageNum, text: '' };
         }
       });
@@ -3475,7 +3475,7 @@ async function startBackgroundOcrScan(reason = 'auto') {
       updatedAt: new Date().toISOString(),
     });
     setOcrStatus('OCR: фоновое распознавание завершено');
-    try { toastSuccess('OCR: фоновое распознавание завершено'); } catch {}
+    try { toastSuccess('OCR: фоновое распознавание завершено'); } catch (err) { console.warn('[ocr] toast failed:', err?.message); }
     pushDiagnosticEvent('ocr.background.finish', { scannedPages: scannedCount, concurrency });
   } finally {
     if (state.backgroundOcrToken === token) {
@@ -4067,7 +4067,7 @@ async function importAnnotationsJson(file) {
     saveComments(comments);
     renderAnnotations();
     renderCommentList();
-  } catch {
+  } catch (err) {
     toastError('Не удалось импортировать JSON аннотаций. Проверьте формат файла.');
   }
 }
@@ -4168,7 +4168,7 @@ async function importAnnotationBundleJson(file) {
 
     renderAnnotations();
     renderCommentList();
-  } catch {
+  } catch (err) {
     toastError('Не удалось импортировать bundle JSON аннотаций. Проверьте формат файла.');
   }
 }
@@ -4239,7 +4239,7 @@ function loadOcrTextData() {
   try {
     const raw = localStorage.getItem(ocrTextKey());
     return raw ? JSON.parse(raw) : null;
-  } catch {
+  } catch (err) {
     return null;
   }
 }
@@ -4257,7 +4257,7 @@ async function loadOcrTextDataAsync() {
   try {
     const idbData = await loadOcrData(docName);
     if (idbData) return idbData;
-  } catch { /* fall through */ }
+  } catch (err) { console.warn('[app] fallthrough:', err?.message); }
   return loadOcrTextData();
 }
 
@@ -4457,7 +4457,7 @@ function toggleCollaborationChannel() {
         setWorkspaceStatus('Workspace получен из collab-канала.', 'success');
         setStage4Status('Collab snapshot применён.', 'success');
       }
-    } catch {
+    } catch (err) {
       setStage4Status('Ошибка применения collab snapshot.', 'error');
     }
   };
@@ -4496,7 +4496,7 @@ async function importOcrJson(file) {
       await renderCurrentPage();
     }
     setStage4Status('OCR JSON импортирован.', 'success');
-  } catch {
+  } catch (err) {
     setStage4Status('Ошибка импорта OCR JSON.', 'error');
   }
 }
@@ -4532,7 +4532,7 @@ async function importWorkspaceBundleJson(file) {
     if (ok) {
       setWorkspaceStatus('Workspace импортирован.', 'success');
     }
-  } catch {
+  } catch (err) {
     setWorkspaceStatus('Ошибка импорта workspace backup.', 'error');
   }
 }
@@ -4583,7 +4583,7 @@ async function copySearchResultsSummary() {
       ta.remove();
     }
     els.searchStatus.textContent = `Скопировано результатов: ${state.searchResults.length}`;
-  } catch {
+  } catch (err) {
     els.searchStatus.textContent = 'Не удалось скопировать список';
   }
 }
@@ -4729,7 +4729,7 @@ async function importSearchResultsJson(file) {
 
     renderSearchResultsList();
     els.searchStatus.textContent = `Импортировано результатов: ${state.searchResults.length}`;
-  } catch {
+  } catch (err) {
     els.searchStatus.textContent = 'Ошибка импорта результатов поиска';
   }
 }
@@ -4827,7 +4827,7 @@ async function importSearchResultsCsv(file) {
 
     renderSearchResultsList();
     els.searchStatus.textContent = `Импортировано из CSV: ${state.searchResults.length}`;
-  } catch {
+  } catch (err) {
     els.searchStatus.textContent = 'Ошибка импорта CSV';
   }
 }
@@ -4853,7 +4853,7 @@ async function importDjvuDataJson(file) {
     await renderPagePreviews();
     await renderCurrentPage();
     els.searchStatus.textContent = 'DjVu data JSON импортирован';
-  } catch {
+  } catch (err) {
     els.searchStatus.textContent = 'Ошибка импорта DjVu data JSON';
   }
 }
@@ -4907,7 +4907,7 @@ function renderSearchResultsList() {
 function loadSearchHistory() {
   try {
     return JSON.parse(localStorage.getItem(searchHistoryKey()) || '[]');
-  } catch {
+  } catch (err) {
     return [];
   }
 }
@@ -5046,7 +5046,7 @@ async function copySearchHistory() {
       ta.remove();
     }
     els.searchStatus.textContent = `Скопировано запросов: ${history.length}`;
-  } catch {
+  } catch (err) {
     els.searchStatus.textContent = 'Не удалось скопировать историю';
   }
 }
@@ -5074,7 +5074,7 @@ async function importSearchHistoryJson(file) {
     saveSearchHistory(unique);
     renderSearchHistory();
     els.searchStatus.textContent = `Импортировано запросов: ${unique.length}`;
-  } catch {
+  } catch (err) {
     els.searchStatus.textContent = 'Ошибка импорта истории поиска';
   }
 }
@@ -5093,7 +5093,7 @@ function loadReadingGoal() {
     const parsed = JSON.parse(raw);
     if (!Number.isInteger(parsed?.page)) return null;
     return parsed.page;
-  } catch {
+  } catch (err) {
     return null;
   }
 }
@@ -5315,7 +5315,7 @@ function loadReadingTime() {
     if (!raw) return 0;
     const parsed = JSON.parse(raw);
     return Number.isFinite(parsed?.totalMs) ? Math.max(0, parsed.totalMs) : 0;
-  } catch {
+  } catch (err) {
     return 0;
   }
 }
@@ -5383,7 +5383,7 @@ async function isLikelyDjvuFile(file) {
     const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
     const text = new TextDecoder('ascii', { fatal: false }).decode(header);
     return text.includes('AT&TFORM') || text.startsWith('AT&T');
-  } catch {
+  } catch (err) {
     return false;
   }
 }
@@ -5409,7 +5409,7 @@ async function extractDjvuFallbackText(file) {
     }
 
     return text.slice(0, 5000);
-  } catch {
+  } catch (err) {
     return '';
   }
 }
@@ -5456,7 +5456,7 @@ const _openFileImpl = async function openFileImpl(file) {
       }
       const pdfDoc = await pdf.getDocument(pdfOptions).promise;
       state.adapter = new PDFAdapter(pdfDoc);
-    } catch {
+    } catch (err) {
       state.adapter = new UnsupportedAdapter(file.name);
       els.searchStatus.textContent = 'Не удалось загрузить локальный PDF runtime. Проверьте целостность приложения.';
     }
@@ -5472,7 +5472,7 @@ const _openFileImpl = async function openFileImpl(file) {
       state.adapter = new DjVuNativeAdapter(doc, file.name);
       openedByNative = true;
       els.searchStatus.textContent = 'DjVu файл открыт встроенным runtime.';
-    } catch {
+    } catch (err) {
       const hasPageData = Array.isArray(djvuData?.pagesImages) && djvuData.pagesImages.length > 0;
       let effectiveDjvuData = djvuData;
 
@@ -5535,7 +5535,7 @@ const _openFileImpl = async function openFileImpl(file) {
       if (autoZoom > 0.3 && autoZoom < 4) {
         state.zoom = Math.round(autoZoom * 100) / 100;
       }
-    } catch { /* keep default zoom=1 */ }
+    } catch (err) { console.warn('[app] zoom restore fallback:', err?.message); }
   }
   stopReadingTimer(false);
   state.readingTotalMs = loadReadingTime();
@@ -5575,8 +5575,8 @@ const _openFileImpl = async function openFileImpl(file) {
   renderEtaStatus();
   startReadingTimer();
   recordPerfMetric('pageLoadTimes', Math.round(performance.now() - openStartedAt));
-  try { toastInfo(`${state.docName || 'Документ'} — ${state.pageCount} стр.`); } catch {}
-  try { announce(`Документ ${state.docName} открыт, ${state.pageCount} страниц`); } catch {}
+  try { toastInfo(`${state.docName || 'Документ'} — ${state.pageCount} стр.`); } catch (err) { console.warn('[file] toast failed:', err?.message); }
+  try { announce(`Документ ${state.docName} открыт, ${state.pageCount} страниц`); } catch (err) { console.warn('[a11y] announce failed:', err?.message); }
 };
 const openFile = withErrorBoundary(_openFileImpl, 'file-open');
 
@@ -5609,7 +5609,7 @@ async function _preRenderAdjacent(page, zoom, rotation) {
       cacheRenderedPage(p, offscreen, zoom, rotation);
       offscreen.width = 0;
       offscreen.height = 0;
-    } catch {
+    } catch (err) {
       // Pre-render failures are non-critical; silently ignore
     }
   }
@@ -5821,7 +5821,7 @@ async function renderTextLayer(pageNum, zoom, rotation) {
 
   // Clean up previous TextLayer instance
   if (_activeTextLayer) {
-    try { _activeTextLayer.cancel(); } catch { /* already done */ }
+    try { _activeTextLayer.cancel(); } catch (_) { /* already done */ }
     _activeTextLayer = null;
   }
   container.innerHTML = '';
@@ -6727,7 +6727,7 @@ function loadViewState() {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
     return parsed;
-  } catch {
+  } catch (err) {
     return null;
   }
 }
@@ -6928,7 +6928,7 @@ function loadNotes() {
       setNotesStatus('Заметки загружены');
       return;
     }
-  } catch {
+  } catch (err) {
     // Backward compatibility with old plain-string format.
   }
 
@@ -7042,7 +7042,7 @@ async function importNotesJson(file) {
     els.notesTags.value = merged.tags;
     els.notes.value = merged.body;
     saveNotes('manual');
-  } catch {
+  } catch (err) {
     toastError('Не удалось импортировать заметки JSON. Проверьте формат файла.');
   }
 }
@@ -7209,7 +7209,7 @@ function loadHotkeys() {
       fitWidth: normalizeHotkey(parsed.fitWidth, defaultHotkeys.fitWidth),
       fitPage: normalizeHotkey(parsed.fitPage, defaultHotkeys.fitPage),
     });
-  } catch {
+  } catch (err) {
     setHotkeys({ ...defaultHotkeys });
   }
   renderHotkeyInputs();
@@ -7381,7 +7381,7 @@ async function importBookmarksJson(file) {
     saveBookmarks(unique);
     renderBookmarks();
     setBookmarksStatus(`Импортировано закладок: ${unique.length}`, 'success');
-  } catch {
+  } catch (err) {
     setBookmarksStatus('Ошибка импорта закладок', 'error');
   }
 }
@@ -7500,7 +7500,7 @@ async function buildOutlineItems(items = [], level = 0) {
     if (item.dest) {
       try {
         page = await state.adapter.resolveDestToPage(item.dest);
-      } catch {
+      } catch (err) {
         page = null;
       }
     }
@@ -7586,7 +7586,7 @@ async function _renderDeferredPreviews(from, to) {
       const scale = Math.min(120 / Math.max(1, viewport.width), 160 / Math.max(1, viewport.height));
       await state.adapter.renderPage(page, canvas, { zoom: scale, rotation: state.rotation });
       delete canvas.dataset.needsRender;
-    } catch { /* keep placeholder */ }
+    } catch (err) { console.warn('[app] thumbnail placeholder fallback:', err?.message); }
     // Yield between previews to not block the main thread
     await yieldToMainThread();
   }
@@ -7625,7 +7625,7 @@ async function renderPagePreviews() {
         const viewport = await state.adapter.getPageViewport(i, 1, state.rotation);
         const scale = Math.min(120 / Math.max(1, viewport.width), 160 / Math.max(1, viewport.height));
         await state.adapter.renderPage(i, canvas, { zoom: scale, rotation: state.rotation });
-      } catch {
+      } catch (err) {
         _drawPreviewPlaceholder(canvas, i);
       }
     } else {
@@ -8396,14 +8396,14 @@ els.saveCloudSyncUrl.addEventListener('click', saveCloudSyncUrl);
 els.pushCloudSync.addEventListener('click', async () => {
   try {
     await pushWorkspaceToCloud();
-  } catch {
+  } catch (err) {
     setStage4Status('Ошибка cloud push.', 'error');
   }
 });
 els.pullCloudSync.addEventListener('click', async () => {
   try {
     await pullWorkspaceFromCloud();
-  } catch {
+  } catch (err) {
     setStage4Status('Ошибка cloud pull.', 'error');
   }
 });
@@ -8493,7 +8493,7 @@ els.importDocx?.addEventListener('change', async (e) => {
     } else {
       importDocxEdits(file);
     }
-  } catch {
+  } catch (err) {
     importDocxEdits(file);
   }
   e.target.value = '';
@@ -8529,7 +8529,7 @@ els.copyOcrText?.addEventListener('click', async () => {
       await navigator.clipboard.writeText(els.pageText.value);
       setOcrStatus('OCR: текст скопирован');
     }
-  } catch {
+  } catch (err) {
     setOcrStatus('OCR: не удалось скопировать текст');
   }
 });
@@ -8584,7 +8584,7 @@ async function refreshOcrStorageInfo() {
         els.ocrDocumentsList.appendChild(li);
       }
     }
-  } catch {
+  } catch (err) {
     if (els.ocrStorageInfo) els.ocrStorageInfo.textContent = 'Ошибка чтения хранилища';
   }
 }
@@ -8660,7 +8660,7 @@ els.exportAnnPdf?.addEventListener('click', async () => {
             const data = JSON.parse(stored);
             if (data?.strokes?.length) annotStore.set(p, data.strokes);
           }
-        } catch { /* skip */ }
+        } catch (err) { console.warn('[app] skipped:', err?.message); }
       }
       if (annotStore.size === 0) {
         setOcrStatus('Нет аннотаций для экспорта');
@@ -9024,7 +9024,7 @@ els.addSignature?.addEventListener('click', () => {
       canvas.height = viewport.height;
       const ctx = canvas.getContext('2d');
       await page.render({ canvasContext: ctx, viewport }).promise;
-    } catch { /* ignore render errors */ }
+    } catch (err) { console.warn('[app] render error (non-critical):', err?.message); }
   }
 
   function updateOrgSelectionUI() {
@@ -10402,7 +10402,7 @@ if (document.getElementById('orgInsertPages')) {
       if (previewInfo) {
         previewInfo.textContent = `Стр. ${page} из ${state.pageCount || '?'}`;
       }
-    } catch { /* ignore */ }
+    } catch (err) { console.warn('[app] non-critical error:', err?.message); }
   }
 
   // Execute print
@@ -10769,7 +10769,7 @@ registerRecovery(ERROR_CODES.MEMORY, () => {
 });
 registerRecovery(ERROR_CODES.RENDER, () => {
   toastInfo('Ошибка рендеринга — повторная попытка...');
-  try { renderCurrentPage(); } catch {}
+  try { renderCurrentPage(); } catch (err) { console.error('[render] recovery render failed:', err); }
 });
 onError((err) => {
   if (err.severity === 'fatal') {

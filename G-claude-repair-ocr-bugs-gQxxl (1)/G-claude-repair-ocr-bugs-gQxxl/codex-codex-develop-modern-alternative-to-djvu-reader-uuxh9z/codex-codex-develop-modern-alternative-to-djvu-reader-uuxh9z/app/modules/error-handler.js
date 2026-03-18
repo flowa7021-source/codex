@@ -79,14 +79,14 @@ export function reportError(error, extra = {}) {
 
   // Notify listeners
   for (const fn of listeners) {
-    try { fn(appError); } catch { /* ignore listener errors */ }
+    try { fn(appError); } catch (err) { /* ignore listener errors */ console.warn('[error-handler] listener error:', err?.message); }
   }
 
   // Attempt recovery if available
   if (appError.recoverable) {
     const strategy = recoveryStrategies.get(appError.code);
     if (strategy) {
-      try { strategy(appError); } catch { /* recovery failed */ }
+      try { strategy(appError); } catch (err) { /* recovery failed */ console.warn('[error-handler] recovery failed:', err?.message); }
     }
   }
 

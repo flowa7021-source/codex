@@ -98,7 +98,7 @@ export async function saveOcrData(docName, data) {
     try {
       const key = `novareader-ocr-text:${docName}`;
       localStorage.setItem(key, JSON.stringify(data));
-    } catch { /* storage full, ignore */ }
+    } catch (err) { /* storage full, ignore */ console.warn('[ocr-storage] localStorage fallback full:', err?.message); }
   }
 }
 
@@ -112,7 +112,7 @@ export async function loadOcrData(docName) {
     const store = await getStore('readonly');
     const record = await idbRequest(store.get(`ocr:${docName}`));
     if (record) return record;
-  } catch { /* fall through */ }
+  } catch (err) { /* fall through */ console.warn('[ocr-storage] IndexedDB load:', err?.message); }
 
   // Fallback: check localStorage
   try {
@@ -124,7 +124,7 @@ export async function loadOcrData(docName) {
       saveOcrData(docName, parsed).catch(() => {});
       return parsed;
     }
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[ocr-storage] localStorage fallback load:', err?.message); }
 
   return null;
 }
@@ -168,10 +168,10 @@ export async function deleteOcrData(docName) {
   try {
     const store = await getStore('readwrite');
     await idbRequest(store.delete(`ocr:${docName}`));
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[ocr-storage] IndexedDB delete:', err?.message); }
   try {
     localStorage.removeItem(`novareader-ocr-text:${docName}`);
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[ocr-storage] localStorage delete:', err?.message); }
 }
 
 /**

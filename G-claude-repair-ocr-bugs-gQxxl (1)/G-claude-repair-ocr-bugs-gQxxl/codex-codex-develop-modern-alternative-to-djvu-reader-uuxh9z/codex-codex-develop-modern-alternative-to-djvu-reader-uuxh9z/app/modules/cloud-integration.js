@@ -169,7 +169,7 @@ export function onStatusChange(listener) {
 function _notifyStatus() {
   const status = getConnectionStatus();
   for (const fn of statusListeners) {
-    try { fn(status); } catch { /* ignore */ }
+    try { fn(status); } catch (err) { /* ignore */ console.warn('[cloud-integration] status listener:', err?.message); }
   }
 }
 

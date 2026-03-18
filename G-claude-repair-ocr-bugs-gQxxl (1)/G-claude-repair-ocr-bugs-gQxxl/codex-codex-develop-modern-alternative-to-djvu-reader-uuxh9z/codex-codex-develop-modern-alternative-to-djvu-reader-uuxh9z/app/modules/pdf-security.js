@@ -85,7 +85,7 @@ export async function cleanMetadata(pdfBytes, options = {}) {
         removed.push('creationDate', 'modDate');
       }
     }
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[pdf-security] metadata date removal:', err?.message); }
 
   pdfDoc.setProducer('NovaReader');
   const saved = await pdfDoc.save();
@@ -119,7 +119,7 @@ export async function getSecurityInfo(pdfBytes) {
     if (trailer.Encrypt) {
       info.isEncrypted = true;
     }
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[pdf-security] encryption check:', err?.message); }
 
   // Check for NovaReader permission flags
   try {
@@ -128,7 +128,7 @@ export async function getSecurityInfo(pdfBytes) {
       const data = JSON.parse(atob(subject.slice(10)));
       info.permissions = data;
     }
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.warn('[pdf-security] permission flags parse:', err?.message); }
 
   return info;
 }
@@ -166,7 +166,7 @@ export async function sanitizePdf(pdfBytes) {
         sanitized.push('embeddedFiles');
       }
     }
-  } catch { /* ignore */ }
+  } catch (err) { /* ignore */ console.error('[pdf-security] catalog sanitize failed:', err); }
 
   // Remove form submit actions from pages
   const pages = pdfDoc.getPages();
@@ -196,7 +196,7 @@ export async function sanitizePdf(pdfBytes) {
           }
         }
       }
-    } catch { /* ignore */ }
+    } catch (err) { /* ignore */ console.error('[pdf-security] annotation sanitize failed:', err); }
   }
 
   const saved = await pdfDoc.save();

@@ -20,6 +20,8 @@
     "test:benchmark": "node tests/benchmarks/ocr-quality-baseline.js",
     "test:soak": "node tests/nightly-soak.js",
     "test:soak:long": "SOAK_DURATION_MIN=60 node tests/nightly-soak.js",
+    "lint": "eslint app/",
+    "lint:fix": "eslint app/ --fix",
     "test": "npm run test:benchmark"
   },
   "devDependencies": {
