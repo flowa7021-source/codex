@@ -73,6 +73,8 @@ import { AnnotationController } from './modules/annotations-core.js';
 import { getPageInfoList, reorderPages, deletePages, rotatePages, extractPages, insertPages, insertBlankPage, duplicatePages, reversePages, createOrganizerState, togglePageSelection, selectPageRange, computeReorderFromDrag } from './modules/page-organizer.js';
 import { initFloatingSearch } from './modules/floating-search.js';
 import { XpsAdapter, parseXps } from './modules/xps-adapter.js';
+import { registerProvider, getProviders, authenticate, listFiles, openFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider } from './modules/cloud-integration.js';
+import { summarizeText, extractTags, semanticSearch, generateToc } from './modules/ai-features.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -10131,6 +10133,13 @@ window._floatingSearch = initFloatingSearch(
   }
 );
 window._xpsAdapter = XpsAdapter;
+window._cloud = { registerProvider, getProviders, authenticate, listFiles, openFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider };
+window._ai = { summarizeText, extractTags, semanticSearch, generateToc };
+
+// Register cloud provider stubs
+registerProvider(createGoogleDriveProvider());
+registerProvider(createOneDriveProvider());
+registerProvider(createDropboxProvider());
 
 // ─── Initialize Quick Actions ─────────────────────────────────────────────
 initQuickActions({
