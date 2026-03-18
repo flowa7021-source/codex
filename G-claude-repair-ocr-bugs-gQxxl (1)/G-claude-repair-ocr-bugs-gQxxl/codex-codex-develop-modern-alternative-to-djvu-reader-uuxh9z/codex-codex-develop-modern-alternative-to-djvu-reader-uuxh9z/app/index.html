@@ -627,6 +627,7 @@
           <div class="rp-section">
             <h3 class="rp-section-title">Документ</h3>
             <div class="rp-actions">
+              <button id="openPageOrganizer" class="btn-xs">🗂 Организатор страниц</button>
               <button id="mergePages" class="btn-xs">📎 Объединить PDF</button>
               <button id="splitPages" class="btn-xs">✂ Разделить PDF</button>
             </div>
@@ -942,6 +943,32 @@
               <div class="shortcut-item"><kbd>?</kbd> <span>Эта справка</span></div>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page Organizer Modal -->
+    <div id="pageOrganizerModal" class="modal page-organizer-modal" style="display:none">
+      <div class="modal-card page-organizer-card">
+        <div class="modal-head">
+          <h3>Организатор страниц</h3>
+          <div class="page-org-actions">
+            <button id="pageOrgRotateCW" class="btn-xs" title="Повернуть на 90°">↻ Повернуть</button>
+            <button id="pageOrgDelete" class="btn-xs" title="Удалить выбранные">🗑 Удалить</button>
+            <button id="pageOrgDuplicate" class="btn-xs" title="Дублировать выбранные">📋 Дублировать</button>
+            <button id="pageOrgInsertBlank" class="btn-xs" title="Вставить пустую страницу">+ Пустая</button>
+            <button id="pageOrgExtract" class="btn-xs" title="Извлечь выбранные в PDF">⬇ Извлечь</button>
+            <button id="pageOrgReverse" class="btn-xs" title="Обратный порядок">⇅ Обратить</button>
+          </div>
+          <button id="pageOrgClose" title="Закрыть">✕</button>
+        </div>
+        <div class="modal-body">
+          <div id="pageOrgGrid" class="page-org-grid"></div>
+        </div>
+        <div class="modal-foot">
+          <span id="pageOrgStatus" class="status-inline"></span>
+          <button id="pageOrgApply" class="btn btn-primary">Применить изменения</button>
+          <button id="pageOrgCancel" class="btn">Отмена</button>
         </div>
       </div>
     </div>
