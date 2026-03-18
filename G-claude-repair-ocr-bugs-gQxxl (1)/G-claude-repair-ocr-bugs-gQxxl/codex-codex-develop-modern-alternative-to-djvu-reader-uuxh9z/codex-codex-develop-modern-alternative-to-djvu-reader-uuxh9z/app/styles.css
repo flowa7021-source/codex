@@ -622,6 +622,16 @@ body.sidebar-compact .sidebar-panel > section { padding: 4px; }
   resize: both;
   overflow: auto;
 }
+.text-layer .paragraph-editor {
+  background: rgba(255, 255, 255, 0.97);
+  border: 2px solid #10b981;
+  padding: 6px 8px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  min-height: 2em;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+}
 
 /* ═══════════════════════════════════════════════════
    FLOATING SEARCH (Ctrl+F)

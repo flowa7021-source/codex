@@ -6033,19 +6033,226 @@ function _handleTextLayerDblClick(e) {
     const rect = els.textLayerDiv.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-    _createInlineEditor(x, y, '', null);
+    _createInlineEditor(x, y, '', null, []);
     return;
   }
 
-  // Edit existing text
-  const rect = span.getBoundingClientRect();
-  const containerRect = els.textLayerDiv.getBoundingClientRect();
-  const x = rect.left - containerRect.left;
-  const y = rect.top - containerRect.top;
-  _createInlineEditor(x, y, span.textContent, span);
+  // Group spans into a paragraph by Y-proximity for reflow editing
+  const paragraphSpans = _findParagraphSpans(span);
+  if (paragraphSpans.length > 1) {
+    _createParagraphEditor(paragraphSpans);
+  } else {
+    // Single span edit (fallback)
+    const rect = span.getBoundingClientRect();
+    const containerRect = els.textLayerDiv.getBoundingClientRect();
+    const x = rect.left - containerRect.left;
+    const y = rect.top - containerRect.top;
+    _createInlineEditor(x, y, span.textContent, span, []);
+  }
 }
 
-function _createInlineEditor(x, y, initialText, targetSpan) {
+/**
+ * Find all spans that belong to the same paragraph as the target span.
+ * Groups by Y-proximity: spans on the same or adjacent lines with similar X range.
+ */
+function _findParagraphSpans(targetSpan) {
+  const container = els.textLayerDiv;
+  if (!container) return [targetSpan];
+
+  const allSpans = Array.from(container.querySelectorAll('span:not(.inline-editor)'));
+  if (allSpans.length <= 1) return [targetSpan];
+
+  const targetRect = targetSpan.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const lineH = targetRect.height || 14;
+
+  // Collect all spans with bounding info
+  const spansWithRect = allSpans.map(s => ({
+    span: s,
+    rect: s.getBoundingClientRect(),
+  }));
+
+  // Find all spans on lines near the target span
+  // A "paragraph" is a group of consecutive lines with spans that overlap in X
+  const targetRelY = targetRect.top - containerRect.top;
+  const targetLeft = targetRect.left - containerRect.left;
+  const targetRight = targetLeft + targetRect.width;
+
+  // Get all lines (groups of spans with similar Y)
+  const lines = [];
+  const sorted = [...spansWithRect].sort((a, b) => a.rect.top - b.rect.top);
+  let currentLine = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = currentLine[currentLine.length - 1];
+    if (Math.abs(sorted[i].rect.top - prev.rect.top) < lineH * 0.6) {
+      currentLine.push(sorted[i]);
+    } else {
+      lines.push(currentLine);
+      currentLine = [sorted[i]];
+    }
+  }
+  if (currentLine.length) lines.push(currentLine);
+
+  // Find which line the target is on
+  let targetLineIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].some(s => s.span === targetSpan)) {
+      targetLineIdx = i;
+      break;
+    }
+  }
+  if (targetLineIdx === -1) return [targetSpan];
+
+  // Expand up and down to find paragraph boundaries
+  // A paragraph break occurs when there's a large vertical gap or significant X indent change
+  let startLine = targetLineIdx;
+  let endLine = targetLineIdx;
+
+  // Expand upward
+  for (let i = targetLineIdx - 1; i >= 0; i--) {
+    const prevLine = lines[i + 1];
+    const thisLine = lines[i];
+    const gap = prevLine[0].rect.top - (thisLine[0].rect.top + thisLine[0].rect.height);
+    if (gap > lineH * 0.8) break; // Large gap = paragraph break
+    startLine = i;
+  }
+
+  // Expand downward
+  for (let i = targetLineIdx + 1; i < lines.length; i++) {
+    const prevLine = lines[i - 1];
+    const thisLine = lines[i];
+    const gap = thisLine[0].rect.top - (prevLine[0].rect.top + prevLine[0].rect.height);
+    if (gap > lineH * 0.8) break;
+    endLine = i;
+  }
+
+  // Collect all spans in the paragraph
+  const result = [];
+  for (let i = startLine; i <= endLine; i++) {
+    for (const s of lines[i]) {
+      result.push(s.span);
+    }
+  }
+
+  return result.length ? result : [targetSpan];
+}
+
+/**
+ * Create a paragraph-level contenteditable editor covering all paragraph spans.
+ * Supports text reflow: edited text re-wraps within the paragraph bounds.
+ */
+function _createParagraphEditor(spans) {
+  if (_activeInlineEditor) _activeInlineEditor.remove();
+
+  const containerRect = els.textLayerDiv.getBoundingClientRect();
+
+  // Calculate bounding box of all spans in the paragraph
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const s of spans) {
+    const r = s.getBoundingClientRect();
+    const relX = r.left - containerRect.left;
+    const relY = r.top - containerRect.top;
+    minX = Math.min(minX, relX);
+    minY = Math.min(minY, relY);
+    maxX = Math.max(maxX, relX + r.width);
+    maxY = Math.max(maxY, relY + r.height);
+  }
+
+  // Determine dominant font size from spans
+  const fontSizes = spans.map(s => parseFloat(s.style.fontSize) || 14);
+  const dominantFontSize = fontSizes.sort((a, b) => b - a)[0] || 14;
+
+  // Collect text from spans (join with spaces, preserving line breaks)
+  const text = spans.map(s => s.textContent).join(' ').replace(/\s+/g, ' ').trim();
+
+  // Hide original spans
+  for (const s of spans) s.style.visibility = 'hidden';
+
+  const editor = document.createElement('div');
+  editor.className = 'inline-editor paragraph-editor';
+  editor.contentEditable = 'true';
+  editor.textContent = text;
+  editor.style.left = `${minX}px`;
+  editor.style.top = `${minY}px`;
+  editor.style.width = `${maxX - minX}px`;
+  editor.style.minHeight = `${maxY - minY}px`;
+  editor.style.fontSize = `${dominantFontSize}px`;
+  editor.style.lineHeight = '1.3';
+  editor.style.wordWrap = 'break-word';
+  editor.style.overflowWrap = 'break-word';
+  editor.style.whiteSpace = 'pre-wrap';
+
+  editor.addEventListener('blur', () => {
+    const newText = editor.textContent.trim();
+
+    // Restore original spans visibility
+    for (const s of spans) s.style.visibility = '';
+
+    if (newText) {
+      // Reflow: update the text content of spans to match edited text
+      _reflowTextToSpans(spans, newText, dominantFontSize, maxX - minX);
+    }
+
+    editor.remove();
+    _activeInlineEditor = null;
+    _syncTextLayerToStorage();
+  });
+
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      for (const s of spans) s.style.visibility = '';
+      editor.remove();
+      _activeInlineEditor = null;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editor.blur(); }
+  });
+
+  els.textLayerDiv.appendChild(editor);
+  _activeInlineEditor = editor;
+  editor.focus();
+
+  // Select all text
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/**
+ * Reflow edited text back into the original spans.
+ * Distributes words across spans maintaining original positions.
+ */
+function _reflowTextToSpans(spans, newText, fontSize, maxWidth) {
+  const words = newText.split(/\s+/).filter(Boolean);
+  if (!words.length || !spans.length) return;
+
+  // Simple distribution: evenly distribute words across existing spans
+  const wordsPerSpan = Math.max(1, Math.ceil(words.length / spans.length));
+
+  for (let i = 0; i < spans.length; i++) {
+    const start = i * wordsPerSpan;
+    const end = Math.min(start + wordsPerSpan, words.length);
+    const spanWords = words.slice(start, end);
+    if (spanWords.length) {
+      spans[i].textContent = spanWords.join(' ');
+      spans[i].style.visibility = '';
+    } else {
+      // Extra spans: clear their text
+      spans[i].textContent = '';
+    }
+  }
+
+  // If there are remaining words that didn't fit, append to the last span
+  const usedWords = spans.length * wordsPerSpan;
+  if (usedWords < words.length) {
+    const lastSpan = spans[spans.length - 1];
+    const remaining = words.slice(usedWords).join(' ');
+    lastSpan.textContent += ' ' + remaining;
+  }
+}
+
+function _createInlineEditor(x, y, initialText, targetSpan, _paragraphSpans) {
   if (_activeInlineEditor) _activeInlineEditor.remove();
 
   const editor = document.createElement('div');
