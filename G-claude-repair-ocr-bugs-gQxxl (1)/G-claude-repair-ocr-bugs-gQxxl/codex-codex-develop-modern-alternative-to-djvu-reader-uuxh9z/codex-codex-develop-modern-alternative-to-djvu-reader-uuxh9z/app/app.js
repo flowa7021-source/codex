@@ -60,6 +60,8 @@ import { TabManager } from './modules/tab-manager.js';
 import { parsePageRange as parsePrintRange, getPagesToPrint, arrangeBooklet, arrangeNup, triggerPrint } from './modules/pdf-print.js';
 import { createPdfFromImages, createBlankPdf, canvasesToPdf } from './modules/pdf-create.js';
 import { initQuickActions, hideQuickActions } from './modules/quick-actions.js';
+import { initHotkeys, onHotkey, registerHotkeyHandlers, isSpaceHeld, getBindings, getCheatsheet } from './modules/hotkeys.js';
+import { CbzAdapter, parseCbz } from './modules/cbz-adapter.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -10088,6 +10090,8 @@ window._tabManager = TabManager;
 window._print = { parsePrintRange, getPagesToPrint, arrangeBooklet, arrangeNup, triggerPrint };
 window._pdfCreate = { createPdfFromImages, createBlankPdf, canvasesToPdf };
 window._quickActions = { initQuickActions, hideQuickActions };
+window._hotkeys = { initHotkeys, onHotkey, registerHotkeyHandlers, isSpaceHeld, getBindings, getCheatsheet };
+window._cbzAdapter = CbzAdapter;
 
 // ─── Initialize Quick Actions ─────────────────────────────────────────────
 initQuickActions({
@@ -10098,4 +10102,22 @@ initQuickActions({
       if (searchInput) { searchInput.value = text; searchInput.dispatchEvent(new Event('input')); }
     }
   },
+});
+
+// ─── Initialize Extended Hotkeys ──────────────────────────────────────────
+initHotkeys();
+registerHotkeyHandlers({
+  goToPage: () => {
+    const page = prompt('Перейти к странице:');
+    if (page) { const n = parseInt(page, 10); if (n >= 1 && n <= state.pageCount) { state.currentPage = n; renderCurrentPage(); } }
+  },
+  firstPage: () => { state.currentPage = 1; renderCurrentPage(); },
+  lastPage: () => { state.currentPage = state.pageCount; renderCurrentPage(); },
+  prevPage: () => els.prevPage?.click(),
+  nextPage: () => els.nextPage?.click(),
+  zoomIn: () => els.zoomIn?.click(),
+  zoomOut: () => els.zoomOut?.click(),
+  search: () => { const toggle = document.getElementById('searchToggle'); if (toggle) toggle.click(); },
+  fullscreen: () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); },
+  print: () => window.print(),
 });

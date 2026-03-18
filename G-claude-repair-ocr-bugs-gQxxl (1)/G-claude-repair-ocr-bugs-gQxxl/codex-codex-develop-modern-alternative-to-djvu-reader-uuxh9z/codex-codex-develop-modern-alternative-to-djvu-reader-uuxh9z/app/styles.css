@@ -2247,3 +2247,30 @@ body.virtual-keyboard-open .command-bar {
   .qa-label { display: none; }
   .quick-action-btn { padding: 6px; }
 }
+
+/* ═══════════════════════════════════════════════════
+   Hand Tool (Space+Drag)
+   ═══════════════════════════════════════════════════ */
+body.hand-tool-active,
+body.hand-tool-active .document-viewport,
+body.hand-tool-active canvas {
+  cursor: grab !important;
+}
+body.hand-tool-active:active,
+body.hand-tool-active:active .document-viewport,
+body.hand-tool-active:active canvas {
+  cursor: grabbing !important;
+}
+
+/* ═══════════════════════════════════════════════════
+   RTL Support (Arabic)
+   ═══════════════════════════════════════════════════ */
+[dir="rtl"] .command-bar { direction: rtl; }
+[dir="rtl"] .cb-group { flex-direction: row-reverse; }
+[dir="rtl"] .sidebar { border-right: none; border-left: 1px solid var(--border); }
+[dir="rtl"] .rp-panel { direction: rtl; text-align: right; }
+[dir="rtl"] .tab-bar { direction: rtl; }
+[dir="rtl"] .ribbon-tab-bar { direction: rtl; }
+[dir="rtl"] .ribbon-panel { direction: rtl; }
+[dir="rtl"] .ctx-menu { text-align: right; }
+[dir="rtl"] .quick-actions-bar { direction: rtl; }
