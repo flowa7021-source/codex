@@ -2008,3 +2008,127 @@ body.virtual-keyboard-open .command-bar {
   font-size: 0.85rem;
   text-align: center;
 }
+
+/* ═══════════════════════════════════════════════════
+   Enhanced Text Layer
+   ═══════════════════════════════════════════════════ */
+.text-layer-small {
+  font-size: max(6px, inherit) !important;
+}
+.text-layer-cjk {
+  word-break: break-all;
+  line-height: 1.2;
+}
+.search-highlight {
+  background: rgba(255, 235, 59, 0.5);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+.search-highlight.active {
+  background: rgba(255, 152, 0, 0.7);
+  outline: 2px solid var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════
+   Ribbon Toolbar
+   ═══════════════════════════════════════════════════ */
+.ribbon-toolbar {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-1);
+  border-bottom: 1px solid var(--border);
+}
+.ribbon-tab-bar {
+  display: flex;
+  gap: 0;
+  padding: 0 8px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+}
+.ribbon-tab-btn {
+  padding: 6px 14px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.12s;
+}
+.ribbon-tab-btn:hover {
+  color: var(--text-primary);
+  background: var(--hover);
+}
+.ribbon-tab-btn.active,
+.ribbon-tab-btn[aria-selected="true"] {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.ribbon-tab-contextual {
+  color: var(--accent) !important;
+  font-style: italic;
+}
+.ribbon-content-area {
+  overflow: hidden;
+}
+.ribbon-panel {
+  display: flex;
+  gap: 2px;
+  padding: 6px 12px;
+  align-items: flex-start;
+  overflow-x: auto;
+}
+.ribbon-panel[hidden] { display: none; }
+.ribbon-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 8px;
+  border-right: 1px solid var(--border);
+  min-width: 60px;
+}
+.ribbon-group:last-child { border-right: none; }
+.ribbon-group-content {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.ribbon-group-label {
+  font-size: 0.6rem;
+  color: var(--muted);
+  margin-top: 4px;
+  text-align: center;
+}
+.ribbon-btn {
+  font-size: 0.75rem !important;
+  padding: 4px 8px !important;
+}
+.ribbon-collapse-btn {
+  margin-left: auto;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.7rem;
+}
+.ribbon-collapsed .ribbon-content-area {
+  display: none;
+}
+
+/* ═══════════════════════════════════════════════════
+   Layout Analysis Debug Overlay
+   ═══════════════════════════════════════════════════ */
+.layout-zone-overlay {
+  position: absolute;
+  border: 1px dashed rgba(100, 149, 237, 0.5);
+  pointer-events: none;
+  z-index: 5;
+}
+.layout-zone-overlay.zone-text { border-color: rgba(76, 175, 80, 0.5); }
+.layout-zone-overlay.zone-table { border-color: rgba(255, 152, 0, 0.5); background: rgba(255, 152, 0, 0.05); }
+.layout-zone-overlay.zone-header { border-color: rgba(156, 39, 176, 0.5); }
+.layout-zone-overlay.zone-footer { border-color: rgba(156, 39, 176, 0.5); }
+.layout-zone-overlay.zone-sidebar { border-color: rgba(33, 150, 243, 0.5); }

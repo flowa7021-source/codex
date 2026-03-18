@@ -52,6 +52,10 @@ import { convertToPdfA, checkPdfACompliance } from './modules/pdf-a-converter.js
 import { initDragDrop, initAnnotationDrop } from './modules/drag-drop.js';
 import { VirtualScroll } from './modules/virtual-scroll.js';
 import { initMemoryManager, createTrackedUrl, revokeTrackedUrl, revokeAllUrls, acquireCanvas, releaseCanvas, getMemoryStats, forceCleanup } from './modules/memory-manager.js';
+import { buildTextLayer, highlightSearchMatches, clearSearchHighlights, getSelectedText } from './modules/text-layer-builder.js';
+import { analyzeLayout, detectTable, sortByReadingOrder, tableToHtml } from './modules/layout-analysis.js';
+import { BatchOcrEngine } from './modules/batch-ocr-enhanced.js';
+import { initRibbonToolbar, switchTab, setContextualTab } from './modules/ribbon-toolbar.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -10072,3 +10076,7 @@ window._errorHandler = { reportError, getErrorLog, withRetry, saveStateSnapshot,
 window._pdfA = { convertToPdfA, checkPdfACompliance };
 window._virtualScroll = VirtualScroll;
 window._memoryManager = { getMemoryStats, forceCleanup, acquireCanvas, releaseCanvas };
+window._textLayer = { buildTextLayer, highlightSearchMatches, clearSearchHighlights, getSelectedText };
+window._layoutAnalysis = { analyzeLayout, detectTable, sortByReadingOrder, tableToHtml };
+window._batchOcrEngine = BatchOcrEngine;
+window._ribbon = { initRibbonToolbar, switchTab, setContextualTab };
