@@ -5792,8 +5792,9 @@ function openSignaturePad() {
   insertBtn.className = 'btn-xs';
   insertBtn.style.background = '#3b82f6';
   insertBtn.style.color = 'white';
-  insertBtn.addEventListener('click', () => {
+  insertBtn.addEventListener('click', async () => {
     const dataUrl = sigCanvas.toDataURL('image/png');
+    // Visual preview via block editor
     if (!blockEditor.active) {
       els.pdfBlockEdit?.classList.add('active');
       blockEditor.enable(els.canvasWrap, els.canvas);
@@ -5802,7 +5803,33 @@ function openSignaturePad() {
     const canvasH = parseFloat(els.canvas.style.height) || 600;
     blockEditor.addImageBlock(state.currentPage, canvasW * 0.5, canvasH * 0.75, dataUrl, 200, 100);
     blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
-    setOcrStatus('Подпись вставлена');
+    setOcrStatus('Подпись вставлена на canvas');
+
+    // Also embed into actual PDF via pdf-lib
+    if (state.adapter?.type === 'pdf' && state.file) {
+      try {
+        setOcrStatus('Встраивание подписи в PDF...');
+        const pngBlob = await (await fetch(dataUrl)).blob();
+        const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
+        const arrayBuffer = await state.file.arrayBuffer();
+        const pdfBlob = await addSignatureToPdf(arrayBuffer, pngBytes, {
+          pageNum: state.currentPage,
+          x: 350,
+          y: 50,
+          width: 200,
+          height: 100,
+        });
+        const url = safeCreateObjectURL(pdfBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${state.docName || 'document'}-signed.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setOcrStatus('Подпись встроена в PDF и сохранена');
+      } catch (err) {
+        setOcrStatus(`Подпись на canvas (PDF ошибка: ${err?.message || 'неизвестная'})`);
+      }
+    }
     modal.remove();
   });
 
@@ -7902,7 +7929,7 @@ els.exportAnnPdf?.addEventListener('click', async () => {
   URL.revokeObjectURL(url);
 });
 
-// ─── PDF Forms ──────────────────────────────────────────────────────────────
+// ─── PDF Forms (pdf-lib: fills and saves actual PDF) ────────────────────────
 els.pdfFormFill?.addEventListener('click', async () => {
   if (!state.adapter || state.adapter.type !== 'pdf') {
     setOcrStatus('Формы доступны только для PDF');
@@ -7911,10 +7938,12 @@ els.pdfFormFill?.addEventListener('click', async () => {
   await formManager.loadFromAdapter(state.adapter);
   const fctx = els.annotationCanvas.getContext('2d');
   formManager.renderFormOverlay(fctx, state.currentPage, state.zoom);
-  setOcrStatus(`Формы: ${formManager.fields.length} полей найдено`);
+  const totalFields = formManager.getAllFields().length;
+  setOcrStatus(`Формы: ${totalFields} полей найдено`);
 });
 
-els.pdfFormExport?.addEventListener('click', () => {
+els.pdfFormExport?.addEventListener('click', async () => {
+  // Export as JSON (data only)
   const data = formManager.exportFormData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -7923,6 +7952,34 @@ els.pdfFormExport?.addEventListener('click', () => {
   a.download = `${state.docName || 'document'}-form-data.json`;
   a.click();
   URL.revokeObjectURL(url);
+
+  // Also save filled form as PDF via pdf-lib
+  if (state.adapter?.type === 'pdf' && state.file) {
+    try {
+      const formData = {};
+      for (const field of formManager.getAllFields()) {
+        if (field.value !== '' && field.value !== field.defaultValue) {
+          formData[field.name] = field.value;
+        }
+      }
+      if (Object.keys(formData).length === 0) {
+        setOcrStatus('Форма экспортирована (JSON). Нет заполненных полей для PDF.');
+        return;
+      }
+      setOcrStatus('Сохранение заполненной формы в PDF...');
+      const arrayBuffer = await state.file.arrayBuffer();
+      const pdfBlob = await fillPdfForm(arrayBuffer, formData, false);
+      const pdfUrl = safeCreateObjectURL(pdfBlob);
+      const a2 = document.createElement('a');
+      a2.href = pdfUrl;
+      a2.download = `${state.docName || 'document'}-filled.pdf`;
+      a2.click();
+      URL.revokeObjectURL(pdfUrl);
+      setOcrStatus('Форма сохранена: JSON + заполненный PDF');
+    } catch (err) {
+      setOcrStatus(`JSON экспортирован (PDF ошибка: ${err?.message || 'неизвестная'})`);
+    }
+  }
 });
 
 els.pdfFormImport?.addEventListener('change', async (e) => {
@@ -7933,7 +7990,7 @@ els.pdfFormImport?.addEventListener('change', async (e) => {
     const data = JSON.parse(text);
     formManager.importFormData(data);
     const fctx = els.annotationCanvas.getContext('2d');
-  formManager.renderFormOverlay(fctx, state.currentPage, state.zoom);
+    formManager.renderFormOverlay(fctx, state.currentPage, state.zoom);
     setOcrStatus('Данные формы импортированы');
   } catch (err) {
     setOcrStatus(`Ошибка импорта формы: ${err?.message || 'неизвестная'}`);
@@ -7946,7 +8003,7 @@ els.pdfFormClear?.addEventListener('click', () => {
   setOcrStatus('Формы очищены');
 });
 
-// ─── PDF Block Editor ───────────────────────────────────────────────────────
+// ─── PDF Block Editor (with snap guides & pdf-lib export) ───────────────────
 els.pdfBlockEdit?.addEventListener('click', () => {
   if (!state.adapter || state.adapter.type !== 'pdf') {
     setOcrStatus('Редактор блоков доступен только для PDF');
@@ -7955,10 +8012,48 @@ els.pdfBlockEdit?.addEventListener('click', () => {
   const isActive = els.pdfBlockEdit.classList.toggle('active');
   if (isActive) {
     blockEditor.enable(els.canvasWrap, els.canvas);
-    setOcrStatus('Редактор блоков: ВКЛ');
+    setOcrStatus('Редактор блоков: ВКЛ (привязка к сетке активна)');
   } else {
+    blockEditor.clearGuides();
     blockEditor.disable();
     setOcrStatus('Редактор блоков: ВЫКЛ');
+  }
+});
+
+// Export block edits into PDF via pdf-lib (double-click pdfBlockEdit or Ctrl+Shift+E when editor active)
+async function exportBlockEditsToPdf() {
+  if (!state.adapter || state.adapter.type !== 'pdf' || !state.file) {
+    setOcrStatus('Экспорт блоков: нужен открытый PDF');
+    return;
+  }
+  const allBlocks = blockEditor.exportAllBlocks();
+  if (!Object.keys(allBlocks).length) {
+    setOcrStatus('Нет блоков для экспорта');
+    return;
+  }
+  try {
+    setOcrStatus('Экспорт блоков в PDF...');
+    const arrayBuffer = await state.file.arrayBuffer();
+    const canvasW = parseFloat(els.canvas.style.width) || els.canvas.width;
+    const canvasH = parseFloat(els.canvas.style.height) || els.canvas.height;
+    const pdfBlob = await blockEditor.exportBlocksToPdf(arrayBuffer, { width: canvasW, height: canvasH });
+    const url = safeCreateObjectURL(pdfBlob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${state.docName || 'document'}-edited.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setOcrStatus('Блоки экспортированы в PDF');
+  } catch (err) {
+    setOcrStatus(`Ошибка экспорта блоков: ${err?.message || 'неизвестная'}`);
+  }
+}
+
+els.pdfBlockEdit?.addEventListener('dblclick', exportBlockEditsToPdf);
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'E' && blockEditor.active) {
+    e.preventDefault();
+    exportBlockEditsToPdf();
   }
 });
 

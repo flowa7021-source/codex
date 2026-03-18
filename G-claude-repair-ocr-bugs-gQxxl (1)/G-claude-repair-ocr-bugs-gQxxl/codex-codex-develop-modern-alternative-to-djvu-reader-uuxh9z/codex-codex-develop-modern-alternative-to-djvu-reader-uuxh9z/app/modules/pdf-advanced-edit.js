@@ -11,6 +11,10 @@ export class PdfBlockEditor {
     this.redoStack = [];
     this.maxHistory = 50;
     this.listeners = [];
+    this.snapEnabled = true;
+    this.snapThreshold = 8; // px
+    this.showGuides = true;
+    this._guides = []; // active snap guides [{axis:'x'|'y', pos: number}]
   }
 
   getPageBlocks(pageNum) {
@@ -191,6 +195,11 @@ export class PdfBlockEditor {
         ctx.fillRect(x + w - hs, y + h - hs, hs * 2, hs * 2);
       }
     }
+
+    // Render snap guides if active
+    const cW = ctx.canvas.width / zoom;
+    const cH = ctx.canvas.height / zoom;
+    this.renderGuides(ctx, zoom, cW, cH);
   }
 
   undo(pageNum) {
@@ -282,6 +291,179 @@ export class PdfBlockEditor {
 
   onEvent(fn) {
     this.listeners.push(fn);
+  }
+
+  // ─── Snap & Guides ──────────────────────────────────────────────────────────
+  snapPosition(pageNum, blockId, x, y, width, height, canvasW, canvasH) {
+    if (!this.snapEnabled) {
+      this._guides = [];
+      return { x, y };
+    }
+    const guides = [];
+    const threshold = this.snapThreshold;
+    let snappedX = x;
+    let snappedY = y;
+
+    // Snap points for the moving block: left, center, right / top, middle, bottom
+    const edges = {
+      left: x, centerX: x + width / 2, right: x + width,
+      top: y, centerY: y + height / 2, bottom: y + height,
+    };
+
+    // Collect target edges from other blocks + canvas boundaries
+    const targetXEdges = [0, canvasW / 2, canvasW]; // canvas left, center, right
+    const targetYEdges = [0, canvasH / 2, canvasH]; // canvas top, center, bottom
+
+    const blocks = this.getPageBlocks(pageNum);
+    for (const b of blocks) {
+      if (b.id === blockId) continue;
+      targetXEdges.push(b.x, b.x + b.width / 2, b.x + b.width);
+      targetYEdges.push(b.y, b.y + b.height / 2, b.y + b.height);
+    }
+
+    // Find closest X snap
+    let bestXDist = Infinity;
+    for (const target of targetXEdges) {
+      for (const edgeKey of ['left', 'centerX', 'right']) {
+        const dist = Math.abs(edges[edgeKey] - target);
+        if (dist < threshold && dist < bestXDist) {
+          bestXDist = dist;
+          snappedX = x + (target - edges[edgeKey]);
+          guides.push({ axis: 'x', pos: target });
+        }
+      }
+    }
+
+    // Find closest Y snap
+    let bestYDist = Infinity;
+    for (const target of targetYEdges) {
+      for (const edgeKey of ['top', 'centerY', 'bottom']) {
+        const dist = Math.abs(edges[edgeKey] - target);
+        if (dist < threshold && dist < bestYDist) {
+          bestYDist = dist;
+          snappedY = y + (target - edges[edgeKey]);
+          guides.push({ axis: 'y', pos: target });
+        }
+      }
+    }
+
+    this._guides = guides;
+    return { x: snappedX, y: snappedY };
+  }
+
+  renderGuides(ctx, zoom = 1, canvasW, canvasH) {
+    if (!this.showGuides || !this._guides.length) return;
+    ctx.save();
+    ctx.strokeStyle = '#f97316'; // orange
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    for (const guide of this._guides) {
+      ctx.beginPath();
+      if (guide.axis === 'x') {
+        const px = guide.pos * zoom;
+        ctx.moveTo(px, 0);
+        ctx.lineTo(px, canvasH * zoom);
+      } else {
+        const py = guide.pos * zoom;
+        ctx.moveTo(0, py);
+        ctx.lineTo(canvasW * zoom, py);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  clearGuides() {
+    this._guides = [];
+  }
+
+  moveBlockWithSnap(pageNum, blockId, newX, newY, canvasW, canvasH) {
+    const blocks = this.getPageBlocks(pageNum);
+    const block = blocks.find((b) => b.id === blockId);
+    if (!block) return;
+    const snapped = this.snapPosition(pageNum, blockId, newX, newY, block.width, block.height, canvasW, canvasH);
+    this._pushUndo(pageNum);
+    block.x = snapped.x;
+    block.y = snapped.y;
+    this._notify('move', pageNum, block);
+  }
+
+  // ─── Export blocks to pdf-lib PDF ─────────────────────────────────────────
+  async exportBlocksToPdf(pdfArrayBuffer, canvasSize) {
+    const { PDFDocument, rgb, StandardFonts } = await import('pdf-lib');
+    const pdfDoc = await PDFDocument.load(pdfArrayBuffer);
+    const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+    const helveticaOblique = await pdfDoc.embedFont(StandardFonts.HelveticaOblique);
+    const helveticaBoldOblique = await pdfDoc.embedFont(StandardFonts.HelveticaBoldOblique);
+    const pages = pdfDoc.getPages();
+
+    for (const [pageNum, blocks] of this.blocks) {
+      const pageIdx = pageNum - 1;
+      if (pageIdx < 0 || pageIdx >= pages.length || !blocks.length) continue;
+      const page = pages[pageIdx];
+      const { width: pW, height: pH } = page.getSize();
+
+      // Scale from canvas coords to PDF coords
+      const scaleX = pW / (canvasSize?.width || pW);
+      const scaleY = pH / (canvasSize?.height || pH);
+
+      for (const block of blocks) {
+        const bx = block.x * scaleX;
+        const by = pH - (block.y + block.height) * scaleY; // flip Y
+        const bw = block.width * scaleX;
+        const bh = block.height * scaleY;
+
+        if (block.type === 'text') {
+          let font = helvetica;
+          if (block.style.bold && block.style.italic) font = helveticaBoldOblique;
+          else if (block.style.bold) font = helveticaBold;
+          else if (block.style.italic) font = helveticaOblique;
+
+          const fontSize = (block.style.fontSize || 14) * scaleY;
+          const color = this._parseColor(block.style.color || '#000000');
+
+          // Draw background if not transparent
+          if (block.style.backgroundColor && block.style.backgroundColor !== 'transparent') {
+            const bgColor = this._parseColor(block.style.backgroundColor);
+            page.drawRectangle({ x: bx, y: by, width: bw, height: bh, color: rgb(bgColor.r, bgColor.g, bgColor.b) });
+          }
+
+          const lines = (block.content || '').split('\n');
+          const lineHeight = fontSize * 1.3;
+          for (let i = 0; i < lines.length; i++) {
+            const lineY = by + bh - fontSize - i * lineHeight;
+            if (lineY < by) break;
+            page.drawText(lines[i], { x: bx + 2, y: lineY, size: fontSize, font, color: rgb(color.r, color.g, color.b), maxWidth: bw - 4 });
+          }
+        } else if (block.type === 'image' && block.content) {
+          try {
+            const dataUrl = block.content;
+            const base64 = dataUrl.split(',')[1];
+            const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+            let img;
+            if (dataUrl.includes('image/png')) {
+              img = await pdfDoc.embedPng(bytes);
+            } else {
+              img = await pdfDoc.embedJpg(bytes);
+            }
+            page.drawImage(img, { x: bx, y: by, width: bw, height: bh });
+          } catch { /* skip unembeddable images */ }
+        }
+      }
+    }
+
+    const bytes = await pdfDoc.save();
+    return new Blob([bytes], { type: 'application/pdf' });
+  }
+
+  _parseColor(hex) {
+    const h = hex.replace('#', '');
+    return {
+      r: parseInt(h.substring(0, 2), 16) / 255,
+      g: parseInt(h.substring(2, 4), 16) / 255,
+      b: parseInt(h.substring(4, 6), 16) / 255,
+    };
   }
 
   _pushUndo(pageNum) {
