@@ -13,6 +13,7 @@ function initContinuousScroll(deps) {
   const scrollContainer = document.getElementById('continuousScrollContainer');
   let continuousMode = false;
   let renderedPages = new Set();
+  let scrollObserver = null;
 
   if (!toggleBtn || !scrollWrap || !scrollContainer) return;
 
@@ -53,7 +54,8 @@ function initContinuousScroll(deps) {
     }
 
     // Use IntersectionObserver for lazy rendering
-    const observer = new IntersectionObserver((entries) => {
+    if (scrollObserver) { scrollObserver.disconnect(); scrollObserver = null; }
+    scrollObserver = new IntersectionObserver((entries) => {
       for (const entry of entries) {
         if (entry.isIntersecting) {
           const pageNum = parseInt(entry.target.dataset.pageNum, 10);
@@ -65,10 +67,10 @@ function initContinuousScroll(deps) {
       }
     }, { rootMargin: '200px 0px' });
 
-    scrollContainer.querySelectorAll('canvas[data-page-num]').forEach(c => observer.observe(c));
+    scrollContainer.querySelectorAll('canvas[data-page-num]').forEach(c => scrollObserver.observe(c));
 
     // Scroll to current page
-    const target = document.getElementById(`cs-page-${state.pageNum || 1}`);
+    const target = document.getElementById(`cs-page-${state.currentPage || 1}`);
     if (target) target.scrollIntoView({ behavior: 'auto', block: 'start' });
   }
 
@@ -83,6 +85,7 @@ function initContinuousScroll(deps) {
   }
 
   function exitContinuousMode() {
+    if (scrollObserver) { scrollObserver.disconnect(); scrollObserver = null; }
     scrollWrap.style.display = 'none';
     canvasWrap.style.display = '';
     scrollContainer.innerHTML = '';
@@ -425,7 +428,7 @@ function initPrintDialog(deps) {
   async function updatePreview() {
     if (!previewCanvas || !state.adapter) return;
     try {
-      const page = state.pageNum || 1;
+      const page = state.currentPage || 1;
       await state.adapter.renderPage(page, previewCanvas, { zoom: 0.3, rotation: 0 });
       if (previewInfo) {
         previewInfo.textContent = `Стр. ${page} из ${state.pageCount || '?'}`;
@@ -445,7 +448,7 @@ function initPrintDialog(deps) {
 
       let pages = [];
       if (range === 'current') {
-        pages = [state.pageNum || 1];
+        pages = [state.currentPage || 1];
       } else if (range === 'custom' && customRange?.value) {
         pages = parsePageRangeLib(customRange.value, state.pageCount);
       } else {

@@ -145,7 +145,14 @@ export function ensureDefaultPageAreaHeight() {
   applyResizableLayoutState();
 }
 
+let _resizeAbort = null;
+
 export function setupResizableLayout() {
+  // Clean up previous listeners to prevent accumulation on re-init
+  if (_resizeAbort) { _resizeAbort.abort(); }
+  _resizeAbort = new AbortController();
+  const signal = _resizeAbort.signal;
+
   applyResizableLayoutState();
   ensureDefaultPageAreaHeight();
 
@@ -167,9 +174,9 @@ export function setupResizableLayout() {
     els.sidebarResizeHandle.addEventListener('pointerdown', (e) => {
       active = true;
       els.sidebarResizeHandle.setPointerCapture?.(e.pointerId);
-    });
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', () => { active = false; });
+    }, { signal });
+    window.addEventListener('pointermove', onMove, { signal });
+    window.addEventListener('pointerup', () => { active = false; }, { signal });
   }
 
   if (els.canvasResizeHandle) {
@@ -192,20 +199,26 @@ export function setupResizableLayout() {
     els.canvasResizeHandle.addEventListener('pointerdown', (e) => {
       active = true;
       els.canvasResizeHandle.setPointerCapture?.(e.pointerId);
-    });
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', () => { active = false; });
+    }, { signal });
+    window.addEventListener('pointermove', onMove, { signal });
+    window.addEventListener('pointerup', () => { active = false; }, { signal });
   }
 }
 
 // ─── Drag and Drop ──────────────────────────────────────────────────────────
 
+let _dndAbort = null;
+
 export function setupDragAndDrop() {
+  if (_dndAbort) { _dndAbort.abort(); }
+  _dndAbort = new AbortController();
+  const signal = _dndAbort.signal;
+
   ['dragenter', 'dragover'].forEach((evt) => {
     window.addEventListener(evt, (e) => {
       e.preventDefault();
       e.stopPropagation();
-    });
+    }, { signal });
   });
 
   window.addEventListener('drop', async (e) => {
@@ -213,7 +226,7 @@ export function setupDragAndDrop() {
     e.stopPropagation();
     const file = e.dataTransfer?.files?.[0];
     if (file) await _deps.openFile(file);
-  });
+  }, { signal });
 }
 
 // ─── Annotation Events Setup ────────────────────────────────────────────────

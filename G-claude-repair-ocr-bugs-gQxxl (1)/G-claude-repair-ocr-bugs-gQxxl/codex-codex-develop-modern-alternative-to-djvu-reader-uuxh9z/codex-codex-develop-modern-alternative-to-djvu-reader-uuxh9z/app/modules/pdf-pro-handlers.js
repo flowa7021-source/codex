@@ -338,7 +338,7 @@ export function initPdfProHandlers() {
       try {
         _deps.setOcrStatus('Поворот страницы по часовой стрелке...');
         const arrayBuffer = await file.arrayBuffer();
-        const blob = await _deps.rotatePdfPages(arrayBuffer, [state.pageNum], 90);
+        const blob = await _deps.rotatePdfPages(arrayBuffer, [state.currentPage], 90);
         if (blob) {
           const url = _deps.safeCreateObjectURL(blob);
           const a = document.createElement('a');
@@ -361,7 +361,7 @@ export function initPdfProHandlers() {
       try {
         _deps.setOcrStatus('Поворот страницы против часовой стрелки...');
         const arrayBuffer = await file.arrayBuffer();
-        const blob = await _deps.rotatePdfPages(arrayBuffer, [state.pageNum], -90);
+        const blob = await _deps.rotatePdfPages(arrayBuffer, [state.currentPage], -90);
         if (blob) {
           const url = _deps.safeCreateObjectURL(blob);
           const a = document.createElement('a');
@@ -394,7 +394,7 @@ export function initPdfProHandlers() {
         // Extract all pages except current
         const pages = [];
         for (let i = 1; i <= state.pageCount; i++) {
-          if (i !== state.pageNum) pages.push(i);
+          if (i !== state.currentPage) pages.push(i);
         }
         const blob = await _deps.splitPdfDocument(arrayBuffer, pages);
         if (blob) {
@@ -404,7 +404,7 @@ export function initPdfProHandlers() {
           a.download = `${state.docName || 'document'}-page-removed.pdf`;
           a.click();
           URL.revokeObjectURL(url);
-          _deps.setOcrStatus(`Страница ${state.pageNum} удалена, сохранено ${pages.length} стр.`);
+          _deps.setOcrStatus(`Страница ${state.currentPage} удалена, сохранено ${pages.length} стр.`);
         }
       } catch (err) {
         _deps.setOcrStatus(`Ошибка удаления: ${err?.message || 'неизвестная'}`);

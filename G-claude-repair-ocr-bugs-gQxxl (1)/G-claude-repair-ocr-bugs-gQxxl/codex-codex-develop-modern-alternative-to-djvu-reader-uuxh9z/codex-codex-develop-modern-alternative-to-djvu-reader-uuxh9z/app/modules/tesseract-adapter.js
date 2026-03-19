@@ -52,6 +52,15 @@ const LANG_MAP = {
   spa: 'spa',
   ita: 'ita',
   por: 'por',
+  chi_sim: 'chi_sim',
+  chi_tra: 'chi_tra',
+  jpn: 'jpn',
+  kor: 'kor',
+  ara: 'ara',
+  hin: 'hin',
+  tur: 'tur',
+  pol: 'pol',
+  ces: 'ces',
   auto: 'eng+rus', // multi-language mode for auto
 };
 
