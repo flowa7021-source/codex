@@ -79,6 +79,14 @@ function isMonospaceFont(fontName) {
   return /courier|mono|consola|fixed/i.test(fontName || '');
 }
 
+function isUnderlineFont(fontName) {
+  return /underline/i.test(fontName || '');
+}
+
+function isStrikethroughFont(fontName) {
+  return /strikethrough|strikeout|strike/i.test(fontName || '');
+}
+
 // ─── Text quality helpers ───────────────────────────────────────────────────
 
 // Merge adjacent items on the same line that are very close (continuation of same word/phrase)
@@ -95,8 +103,9 @@ function mergeAdjacentItems(items, avgFontSize) {
         Math.abs(prev.fontSize - curr.fontSize) < 1) {
       prev.text += curr.text;
       prev.width = (curr.x + curr.width) - prev.x;
-    } else if (gap >= 0 && gap < prev.fontSize * 0.6) {
-      // Small gap — add space between
+    } else if (gap >= 0 && gap < prev.fontSize * 0.6 &&
+               prev.fontName === curr.fontName && Math.abs(prev.fontSize - curr.fontSize) < 1) {
+      // Small gap, same font — add space between
       prev.text += ' ' + curr.text;
       prev.width = (curr.x + curr.width) - prev.x;
     } else {
@@ -117,6 +126,10 @@ function detectAlignment(lineItems, pageWidth, leftMargin) {
   const rightMargin = pageWidth - lineRight;
   const leftIndent = lineLeft - leftMargin;
 
+  // Justified: both margins close to page edges and line is wide
+  if (lineWidth > pageWidth * 0.8 && leftIndent < pageWidth * 0.08 && rightMargin < pageWidth * 0.08) {
+    return AlignmentType.JUSTIFIED;
+  }
   // Centered: line center is near page center and both margins roughly equal
   if (Math.abs(center - pageCenter) < pageWidth * 0.05 &&
       Math.abs(leftIndent - rightMargin) < pageWidth * 0.1 &&
@@ -342,6 +355,20 @@ async function extractStructuredContent(pdfDoc, pageNum) {
   const pageWidth = viewport.width;
   const pageHeight = viewport.height;
 
+  // Extract link annotations from the page
+  let linkAnnotations = [];
+  try {
+    const annotations = await page.getAnnotations({ intent: 'display' });
+    linkAnnotations = annotations.filter(a => a.subtype === 'Link' && a.url).map(a => ({
+      url: a.url,
+      // PDF annotation rects are [x1, y1, x2, y2] in bottom-up coords
+      rect: a.rect ? {
+        x1: a.rect[0], y1: pageHeight - a.rect[3],
+        x2: a.rect[2], y2: pageHeight - a.rect[1],
+      } : null,
+    }));
+  } catch { /* annotations optional */ }
+
   // Extract embedded images from this page
   const images = await extractPageImages(page, viewport);
 
@@ -355,6 +382,17 @@ async function extractStructuredContent(pdfDoc, pageNum) {
       const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]) || Math.abs(tx[3]) || 12;
       const x = tx[4];
       const y = pageHeight - tx[5]; // flip Y
+
+      // Check if this text item overlaps any link annotation
+      let url = null;
+      for (const link of linkAnnotations) {
+        if (link.rect && x >= link.rect.x1 - 2 && x <= link.rect.x2 + 2 &&
+            y >= link.rect.y1 - 2 && y <= link.rect.y2 + 2) {
+          url = link.url;
+          break;
+        }
+      }
+
       return {
         text: item.str,
         x, y,
@@ -362,6 +400,7 @@ async function extractStructuredContent(pdfDoc, pageNum) {
         height: item.height || fontSize,
         fontSize,
         fontName: item.fontName || '',
+        url,
       };
     })
     .sort((a, b) => {
@@ -371,7 +410,7 @@ async function extractStructuredContent(pdfDoc, pageNum) {
       return Math.abs(dy) < threshold ? a.x - b.x : dy;
     });
 
-  if (!items.length) return { blocks: [], pageWidth, pageHeight, images };
+  if (!items.length) return { blocks: [], pageWidth, pageHeight, images, links: linkAnnotations, margins: {}, bodyFontSize: 12, columnInfo: null };
 
   // Group into lines (items with similar Y, using running average Y)
   const lines = [];
@@ -422,7 +461,18 @@ async function extractStructuredContent(pdfDoc, pageNum) {
     allBlocks = processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, pageWidth);
   }
 
-  return { blocks: allBlocks, pageWidth, pageHeight, images };
+  // Compute page margins
+  const rightEdge = Math.max(...items.map(i => i.x + (i.width || 0)));
+  const topMargin = Math.min(...items.map(i => i.y));
+  const bottomEdge = Math.max(...items.map(i => i.y + (i.height || i.fontSize)));
+
+  return {
+    blocks: allBlocks, pageWidth, pageHeight, images,
+    links: linkAnnotations,
+    margins: { left: leftMargin, right: pageWidth - rightEdge, top: topMargin, bottom: pageHeight - bottomEdge },
+    bodyFontSize,
+    columnInfo,
+  };
 }
 
 // Process a set of lines (from one column or the whole page) into blocks
@@ -464,7 +514,7 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
         // Flush pending paragraphs before table
         flushParagraphGroup(consecutiveParagraphs, blocks);
         consecutiveParagraphs = [];
-        tableCandidate.push({ columns: columnItems, line: rawLine });
+        tableCandidate.push({ cellData: columnItems, line: rawLine });
         prevLineBottom = lineBottom;
         continue;
       }
@@ -600,16 +650,33 @@ function flushTable(tableCandidate, blocks, avgFontSize, leftMargin) {
 }
 
 function buildRuns(lineItems) {
+  // Compute line average Y for super/subscript detection
+  const lineAvgY = lineItems.reduce((s, i) => s + i.y, 0) / lineItems.length;
+  const lineAvgFontSize = lineItems.reduce((s, i) => s + i.fontSize, 0) / lineItems.length;
+
   // Merge adjacent items with same formatting into single runs
-  const raw = lineItems.map(item => ({
-    text: item.text,
-    bold: isBoldFont(item.fontName),
-    italic: isItalicFont(item.fontName),
-    monospace: isMonospaceFont(item.fontName),
-    fontFamily: mapPdfFont(item.fontName),
-    fontSize: item.fontSize,
-    color: item.color || null,
-  }));
+  const raw = lineItems.map(item => {
+    // Detect superscript/subscript from Y-offset relative to line average
+    const yOffset = item.y - lineAvgY;
+    const sizeRatio = item.fontSize / lineAvgFontSize;
+    const superscript = sizeRatio < 0.8 && yOffset < -lineAvgFontSize * 0.15;
+    const subscript = sizeRatio < 0.8 && yOffset > lineAvgFontSize * 0.15;
+
+    return {
+      text: item.text,
+      bold: isBoldFont(item.fontName),
+      italic: isItalicFont(item.fontName),
+      underline: isUnderlineFont(item.fontName),
+      strikethrough: isStrikethroughFont(item.fontName),
+      superscript,
+      subscript,
+      monospace: isMonospaceFont(item.fontName),
+      fontFamily: mapPdfFont(item.fontName),
+      fontSize: item.fontSize,
+      color: item.color || null,
+      url: item.url || null,
+    };
+  });
 
   if (raw.length <= 1) return raw;
 
@@ -618,8 +685,10 @@ function buildRuns(lineItems) {
     const prev = merged[merged.length - 1];
     const curr = raw[i];
     if (prev.bold === curr.bold && prev.italic === curr.italic &&
+        prev.underline === curr.underline && prev.strikethrough === curr.strikethrough &&
+        prev.superscript === curr.superscript && prev.subscript === curr.subscript &&
         prev.fontFamily === curr.fontFamily &&
-        prev.color === curr.color &&
+        prev.color === curr.color && prev.url === curr.url &&
         Math.abs(prev.fontSize - curr.fontSize) < 0.5) {
       prev.text += ' ' + curr.text;
     } else {
@@ -655,20 +724,23 @@ function clusterByXGap(items, gapThreshold) {
       clusters[clusters.length - 1].push(curr);
     }
   }
-  return clusters.map(c => c.map(i => i.text).join(' ').trim());
+  // Return cell objects with both text and formatted runs
+  return clusters.map(c => ({
+    text: c.map(i => i.text).join(' ').trim(),
+    runs: buildRuns(c),
+  }));
 }
 
 function buildTableBlock(rows) {
-  const maxCols = Math.max(...rows.map(r => r.columns.length));
-  // Estimate column widths from actual content positions
+  const maxCols = Math.max(...rows.map(r => r.cellData.length));
   const tableRows = rows.map(r => {
     const cells = [];
     for (let c = 0; c < maxCols; c++) {
-      cells.push(r.columns[c] || '');
+      cells.push(r.cellData[c] || { text: '', runs: [] });
     }
-    return cells;
+    return { cells };
   });
   return { type: 'table', rows: tableRows, maxCols };
 }
 
-export { extractStructuredContent, mapPdfFont, isBoldFont, isItalicFont, isMonospaceFont };
+export { extractStructuredContent, mapPdfFont, isBoldFont, isItalicFont, isMonospaceFont, isUnderlineFont, isStrikethroughFont };

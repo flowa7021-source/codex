@@ -7,7 +7,7 @@ import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   ImageRun, HeadingLevel, AlignmentType, BorderStyle, WidthType,
   Header, Footer, PageNumber, NumberFormat, TabStopPosition, TabStopType,
-  ShadingType, convertInchesToTwip,
+  ShadingType, convertInchesToTwip, ExternalHyperlink,
 } from 'docx';
 
 import { extractStructuredContent, mapPdfFont, isBoldFont, isItalicFont, isMonospaceFont } from './docx-structure-detector.js';
@@ -16,25 +16,74 @@ import { extractStructuredContent, mapPdfFont, isBoldFont, isItalicFont, isMonos
 export { extractStructuredContent, mapPdfFont, isBoldFont, isItalicFont, isMonospaceFont } from './docx-structure-detector.js';
 
 /**
- * Build a TextRun from a run object, with optional color support.
+ * Build a TextRun from a run object, with full formatting support.
  */
 function makeTextRun(run, opts = {}) {
   const props = {
-    text: run.text + ' ',
+    text: run.text,
     bold: opts.bold ?? run.bold,
-    italics: run.italic,
+    italics: opts.italic ?? run.italic,
     font: run.fontFamily,
-    size: Math.round(Math.min(opts.maxSize || 36, Math.max(opts.minSize || 12, run.fontSize)) * 2),
+    size: Math.round(Math.min(opts.maxSize || 72, Math.max(opts.minSize || 8, run.fontSize)) * 2),
   };
-  // Add color only if it's not black (default)
+  // Underline
+  if (run.underline) {
+    props.underline = { type: 'single' };
+  }
+  // Strikethrough
+  if (run.strikethrough) {
+    props.strike = true;
+  }
+  // Superscript / subscript
+  if (run.superscript) {
+    props.superScript = true;
+  } else if (run.subscript) {
+    props.subScript = true;
+  }
+  // Color
   if (run.color && run.color !== '000000' && run.color !== '#000000') {
     const c = run.color.startsWith('#') ? run.color.slice(1) : run.color;
-    if (/^[0-9a-fA-F]{6}$/.test(c)) {
-      props.color = c;
-    }
+    if (/^[0-9a-fA-F]{6}$/.test(c)) props.color = c;
   }
   if (opts.color) props.color = opts.color;
+  // Character spacing
+  if (run.characterSpacing && run.characterSpacing !== 0) {
+    props.characterSpacing = Math.round(run.characterSpacing * 20);
+  }
   return new TextRun(props);
+}
+
+/**
+ * Build an array of TextRuns with space runs inserted between them.
+ * Since makeTextRun no longer appends a trailing space, we insert explicit
+ * space runs between consecutive text runs.
+ */
+function makeRunsWithSpaces(runs, opts = {}) {
+  const result = [];
+  for (let i = 0; i < runs.length; i++) {
+    result.push(makeTextRun(runs[i], opts));
+    if (i < runs.length - 1) {
+      result.push(new TextRun({ text: ' ', font: runs[i].fontFamily, size: Math.round(runs[i].fontSize * 2) }));
+    }
+  }
+  return result;
+}
+
+/**
+ * Build a hyperlink element for runs that have a url property.
+ */
+function makeHyperlinkRun(run) {
+  return new ExternalHyperlink({
+    children: [new TextRun({
+      text: run.text,
+      style: 'Hyperlink',
+      color: '0563C1',
+      underline: { type: 'single' },
+      font: run.fontFamily,
+      size: Math.round(run.fontSize * 2),
+    })],
+    link: run.url,
+  });
 }
 
 // ─── Main conversion function ───────────────────────────────────────────────
@@ -54,6 +103,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
 
   for (const pageNum of pagesToConvert) {
     const children = [];
+    const footnoteChildren = [];
 
     if (mode === 'images-only') {
       if (capturePageImage) {
@@ -71,6 +121,10 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
     } else {
       const content = await extractStructuredContent(pdfDoc, pageNum);
 
+      // Use actual PDF page dimensions converted to twips (1pt = 20 twips)
+      const pgWidth = Math.round((content.pageWidth || 595) * 20);
+      const pgHeight = Math.round((content.pageHeight || 842) * 20);
+
       let blocks = content.blocks;
       if (!blocks.length && ocrWordCache && ocrWordCache.has(pageNum)) {
         const words = ocrWordCache.get(pageNum);
@@ -87,40 +141,71 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
         }
 
         if (block.type === 'heading') {
-          children.push(new Paragraph({
+          const headingPara = new Paragraph({
             heading: block.level,
-            children: block.runs.map(run => makeTextRun(run, { bold: true, minSize: 20, maxSize: 56 })),
+            children: makeRunsWithSpaces(block.runs, { bold: true, minSize: 20, maxSize: 56 }),
             spacing: { before: 240, after: 120 },
             alignment: block.alignment || AlignmentType.LEFT,
-          }));
+          });
+          headingPara._blockY = block.y;
+          children.push(headingPara);
         } else if (block.type === 'paragraph') {
           const spacing = {};
           if (block.paragraphBreak) spacing.before = 120;
           spacing.after = 40;
-          spacing.line = Math.round(block.fontSize * 1.15 * 20);
+          // Line spacing: use 1.15× body font or exact value from block
+          spacing.line = Math.round((block.fontSize || 12) * 1.15 * 20);
 
-          children.push(new Paragraph({
-            children: block.runs.map(run => makeTextRun(run)),
+          // Build children: handle hyperlinks within runs
+          const paraChildren = [];
+          if (block.runs) {
+            for (let i = 0; i < block.runs.length; i++) {
+              const run = block.runs[i];
+              if (run.url) {
+                paraChildren.push(makeHyperlinkRun(run));
+              } else {
+                paraChildren.push(makeTextRun(run));
+              }
+              if (i < block.runs.length - 1) {
+                paraChildren.push(new TextRun({ text: ' ', font: run.fontFamily, size: Math.round(run.fontSize * 2) }));
+              }
+            }
+          }
+
+          const para = new Paragraph({
+            children: paraChildren,
             indent: block.indent > 0 ? { left: block.indent * 720 } : undefined,
             spacing,
             alignment: block.alignment || AlignmentType.LEFT,
-          }));
+          });
+          para._blockY = block.y;
+          children.push(para);
         } else if (block.type === 'table') {
           children.push(buildDocxTable(block));
         } else if (block.type === 'list') {
+          const listRef = block.bullet ? 'bullet-list' : 'numbered-list';
           children.push(new Paragraph({
             children: block.runs
-              ? block.runs.map(run => makeTextRun(run, { minSize: 12, maxSize: 28 }))
+              ? makeRunsWithSpaces(block.runs, { minSize: 8, maxSize: 28 })
               : [new TextRun(block.text)],
-            bullet: { level: block.level || 0 },
+            numbering: { reference: listRef, level: block.level || 0 },
+            spacing: { after: 40 },
+          }));
+        } else if (block.type === 'footnote') {
+          // Footnote separator + smaller text at the bottom
+          footnoteChildren.push(new Paragraph({
+            children: makeRunsWithSpaces(block.runs, { maxSize: 18 }),
+            spacing: { before: 40, after: 20 },
+            indent: { left: 360, hanging: 360 },
           }));
         }
       }
 
       // Insert extracted inline images from the PDF page
+      // Track image insertion points by Y coordinate
       if (content.images && content.images.length && mode !== 'images-only') {
         for (const img of content.images) {
-          children.push(new Paragraph({
+          const imgParagraph = new Paragraph({
             children: [new ImageRun({
               data: img.data,
               transformation: { width: Math.min(img.width, 500), height: Math.min(img.height, 700) },
@@ -128,8 +213,31 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
             })],
             alignment: AlignmentType.CENTER,
             spacing: { before: 100, after: 100 },
-          }));
+          });
+          // Insert at approximate Y position if available
+          if (img.y !== undefined && children.length > 0) {
+            let insertIdx = children.length;
+            for (let ci = 0; ci < children.length; ci++) {
+              if (children[ci]._blockY !== undefined && children[ci]._blockY > img.y) {
+                insertIdx = ci;
+                break;
+              }
+            }
+            children.splice(insertIdx, 0, imgParagraph);
+          } else {
+            children.push(imgParagraph);
+          }
         }
+      }
+
+      // Append footnotes at the end of the page content
+      if (footnoteChildren.length) {
+        // Add a visual separator before footnotes
+        children.push(new Paragraph({
+          children: [new TextRun({ text: '───────────────────────', font: 'Arial', size: 16, color: '999999' })],
+          spacing: { before: 200, after: 40 },
+        }));
+        children.push(...footnoteChildren);
       }
 
       // Add page image after text in 'text+images' mode
@@ -147,6 +255,27 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
           }));
         }
       }
+
+      // Build section properties with actual page dimensions
+      const sectionProperties = {
+        page: {
+          size: { width: pgWidth, height: pgHeight },
+          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+        },
+      };
+
+      // Section-level columns for multi-column content
+      if (content.columnInfo && content.columnInfo.count >= 2) {
+        sectionProperties.column = {
+          count: content.columnInfo.count,
+          space: 720, // 0.5 inch gutter
+          separate: true,
+        };
+      }
+
+      // Store section properties for this page
+      // (used below when building the section object)
+      children._sectionProperties = sectionProperties;
     }
 
     // Empty page fallback
@@ -154,13 +283,15 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
       children.push(new Paragraph({ text: '' }));
     }
 
-    sections.push({
-      properties: {
-        page: {
-          size: { width: 11906, height: 16838 },  // A4
-          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
-        },
+    const sectionProperties = children._sectionProperties || {
+      page: {
+        size: { width: 11906, height: 16838 },  // A4 default
+        margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
       },
+    };
+
+    sections.push({
+      properties: sectionProperties,
       headers: includeHeader ? {
         default: new Header({
           children: [new Paragraph({
@@ -190,6 +321,55 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
     title: title || 'NovaReader Export',
     creator: 'NovaReader',
     description: `Converted from PDF: ${title || 'unknown'}`,
+    styles: {
+      default: {
+        document: {
+          run: { font: 'Arial', size: 24 },
+          paragraph: { spacing: { line: 276 } },
+        },
+      },
+      paragraphStyles: [
+        { id: 'Normal', name: 'Normal', run: { font: 'Arial', size: 24 } },
+        { id: 'Heading1', name: 'heading 1', basedOn: 'Normal', next: 'Normal',
+          run: { bold: true, size: 48, font: 'Arial' },
+          paragraph: { spacing: { before: 480, after: 240 } } },
+        { id: 'Heading2', name: 'heading 2', basedOn: 'Normal', next: 'Normal',
+          run: { bold: true, size: 36, font: 'Arial' },
+          paragraph: { spacing: { before: 360, after: 160 } } },
+        { id: 'Heading3', name: 'heading 3', basedOn: 'Normal', next: 'Normal',
+          run: { bold: true, size: 28, font: 'Arial' },
+          paragraph: { spacing: { before: 240, after: 120 } } },
+      ],
+      characterStyles: [
+        { id: 'Hyperlink', name: 'Hyperlink', run: { color: '0563C1', underline: { type: 'single' } } },
+      ],
+    },
+    numbering: {
+      config: [
+        {
+          reference: 'bullet-list',
+          levels: [
+            { level: 0, format: 'bullet', text: '\u2022', alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 720, hanging: 360 } } } },
+            { level: 1, format: 'bullet', text: '\u25CB', alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 1440, hanging: 360 } } } },
+            { level: 2, format: 'bullet', text: '\u25AA', alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 2160, hanging: 360 } } } },
+          ],
+        },
+        {
+          reference: 'numbered-list',
+          levels: [
+            { level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 720, hanging: 360 } } } },
+            { level: 1, format: 'lowerLetter', text: '%2)', alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 1440, hanging: 360 } } } },
+            { level: 2, format: 'lowerRoman', text: '%3.', alignment: AlignmentType.LEFT,
+              style: { paragraph: { indent: { left: 2160, hanging: 360 } } } },
+          ],
+        },
+      ],
+    },
     sections,
   });
 
@@ -201,24 +381,28 @@ function buildDocxTable(block) {
   const colWidth = Math.floor(9000 / maxCols);
 
   const tableRows = rows.map((row, rowIdx) => {
-    const cells = row.map(cellText => new TableCell({
-      children: [new Paragraph({
-        children: [new TextRun({
-          text: cellText || '',
-          font: 'Arial',
-          size: 20,
-          bold: rowIdx === 0,
-        })],
-      })],
-      width: { size: colWidth, type: WidthType.DXA },
-      shading: rowIdx === 0 ? { type: ShadingType.CLEAR, fill: 'E8E8E8' } : undefined,
-      borders: {
-        top: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-        bottom: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-        left: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-        right: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
-      },
-    }));
+    const cells = [];
+    for (let c = 0; c < maxCols; c++) {
+      const cellData = row.cells ? row.cells[c] : null;
+      const cellText = cellData?.text || (typeof row === 'object' && !row.cells ? (row[c] || '') : '');
+      const cellRuns = cellData?.runs;
+
+      const children = cellRuns && cellRuns.length
+        ? cellRuns.map(r => makeTextRun(r, { minSize: 8, maxSize: 28 }))
+        : [new TextRun({ text: cellText || '', font: 'Arial', size: 20, bold: rowIdx === 0 })];
+
+      cells.push(new TableCell({
+        children: [new Paragraph({ children })],
+        width: { size: colWidth, type: WidthType.DXA },
+        shading: rowIdx === 0 ? { type: ShadingType.CLEAR, fill: 'E8E8E8' } : undefined,
+        borders: {
+          top: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          bottom: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          left: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          right: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+        },
+      }));
+    }
     return new TableRow({ children: cells });
   });
 
