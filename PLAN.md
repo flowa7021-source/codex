@@ -330,12 +330,14 @@
 - pdf-pro-tools: addHeaderFooter, addBatesNumbering, flattenPdf, checkAccessibility, autoFixAccessibility, addPageNumbers, cropPdfPages
 - Файлы: `tests/unit/*.test.js`, запуск: `node --test tests/unit/*.test.js`
 
-### 7.6 Build system ❌ НЕ НАЧАТО
-- Vite или esbuild для бандлинга
-- Tree-shaking неиспользуемого кода
-- Code splitting по модулям
-- Source maps для отладки
-- Hot Module Replacement для разработки
+### 7.6 Build system ✅ ГОТОВО
+- Vite 6 для бандлинга (`npx vite build` → `dist-vite/`)
+- Tree-shaking: 100 модулей → 504KB entry (156KB gzip)
+- Code splitting: pdf-lib (525KB) и docx (363KB) в отдельные chunks
+- Source maps: генерируются для всех JS chunks
+- HMR: `npx vite dev` на порту 5173
+- Исправлен broken import в text-nav-controller.js
+- Alias pdf-lib → non-minified ESM для корректной esbuild обработки
 
 ---
 
@@ -358,7 +360,7 @@
 | P3 | 4.5 Безопасность | Enterprise-функции | ✅ Готово |
 | P3 | 5.2 PDF→HTML | Дополнительный формат | ✅ Готово |
 | P3 | 7.5 Testing | Стабильность | ✅ Готово (220 тестов) |
-| P3 | 7.6 Build system | Разработка | ❌ Не начато |
+| P3 | 7.6 Build system | Разработка | ✅ Готово |
 
 ---
 

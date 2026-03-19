@@ -7,7 +7,8 @@
  */
 
 import { state, els } from './state.js';
-import { ToolMode, toolStateMachine, enableInlineTextEditing, disableInlineTextEditing } from './tool-modes.js';
+import { ToolMode, toolStateMachine } from './tool-modes.js';
+import { enableInlineTextEditing, disableInlineTextEditing } from './render-controller.js';
 
 /* ------------------------------------------------------------------ */
 /*  Late-bound cross-module dependencies (set via initTextNavDeps)     */

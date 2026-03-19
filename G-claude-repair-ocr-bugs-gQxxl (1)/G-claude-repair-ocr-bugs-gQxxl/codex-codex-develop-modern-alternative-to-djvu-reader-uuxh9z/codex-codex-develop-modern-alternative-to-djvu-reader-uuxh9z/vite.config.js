@@ -45,7 +45,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // Map importmap entries to node_modules for Vite resolution
-      'pdf-lib': resolve(__dirname, 'node_modules/pdf-lib/dist/pdf-lib.esm.min.js'),
+      'pdf-lib': resolve(__dirname, 'node_modules/pdf-lib/dist/pdf-lib.esm.js'),
       'docx': resolve(__dirname, 'node_modules/docx/dist/index.mjs'),
     },
   },
