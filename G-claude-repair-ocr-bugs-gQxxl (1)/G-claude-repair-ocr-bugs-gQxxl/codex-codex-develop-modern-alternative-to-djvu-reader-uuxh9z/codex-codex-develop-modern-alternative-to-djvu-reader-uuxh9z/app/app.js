@@ -160,28 +160,9 @@ function showUserError(context, errorType, message) {
   try { toastError(`${label}: ${message}`); } catch (err) { console.warn('[app] toast in error boundary failed:', err?.message); }
 }
 
-// ─── Phase 2: OCR — now in modules/ocr-controller.js ─
-// ─── Phase 3: PDF Text Editing + DOCX Export — now in modules/export-controller.js ─
-// ─── Phase 2: OCR Search Index — now in modules/export-controller.js ─
-// ─── Phase 5: Crash Telemetry — now in modules/crash-telemetry.js ──────────
 initCrashTelemetry();
 
-
-// PDFAdapter, ImageAdapter, DjVuAdapter, DjVuNativeAdapter, UnsupportedAdapter
-// — moved to modules/adapters.js
-
-
-// revokeCurrentObjectUrl, djvuTextKey, loadDjvuData, saveDjvuData
-// — moved to file-controller.js
-
-// noteKey, bookmarkKey, viewStateKey, readingTimeKey, readingGoalKey
-// — moved to reading-progress-controller.js
-
-// annotationKey, commentKey, invalidateAnnotationCaches, getCurrentAnnotationCtx,
-// getAnnotationDpr, loadStrokes, saveStrokes, loadComments, saveComments,
-// clearDocumentCommentStorage, renderCommentList, clearDocumentAnnotationStorage,
-// updateOverlayInteractionState, setDrawMode — moved to annotation-controller.js
-
+// ─── Settings proxy wrappers (delegate to SettingsController) ────────────────
 function appSettingsKey() { return SettingsController.appSettingsKey(); }
 function defaultSettings() { return SettingsController.defaultSettings(); }
 function loadAppSettings() { SettingsController.loadAppSettings(); }
@@ -189,27 +170,6 @@ function saveAppSettings() { SettingsController.saveAppSettings(); }
 function applyUiSizeSettings() { SettingsController.applyUiSizeSettings(uiLayoutKey); }
 function getOcrLang() { return SettingsController.getOcrLang(); }
 function getOcrScale() { return SettingsController.getOcrScale(); }
-
-// ─── OCR functions (getConfusableLatinToCyrillicMap through normalizeOcrTextByLang) ─
-// now in modules/ocr-controller.js
-
-// applyAppLanguage, renderSectionVisibilityControls, applySectionVisibilitySettings,
-// openSettingsModal, closeSettingsModal, readUiSizeSettingsFromModal,
-// previewUiSizeFromModal, saveSettingsFromModal
-// — moved to settings-ui.js
-
-// ─── OCR functions (setOcrControlsBusy through startBackgroundOcrScan) ─
-// now in modules/ocr-controller.js
-
-// ─── Annotation functions (moved to annotation-controller.js) ────────────────
-// normalizePoint, denormalizePoint, applyStrokeStyle, drawStroke,
-// renderAnnotations, _applyTextMarkupFromSelection, getCanvasPointFromEvent,
-// beginStroke, moveStroke, endStroke, undoStroke, clearStrokes, clearComments,
-// exportAnnotatedPng, exportAnnotationsJson, importAnnotationsJson,
-// showShortcutsHelp, exportAnnotationBundleJson, importAnnotationBundleJson
-// — now imported from ./modules/annotation-controller.js
-
-// ─── Workspace functions: delegated to workspace-controller.js ──────────────
 
 async function importDjvuDataJson(file) {
   if (!state.adapter || state.adapter.type !== 'djvu') {
@@ -237,44 +197,7 @@ async function importDjvuDataJson(file) {
   }
 }
 
-// loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus
-// — moved to reading-progress-controller.js
-
-// formatEta, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage,
-// clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender,
-// navigateHistoryBack, navigateHistoryForward, formatDuration, saveReadingTime,
-// loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer,
-// syncReadingTimerWithVisibility, resetReadingTime
-// — moved to reading-progress-controller.js
-
-// isLikelyDjvuFile, extractDjvuFallbackText
-// — moved to file-controller.js
-
-
-// openFile (_openFileImpl + withErrorBoundary wrapper)
-// — moved to file-controller.js
-
-// ─── Rendering & Text Layer (extracted to render-controller.js) ──────────────
-// Functions: _schedulePreRender, _preRenderAdjacent, _blitCacheToCanvas,
-// _updateAnnotationCanvas, _updatePageUI, renderCurrentPage, safeCreateObjectURL,
-// _renderPdfAnnotationLayer, _renderManualTextLayer, renderTextLayer,
-// _renderOcrTextLayer, enableInlineTextEditing, disableInlineTextEditing,
-// _handleTextLayerDblClick, _findParagraphSpans, _createParagraphEditor,
-// _reflowTextToSpans, _createInlineEditor, _syncTextLayerToStorage,
-// handleImageInsertion, addWatermarkToPage, addStampToPage, openSignaturePad
-// — now imported from ./modules/render-controller.js
-
-// mergePdfFiles — moved to pdf-ops-controller.js
-
-// buildMergedPdfFromCanvases, splitPdfPages, parsePageRange
-// — moved to pdf-ops-controller.js
-
-
-// _saveViewStateNow, saveViewState, loadViewState, clearViewState,
-// renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress,
-// saveRecent, removeRecent, clearRecent, renderRecent
-// — moved to reading-progress-controller.js
-
+// ─── Theme ───────────────────────────────────────────────────────────────────
 const THEME_CLASSES = ['light', 'sepia', 'high-contrast', 'theme-auto'];
 
 function applyTheme(theme) {
@@ -331,21 +254,7 @@ function renderBookmarks() { SettingsController.renderBookmarks(bookmarkKey, sav
 async function addBookmark() { await SettingsController.addBookmark(bookmarkKey, saveBookmarks, renderBookmarks); }
 function clearBookmarks() { SettingsController.clearBookmarks(saveBookmarks, renderBookmarks); }
 
-// renderDocInfo, buildOutlineItems, renderOutline, updatePreviewSelection,
-// _drawPreviewPlaceholder, _renderDeferredPreviews, renderPagePreviews
-// — moved to outline-controller.js
-
-// ensureTextToolsVisible, refreshPageText, copyPageText, exportPageText,
-// setTextEditMode, saveCurrentPageTextEdits, exportCurrentDocToWord,
-// normalizePageInput, goToPage, fitWidth, fitPage, downloadCurrentFile, printCanvasPage
-// — moved to text-nav-controller.js
-
-
-// uiLayoutKey, applyAdvancedPanelsState, toggleAdvancedPanelsState, applyLayoutState,
-// updateSearchToolbarRows, toggleLayoutState, applyResizableLayoutState,
-// ensureDefaultPageAreaHeight, setupResizableLayout, setupDragAndDrop, setupAnnotationEvents
-// — moved to layout-controller.js
-
+// ─── Event Bindings ──────────────────────────────────────────────────────────
 els.clearRecent.addEventListener('click', clearRecent);
 els.toggleAdvancedPanels?.addEventListener('click', toggleAdvancedPanelsState);
 els.openSettingsModal?.addEventListener('click', openSettingsModal);
