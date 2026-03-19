@@ -44,13 +44,17 @@ jobs:
           Write-Host "SHORT_PATH=$env:SHORT_PATH"
           Write-Host "Junction exists: $(Test-Path $env:SHORT_PATH)"
 
-      - name: Install dependencies
+      - name: Install dependencies (skip postinstall scripts)
         env:
           npm_config_audit: "false"
           npm_config_fund: "false"
           CYPRESS_INSTALL_BINARY: "0"
         working-directory: C:\nr
-        run: npm ci --no-audit --no-fund
+        run: npm ci --no-audit --no-fund --ignore-scripts
+
+      - name: Download Electron binary
+        working-directory: C:\nr
+        run: node node_modules/electron/install.js
 
       - name: build portable EXE
         env:
