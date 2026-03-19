@@ -79,7 +79,7 @@ function initContinuousScroll(deps) {
       const zoom = state.zoom || 1;
       await state.adapter.renderPage(pageNum, canvas, { zoom, rotation: 0 });
       canvas.style.background = 'white';
-    } catch (err) {
+    } catch {
       canvas.style.background = '#fdd';
     }
   }
@@ -97,7 +97,7 @@ function initContinuousScroll(deps) {
 
 // ── Batch OCR UI Integration ────────────────────────────────────────────────
 function initBatchOcrUI(deps) {
-  const { state, recognizeWithBoxes, batchOcr, createSearchablePdf, detectScannedDocument, autoDetectLanguage, safeCreateObjectURL, pushDiagnosticEvent, setOcrStatus } = deps;
+  const { state, recognizeWithBoxes, batchOcr, createSearchablePdf, detectScannedDocument, autoDetectLanguage, safeCreateObjectURL, pushDiagnosticEvent, setOcrStatus: _setOcrStatus } = deps;
 
   const batchOcrAllBtn = document.getElementById('batchOcrAll');
   const batchOcrCancelBtn = document.getElementById('batchOcrCancel');
@@ -444,7 +444,7 @@ function initPrintDialog(deps) {
       const rangeRadio = modal.querySelector('input[name="printRange"]:checked');
       const range = rangeRadio?.value || 'all';
       const dpi = parseInt(document.getElementById('printDpi')?.value || '300', 10);
-      const includeAnnotations = document.getElementById('printAnnotations')?.checked ?? true;
+      const _includeAnnotations = document.getElementById('printAnnotations')?.checked ?? true;
 
       let pages = [];
       if (range === 'current') {

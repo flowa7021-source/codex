@@ -28,7 +28,7 @@ export class BatchConverter {
   _notify() {
     const state = this.getState();
     for (const fn of this._listeners) {
-      try { fn(state); } catch {}
+      try { fn(state); } catch (err) { console.warn('[batch-convert] error:', err?.message); }
     }
   }
 

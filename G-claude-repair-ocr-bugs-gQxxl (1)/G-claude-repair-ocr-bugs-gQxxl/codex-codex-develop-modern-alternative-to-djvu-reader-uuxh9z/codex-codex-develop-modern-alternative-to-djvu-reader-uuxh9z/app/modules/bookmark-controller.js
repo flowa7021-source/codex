@@ -11,7 +11,7 @@ function loadBookmarks() {
   try {
     const raw = localStorage.getItem(storageKey());
     return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
+  } catch (err) { console.warn('[bookmark-controller storage] error:', err?.message); return []; }
 }
 
 function saveBookmarks(bookmarks) {
@@ -151,7 +151,7 @@ export function importBookmarks(file) {
       saveBookmarks(merged.slice(0, MAX_BOOKMARKS));
       renderBookmarkList();
       updateBookmarkButton();
-    } catch { /* invalid JSON */ }
+    } catch (err) { console.warn('[bookmark-controller] error:', err?.message); }
   };
   reader.readAsText(file);
 }

@@ -57,7 +57,7 @@ function getStore(mode = 'readonly') {
     try {
       const tx = db.transaction(STORE_NAME, mode);
       return tx.objectStore(STORE_NAME);
-    } catch (err) {
+    } catch {
       // Transaction failed (connection may be stale) — reset and retry once
       _db = null;
       return openDb().then((db2) => {
@@ -98,7 +98,7 @@ export async function saveOcrData(docName, data) {
     try {
       const key = `novareader-ocr-text:${docName}`;
       localStorage.setItem(key, JSON.stringify(data));
-    } catch (err) { /* storage full, ignore */ console.warn('[ocr-storage] localStorage fallback full:', err?.message); }
+    } catch (err) { console.warn('[ocr-storage] localStorage fallback full:', err?.message); }
   }
 }
 
@@ -121,7 +121,7 @@ export async function loadOcrData(docName) {
     if (raw) {
       const parsed = JSON.parse(raw);
       // Migrate to IndexedDB
-      saveOcrData(docName, parsed).catch(() => {});
+      saveOcrData(docName, parsed).catch((err) => { console.warn('[ocr] error:', err?.message); });
       return parsed;
     }
   } catch (err) { /* ignore */ console.warn('[ocr-storage] localStorage fallback load:', err?.message); }

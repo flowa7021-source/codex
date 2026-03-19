@@ -8,7 +8,7 @@
  * Returns an array of {type: 'equal'|'add'|'remove', text: string, line: number}
  */
 function computeLineDiff(linesA, linesB) {
-  const result = [];
+  const _result = [];
   const m = linesA.length;
   const n = linesB.length;
 
@@ -76,7 +76,7 @@ function computeWordDiff(textA, textB) {
   const wordsA = textA.split(/\s+/);
   const wordsB = textB.split(/\s+/);
 
-  const result = [];
+  const _result = [];
   const m = wordsA.length;
   const n = wordsB.length;
 

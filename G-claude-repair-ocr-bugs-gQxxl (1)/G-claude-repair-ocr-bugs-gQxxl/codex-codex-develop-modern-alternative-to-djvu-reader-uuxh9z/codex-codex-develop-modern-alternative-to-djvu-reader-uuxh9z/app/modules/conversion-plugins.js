@@ -10,9 +10,9 @@ class ConversionPlugin {
     this.description = description;
   }
 
-  detect(text) { return false; }
-  transform(text, pageNum) { return text; }
-  toDocxXml(text, pageNum) { return null; }
+  detect(_text) { return false; }
+  transform(_text, _pageNum) { return _text; }
+  toDocxXml(_text, _pageNum) { return null; }
 }
 
 // ─── Invoice Plugin ─────────────────────────────────────────────────────────

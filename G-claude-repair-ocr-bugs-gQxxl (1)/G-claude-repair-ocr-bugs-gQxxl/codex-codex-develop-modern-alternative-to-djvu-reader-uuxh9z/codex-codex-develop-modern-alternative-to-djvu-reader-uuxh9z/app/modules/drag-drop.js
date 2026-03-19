@@ -144,7 +144,7 @@ function initThumbnailReorder(container, reorderPages) {
     }
   });
 
-  container.addEventListener('dragend', (e) => {
+  container.addEventListener('dragend', (_e) => {
     if (draggedItem) {
       draggedItem.classList.remove('dragging');
       draggedItem.style.opacity = '';

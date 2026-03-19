@@ -159,7 +159,7 @@ export function tableToHtml(rows, hasHeader = true) {
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
-function createZone(type, items, pageWidth) {
+function createZone(type, items, _pageWidth) {
   const xs = items.map(i => i.x);
   const ys = items.map(i => i.y);
   return {

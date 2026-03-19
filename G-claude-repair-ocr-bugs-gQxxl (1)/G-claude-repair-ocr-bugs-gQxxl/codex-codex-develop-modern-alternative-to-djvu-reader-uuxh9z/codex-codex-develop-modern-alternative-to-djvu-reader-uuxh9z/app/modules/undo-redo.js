@@ -18,7 +18,7 @@ class UndoRedoManager {
 
   _notify() {
     for (const fn of this._listeners) {
-      try { fn({ canUndo: this.canUndo(), canRedo: this.canRedo() }); } catch {}
+      try { fn({ canUndo: this.canUndo(), canRedo: this.canRedo() }); } catch (err) { console.warn('[undo-redo] error:', err?.message); }
     }
   }
 

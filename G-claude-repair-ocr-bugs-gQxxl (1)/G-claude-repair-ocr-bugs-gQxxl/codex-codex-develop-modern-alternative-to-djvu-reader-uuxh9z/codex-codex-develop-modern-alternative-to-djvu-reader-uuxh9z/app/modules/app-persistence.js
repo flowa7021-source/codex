@@ -15,7 +15,7 @@ let viewStateSaveTimer = null;
 export function save(key, value) {
   try {
     localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(value));
-  } catch { /* quota exceeded */ }
+  } catch (err) { console.warn('[app-persistence storage] error:', err?.message); }
 }
 
 /**

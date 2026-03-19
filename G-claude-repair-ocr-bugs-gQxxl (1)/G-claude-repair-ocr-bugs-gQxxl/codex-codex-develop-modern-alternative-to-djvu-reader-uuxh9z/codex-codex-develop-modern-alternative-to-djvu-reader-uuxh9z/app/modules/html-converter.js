@@ -40,7 +40,7 @@ ${body}
 </html>`;
 }
 
-function renderPage(page, pageNum, layout, includeImages) {
+function renderPage(page, pageNum, layout, _includeImages) {
   const items = page.items || [];
   const text = page.text || '';
 
@@ -196,7 +196,7 @@ ${responsive ? `
 /**
  * Convert a single page's text to a simple HTML fragment.
  */
-export function pageToHtmlFragment(text, pageNum) {
+export function pageToHtmlFragment(text, _pageNum) {
   const paragraphs = text.split(/\n\s*\n/).filter(Boolean);
   return paragraphs.map(p => `<p>${escapeHtml(p.trim())}</p>`).join('\n');
 }

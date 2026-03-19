@@ -174,7 +174,7 @@ async function importDjvuDataJson(file) {
     await renderPagePreviews();
     await renderCurrentPage();
     els.searchStatus.textContent = 'DjVu data JSON импортирован';
-  } catch (err) {
+  } catch {
     els.searchStatus.textContent = 'Ошибка импорта DjVu data JSON';
   }
 }
@@ -203,12 +203,12 @@ function getNotesModel() { return SettingsController.getNotesModel(); }
 function normalizeImportedNotes(payload) { return SettingsController.normalizeImportedNotes(payload); }
 function loadNotes() { SettingsController.loadNotes(noteKey); }
 function saveNotes(source = 'manual') { SettingsController.saveNotes(noteKey, source); }
-function queueNotesAutosave() { SettingsController.queueNotesAutosave(noteKey); }
-function exportNotes() { SettingsController.exportNotes(); }
-function exportNotesMarkdown() { SettingsController.exportNotesMarkdown(); }
-function exportNotesJson() { SettingsController.exportNotesJson(); }
-async function importNotesJson(file) { await SettingsController.importNotesJson(file, noteKey); }
-function insertTimestamp() { SettingsController.insertTimestamp(noteKey); }
+function _queueNotesAutosave() { SettingsController.queueNotesAutosave(noteKey); }
+function _exportNotes() { SettingsController.exportNotes(); }
+function _exportNotesMarkdown() { SettingsController.exportNotesMarkdown(); }
+function _exportNotesJson() { SettingsController.exportNotesJson(); }
+async function _importNotesJson(file) { await SettingsController.importNotesJson(file, noteKey); }
+function _insertTimestamp() { SettingsController.insertTimestamp(noteKey); }
 function normalizeHotkey(value, fallback) { return SettingsController.normalizeHotkey(value, fallback); }
 function setHotkeysStatus(message, type = '') { SettingsController.setHotkeysStatus(message, type); }
 function setHotkeysInputErrors(fields = [], details = {}) { SettingsController.setHotkeysInputErrors(fields, details); }
@@ -223,13 +223,13 @@ function autoFixHotkeys() { SettingsController.autoFixHotkeys(); }
 
 
 function setBookmarksStatus(message, type = '') { SettingsController.setBookmarksStatus(message, type); }
-function exportBookmarksJson() { SettingsController.exportBookmarksJson(bookmarkKey, loadBookmarks); }
-async function importBookmarksJson(file) { await SettingsController.importBookmarksJson(file, saveBookmarks, renderBookmarks); }
+function _exportBookmarksJson() { SettingsController.exportBookmarksJson(bookmarkKey, loadBookmarks); }
+async function _importBookmarksJson(file) { await SettingsController.importBookmarksJson(file, saveBookmarks, renderBookmarks); }
 function loadBookmarks() { return SettingsController.loadBookmarks(bookmarkKey); }
 function saveBookmarks(next) { SettingsController.saveBookmarks(next, bookmarkKey, renderDocStats, renderEtaStatus); }
 function renderBookmarks() { SettingsController.renderBookmarks(bookmarkKey, saveBookmarks, renderCurrentPage); }
 async function addBookmark() { await SettingsController.addBookmark(bookmarkKey, saveBookmarks, renderBookmarks); }
-function clearBookmarks() { SettingsController.clearBookmarks(saveBookmarks, renderBookmarks); }
+function _clearBookmarks() { SettingsController.clearBookmarks(saveBookmarks, renderBookmarks); }
 
 // ─── Event Listener Cleanup Registry ─────────────────────────────────────────
 /** @type {Array<{el: EventTarget, type: string, handler: Function}>} */
@@ -251,7 +251,7 @@ function safeOn(el, type, handler, opts) {
 /** Remove all tracked event listeners (call on cleanup/destroy). */
 function cleanupAllListeners() {
   for (const { el, type, handler } of _listenerRegistry) {
-    try { el.removeEventListener(type, handler); } catch { /* noop */ }
+    try { el.removeEventListener(type, handler); } catch (err) { console.warn('[app] error:', err?.message); }
   }
   _listenerRegistry.length = 0;
 }
@@ -377,14 +377,14 @@ safeOn(els.saveCloudSyncUrl, 'click', saveCloudSyncUrl);
 safeOn(els.pushCloudSync, 'click', async () => {
   try {
     await pushWorkspaceToCloud();
-  } catch (err) {
+  } catch {
     setStage4Status('Ошибка cloud push.', 'error');
   }
 });
 safeOn(els.pullCloudSync, 'click', async () => {
   try {
     await pullWorkspaceFromCloud();
-  } catch (err) {
+  } catch {
     setStage4Status('Ошибка cloud pull.', 'error');
   }
 });
@@ -460,7 +460,7 @@ safeOn(els.importDocx, 'change', async (e) => {
     } else {
       importDocxEdits(file);
     }
-  } catch (err) {
+  } catch {
     importDocxEdits(file);
   }
   e.target.value = '';
@@ -496,7 +496,7 @@ safeOn(els.copyOcrText, 'click', async () => {
       await navigator.clipboard.writeText(els.pageText.value);
       setOcrStatus('OCR: текст скопирован');
     }
-  } catch (err) {
+  } catch {
     setOcrStatus('OCR: не удалось скопировать текст');
   }
 });
@@ -551,7 +551,7 @@ async function refreshOcrStorageInfo() {
         els.ocrDocumentsList.appendChild(li);
       }
     }
-  } catch (err) {
+  } catch {
     if (els.ocrStorageInfo) els.ocrStorageInfo.textContent = 'Ошибка чтения хранилища';
   }
 }
@@ -855,7 +855,7 @@ safeOn(els.addStamp, 'click', async () => {
         a.click();
         URL.revokeObjectURL(url);
         setOcrStatus(`Штамп "${labels[idx]}" — PDF сохранён`);
-      } catch (err) {
+      } catch {
         setOcrStatus(`Штамп "${labels[idx]}" добавлен на canvas`);
       }
     } else {
@@ -1135,7 +1135,7 @@ window.addEventListener('beforeunload', () => {
   if (pdfEditState.dirty) persistEdits();
   revokeAllTrackedUrls();
   clearPageRenderCache();
-  terminateTesseract().catch(() => {});
+  terminateTesseract().catch((err) => { console.warn('[ocr] error:', err?.message); });
 });
 
 renderRecent();

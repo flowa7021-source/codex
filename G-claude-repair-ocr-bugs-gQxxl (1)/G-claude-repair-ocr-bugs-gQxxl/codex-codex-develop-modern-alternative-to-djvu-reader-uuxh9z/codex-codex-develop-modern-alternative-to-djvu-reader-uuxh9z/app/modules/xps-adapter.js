@@ -14,7 +14,7 @@ export async function parseXps(data) {
   const files = extractZipFiles(bytes);
 
   // Find FixedDocumentSequence to determine page order
-  const fdseqPath = findFile(files, 'FixedDocumentSequence.fdseq') ||
+  const _fdseqPath = findFile(files, 'FixedDocumentSequence.fdseq') ||
                     findFile(files, '[Content_Types].xml') ? findFdseq(files) : null;
 
   // Find page files (*.fpage)
@@ -162,7 +162,7 @@ function extractZipFiles(bytes) {
 
     const compMethod = view.getUint16(offset + 8, true);
     const compSize = view.getUint32(offset + 18, true);
-    const uncompSize = view.getUint32(offset + 22, true);
+    const _uncompSize = view.getUint32(offset + 22, true);
     const nameLen = view.getUint16(offset + 26, true);
     const extraLen = view.getUint16(offset + 28, true);
 

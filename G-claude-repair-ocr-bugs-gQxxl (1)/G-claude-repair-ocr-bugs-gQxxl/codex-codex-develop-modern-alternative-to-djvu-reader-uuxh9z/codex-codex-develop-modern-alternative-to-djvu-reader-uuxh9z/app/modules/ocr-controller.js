@@ -176,7 +176,7 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   // changes language or quality mode mid-pipeline
   const pipelineLang = getOcrLang();
   const pipelineQualityMode = state.settings?.ocrQualityMode || 'balanced';
-  const pipelineCyrillicOnly = !!state.settings?.ocrCyrillicOnly;
+  const _pipelineCyrillicOnly = !!state.settings?.ocrCyrillicOnly;
 
   // Early exit: check Tesseract availability BEFORE spending time on preprocessing
   const lang = pipelineLang;
@@ -476,7 +476,7 @@ export function enqueueOcrTask(reason, task, options = {}) {
   }
 
   state.ocrQueue = state.ocrQueue
-    .catch(() => {})
+    .catch((err) => { console.warn('[ocr] error:', err?.message); })
     .then(async () => {
       if (queueEpoch !== state.ocrQueueEpoch) {
         pushDiagnosticEvent('ocr.queue.skip', { reason, skipReason: 'queue-cancelled', queueEpoch }, 'warn');
@@ -614,7 +614,7 @@ export async function runOcrOnRectNow(rect) {
       indexOcrPage(state.currentPage, corrected);
       // Persist to IndexedDB
       if (state.docName) {
-        savePageOcrText(state.docName, state.currentPage, corrected).catch(() => {});
+        savePageOcrText(state.docName, state.currentPage, corrected).catch((err) => { console.warn('[ocr] error:', err?.message); });
       }
       setOcrStatus(`OCR: распознано ${corrected.length} символов за ${totalMs}мс [${confidence.level} ${confidence.score}%] качество: ${qualitySummary.quality}`);
       recordPerfMetric('ocrTimes', totalMs);
@@ -624,7 +624,7 @@ export async function runOcrOnRectNow(rect) {
         pushDiagnosticEvent('ocr.manual.slow', { taskId, totalMs, page: state.currentPage }, 'warn');
       }
       // Refresh text layer with newly recognized word boxes
-      _deps.renderTextLayer(state.currentPage, state.zoom, state.rotation).catch(() => {});
+      _deps.renderTextLayer(state.currentPage, state.zoom, state.rotation).catch((err) => { console.warn('[ocr] error:', err?.message); });
     } else {
       recordPerfMetric('ocrTimes', totalMs);
       setOcrStatus(`OCR: текст не найден (${totalMs}мс)`);
@@ -665,7 +665,7 @@ export async function extractTextForPage(pageNumber) {
   let text = '';
   try {
     text = String(await state.adapter.getText(pageNumber) || '').trim();
-  } catch (err) {
+  } catch {
     text = '';
   }
   if (text) return text;
@@ -693,7 +693,7 @@ export async function extractTextForPage(pageNumber) {
       } catch (err) { console.warn('[app] persist best-effort failed:', err?.message); }
     }
     return ocrResult;
-  } catch (err) {
+  } catch {
     return '';
   }
 }
@@ -756,7 +756,7 @@ export async function startBackgroundOcrScan(reason = 'auto') {
     if (usePool) {
       pushDiagnosticEvent('ocr.background.pool', { poolSize, lang: tessLang });
     }
-  } catch (err) {
+  } catch {
     usePool = false;
   }
 
@@ -800,7 +800,7 @@ export async function startBackgroundOcrScan(reason = 'auto') {
         try {
           const txt = await extractTextForPage(pageNum);
           return { pageNum, text: txt || '' };
-        } catch (err) {
+        } catch {
           return { pageNum, text: '' };
         }
       });
@@ -862,7 +862,7 @@ export async function startBackgroundOcrScan(reason = 'auto') {
     }
     // Tear down pool after background scan to free memory
     if (usePool) {
-      terminateTesseractPool().catch(() => {});
+      terminateTesseractPool().catch((err) => { console.warn('[ocr] error:', err?.message); });
     }
     releaseLock();
   }

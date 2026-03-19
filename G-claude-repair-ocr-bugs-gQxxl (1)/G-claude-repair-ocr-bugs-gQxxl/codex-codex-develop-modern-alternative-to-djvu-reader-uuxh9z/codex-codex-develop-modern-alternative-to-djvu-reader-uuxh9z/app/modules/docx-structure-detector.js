@@ -90,7 +90,7 @@ function isStrikethroughFont(fontName) {
 // ─── Text quality helpers ───────────────────────────────────────────────────
 
 // Merge adjacent items on the same line that are very close (continuation of same word/phrase)
-function mergeAdjacentItems(items, avgFontSize) {
+function mergeAdjacentItems(items, _avgFontSize) {
   if (items.length <= 1) return items;
   const merged = [{ ...items[0] }];
   for (let i = 1; i < items.length; i++) {
@@ -150,7 +150,7 @@ function detectColumns(lines, pageWidth) {
 
   // Collect all line start X positions
   const starts = lines.map(l => Math.min(...l.map(i => i.x)));
-  const ends = lines.map(l => Math.max(...l.map(i => i.x + i.width)));
+  const _ends = lines.map(l => Math.max(...l.map(i => i.x + i.width)));
 
   // Find clusters of line start positions
   const sorted = [...starts].sort((a, b) => a - b);
@@ -268,7 +268,7 @@ async function extractPageImages(page, viewport) {
       paintImageXObjectRepeat: 87,
     };
     const pageWidth = viewport.width;
-    const pageHeight = viewport.height;
+    const _pageHeight = viewport.height;
 
     for (let i = 0; i < ops.fnArray.length; i++) {
       if (ops.fnArray[i] === OPS.paintImageXObject ||
@@ -279,9 +279,9 @@ async function extractPageImages(page, viewport) {
         try {
           // Try page-level objects first, then common (shared) objects
           let imgData = null;
-          try { imgData = page.objs.get(imgName); } catch { /* ignore */ }
+          try { imgData = page.objs.get(imgName); } catch (err) { console.warn('[docx-structure-detector] error:', err?.message); }
           if (!imgData) {
-            try { imgData = page.commonObjs.get(imgName); } catch { /* ignore */ }
+            try { imgData = page.commonObjs.get(imgName); } catch (err) { console.warn('[docx-structure-detector] error:', err?.message); }
           }
           if (!imgData || !imgData.data) continue;
 
@@ -367,7 +367,7 @@ async function extractStructuredContent(pdfDoc, pageNum) {
         x2: a.rect[2], y2: pageHeight - a.rect[1],
       } : null,
     }));
-  } catch { /* annotations optional */ }
+  } catch (err) { console.warn('[docx-structure-detector] error:', err?.message); }
 
   // Extract embedded images from this page
   const images = await extractPageImages(page, viewport);
@@ -698,7 +698,7 @@ function buildRuns(lineItems) {
   return merged;
 }
 
-function buildParagraphBlock(line, avgFontSize, leftMargin) {
+function buildParagraphBlock(line, avgFontSize, _leftMargin) {
   const arr = Array.isArray(line) ? line : (line.line || [line]);
   const lineText = arr.map(i => i.text).join(' ').trim();
   return {

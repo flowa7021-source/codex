@@ -82,13 +82,13 @@ export async function isTesseractAvailable() {
     await loadTesseractModule();
     _available = true;
     return true;
-  } catch { /* continue to next strategy */ }
+  } catch (err) { console.warn('[ocr] error:', err?.message); }
 
   // Strategy 2: HTTP HEAD check (works on http/https only)
   try {
     const resp = await fetch(PATHS.workerJs, { method: 'HEAD', cache: 'force-cache' });
     if (resp.ok) { _available = true; return true; }
-  } catch { /* ignore */ }
+  } catch (err) { console.warn('[ocr] error:', err?.message); }
 
   // Module/files truly not found — mark unavailable
   _available = false;
@@ -181,7 +181,7 @@ async function _configureWorker(worker) {
       textord_heavy_nr: '1',
       tessedit_do_invert: '0',
     });
-  } catch { /* setParameters may not be supported in all versions */ }
+  } catch (err) { console.warn('[ocr] error:', err?.message); }
 }
 
 /**
@@ -215,7 +215,7 @@ export async function initTesseract(lang = 'eng') {
     try {
       // Terminate previous worker if switching language
       if (_worker) {
-        try { await _worker.terminate(); } catch { /* ignore */ }
+        try { await _worker.terminate(); } catch (err) { console.warn('[ocr] error:', err?.message); }
         _worker = null;
         _currentLang = null;
       }
@@ -380,11 +380,11 @@ export function isTesseractPoolReady() {
  */
 export async function terminateTesseractPool() {
   if (_scheduler) {
-    try { _scheduler.terminate(); } catch { /* ignore */ }
+    try { _scheduler.terminate(); } catch (err) { console.warn('[ocr] error:', err?.message); }
     _scheduler = null;
   }
   for (const w of _poolWorkers) {
-    try { await w.terminate(); } catch { /* ignore */ }
+    try { await w.terminate(); } catch (err) { console.warn('[ocr] error:', err?.message); }
   }
   _poolWorkers = [];
   _poolLang = null;
@@ -481,7 +481,7 @@ export function resetTesseractAvailability() {
  */
 export async function terminateTesseract() {
   if (_worker) {
-    try { await _worker.terminate(); } catch { /* ignore */ }
+    try { await _worker.terminate(); } catch (err) { console.warn('[ocr] error:', err?.message); }
     _worker = null;
     _currentLang = null;
   }

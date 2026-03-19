@@ -5,7 +5,7 @@
 /** @type {'stub'|'partial'|'ready'} Module readiness status */
 export const MODULE_STATUS = 'stub';
 /** What's needed to make this module functional */
-export const MODULE_REQUIRES = ['Google OAuth2 Client ID', 'Microsoft MSAL config', 'Dropbox App Key'];
+export const MODULE_REQUIRES = ['OAuth2 credentials for Google Drive, OneDrive, or Dropbox'];
 
 /**
  * @typedef {object} CloudFile
@@ -30,7 +30,7 @@ export const MODULE_REQUIRES = ['Google OAuth2 Client ID', 'Microsoft MSAL confi
  * @property {Function} signOut - () => Promise<void>
  */
 
-const SUPPORTED_MIME_TYPES = [
+const _SUPPORTED_MIME_TYPES = [
   'application/pdf',
   'image/vnd.djvu',
   'application/epub+zip',
@@ -187,7 +187,7 @@ function _notifyStatus() {
  * @param {string} config.clientId
  * @returns {CloudProvider}
  */
-export function createGoogleDriveProvider(config = {}) {
+export function createGoogleDriveProvider(_config = {}) {
   let token = null;
   return {
     id: 'gdrive',
@@ -211,7 +211,7 @@ export function createGoogleDriveProvider(config = {}) {
  * @param {object} config
  * @returns {CloudProvider}
  */
-export function createOneDriveProvider(config = {}) {
+export function createOneDriveProvider(_config = {}) {
   let token = null;
   return {
     id: 'onedrive',
@@ -234,7 +234,7 @@ export function createOneDriveProvider(config = {}) {
  * @param {object} config
  * @returns {CloudProvider}
  */
-export function createDropboxProvider(config = {}) {
+export function createDropboxProvider(_config = {}) {
   let token = null;
   return {
     id: 'dropbox',

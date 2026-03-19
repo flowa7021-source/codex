@@ -2,7 +2,7 @@
 // Proper PDF merge/split/forms/annotations/watermarks without data loss.
 // Uses pdf-lib which operates on the PDF structure directly (no rasterization).
 
-import { PDFDocument, StandardFonts, rgb, degrees, PDFName } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 
 // ─── PDF Merge ──────────────────────────────────────────────────────────────
 // Merges multiple PDF files preserving text, fonts, images, forms, links.
@@ -100,7 +100,7 @@ export async function getPdfFormFields(pdfArrayBuffer) {
       else if (type === 'PDFDropdown') value = field.getSelected() || [];
       else if (type === 'PDFRadioGroup') value = field.getSelected() || '';
       else if (type === 'PDFOptionList') value = field.getSelected() || [];
-    } catch { /* field may not have value */ }
+    } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
 
     return { name, type, value };
   });

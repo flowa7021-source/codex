@@ -79,7 +79,7 @@ function cleanupMode(mode) {
 
   // Exit fullscreen for presentation
   if (mode === VIEW_MODES.PRESENTATION && document.fullscreenElement) {
-    document.exitFullscreen().catch(() => {});
+    document.exitFullscreen().catch((err) => { console.warn('[view-modes] error:', err?.message); });
   }
 }
 
@@ -205,7 +205,7 @@ function setupPresentation() {
   deps.viewport.classList.add('vmode-presentation');
 
   // Enter fullscreen
-  deps.viewport.requestFullscreen?.().catch(() => {});
+  deps.viewport.requestFullscreen?.().catch((err) => { console.warn('[view-modes] error:', err?.message); });
 
   // Keyboard navigation
   presentationKeyHandler = (e) => {

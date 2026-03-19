@@ -174,7 +174,7 @@ export async function createSearchablePdf(pdfBytes, ocrResults) {
   // Mark as having OCR text layer
   try {
     pdfDoc.setProducer('NovaReader OCR');
-  } catch { /* ignore */ }
+  } catch (err) { console.warn('[ocr] error:', err?.message); }
 
   const savedBytes = await pdfDoc.save();
   return {

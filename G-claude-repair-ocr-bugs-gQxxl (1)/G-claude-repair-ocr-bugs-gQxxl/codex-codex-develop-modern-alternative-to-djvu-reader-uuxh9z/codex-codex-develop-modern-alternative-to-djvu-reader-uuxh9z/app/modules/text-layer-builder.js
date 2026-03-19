@@ -40,7 +40,7 @@ export function buildTextLayer(options) {
     const tx = item.transform;
     if (!tx || tx.length < 6) continue;
 
-    const [a, b, c, d, e, f] = tx;
+    const [a, b, _c, _d, e, f] = tx;
     const fontSize = Math.hypot(a, b);
     const angle = Math.atan2(b, a);
 

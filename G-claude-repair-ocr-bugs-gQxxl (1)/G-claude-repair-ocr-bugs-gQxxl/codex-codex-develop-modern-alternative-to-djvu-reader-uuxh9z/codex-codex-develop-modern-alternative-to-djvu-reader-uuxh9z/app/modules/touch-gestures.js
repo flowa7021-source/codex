@@ -121,7 +121,7 @@ export function hapticFeedback(duration = 10) {
     if (navigator.vibrate) {
       navigator.vibrate(duration);
     }
-  } catch {}
+  } catch (err) { console.warn('[touch-gestures] error:', err?.message); }
 }
 
 // ─── Virtual Keyboard Adaptation ────────────────────────────────────────────

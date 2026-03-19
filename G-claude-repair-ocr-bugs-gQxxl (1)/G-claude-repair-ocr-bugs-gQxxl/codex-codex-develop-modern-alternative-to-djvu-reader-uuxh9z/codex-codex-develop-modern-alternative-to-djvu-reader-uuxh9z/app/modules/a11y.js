@@ -44,7 +44,7 @@ export function applyAriaAttributes() {
   }
 
   // ─── CB groups → role group ───────────────────────────
-  document.querySelectorAll('.cb-group').forEach((g, i) => {
+  document.querySelectorAll('.cb-group').forEach((g, _i) => {
     g.setAttribute('role', 'group');
   });
 
@@ -176,17 +176,17 @@ export function observeTabChanges() {
 
 /** Set up keyboard-only focus visibility */
 function setupFocusVisibility() {
-  let usingKeyboard = false;
+  let _usingKeyboard = false;
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
-      usingKeyboard = true;
+      _usingKeyboard = true;
       document.body.classList.add('keyboard-nav');
     }
   });
 
   document.addEventListener('mousedown', () => {
-    usingKeyboard = false;
+    _usingKeyboard = false;
     document.body.classList.remove('keyboard-nav');
   });
 }

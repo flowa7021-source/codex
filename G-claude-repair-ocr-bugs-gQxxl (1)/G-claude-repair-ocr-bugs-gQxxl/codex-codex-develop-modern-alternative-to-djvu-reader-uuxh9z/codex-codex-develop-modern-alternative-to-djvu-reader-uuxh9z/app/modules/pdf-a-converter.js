@@ -1,7 +1,7 @@
 // ─── PDF/A Converter ────────────────────────────────────────────────────────
 // Convert PDF to PDF/A-2b compliant format via pdf-lib metadata injection.
 
-import { PDFDocument, PDFName, PDFString, PDFArray, PDFDict, PDFHexString } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFDict } from 'pdf-lib';
 
 const PDFA_NAMESPACE = 'http://www.aiim.org/pdfa/ns/id/';
 const PDFA_CONFORMANCE = 'B';
@@ -92,7 +92,7 @@ export async function convertToPdfA(pdfBytes, options = {}) {
   try {
     const viewerPrefs = pdfDoc.context.obj({ DisplayDocTitle: true });
     pdfDoc.catalog.set(PDFName.of('ViewerPreferences'), viewerPrefs);
-  } catch {}
+  } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
 
   // 6. Remove prohibited features
   try {
@@ -107,7 +107,7 @@ export async function convertToPdfA(pdfBytes, options = {}) {
         namesDict.delete(PDFName.of('EmbeddedFiles'));
       }
     }
-  } catch {}
+  } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
 
   const saved = await pdfDoc.save();
   return {

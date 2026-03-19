@@ -61,11 +61,9 @@ export function buildMergedPdfFromCanvases(pages) {
   const encoder = new TextEncoder();
   const objects = [];
   const xrefOffsets = [];
-  let body = '';
   let offset = 0;
 
   const header = '%PDF-1.4\n';
-  body += header;
   offset = header.length;
 
   // Catalog
@@ -126,7 +124,6 @@ export function buildMergedPdfFromCanvases(pages) {
   pdfParts.push(xref);
 
   // Combine text and binary parts
-  const textParts = pdfParts.filter(p => typeof p === 'string');
   const allParts = pdfParts.map(p => typeof p === 'string' ? encoder.encode(p) : p);
   const totalSize = allParts.reduce((s, p) => s + p.length, 0);
   const result = new Uint8Array(totalSize);

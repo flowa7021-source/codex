@@ -1,7 +1,7 @@
 // ─── PDF Security ───────────────────────────────────────────────────────────
 // Encryption, permissions, password protection, metadata cleanup via pdf-lib.
 
-import { PDFDocument, PDFName, PDFString, PDFDict, PDFArray, PDFHexString } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFDict, PDFArray } from 'pdf-lib';
 
 /**
  * Set a user (open) password on a PDF.

@@ -119,7 +119,7 @@ export function loadOcrTextData() {
   try {
     const raw = localStorage.getItem(ocrTextKey());
     return raw ? JSON.parse(raw) : null;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -127,7 +127,7 @@ export function loadOcrTextData() {
 export function saveOcrTextData(payload) {
   localStorage.setItem(ocrTextKey(), JSON.stringify(payload));
   const docName = state.docName || 'global';
-  saveOcrData(docName, payload).catch(() => {});
+  saveOcrData(docName, payload).catch((err) => { console.warn('[ocr] error:', err?.message); });
 }
 
 export async function loadOcrTextDataAsync() {
@@ -340,7 +340,7 @@ export function toggleCollaborationChannel() {
         setWorkspaceStatus('Workspace получен из collab-канала.', 'success');
         setStage4Status('Collab snapshot применён.', 'success');
       }
-    } catch (err) {
+    } catch {
       setStage4Status('Ошибка применения collab snapshot.', 'error');
     }
   };
@@ -381,7 +381,7 @@ export async function importOcrJson(file) {
       await _deps.renderCurrentPage();
     }
     setStage4Status('OCR JSON импортирован.', 'success');
-  } catch (err) {
+  } catch {
     setStage4Status('Ошибка импорта OCR JSON.', 'error');
   }
 }
@@ -418,7 +418,7 @@ export async function importWorkspaceBundleJson(file) {
     if (ok) {
       setWorkspaceStatus('Workspace импортирован.', 'success');
     }
-  } catch (err) {
+  } catch {
     setWorkspaceStatus('Ошибка импорта workspace backup.', 'error');
   }
 }

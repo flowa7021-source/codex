@@ -186,7 +186,7 @@ export async function copySearchResultsSummary() {
       ta.remove();
     }
     els.searchStatus.textContent = `Скопировано результатов: ${state.searchResults.length}`;
-  } catch (err) {
+  } catch {
     els.searchStatus.textContent = 'Не удалось скопировать список';
   }
 }
@@ -332,7 +332,7 @@ export async function importSearchResultsJson(file) {
 
     renderSearchResultsList();
     els.searchStatus.textContent = `Импортировано результатов: ${state.searchResults.length}`;
-  } catch (err) {
+  } catch {
     els.searchStatus.textContent = 'Ошибка импорта результатов поиска';
   }
 }
@@ -430,7 +430,7 @@ export async function importSearchResultsCsv(file) {
 
     renderSearchResultsList();
     els.searchStatus.textContent = `Импортировано из CSV: ${state.searchResults.length}`;
-  } catch (err) {
+  } catch {
     els.searchStatus.textContent = 'Ошибка импорта CSV';
   }
 }
@@ -486,7 +486,7 @@ export function renderSearchResultsList() {
 export function loadSearchHistory() {
   try {
     return JSON.parse(localStorage.getItem(searchHistoryKey()) || '[]');
-  } catch (err) {
+  } catch {
     return [];
   }
 }
@@ -625,7 +625,7 @@ export async function copySearchHistory() {
       ta.remove();
     }
     els.searchStatus.textContent = `Скопировано запросов: ${history.length}`;
-  } catch (err) {
+  } catch {
     els.searchStatus.textContent = 'Не удалось скопировать историю';
   }
 }
@@ -653,7 +653,7 @@ export async function importSearchHistoryJson(file) {
     saveSearchHistory(unique);
     renderSearchHistory();
     els.searchStatus.textContent = `Импортировано запросов: ${unique.length}`;
-  } catch (err) {
+  } catch {
     els.searchStatus.textContent = 'Ошибка импорта истории поиска';
   }
 }

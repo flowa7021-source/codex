@@ -15,7 +15,7 @@
  * @property {boolean} booklet
  */
 
-const DEFAULT_OPTIONS = {
+const _DEFAULT_OPTIONS = {
   pages: 'all',
   pageRange: '',
   currentPage: 1,

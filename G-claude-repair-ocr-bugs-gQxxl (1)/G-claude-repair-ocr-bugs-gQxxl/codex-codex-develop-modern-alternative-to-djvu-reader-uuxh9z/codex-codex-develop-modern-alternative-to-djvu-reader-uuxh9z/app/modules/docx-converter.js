@@ -6,11 +6,11 @@
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   ImageRun, HeadingLevel, AlignmentType, BorderStyle, WidthType,
-  Header, Footer, PageNumber, NumberFormat, TabStopPosition, TabStopType,
-  ShadingType, convertInchesToTwip, ExternalHyperlink,
+  Header, Footer, PageNumber,
+  ShadingType, ExternalHyperlink,
 } from 'docx';
 
-import { extractStructuredContent, mapPdfFont, isBoldFont, isItalicFont, isMonospaceFont } from './docx-structure-detector.js';
+import { extractStructuredContent } from './docx-structure-detector.js';
 
 // Re-export structure detector functions for backwards compatibility
 export { extractStructuredContent, mapPdfFont, isBoldFont, isItalicFont, isMonospaceFont } from './docx-structure-detector.js';

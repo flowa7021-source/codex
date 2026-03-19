@@ -104,7 +104,7 @@ export function saveReadingPosition(docName, position) {
       }
     }
     localStorage.setItem(POSITION_KEY, JSON.stringify(data));
-  } catch {}
+  } catch (err) { console.warn('[navigation storage] error:', err?.message); }
 }
 
 /**

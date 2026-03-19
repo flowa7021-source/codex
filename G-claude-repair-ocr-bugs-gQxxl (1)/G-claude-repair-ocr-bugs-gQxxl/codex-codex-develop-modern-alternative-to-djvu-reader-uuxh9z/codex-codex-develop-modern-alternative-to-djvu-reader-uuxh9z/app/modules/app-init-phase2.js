@@ -1,16 +1,16 @@
 // app-init-phase2.js — Phase 2+ module initialization, extracted from app.js
 import { state, els } from './state.js';
-import { setViewMode, VIEW_MODES } from './view-modes.js';
+import { setViewMode } from './view-modes.js';
 import { extractTextForPage } from './ocr-controller.js';
 import { convertToHtml, downloadHtml } from './html-converter.js';
-import { initEnhancedZoom, ZOOM_PRESETS, zoomToPreset, startMarqueeZoom, smoothZoomTo } from './enhanced-zoom.js';
+import { initEnhancedZoom } from './enhanced-zoom.js';
 import { initTouchGestures, setupVirtualKeyboardAdaptation } from './touch-gestures.js';
 import { initMinimap, saveReadingPosition } from './navigation.js';
 import { initErrorHandler, registerRecovery, onError, ERROR_CODES } from './error-handler.js';
 import { openDatabase } from './indexed-storage.js';
 import { findAndReplace } from './pdf-text-edit.js';
 import { cleanMetadata, sanitizePdf } from './pdf-security.js';
-import { extractMultiPageText, downloadText } from './text-extractor.js';
+import { downloadText } from './text-extractor.js';
 import { initMemoryManager, forceCleanup } from './memory-manager.js';
 import { MODULE_STATUS as CLOUD_STATUS } from './cloud-integration.js';
 import { MODULE_STATUS as AI_STATUS } from './ai-features.js';
@@ -23,7 +23,7 @@ import { clearPageRenderCache, revokeAllTrackedUrls } from './perf.js';
 import { _updatePageUI } from './render-controller.js';
 
 export function initPhase2Modules(deps) {
-  const { renderCurrentPage, goToPage } = deps;
+  const { renderCurrentPage, goToPage: _goToPage } = deps;
 
   // ─── UI Tab Switching (sidebar, bottom toolbar, settings modal) ──────────────
   // Sidebar tabs
@@ -198,7 +198,7 @@ export function initPhase2Modules(deps) {
   });
 
   // ─── Initialize IndexedDB ─────────────────────────────────────────────────
-  openDatabase().catch(() => { /* IndexedDB not available */ });
+  openDatabase().catch((err) => { console.warn('[app-init-phase2] storage error:', err?.message); });
 
   // ─── PDF Text Edit Button Handler ─────────────────────────────────────────
   {

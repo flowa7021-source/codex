@@ -135,7 +135,7 @@ export class PdfFormManager {
     const data = this.exportFormData();
     try {
       localStorage.setItem(key, JSON.stringify(data));
-    } catch { /* storage quota */ }
+    } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
   }
 
   loadFromLocalStorage(docName) {
@@ -314,7 +314,7 @@ export class PdfFormManager {
         if (isNaN(Date.parse(value))) return msg('Неверная дата');
         break;
       case 'url':
-        try { new URL(value); } catch { return msg('Неверный URL'); }
+        try { new URL(value); } catch (err) { console.warn('[pdf-ops] error:', err?.message); return msg('Неверный URL'); }
         break;
       case 'integer':
         if (!/^-?\d+$/.test(value)) return msg('Ожидается целое число');

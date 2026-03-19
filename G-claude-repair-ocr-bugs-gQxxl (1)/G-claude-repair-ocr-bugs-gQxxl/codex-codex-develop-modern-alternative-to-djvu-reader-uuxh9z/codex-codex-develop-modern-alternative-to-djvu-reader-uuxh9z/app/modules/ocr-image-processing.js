@@ -474,7 +474,7 @@ export async function estimatePageSkewAngle(pageNumber) {
     const skew = estimateSkewAngleFromBinary(img);
     state.pageSkewAngles[pageNumber] = skew;
     return skew;
-    } catch (err) {
+    } catch {
       state.pageSkewAngles[pageNumber] = 0;
       return 0;
     } finally {

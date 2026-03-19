@@ -63,7 +63,7 @@ export function exportAnnotationsAsSvg(strokes, canvasWidth, canvasHeight) {
   return svgParts.join('\n');
 }
 
-export function exportAnnotationsAsPdf(strokes, canvasWidth, canvasHeight, pageImageDataUrl = null) {
+export function exportAnnotationsAsPdf(strokes, canvasWidth, canvasHeight, _pageImageDataUrl = null) {
   // Minimal PDF 1.4 with annotation overlay
   const objects = [];
   let objNum = 0;

@@ -1,5 +1,5 @@
 // page-organizer-ui.js — Page Organizer modal UI, extracted from app.js
-import { state, els } from './state.js';
+import { state, els as _els } from './state.js';
 import { toastSuccess, toastError } from './toast.js';
 import {
   getPageInfoList, reorderPages, rotatePages, extractPages,
@@ -122,7 +122,7 @@ export function initPageOrganizerUI(deps) {
       orgGrid.appendChild(thumb);
 
       // Render page thumbnail asynchronously
-      renderThumbnailAsync(canvas, pageNum).catch(() => {});
+      renderThumbnailAsync(canvas, pageNum).catch((err) => { console.warn('[page-organizer-ui] error:', err?.message); });
     }
   }
 

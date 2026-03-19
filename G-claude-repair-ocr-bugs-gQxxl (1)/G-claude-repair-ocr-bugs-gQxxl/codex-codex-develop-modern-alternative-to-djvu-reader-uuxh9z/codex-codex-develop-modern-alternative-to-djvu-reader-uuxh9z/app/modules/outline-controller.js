@@ -44,7 +44,7 @@ export async function buildOutlineItems(items = [], level = 0) {
     if (item.dest) {
       try {
         page = await state.adapter.resolveDestToPage(item.dest);
-      } catch (err) {
+      } catch {
         page = null;
       }
     }

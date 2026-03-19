@@ -10,7 +10,7 @@ const COMMON_OCR_SUBSTITUTIONS = [
   ['3', 'З'], ['6', 'б'], ['п', 'н'],
 ];
 
-const BIGRAM_FREQ_THRESHOLD = 0.0001;
+const _BIGRAM_FREQ_THRESHOLD = 0.0001;
 
 /**
  * Build a dictionary Set from text (one word per line or space-separated).
@@ -179,7 +179,7 @@ function preserveCase(original, replacement) {
  * @param {number} [options.minParagraphGap=1.5] - Line height multiplier to detect paragraph breaks
  * @returns {string}
  */
-export function recoverParagraphs(text, options = {}) {
+export function recoverParagraphs(text, _options = {}) {
   const lines = text.split('\n');
   if (lines.length === 0) return text;
 

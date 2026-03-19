@@ -58,7 +58,7 @@ export class PDFAdapter {
 
     const isMainCanvas = canvas === els?.canvas;
     if (isMainCanvas && this._currentRenderTask) {
-      try { this._currentRenderTask.cancel(); } catch (_) { /* already finished */ }
+      try { this._currentRenderTask.cancel(); } catch (err) { console.warn('[adapters] error:', err?.message); }
       this._currentRenderTask = null;
     }
 

@@ -17,9 +17,9 @@ export class PdfOptimizer {
       cleanMetadata = true,
       removeUnusedObjects = true,
       compressStreams = true,
-      downscaleImages = false,
-      maxImageDpi = 150,
-      jpegQuality = 75,
+      _downscaleImages = false,
+      _maxImageDpi = 150,
+      _jpegQuality = 75,
       removeThumbnails = true,
       removeJavaScript = true,
       removeAnnotations = false,
@@ -52,7 +52,7 @@ export class PdfOptimizer {
         if (catalog && catalog.get(PDFName.of('Metadata'))) {
           catalog.delete(PDFName.of('Metadata'));
         }
-      } catch { /* ignore */ }
+      } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
 
       details.metadataCleaned = true;
     }
@@ -66,7 +66,7 @@ export class PdfOptimizer {
             pageDict.delete(PDFName.of('Thumb'));
             details.thumbnailsRemoved++;
           }
-        } catch { /* ignore */ }
+        } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
       }
     }
 
@@ -93,7 +93,7 @@ export class PdfOptimizer {
             }
           }
         }
-      } catch { /* ignore */ }
+      } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
     }
 
     // 4. Remove annotations (if requested)
@@ -107,7 +107,7 @@ export class PdfOptimizer {
             pageDict.delete(PDFName.of('Annots'));
             details.annotationsRemoved += count;
           }
-        } catch { /* ignore */ }
+        } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
       }
     }
 
@@ -156,7 +156,7 @@ export class PdfOptimizer {
       if (catalog.get(PDFName.of('Metadata'))) hasXmpMetadata = true;
       const names = catalog.get(PDFName.of('Names'));
       if (names instanceof PDFDict && names.get(PDFName.of('JavaScript'))) hasJavaScript = true;
-    } catch { /* ignore */ }
+    } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
 
     // Check pages
     for (const page of pdfDoc.getPages()) {
@@ -185,7 +185,7 @@ export class PdfOptimizer {
             }
           }
         }
-      } catch { /* ignore */ }
+      } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
     }
 
     return {

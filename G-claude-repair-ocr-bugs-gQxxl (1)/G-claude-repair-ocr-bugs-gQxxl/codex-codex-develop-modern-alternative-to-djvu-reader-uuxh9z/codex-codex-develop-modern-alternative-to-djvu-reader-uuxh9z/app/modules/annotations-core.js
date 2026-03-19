@@ -276,7 +276,7 @@ export class AnnotationController {
   /** @private */
   _notify(type, data) {
     for (const fn of this._listeners) {
-      try { fn(type, data); } catch { /* ignore */ }
+      try { fn(type, data); } catch (err) { console.warn('[annotations-core] error:', err?.message); }
     }
   }
 }

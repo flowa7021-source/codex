@@ -11,7 +11,7 @@ const STORES = {
   documents: 'document-meta',    // document metadata
 };
 
-const MAX_CACHE_SIZE_MB = 200;
+const _MAX_CACHE_SIZE_MB = 200;
 const MAX_CACHE_ENTRIES = 1000;
 
 /** @type {IDBDatabase|null} */

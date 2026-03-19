@@ -234,7 +234,7 @@ export function saveDocumentZoom(docName, zoom) {
       delete data[keys[0]];
     }
     localStorage.setItem(ZOOM_MEMORY_KEY, JSON.stringify(data));
-  } catch {}
+  } catch (err) { console.warn('[enhanced-zoom storage] error:', err?.message); }
 }
 
 export function loadDocumentZoom(docName) {

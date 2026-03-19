@@ -113,7 +113,7 @@ export function schedulePreRender(currentPage, pageCount, zoom, rotation, adapte
         const offscreen = document.createElement('canvas');
         await adapter.renderPage(page, offscreen, zoom, rotation);
         cachePageResult(cacheKey, offscreen);
-      } catch { /* ignore pre-render failures */ }
+      } catch (err) { console.warn('[render-pipeline] error:', err?.message); }
     }
   }, PRE_RENDER_DELAY);
 }
@@ -158,7 +158,7 @@ function cachePageResult(key, canvas) {
     const ctx = canvas.getContext('2d');
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     pageCache.set(key, { imageData, width: canvas.width, height: canvas.height });
-  } catch { /* ignore */ }
+  } catch (err) { console.warn('[render-pipeline] error:', err?.message); }
 }
 
 function blitToCanvas(canvas, cached) {

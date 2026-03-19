@@ -448,7 +448,7 @@ export class PdfBlockEditor {
               img = await pdfDoc.embedJpg(bytes);
             }
             page.drawImage(img, { x: bx, y: by, width: bw, height: bh });
-          } catch { /* skip unembeddable images */ }
+          } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
         }
       }
     }

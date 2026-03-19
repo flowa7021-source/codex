@@ -80,7 +80,7 @@ export async function _preRenderAdjacent(page, zoom, rotation) {
       cacheRenderedPage(p, offscreen, zoom, rotation);
       offscreen.width = 0;
       offscreen.height = 0;
-    } catch (err) {
+    } catch {
       // Pre-render failures are non-critical; silently ignore
     }
   }
@@ -135,7 +135,7 @@ export function _updatePageUI(renderMs) {
       ms: renderMs ?? 0,
     });
     // Notify app of page render for bookmark/thumbnail updates
-    try { window.dispatchEvent(new CustomEvent('page-rendered', { detail: { page: renderedPage } })); } catch (_) { /* noop */ }
+    try { window.dispatchEvent(new CustomEvent('page-rendered', { detail: { page: renderedPage } })); } catch (err) { console.warn('[render-controller] error:', err?.message); }
   });
 }
 
@@ -178,7 +178,7 @@ export async function renderCurrentPage() {
   _schedulePreRender(page, zoom, rotation);
 
   // Render text layer after page render (non-blocking)
-  renderTextLayer(page, zoom, rotation).catch(() => {});
+  renderTextLayer(page, zoom, rotation).catch((err) => { console.warn('[render-controller] error:', err?.message); });
 }
 
 // ─── Safe createObjectURL wrapper ──────────────────────────────────────────
@@ -223,7 +223,7 @@ export async function _renderPdfAnnotationLayer(page, viewport) {
       annotations,
       page,
       linkService: {
-        getDestinationHash: (dest) => `#`,
+        getDestinationHash: (_dest) => `#`,
         getAnchorUrl: (hash) => hash,
         addLinkAttributes: (link, url) => {
           link.href = url;
@@ -291,7 +291,7 @@ export async function renderTextLayer(pageNum, zoom, rotation) {
 
   // Clean up previous TextLayer instance
   if (_activeTextLayer) {
-    try { _activeTextLayer.cancel(); } catch (_) { /* already done */ }
+    try { _activeTextLayer.cancel(); } catch (err) { console.warn('[render-controller] error:', err?.message); }
     _activeTextLayer = null;
   }
   container.innerHTML = '';
@@ -339,7 +339,7 @@ export async function renderTextLayer(pageNum, zoom, rotation) {
         await textLayer.render();
 
         // Also render AnnotationLayer for interactive elements (links, widgets)
-        _renderPdfAnnotationLayer(page, displayViewport).catch(() => {});
+        _renderPdfAnnotationLayer(page, displayViewport).catch((err) => { console.warn('[render-controller] error:', err?.message); });
       } else {
         // Fallback: manual text layer (for older pdf.js without TextLayer class)
         _renderManualTextLayer(container, textContent, displayViewport, zoom);
@@ -524,9 +524,9 @@ export function _findParagraphSpans(targetSpan) {
 
   // Find all spans on lines near the target span
   // A "paragraph" is a group of consecutive lines with spans that overlap in X
-  const targetRelY = targetRect.top - containerRect.top;
+  const _targetRelY = targetRect.top - containerRect.top;
   const targetLeft = targetRect.left - containerRect.left;
-  const targetRight = targetLeft + targetRect.width;
+  const _targetRight = targetLeft + targetRect.width;
 
   // Get all lines (groups of spans with similar Y)
   const lines = [];
@@ -673,7 +673,7 @@ export function _createParagraphEditor(spans) {
  * Reflow edited text back into the original spans.
  * Distributes words across spans maintaining original positions.
  */
-export function _reflowTextToSpans(spans, newText, fontSize, maxWidth) {
+export function _reflowTextToSpans(spans, newText, _fontSize, _maxWidth) {
   const words = newText.split(/\s+/).filter(Boolean);
   if (!words.length || !spans.length) return;
 

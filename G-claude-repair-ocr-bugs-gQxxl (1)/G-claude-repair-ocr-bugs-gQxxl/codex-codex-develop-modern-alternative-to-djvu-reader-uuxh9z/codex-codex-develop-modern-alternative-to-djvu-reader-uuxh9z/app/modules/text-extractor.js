@@ -113,7 +113,7 @@ function detectColumns(lines, minGap) {
 
   // Collect all X start positions
   const xStarts = lines.map(line => line[0].x);
-  const xEnds = lines.map(line => {
+  const _xEnds = lines.map(line => {
     const last = line[line.length - 1];
     return last.x + (last.width || 0);
   });

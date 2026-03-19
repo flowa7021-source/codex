@@ -5,7 +5,7 @@
 /** @type {'stub'|'partial'|'ready'} Module readiness — 'partial' = heuristic-only, no AI API */
 export const MODULE_STATUS = 'partial';
 /** What's needed for full functionality */
-export const MODULE_REQUIRES = ['AI API endpoint (optional — heuristics work offline)'];
+export const MODULE_REQUIRES = ['AI/LLM backend integration'];
 
 /**
  * @typedef {object} AiBackend

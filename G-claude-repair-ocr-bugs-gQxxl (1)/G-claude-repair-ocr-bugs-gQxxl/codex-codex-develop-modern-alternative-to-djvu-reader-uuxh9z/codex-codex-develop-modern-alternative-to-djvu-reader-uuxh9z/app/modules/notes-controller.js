@@ -9,7 +9,7 @@ function loadNotes() {
   try {
     const raw = localStorage.getItem(storageKey());
     return raw ? JSON.parse(raw) : { title: '', tags: '', text: '' };
-  } catch { return { title: '', tags: '', text: '' }; }
+  } catch (err) { console.warn('[notes-controller storage] error:', err?.message); return { title: '', tags: '', text: '' }; }
 }
 
 function saveNotesData(data) {
@@ -105,7 +105,7 @@ export function importNotesJson(file, mode) {
       }
       loadNotesIntoUI();
       updateNotesStatus('Заметки импортированы');
-    } catch { updateNotesStatus('Ошибка импорта'); }
+    } catch (err) { console.warn('[notes-controller] error:', err?.message); updateNotesStatus('Ошибка импорта'); }
   };
   reader.readAsText(file);
 }

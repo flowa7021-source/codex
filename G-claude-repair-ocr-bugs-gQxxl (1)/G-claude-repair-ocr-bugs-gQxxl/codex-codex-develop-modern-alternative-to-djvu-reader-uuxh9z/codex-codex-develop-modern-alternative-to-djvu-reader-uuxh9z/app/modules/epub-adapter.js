@@ -2,7 +2,6 @@
 // Lightweight ePub reader: parses OEBPS/OPF container, extracts XHTML chapters,
 // renders them as styled text on canvas.
 
-import { loadImage } from './utils.js';
 
 function extractFileFromZip(bytes, targetName) {
   const decoder = new TextDecoder('utf-8');
@@ -46,7 +45,7 @@ function extractBinaryFromZip(bytes, targetName) {
   return null;
 }
 
-function listZipEntries(bytes) {
+function _listZipEntries(bytes) {
   const entries = [];
   const decoder = new TextDecoder('utf-8');
   let pos = 0;
@@ -237,8 +236,8 @@ export class EpubAdapter {
         this._fontUrls.push(url);
         const familyName = f.name.replace(/\.[^.]+$/, '');
         const fontFace = new FontFace(familyName, `url(${url})`);
-        fontFace.load().then(loaded => document.fonts.add(loaded)).catch(() => {});
-      } catch {}
+        fontFace.load().then(loaded => document.fonts.add(loaded)).catch((err) => { console.warn('[epub-adapter] error:', err?.message); });
+      } catch (err) { console.warn('[epub-adapter] error:', err?.message); }
     }
   }
 

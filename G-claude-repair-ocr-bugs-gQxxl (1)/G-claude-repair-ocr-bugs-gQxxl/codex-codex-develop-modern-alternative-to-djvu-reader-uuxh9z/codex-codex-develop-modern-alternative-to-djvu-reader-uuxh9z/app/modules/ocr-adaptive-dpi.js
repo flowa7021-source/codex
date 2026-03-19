@@ -40,7 +40,7 @@ export function analyzeTextDensity(canvas) {
     if (gray > max) max = gray;
   }
 
-  const mean = sum / totalPx;
+  const _mean = sum / totalPx;
   const contrast = (max - min) / 255;
   const density = darkPx / totalPx; // 0..1, how much "ink" on page
 

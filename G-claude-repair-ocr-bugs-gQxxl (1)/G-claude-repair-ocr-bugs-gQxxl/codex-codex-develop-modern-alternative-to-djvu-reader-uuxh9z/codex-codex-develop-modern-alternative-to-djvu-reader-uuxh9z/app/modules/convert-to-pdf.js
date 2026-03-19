@@ -106,7 +106,7 @@ export async function djvuToPdf(adapter, onProgress) {
           opacity: 0,
         });
       }
-    } catch { /* text extraction optional */ }
+    } catch (err) { console.warn('[convert-to-pdf] error:', err?.message); }
 
     // Release canvas memory
     canvas.width = 0;

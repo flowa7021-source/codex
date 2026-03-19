@@ -64,7 +64,7 @@ function _emit(level, tag, msg, data) {
 
   // Notify sinks
   for (const sink of _sinks) {
-    try { sink(entry); } catch { /* prevent sink errors from breaking logging */ }
+    try { sink(entry); } catch (err) { console.warn('[logger] error:', err?.message); }
   }
 }
 

@@ -71,7 +71,7 @@ export default [
     },
     rules: {
       // Errors
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_', destructuredArrayIgnorePattern: '^_' }],
       'no-undef': 'error',
       'no-empty': ['warn', { allowEmptyCatch: false }],
       'eqeqeq': ['error', 'smart'],

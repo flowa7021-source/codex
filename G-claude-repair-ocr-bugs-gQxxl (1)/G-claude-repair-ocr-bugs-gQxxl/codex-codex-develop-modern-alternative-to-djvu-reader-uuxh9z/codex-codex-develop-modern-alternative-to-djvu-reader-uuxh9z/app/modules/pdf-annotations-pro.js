@@ -4,7 +4,7 @@
 // sticky notes, callouts, text boxes, measurement, XFDF export/import
 // ═══════════════════════════════════════════════════════════════════════
 
-import { PDFDocument, rgb, StandardFonts, PDFName } from 'pdf-lib';
+import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 
 // ─────────────────────────────────────────────────────────────────────
 // Annotation Types
