@@ -1,56 +1,44 @@
 // ─── Module Imports ─────────────────────────────────────────────────────────
-import { APP_VERSION, NOVAREADER_PLAN_PROGRESS_PERCENT, SIDEBAR_SECTION_CONFIG, TOOLBAR_SECTION_CONFIG, OCR_MIN_DPI, CSS_BASE_DPI, OCR_MAX_SIDE_PX, OCR_MAX_PIXELS, OCR_SLOW_TASK_WARN_MS, OCR_HANG_WARN_MS, OCR_SOURCE_MAX_PIXELS, OCR_SOURCE_CACHE_MAX_PIXELS, OCR_SOURCE_CACHE_TTL_MS } from './modules/constants.js';
-import { throttle, debounce, yieldToMainThread, loadImage, downloadBlob } from './modules/utils.js';
+import { debounce } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
-import { ensurePdfJs, ensureDjVuJs, getPdfjsLib } from './modules/loaders.js';
-import { perfMetrics, recordPerfMetric, getPerfSummary, cacheRenderedPage, getCachedPage, clearPageRenderCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
-import { ToolMode, toolStateMachine, activateAnnotateMode, deactivateAnnotateMode, activateOcrRegionMode, deactivateOcrRegionMode, activateTextEditMode, deactivateTextEditMode, activateSearchMode, deactivateSearchMode, initToolModeDeps } from './modules/tool-modes.js';
+import { ensurePdfJs } from './modules/loaders.js';
+import { getCachedPage, clearPageRenderCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
+import { toolStateMachine, initToolModeDeps } from './modules/tool-modes.js';
 import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
-import { setLanguage, getLanguage, loadLanguage, t, applyI18nToDOM, getAvailableLanguages } from './modules/i18n.js';
-import { parseEpub, EpubAdapter } from './modules/epub-adapter.js';
-import { postCorrectByLanguage, scoreTextByLanguage, detectLanguage, getSupportedLanguages, getLanguageName } from './modules/ocr-languages.js';
+import { setLanguage, getLanguage, loadLanguage, applyI18nToDOM } from './modules/i18n.js';
 import { blockEditor } from './modules/pdf-advanced-edit.js';
 import { formManager } from './modules/pdf-forms.js';
-import { progressiveLoader } from './modules/progressive-loader.js';
 import { exportAnnotationsAsSvg, exportAnnotationsAsPdf } from './modules/annotation-export.js';
-import { applyPlugin, pluginToDocxXml, detectApplicablePlugins } from './modules/conversion-plugins.js';
+import { applyPlugin } from './modules/conversion-plugins.js';
 import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from './modules/docx-import-advanced.js';
-import { analyzeTextDensity, computeOcrZoom, hasSmallText } from './modules/ocr-adaptive-dpi.js';
 import { getPageQualitySummary, markLowConfidenceWords } from './modules/ocr-word-confidence.js';
-import { saveOcrData, loadOcrData, savePageOcrText, getPageOcrText, deleteOcrData, listOcrDocuments, getOcrStorageSize } from './modules/ocr-storage.js';
-import { initTesseract, recognizeTesseract, recognizeWithBoxes, isTesseractAvailable, getTesseractStatus, terminateTesseract, resetTesseractAvailability, initTesseractPool, recognizeWithPool, terminateTesseractPool, isTesseractPoolReady, getRecommendedPoolSize } from './modules/tesseract-adapter.js';
-import { convertPdfToDocx, extractStructuredContent } from './modules/docx-converter.js';
-import { mergePdfDocuments, splitPdfDocument, splitPdfIntoIndividual, fillPdfForm, getPdfFormFields, addWatermarkToPdf, addStampToPdf, addSignatureToPdf, exportAnnotationsIntoPdf, rotatePdfPages, getPdfMetadata, parsePageRange as parsePageRangeLib } from './modules/pdf-operations.js';
+import { deleteOcrData, listOcrDocuments, getOcrStorageSize } from './modules/ocr-storage.js';
+import { recognizeWithBoxes, terminateTesseract } from './modules/tesseract-adapter.js';
+import { convertPdfToDocx } from './modules/docx-converter.js';
+import { mergePdfDocuments, splitPdfDocument, fillPdfForm, addWatermarkToPdf, addStampToPdf, exportAnnotationsIntoPdf, rotatePdfPages, parsePageRange as parsePageRangeLib } from './modules/pdf-operations.js';
 import { pdfCompare } from './modules/pdf-compare.js';
 import { pdfOptimizer } from './modules/pdf-optimize.js';
-import { addHeaderFooter, addBatesNumbering, flattenPdf, checkAccessibility, autoFixAccessibility, addPageNumbers } from './modules/pdf-pro-tools.js';
-import { annotationManager, HIGHLIGHT_COLORS, ANNOTATION_TYPES } from './modules/pdf-annotations-pro.js';
+import { addHeaderFooter, addBatesNumbering, flattenPdf, checkAccessibility, autoFixAccessibility } from './modules/pdf-pro-tools.js';
 import { batchOcr, createSearchablePdf, detectScannedDocument, autoDetectLanguage } from './modules/ocr-batch.js';
 
 // ─── Phase 2+ Module Imports ───────────────────────────────────────────────
 import { toast, toastSuccess, toastError, toastWarning, toastInfo, toastProgress, dismissAllToasts } from './modules/toast.js';
 import { initTooltips } from './modules/tooltip.js';
 import { initContextMenu } from './modules/context-menu.js';
-import { initA11y, announce, prefersReducedMotion } from './modules/a11y.js';
-import { undoRedoManager, bindUndoRedoKeys } from './modules/undo-redo.js';
-import { VIEW_MODES, initViewModes, setViewMode, getCurrentMode, navigateInMode, getTwoUpPages, renderTwoUp } from './modules/view-modes.js';
-import { preprocessForOcr } from './modules/ocr-preprocess.js';
+import { initA11y } from './modules/a11y.js';
+import { bindUndoRedoKeys } from './modules/undo-redo.js';
+import { VIEW_MODES, initViewModes, setViewMode, getCurrentMode } from './modules/view-modes.js';
 import { convertToHtml, downloadHtml } from './modules/html-converter.js';
-import { initEnhancedZoom, ZOOM_PRESETS, zoomToNextPreset, zoomToPrevPreset, zoomToPreset, smoothZoomTo, startMarqueeZoom, saveDocumentZoom, loadDocumentZoom } from './modules/enhanced-zoom.js';
-import { initTouchGestures, isTouchDevice, setupVirtualKeyboardAdaptation } from './modules/touch-gestures.js';
-import { saveReadingPosition, loadReadingPosition, initMinimap, updateMinimap, setupLinkFollowing, renderThumbnailGrid } from './modules/navigation.js';
-import { batchConverter } from './modules/batch-convert.js';
 import { applyTextEdits, addTextBlock, findAndReplace, spellCheck, getAvailableFonts } from './modules/pdf-text-edit.js';
 import { setPassword, cleanMetadata, getSecurityInfo, sanitizePdf } from './modules/pdf-security.js';
-import { correctOcrText, buildDictionary, computeBigramFreqs, recoverParagraphs, computeQualityScore } from './modules/ocr-post-correct.js';
+import { correctOcrText, buildDictionary, recoverParagraphs, computeQualityScore } from './modules/ocr-post-correct.js';
 import { extractTextInReadingOrder, extractMultiPageText, downloadText } from './modules/text-extractor.js';
 import { WorkerPool, initOcrPool, getOcrPool, runInWorker } from './modules/worker-pool.js';
-import { openDatabase, cachePageRender, getCachedPageRender, cacheOcrResult, getCachedOcrResult, saveAnnotations, loadAnnotations, clearDocumentCache, getStorageUsage, clearAllCache } from './modules/indexed-storage.js';
-import { initErrorHandler, reportError, classifyError, registerRecovery, onError, saveStateSnapshot, restoreStateSnapshot, withRetry, getErrorLog, ERROR_CODES } from './modules/error-handler.js';
+import { openDatabase, cachePageRender, getCachedPageRender, clearDocumentCache, getStorageUsage, clearAllCache } from './modules/indexed-storage.js';
+import { reportError, saveStateSnapshot, restoreStateSnapshot, withRetry, getErrorLog } from './modules/error-handler.js';
 import { convertToPdfA, checkPdfACompliance } from './modules/pdf-a-converter.js';
-import { initDragDrop, initAnnotationDrop } from './modules/drag-drop.js';
 import { VirtualScroll } from './modules/virtual-scroll.js';
-import { initMemoryManager, createTrackedUrl, revokeTrackedUrl, revokeAllUrls, acquireCanvas, releaseCanvas, getMemoryStats, forceCleanup } from './modules/memory-manager.js';
+import { acquireCanvas, releaseCanvas, getMemoryStats, forceCleanup } from './modules/memory-manager.js';
 import { buildTextLayer, highlightSearchMatches, clearSearchHighlights, getSelectedText } from './modules/text-layer-builder.js';
 import { analyzeLayout, detectTable, sortByReadingOrder, tableToHtml } from './modules/layout-analysis.js';
 import { BatchOcrEngine } from './modules/batch-ocr-enhanced.js';
@@ -60,7 +48,7 @@ import { parsePageRange as parsePrintRange, getPagesToPrint, arrangeBooklet, arr
 import { createPdfFromImages, createBlankPdf, canvasesToPdf } from './modules/pdf-create.js';
 import { initQuickActions, hideQuickActions } from './modules/quick-actions.js';
 import { initHotkeys, onHotkey, registerHotkeyHandlers, isSpaceHeld, getBindings, getCheatsheet } from './modules/hotkeys.js';
-import { CbzAdapter, parseCbz } from './modules/cbz-adapter.js';
+import { CbzAdapter } from './modules/cbz-adapter.js';
 
 // ─── Wave 8: Decomposition Facade Modules ────────────────────────────────
 import * as AppPersistence from './modules/app-persistence.js';
@@ -71,40 +59,30 @@ import { AnnotationController } from './modules/annotations-core.js';
 // ─── Wave 10: Page Organizer, Floating Search, XPS Support ───────────────
 import { getPageInfoList, reorderPages, deletePages, rotatePages, extractPages, insertPages, insertBlankPage, duplicatePages, reversePages, createOrganizerState, togglePageSelection, selectPageRange, computeReorderFromDrag } from './modules/page-organizer.js';
 import { initFloatingSearch } from './modules/floating-search.js';
-import { XpsAdapter, parseXps } from './modules/xps-adapter.js';
-import { registerProvider, getProviders, authenticate, listFiles, openFile as cloudOpenFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider, MODULE_STATUS as CLOUD_STATUS } from './modules/cloud-integration.js';
-import { MODULE_STATUS as AI_STATUS } from './modules/ai-features.js';
+import { XpsAdapter } from './modules/xps-adapter.js';
+import { registerProvider, getProviders, authenticate, listFiles, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider } from './modules/cloud-integration.js';
 import { summarizeText, extractTags, semanticSearch, generateToc } from './modules/ai-features.js';
 import { nrPrompt, nrConfirm } from './modules/modal-prompt.js';
 import * as SettingsController from './modules/settings-controller.js';
-import { initAnnotationControllerDeps, annotationKey, commentKey, invalidateAnnotationCaches, getCurrentAnnotationCtx, getAnnotationDpr, loadStrokes, saveStrokes, loadComments, saveComments, clearDocumentCommentStorage, renderCommentList, clearDocumentAnnotationStorage, updateOverlayInteractionState, setDrawMode, normalizePoint, denormalizePoint, applyStrokeStyle, drawStroke, renderAnnotations, _applyTextMarkupFromSelection, getCanvasPointFromEvent, beginStroke, moveStroke, endStroke, undoStroke, clearStrokes, clearComments, exportAnnotatedPng, exportAnnotationsJson, importAnnotationsJson, showShortcutsHelp, exportAnnotationBundleJson, importAnnotationBundleJson } from './modules/annotation-controller.js';
-import { AsyncLock } from './modules/async-lock.js';
-import { initRenderControllerDeps, _ocrWordCache, _schedulePreRender, _preRenderAdjacent, _blitCacheToCanvas, _updateAnnotationCanvas, _updatePageUI, renderCurrentPage, safeCreateObjectURL, _renderPdfAnnotationLayer, _renderManualTextLayer, renderTextLayer, _renderOcrTextLayer, enableInlineTextEditing, disableInlineTextEditing, _handleTextLayerDblClick, _findParagraphSpans, _createParagraphEditor, _reflowTextToSpans, _createInlineEditor, _syncTextLayerToStorage, handleImageInsertion, addWatermarkToPage, addStampToPage, openSignaturePad } from './modules/render-controller.js';
-import { clearAllTimers, safeTimeout, safeInterval, getTimerStats } from './modules/safe-timers.js';
-import { createLogger } from './modules/logger.js';
-import { emit as busEmit, on as busOn } from './modules/event-bus.js';
-import { crashTelemetry, recordCrashEvent, recordSuccessfulOperation, recordRecovery, getCrashFreeRate, getSessionHealth, getRecentErrors, initCrashTelemetry } from './modules/crash-telemetry.js';
-import { pdfEditState, initExportControllerDeps, getPageEdits, setPageEdits, undoPageEdit, redoPageEdit, getEditHistory, clearEditHistory, persistEdits, loadPersistedEdits, buildDocxXml, buildDocxTable, buildDocxStyles, buildContentTypes, buildRels, buildWordRels, crc32, generateDocxBlob, buildDocxImageParagraph, generateDocxWithImages, _groupWordsIntoLines, buildDocxXmlWithImages, buildContentTypesWithImages, buildWordRelsWithImages, createZipBlob, importDocxEdits, extractDocumentXmlFromZip, parseDocxTextByPages, exportSessionHealthReport, capturePageAsImageData } from './modules/export-controller.js';
-import { ocrSearchIndex, buildOcrSearchEntry, indexOcrPage, searchOcrIndex, exportOcrTextWithCoordinates, downloadOcrTextExport, canSearchCurrentDoc, searchScopeKey, loadSearchScope, saveSearchScope, searchHistoryKey, buildSearchResultsSummaryText, copySearchResultsSummary, exportSearchResultsSummaryTxt, exportSearchResultsCsv, exportSearchResultsJson, importSearchResultsJson, parseCsvLine, importSearchResultsCsv, clearSearchResults, renderSearchResultsList, loadSearchHistory, saveSearchHistory, renderSearchHistory, rememberSearchQuery, buildSearchHistoryText, exportSearchHistoryJson, exportSearchHistoryTxt, copySearchHistory, importSearchHistoryJson, clearSearchHistory, highlightSearchInTextLayer, scrollToSearchHighlight, searchInPdf, jumpToSearchResult, initSearchControllerDeps } from './modules/search-controller.js';
-import { initOcrControllerDeps, computeOcrConfidence, postCorrectOcrText, batchOcrState, enqueueBatchOcr, cancelBatchOcr, getBatchOcrProgress, getConfusableLatinToCyrillicMap, convertLatinLookalikesToCyrillic, hasMixedCyrillicLatinToken, computeOtsuThreshold, countHistogramPercentile, scoreCyrillicWordQuality, scoreRussianBigrams, scoreEnglishBigrams, medianDenoiseMonochrome, morphologyCloseMonochrome, estimateSkewAngleFromBinary, rotateCanvas, clearOcrRuntimeCaches, getOcrSourceCacheKey, updateOcrSourceCache, constrainOcrSourceCanvasPixels, getFreshOcrSourceCacheEntry, buildOcrSourceCanvas, estimatePageSkewAngle, cropCanvasByRelativeRect, preprocessOcrCanvas, pickVariantsByBudget, scoreOcrTextByLang, runOcrOnPreparedCanvas, normalizeOcrTextByLang, setOcrControlsBusy, cancelManualOcrTasks, enqueueOcrTask, setOcrStatus, setOcrStatusThrottled, setOcrRegionMode, drawOcrSelectionPreview, classifyOcrError, runOcrOnRectNow, runOcrOnRect, runOcrForCurrentPage, extractTextForPage, cancelBackgroundOcrScan, cancelAllOcrWork, scheduleBackgroundOcrScan, startBackgroundOcrScan } from './modules/ocr-controller.js';
-import { initWorkspaceDeps, setWorkspaceStatus, setStage4Status, initReleaseGuards, cloudSyncUrlKey, loadCloudSyncUrl, saveCloudSyncUrl, ocrTextKey, loadOcrTextData, saveOcrTextData, loadOcrTextDataAsync, buildWorkspacePayload, applyWorkspacePayload, pushWorkspaceToCloud, pullWorkspaceFromCloud, collabChannelName, broadcastWorkspaceSnapshot, toggleCollaborationChannel, importOcrJson, exportWorkspaceBundleJson, importWorkspaceBundleJson } from './modules/workspace-controller.js';
-import { initReadingProgressDeps, noteKey, bookmarkKey, viewStateKey, readingTimeKey, readingGoalKey, loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus, formatEta, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage, clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender, navigateHistoryBack, navigateHistoryForward, formatDuration, saveReadingTime, loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer, syncReadingTimerWithVisibility, resetReadingTime, _saveViewStateNow, saveViewState, loadViewState, clearViewState, renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress, saveRecent, removeRecent, clearRecent, renderRecent } from './modules/reading-progress-controller.js';
-import { initFileControllerDeps, revokeCurrentObjectUrl, djvuTextKey, loadDjvuData, saveDjvuData, isLikelyDjvuFile, extractDjvuFallbackText, openFile } from './modules/file-controller.js';
-import { initPdfOpsDeps, mergePdfFiles, buildMergedPdfFromCanvases, splitPdfPages, parsePageRange } from './modules/pdf-ops-controller.js';
+import { initAnnotationControllerDeps, invalidateAnnotationCaches, getCurrentAnnotationCtx, loadStrokes, saveStrokes, loadComments, saveComments, clearDocumentCommentStorage, renderCommentList, clearDocumentAnnotationStorage, updateOverlayInteractionState, setDrawMode, denormalizePoint, renderAnnotations, _applyTextMarkupFromSelection, getCanvasPointFromEvent, beginStroke, moveStroke, endStroke, undoStroke, clearStrokes, clearComments, exportAnnotatedPng, exportAnnotationsJson, importAnnotationsJson, showShortcutsHelp, exportAnnotationBundleJson, importAnnotationBundleJson } from './modules/annotation-controller.js';
+import { initRenderControllerDeps, _ocrWordCache, renderCurrentPage, safeCreateObjectURL, renderTextLayer, handleImageInsertion, addWatermarkToPage, addStampToPage, openSignaturePad } from './modules/render-controller.js';
+import { crashTelemetry, recordCrashEvent, recordSuccessfulOperation, getSessionHealth, initCrashTelemetry } from './modules/crash-telemetry.js';
+import { pdfEditState, initExportControllerDeps, setPageEdits, undoPageEdit, redoPageEdit, getEditHistory, persistEdits, loadPersistedEdits, generateDocxBlob, generateDocxWithImages, importDocxEdits, exportSessionHealthReport, capturePageAsImageData } from './modules/export-controller.js';
+import { ocrSearchIndex, searchOcrIndex, downloadOcrTextExport, canSearchCurrentDoc, loadSearchScope, saveSearchScope, copySearchResultsSummary, exportSearchResultsSummaryTxt, exportSearchResultsCsv, exportSearchResultsJson, importSearchResultsJson, importSearchResultsCsv, clearSearchResults, renderSearchResultsList, renderSearchHistory, exportSearchHistoryJson, exportSearchHistoryTxt, copySearchHistory, importSearchHistoryJson, clearSearchHistory, searchInPdf, jumpToSearchResult, initSearchControllerDeps } from './modules/search-controller.js';
+import { initOcrControllerDeps, getBatchOcrProgress, clearOcrRuntimeCaches, estimatePageSkewAngle, setOcrStatus, setOcrRegionMode, drawOcrSelectionPreview, runOcrOnRect, runOcrForCurrentPage, extractTextForPage, cancelAllOcrWork, scheduleBackgroundOcrScan } from './modules/ocr-controller.js';
+import { initWorkspaceDeps, setWorkspaceStatus, setStage4Status, initReleaseGuards, loadCloudSyncUrl, saveCloudSyncUrl, loadOcrTextData, saveOcrTextData, pushWorkspaceToCloud, pullWorkspaceFromCloud, broadcastWorkspaceSnapshot, toggleCollaborationChannel, importOcrJson, exportWorkspaceBundleJson, importWorkspaceBundleJson } from './modules/workspace-controller.js';
+import { initReadingProgressDeps, noteKey, bookmarkKey, loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage, clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender, navigateHistoryBack, navigateHistoryForward, loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer, syncReadingTimerWithVisibility, resetReadingTime, _saveViewStateNow, saveViewState, renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress, saveRecent, clearRecent, renderRecent } from './modules/reading-progress-controller.js';
+import { initFileControllerDeps, revokeCurrentObjectUrl, saveDjvuData, openFile } from './modules/file-controller.js';
+import { initPdfOpsDeps, mergePdfFiles, splitPdfPages } from './modules/pdf-ops-controller.js';
 import { PDFAdapter, ImageAdapter, DjVuAdapter, DjVuNativeAdapter, UnsupportedAdapter } from './modules/adapters.js';
-import { initSettingsUiDeps, applyAppLanguage, renderSectionVisibilityControls, applySectionVisibilitySettings, openSettingsModal, closeSettingsModal, readUiSizeSettingsFromModal, previewUiSizeFromModal, saveSettingsFromModal } from './modules/settings-ui.js';
-import { initOutlineControllerDeps, renderDocInfo, buildOutlineItems, renderOutline, updatePreviewSelection, _drawPreviewPlaceholder, _renderDeferredPreviews, renderPagePreviews } from './modules/outline-controller.js';
-import { initTextNavDeps, ensureTextToolsVisible, refreshPageText, copyPageText, exportPageText, setTextEditMode, saveCurrentPageTextEdits, exportCurrentDocToWord, normalizePageInput, goToPage, fitWidth, fitPage, downloadCurrentFile, printCanvasPage } from './modules/text-nav-controller.js';
-import { initLayoutControllerDeps, uiLayoutKey, applyAdvancedPanelsState, toggleAdvancedPanelsState, applyLayoutState, updateSearchToolbarRows, toggleLayoutState, applyResizableLayoutState, ensureDefaultPageAreaHeight, setupResizableLayout, setupDragAndDrop, setupAnnotationEvents } from './modules/layout-controller.js';
+import { initSettingsUiDeps, applyAppLanguage, applySectionVisibilitySettings, openSettingsModal, closeSettingsModal, previewUiSizeFromModal, saveSettingsFromModal } from './modules/settings-ui.js';
+import { initOutlineControllerDeps, renderDocInfo, renderOutline, renderPagePreviews } from './modules/outline-controller.js';
+import { initTextNavDeps, ensureTextToolsVisible, refreshPageText, copyPageText, exportPageText, setTextEditMode, saveCurrentPageTextEdits, exportCurrentDocToWord, goToPage, fitWidth, fitPage, downloadCurrentFile, printCanvasPage } from './modules/text-nav-controller.js';
+import { initLayoutControllerDeps, uiLayoutKey, applyAdvancedPanelsState, toggleAdvancedPanelsState, applyLayoutState, updateSearchToolbarRows, toggleLayoutState, setupResizableLayout, setupDragAndDrop, setupAnnotationEvents } from './modules/layout-controller.js';
 import { initPdfProHandlersDeps, initPdfProHandlers } from './modules/pdf-pro-handlers.js';
 import { initUiBlocks } from './modules/ui-init-blocks.js';
 import { initPhase2Modules } from './modules/app-init-phase2.js';
 import { initPageOrganizerUI } from './modules/page-organizer-ui.js';
-
-// ─── Module-level loggers ───────────────────────────────────────────────────
-const logOcr = createLogger('ocr');
-const logRender = createLogger('render');
-const logFile = createLogger('file');
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -165,13 +143,11 @@ function showUserError(context, errorType, message) {
 initCrashTelemetry();
 
 // ─── Settings proxy wrappers (delegate to SettingsController) ────────────────
-function appSettingsKey() { return SettingsController.appSettingsKey(); }
 function defaultSettings() { return SettingsController.defaultSettings(); }
 function loadAppSettings() { SettingsController.loadAppSettings(); }
 function saveAppSettings() { SettingsController.saveAppSettings(); }
 function applyUiSizeSettings() { SettingsController.applyUiSizeSettings(uiLayoutKey); }
 function getOcrLang() { return SettingsController.getOcrLang(); }
-function getOcrScale() { return SettingsController.getOcrScale(); }
 
 async function importDjvuDataJson(file) {
   if (!state.adapter || state.adapter.type !== 'djvu') {
@@ -221,9 +197,7 @@ function toggleTheme() { SettingsController.toggleTheme(applyTheme); }
 
 function getNotesModel() { return SettingsController.getNotesModel(); }
 function normalizeImportedNotes(payload) { return SettingsController.normalizeImportedNotes(payload); }
-function mergeNotesByMode(current, incoming, mode) { return SettingsController.mergeNotesByMode(current, incoming, mode); }
 function loadNotes() { SettingsController.loadNotes(noteKey); }
-function setNotesStatus(message) { SettingsController.setNotesStatus(message); }
 function saveNotes(source = 'manual') { SettingsController.saveNotes(noteKey, source); }
 function queueNotesAutosave() { SettingsController.queueNotesAutosave(noteKey); }
 function exportNotes() { SettingsController.exportNotes(); }
@@ -233,9 +207,6 @@ async function importNotesJson(file) { await SettingsController.importNotesJson(
 function insertTimestamp() { SettingsController.insertTimestamp(noteKey); }
 function normalizeHotkey(value, fallback) { return SettingsController.normalizeHotkey(value, fallback); }
 function setHotkeysStatus(message, type = '') { SettingsController.setHotkeysStatus(message, type); }
-const hotkeyFieldMeta = SettingsController.hotkeyFieldMeta;
-function hotkeyKeys() { return SettingsController.hotkeyKeys(); }
-function normalizeHotkeyForDisplay(value) { return SettingsController.normalizeHotkeyForDisplay(value); }
 function setHotkeysInputErrors(fields = [], details = {}) { SettingsController.setHotkeysInputErrors(fields, details); }
 function validateHotkeys(nextHotkeys) { return SettingsController.validateHotkeys(nextHotkeys); }
 function renderHotkeyInputs() { SettingsController.renderHotkeyInputs(); }
