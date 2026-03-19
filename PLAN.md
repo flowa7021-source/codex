@@ -7,15 +7,13 @@
 | app.js (декомпозирован) | 1,425 | Модульный, 84 импорта, ~870 event bindings | 7/10 архитектура |
 | styles.css | 2,559 | Полная тема: dark/light/sepia/high-contrast, a11y | 8/10 |
 | index.html | 981 | Семантичный, 104 aria-*, 37 role=, WCAG-ready | 9/10 |
-| 99 модулей | ~28,000 | 97 ready, 1 partial (ai), 1 stub (cloud) | 8/10 |
+| 101 модуль | ~28,000 | 101 ready | 8/10 |
 | **Итого** | **~33,000** | | |
 
 **Сильные стороны:** PDF.js рендеринг, тёмная тема 2.0, OCR через Tesseract с предобработкой, PDF операции (merge/split/watermark/headers/Bates/flatten/accessibility), i18n 17 языков, кэширование страниц, 5 адаптеров (PDF, DjVu×2, Image, EPUB), полная a11y (ARIA, keyboard, screen reader), toast-уведомления, undo/redo, context menus, tooltips.
 
 **Оставшиеся задачи:**
-- Большие модули нуждаются в дальнейшей декомпозиции (ocr-controller 1442 LOC, docx-converter 1075 LOC)
-- cloud-integration.js — stub (требует OAuth2 ключи)
-- ai-features.js — partial (только heuristic, нет AI API)
+- ~~Большие модули нуждаются в дальнейшей декомпозиции~~ → ocr-controller 869 LOC + ocr-image-processing 592 LOC; docx-converter 411 LOC + docx-structure-detector 674 LOC
 - ~~Форм-валидация отсутствует~~ → Добавлена (validateAll, validateField, _validateFormat)
 - ~~Testing инфраструктура не создана~~ → 220 тестов / 45 suites (Node.js built-in test runner)
 
