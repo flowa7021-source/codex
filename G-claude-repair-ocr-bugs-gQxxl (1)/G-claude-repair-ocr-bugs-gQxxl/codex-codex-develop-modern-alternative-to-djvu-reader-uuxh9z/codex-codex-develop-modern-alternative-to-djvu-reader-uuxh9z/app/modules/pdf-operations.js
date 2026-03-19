@@ -250,10 +250,12 @@ export async function addSignatureToPdf(pdfArrayBuffer, signatureImageBytes, opt
   let embeddedImage;
   try {
     embeddedImage = await pdfDoc.embedPng(signatureImageBytes);
-  } catch {
+  } catch (err) {
+    console.warn('[pdf-ops] error:', err?.message);
     try {
       embeddedImage = await pdfDoc.embedJpg(signatureImageBytes);
-    } catch {
+    } catch (err) {
+      console.warn('[pdf-ops] error:', err?.message);
       return null;
     }
   }

@@ -739,7 +739,8 @@ export async function importAnnotationsJson(file) {
     saveComments(comments);
     renderAnnotations();
     renderCommentList();
-  } catch {
+  } catch (err) {
+    console.warn('[annotation-controller] error:', err?.message);
     _deps.toastError('Не удалось импортировать JSON аннотаций. Проверьте формат файла.');
   }
 }
@@ -839,7 +840,8 @@ export async function importAnnotationBundleJson(file) {
 
     renderAnnotations();
     renderCommentList();
-  } catch {
+  } catch (err) {
+    console.warn('[annotation-controller] error:', err?.message);
     _deps.toastError('Не удалось импортировать bundle JSON аннотаций. Проверьте формат файла.');
   }
 }

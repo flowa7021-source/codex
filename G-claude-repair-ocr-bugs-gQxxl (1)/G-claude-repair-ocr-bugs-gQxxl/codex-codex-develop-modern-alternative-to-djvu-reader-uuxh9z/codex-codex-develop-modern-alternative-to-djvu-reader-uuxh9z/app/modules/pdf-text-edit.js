@@ -178,7 +178,8 @@ export async function findAndReplace(pdfBytes, searchText, replaceText, options 
         stream.setContents(encoded);
         replacements++;
       }
-    } catch {
+    } catch (err) {
+      console.warn('[pdf-ops] error:', err?.message);
       // Skip pages with complex content streams
     }
   }

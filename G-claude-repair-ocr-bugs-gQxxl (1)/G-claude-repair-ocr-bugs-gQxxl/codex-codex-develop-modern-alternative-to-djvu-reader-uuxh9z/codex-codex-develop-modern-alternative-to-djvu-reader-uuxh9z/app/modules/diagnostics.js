@@ -259,7 +259,8 @@ export function setupRuntimeDiagnostics() {
         });
       });
       observer.observe({ type: 'longtask', buffered: true });
-    } catch {
+    } catch (err) {
+      console.warn('[diagnostics] error:', err?.message);
       pushDiagnosticEvent('perf.observer.unavailable', {}, 'warn');
     }
   }

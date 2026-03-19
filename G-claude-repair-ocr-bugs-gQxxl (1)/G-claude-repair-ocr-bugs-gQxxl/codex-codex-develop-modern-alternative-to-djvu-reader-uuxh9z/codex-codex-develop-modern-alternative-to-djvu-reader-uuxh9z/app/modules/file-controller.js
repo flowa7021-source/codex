@@ -86,7 +86,8 @@ export function loadDjvuData() {
   try {
     const raw = localStorage.getItem(djvuTextKey());
     return raw ? JSON.parse(raw) : null;
-  } catch {
+  } catch (err) {
+    console.warn('[file-controller storage] error:', err?.message);
     return null;
   }
 }
@@ -102,7 +103,8 @@ export async function isLikelyDjvuFile(file) {
     const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
     const text = new TextDecoder('ascii', { fatal: false }).decode(header);
     return text.includes('AT&TFORM') || text.startsWith('AT&T');
-  } catch {
+  } catch (err) {
+    console.warn('[file-controller storage] error:', err?.message);
     return false;
   }
 }
@@ -128,7 +130,8 @@ export async function extractDjvuFallbackText(file) {
     }
 
     return text.slice(0, 5000);
-  } catch {
+  } catch (err) {
+    console.warn('[file-controller] error:', err?.message);
     return '';
   }
 }
@@ -232,7 +235,8 @@ const _openFileImpl = async function openFileImpl(file) {
       }
       const pdfDoc = await pdf.getDocument(pdfOptions).promise;
       state.adapter = new _deps.PDFAdapter(pdfDoc);
-    } catch {
+    } catch (err) {
+      console.warn('[file-controller] error:', err?.message);
       state.adapter = new _deps.UnsupportedAdapter(file.name);
       els.searchStatus.textContent = 'Не удалось загрузить локальный PDF runtime. Проверьте целостность приложения.';
     }
@@ -248,7 +252,8 @@ const _openFileImpl = async function openFileImpl(file) {
       state.adapter = new _deps.DjVuNativeAdapter(doc, file.name);
       openedByNative = true;
       els.searchStatus.textContent = 'DjVu файл открыт встроенным runtime.';
-    } catch {
+    } catch (err) {
+      console.warn('[file-controller] error:', err?.message);
       const hasPageData = Array.isArray(djvuData?.pagesImages) && djvuData.pagesImages.length > 0;
       let effectiveDjvuData = djvuData;
 

@@ -538,7 +538,8 @@ export async function capturePageAsImageData(pageNum) {
     await state.adapter.renderPage(pageNum, tempCanvas, { zoom: 1, rotation: 0 });
     const base64 = tempCanvas.toDataURL('image/png').split(',')[1];
     return base64;
-  } catch {
+  } catch (err) {
+    console.warn('[export-controller] error:', err?.message);
     return null;
   } finally {
     tempCanvas.width = 0;

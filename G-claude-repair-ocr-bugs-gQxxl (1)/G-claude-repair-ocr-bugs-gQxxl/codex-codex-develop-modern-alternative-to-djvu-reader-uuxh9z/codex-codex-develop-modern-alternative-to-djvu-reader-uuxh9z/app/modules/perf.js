@@ -139,7 +139,8 @@ export function getPoolWorker() {
       URL.revokeObjectURL(url);
       workerPool.workers.push(worker);
       return worker;
-    } catch {
+    } catch (err) {
+      console.warn('[ocr] error:', err?.message);
       return null;
     }
   }

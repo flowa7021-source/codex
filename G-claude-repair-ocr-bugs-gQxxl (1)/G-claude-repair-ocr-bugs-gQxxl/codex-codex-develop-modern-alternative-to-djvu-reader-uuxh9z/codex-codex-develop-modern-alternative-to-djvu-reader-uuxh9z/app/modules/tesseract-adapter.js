@@ -31,7 +31,8 @@ let _poolInitPromise = null;
 function resolveVendorPath(relativePath) {
   try {
     return new URL(relativePath, import.meta.url).href;
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     return relativePath;
   }
 }
@@ -131,7 +132,8 @@ function hasSIMD() {
       0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123,
       3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11
     ]));
-  } catch {
+  } catch (err) {
+    console.warn('[tesseract-adapter] error:', err?.message);
     return false;
   }
 }

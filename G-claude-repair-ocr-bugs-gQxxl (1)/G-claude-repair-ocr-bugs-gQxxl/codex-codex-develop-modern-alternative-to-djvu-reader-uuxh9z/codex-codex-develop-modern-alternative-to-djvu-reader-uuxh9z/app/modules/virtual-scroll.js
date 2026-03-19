@@ -136,7 +136,8 @@ export class VirtualScroll {
       if (!this._destroyed) {
         this.renderedPages.set(pageNum, element);
       }
-    } catch {
+    } catch (err) {
+      console.warn('[virtual-scroll] error:', err?.message);
       element.innerHTML = `<div class="virtual-page-error">Ошибка загрузки страницы ${pageNum}</div>`;
       this.renderedPages.set(pageNum, element);
     } finally {

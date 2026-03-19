@@ -163,7 +163,8 @@ export async function createSearchablePdf(pdfBytes, ocrResults) {
           color: rgb(0, 0, 0),
           opacity: 0, // Invisible text — only for search and copy
         });
-      } catch {
+      } catch (err) {
+        console.warn('[ocr] error:', err?.message);
         // Skip words that can't be embedded (unsupported characters)
       }
     }
@@ -201,7 +202,8 @@ export async function isScannedPage(pdfPage) {
 
     // If very little text (< 10 chars), likely a scan
     return text.length < 10;
-  } catch {
+  } catch (err) {
+    console.warn('[ocr-batch] error:', err?.message);
     return true; // If we can't extract text, treat as scan
   }
 }

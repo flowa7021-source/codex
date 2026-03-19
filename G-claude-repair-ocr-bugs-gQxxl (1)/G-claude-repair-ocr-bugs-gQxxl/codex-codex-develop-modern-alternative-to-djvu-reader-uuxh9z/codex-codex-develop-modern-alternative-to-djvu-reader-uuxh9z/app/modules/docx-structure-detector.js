@@ -336,12 +336,14 @@ async function extractPageImages(page, viewport) {
             originalWidth: w,
             originalHeight: h,
           });
-        } catch {
+        } catch (err) {
+          console.warn('[docx-structure-detector] error:', err?.message);
           // Skip this image on any error
         }
       }
     }
-  } catch {
+  } catch (err) {
+    console.warn('[docx-structure-detector] error:', err?.message);
     // getOperatorList may fail on some pages
   }
   return images;

@@ -19,7 +19,8 @@ export async function ensurePdfJs() {
         pdfjsLib.GlobalWorkerOptions.workerSrc = localWorkerUrl;
       }
       return pdfjsLib;
-    } catch {
+    } catch (err) {
+      console.warn('[loaders] error:', err?.message);
       pdfLoadPromise = null;
       throw new Error('PDF.js недоступен в локальном runtime пакете');
     }

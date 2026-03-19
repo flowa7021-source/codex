@@ -117,7 +117,8 @@ export function loadReadingPosition(docName) {
   try {
     const data = JSON.parse(localStorage.getItem(POSITION_KEY) || '{}');
     return data[docName] || null;
-  } catch {
+  } catch (err) {
+    console.warn('[navigation storage] error:', err?.message);
     return null;
   }
 }

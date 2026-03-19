@@ -665,7 +665,8 @@ export async function extractTextForPage(pageNumber) {
   let text = '';
   try {
     text = String(await state.adapter.getText(pageNumber) || '').trim();
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     text = '';
   }
   if (text) return text;
@@ -693,7 +694,8 @@ export async function extractTextForPage(pageNumber) {
       } catch (err) { console.warn('[app] persist best-effort failed:', err?.message); }
     }
     return ocrResult;
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     return '';
   }
 }
@@ -756,7 +758,8 @@ export async function startBackgroundOcrScan(reason = 'auto') {
     if (usePool) {
       pushDiagnosticEvent('ocr.background.pool', { poolSize, lang: tessLang });
     }
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     usePool = false;
   }
 
@@ -800,7 +803,8 @@ export async function startBackgroundOcrScan(reason = 'auto') {
         try {
           const txt = await extractTextForPage(pageNum);
           return { pageNum, text: txt || '' };
-        } catch {
+        } catch (err) {
+          console.warn('[ocr] error:', err?.message);
           return { pageNum, text: '' };
         }
       });

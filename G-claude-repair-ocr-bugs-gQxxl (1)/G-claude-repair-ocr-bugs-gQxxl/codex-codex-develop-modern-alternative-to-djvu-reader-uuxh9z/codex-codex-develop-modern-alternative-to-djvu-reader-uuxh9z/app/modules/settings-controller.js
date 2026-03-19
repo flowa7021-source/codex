@@ -42,7 +42,8 @@ export function loadAppSettings() {
     state.settings = { ...defaultSettings(), ...(parsed || {}) };
     state.settings.sidebarSections = { ...defaultSettings().sidebarSections, ...(state.settings.sidebarSections || {}) };
     state.settings.toolbarSections = { ...defaultSettings().toolbarSections, ...(state.settings.toolbarSections || {}) };
-  } catch {
+  } catch (err) {
+    console.warn('[settings-controller storage] error:', err?.message);
     state.settings = defaultSettings();
   }
 }
@@ -191,7 +192,8 @@ export function loadNotes(noteKey) {
       setNotesStatus('Заметки загружены');
       return;
     }
-  } catch {
+  } catch (err) {
+    console.warn('[settings-controller] error:', err?.message);
     // Backward compatibility with old plain-string format.
   }
 
@@ -320,7 +322,8 @@ export async function importNotesJson(file, noteKey) {
     els.notesTags.value = merged.tags;
     els.notes.value = merged.body;
     saveNotes(noteKey, 'manual');
-  } catch {
+  } catch (err) {
+    console.warn('[settings-controller storage] error:', err?.message);
     toastError('Не удалось импортировать заметки JSON. Проверьте формат файла.');
   }
 }
@@ -491,7 +494,8 @@ export function loadHotkeys() {
       fitWidth: normalizeHotkey(parsed.fitWidth, defaultHotkeys.fitWidth),
       fitPage: normalizeHotkey(parsed.fitPage, defaultHotkeys.fitPage),
     });
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     setHotkeys({ ...defaultHotkeys });
   }
   renderHotkeyInputs();
@@ -675,7 +679,8 @@ export async function importBookmarksJson(file, saveBookmarksFn, renderBookmarks
     saveBookmarksFn(unique);
     renderBookmarksFn();
     setBookmarksStatus(`Импортировано закладок: ${unique.length}`, 'success');
-  } catch {
+  } catch (err) {
+    console.warn('[settings-controller storage] error:', err?.message);
     setBookmarksStatus('Ошибка импорта закладок', 'error');
   }
 }

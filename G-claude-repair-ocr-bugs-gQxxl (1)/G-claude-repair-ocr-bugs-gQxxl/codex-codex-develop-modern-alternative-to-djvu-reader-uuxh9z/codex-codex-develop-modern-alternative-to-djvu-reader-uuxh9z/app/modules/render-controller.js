@@ -80,7 +80,8 @@ export async function _preRenderAdjacent(page, zoom, rotation) {
       cacheRenderedPage(p, offscreen, zoom, rotation);
       offscreen.width = 0;
       offscreen.height = 0;
-    } catch {
+    } catch (err) {
+      console.warn('[render-controller] error:', err?.message);
       // Pre-render failures are non-critical; silently ignore
     }
   }

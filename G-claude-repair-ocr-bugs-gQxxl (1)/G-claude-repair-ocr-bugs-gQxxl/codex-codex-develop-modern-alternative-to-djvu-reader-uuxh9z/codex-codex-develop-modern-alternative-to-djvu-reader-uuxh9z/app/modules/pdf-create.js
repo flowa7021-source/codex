@@ -34,11 +34,13 @@ export async function createPdfFromImages(images, options = {}) {
       } else {
         pdfImage = await pdfDoc.embedJpg(img.data);
       }
-    } catch {
+    } catch (err) {
+      console.warn('[pdf-ops] error:', err?.message);
       // Try the other format as fallback
       try {
         pdfImage = await pdfDoc.embedJpg(img.data);
-      } catch {
+      } catch (err) {
+        console.warn('[pdf-ops] error:', err?.message);
         pdfImage = await pdfDoc.embedPng(img.data);
       }
     }

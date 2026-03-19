@@ -55,7 +55,8 @@ export function loadReadingGoal() {
     const parsed = JSON.parse(raw);
     if (!Number.isInteger(parsed?.page)) return null;
     return parsed.page;
-  } catch {
+  } catch (err) {
+    console.warn('[reading-progress-controller storage] error:', err?.message);
     return null;
   }
 }
@@ -282,7 +283,8 @@ export function loadReadingTime() {
     if (!raw) return 0;
     const parsed = JSON.parse(raw);
     return Number.isFinite(parsed?.totalMs) ? Math.max(0, parsed.totalMs) : 0;
-  } catch {
+  } catch (err) {
+    console.warn('[reading-progress-controller storage] error:', err?.message);
     return 0;
   }
 }
@@ -367,7 +369,8 @@ export function loadViewState() {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return null;
     return parsed;
-  } catch {
+  } catch (err) {
+    console.warn('[reading-progress-controller storage] error:', err?.message);
     return null;
   }
 }

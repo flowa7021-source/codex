@@ -79,7 +79,8 @@ function initContinuousScroll(deps) {
       const zoom = state.zoom || 1;
       await state.adapter.renderPage(pageNum, canvas, { zoom, rotation: 0 });
       canvas.style.background = 'white';
-    } catch {
+    } catch (err) {
+      console.warn('[ui-init-blocks] error:', err?.message);
       canvas.style.background = '#fdd';
     }
   }

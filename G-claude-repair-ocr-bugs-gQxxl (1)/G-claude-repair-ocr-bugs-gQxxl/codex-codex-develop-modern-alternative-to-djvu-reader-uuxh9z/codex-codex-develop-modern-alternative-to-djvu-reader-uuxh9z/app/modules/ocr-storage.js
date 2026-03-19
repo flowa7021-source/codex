@@ -16,7 +16,8 @@ function openDb() {
       // Test if connection is still valid by checking objectStoreNames
       _db.objectStoreNames;
       return Promise.resolve(_db);
-    } catch {
+    } catch (err) {
+      console.warn('[ocr-storage storage] error:', err?.message);
       // Connection died (e.g. browser closed it) — reopen
       _db = null;
     }
@@ -57,7 +58,8 @@ function getStore(mode = 'readonly') {
     try {
       const tx = db.transaction(STORE_NAME, mode);
       return tx.objectStore(STORE_NAME);
-    } catch {
+    } catch (err) {
+      console.warn('[ocr-storage] error:', err?.message);
       // Transaction failed (connection may be stale) — reset and retry once
       _db = null;
       return openDb().then((db2) => {
@@ -93,7 +95,8 @@ export async function saveOcrData(docName, data) {
       updatedAt: new Date().toISOString(),
     };
     await idbRequest(store.put(record));
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     // Fallback to localStorage
     try {
       const key = `novareader-ocr-text:${docName}`;
@@ -183,7 +186,8 @@ export async function listOcrDocuments() {
     const store = await getStore('readonly');
     const all = await idbRequest(store.getAll());
     return all.map((r) => r.docName);
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     return [];
   }
 }
@@ -201,7 +205,8 @@ export async function getOcrStorageSize() {
       size += JSON.stringify(record).length * 2; // UTF-16 estimate
     }
     return size;
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     return 0;
   }
 }
@@ -213,7 +218,8 @@ export async function getOcrStorageSize() {
 export function isIndexedDbAvailable() {
   try {
     return typeof indexedDB !== 'undefined' && indexedDB !== null;
-  } catch {
+  } catch (err) {
+    console.warn('[ocr-storage storage] error:', err?.message);
     return false;
   }
 }

@@ -28,7 +28,8 @@ export function load(key, defaultValue = null) {
   try {
     const raw = localStorage.getItem(STORAGE_PREFIX + key);
     return raw !== null ? JSON.parse(raw) : defaultValue;
-  } catch {
+  } catch (err) {
+    console.warn('[app-persistence storage] error:', err?.message);
     return defaultValue;
   }
 }

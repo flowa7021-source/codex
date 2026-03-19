@@ -174,7 +174,8 @@ async function importDjvuDataJson(file) {
     await renderPagePreviews();
     await renderCurrentPage();
     els.searchStatus.textContent = 'DjVu data JSON импортирован';
-  } catch {
+  } catch (err) {
+    console.warn('[app] error:', err?.message);
     els.searchStatus.textContent = 'Ошибка импорта DjVu data JSON';
   }
 }
@@ -377,14 +378,16 @@ safeOn(els.saveCloudSyncUrl, 'click', saveCloudSyncUrl);
 safeOn(els.pushCloudSync, 'click', async () => {
   try {
     await pushWorkspaceToCloud();
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     setStage4Status('Ошибка cloud push.', 'error');
   }
 });
 safeOn(els.pullCloudSync, 'click', async () => {
   try {
     await pullWorkspaceFromCloud();
-  } catch {
+  } catch (err) {
+    console.warn('[app] error:', err?.message);
     setStage4Status('Ошибка cloud pull.', 'error');
   }
 });
@@ -460,7 +463,8 @@ safeOn(els.importDocx, 'change', async (e) => {
     } else {
       importDocxEdits(file);
     }
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     importDocxEdits(file);
   }
   e.target.value = '';
@@ -496,7 +500,8 @@ safeOn(els.copyOcrText, 'click', async () => {
       await navigator.clipboard.writeText(els.pageText.value);
       setOcrStatus('OCR: текст скопирован');
     }
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     setOcrStatus('OCR: не удалось скопировать текст');
   }
 });
@@ -551,7 +556,8 @@ async function refreshOcrStorageInfo() {
         els.ocrDocumentsList.appendChild(li);
       }
     }
-  } catch {
+  } catch (err) {
+    console.warn('[ocr] error:', err?.message);
     if (els.ocrStorageInfo) els.ocrStorageInfo.textContent = 'Ошибка чтения хранилища';
   }
 }
@@ -855,7 +861,8 @@ safeOn(els.addStamp, 'click', async () => {
         a.click();
         URL.revokeObjectURL(url);
         setOcrStatus(`Штамп "${labels[idx]}" — PDF сохранён`);
-      } catch {
+      } catch (err) {
+        console.warn('[ocr] error:', err?.message);
         setOcrStatus(`Штамп "${labels[idx]}" добавлен на canvas`);
       }
     } else {

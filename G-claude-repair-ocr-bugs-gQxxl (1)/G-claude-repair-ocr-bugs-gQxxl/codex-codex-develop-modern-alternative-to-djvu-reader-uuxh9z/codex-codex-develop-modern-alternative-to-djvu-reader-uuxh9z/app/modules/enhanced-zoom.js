@@ -241,7 +241,8 @@ export function loadDocumentZoom(docName) {
   try {
     const data = JSON.parse(localStorage.getItem(ZOOM_MEMORY_KEY) || '{}');
     return data[docName] || null;
-  } catch {
+  } catch (err) {
+    console.warn('[enhanced-zoom storage] error:', err?.message);
     return null;
   }
 }

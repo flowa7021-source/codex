@@ -49,7 +49,8 @@ export class PdfFormManager {
         if (pageFields.length) {
           this.fields.set(p, pageFields);
         }
-      } catch {
+      } catch (err) {
+        console.warn('[pdf-ops] error:', err?.message);
         // Skip pages that fail to load annotations
       }
     }
@@ -145,7 +146,8 @@ export class PdfFormManager {
       const raw = localStorage.getItem(key);
       if (!raw) return 0;
       return this.importFormData(JSON.parse(raw));
-    } catch {
+    } catch (err) {
+      console.warn('[pdf-ops] error:', err?.message);
       return 0;
     }
   }
