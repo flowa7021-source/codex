@@ -127,7 +127,7 @@ async function renderThumb(pageNum, canvas) {
     // Release offscreen
     offscreen.width = 0;
     offscreen.height = 0;
-  } catch (err) {
+  } catch {
     // Non-critical, silently ignore
   }
 }

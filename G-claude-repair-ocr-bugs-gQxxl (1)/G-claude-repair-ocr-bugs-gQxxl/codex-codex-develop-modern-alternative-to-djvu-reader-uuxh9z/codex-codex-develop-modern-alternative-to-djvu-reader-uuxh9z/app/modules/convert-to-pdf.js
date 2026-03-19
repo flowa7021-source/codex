@@ -106,7 +106,7 @@ export async function djvuToPdf(adapter, onProgress) {
           opacity: 0,
         });
       }
-    } catch (_) { /* text extraction optional */ }
+    } catch { /* text extraction optional */ }
 
     // Release canvas memory
     canvas.width = 0;
@@ -137,7 +137,6 @@ export async function convertCurrentToPdf(reloadPdfFromBytes, setStatus) {
   try {
     if (type === 'image') {
       setStatus('Конвертация изображения в PDF...');
-      const bytes = new Uint8Array(await state.file.arrayBuffer());
       const file = state.file;
       const pdfBytes = await imagesToPdf([file]);
       state.docName = state.docName.replace(/\.[^.]+$/, '.pdf');

@@ -72,7 +72,7 @@ import { ocrSearchIndex, searchOcrIndex, downloadOcrTextExport, canSearchCurrent
 import { initOcrControllerDeps, getBatchOcrProgress, clearOcrRuntimeCaches, estimatePageSkewAngle, setOcrStatus, setOcrRegionMode, drawOcrSelectionPreview, runOcrOnRect, runOcrForCurrentPage, extractTextForPage, cancelAllOcrWork, scheduleBackgroundOcrScan } from './modules/ocr-controller.js';
 import { initWorkspaceDeps, setWorkspaceStatus, setStage4Status, initReleaseGuards, loadCloudSyncUrl, saveCloudSyncUrl, loadOcrTextData, saveOcrTextData, pushWorkspaceToCloud, pullWorkspaceFromCloud, broadcastWorkspaceSnapshot, toggleCollaborationChannel, importOcrJson, exportWorkspaceBundleJson, importWorkspaceBundleJson } from './modules/workspace-controller.js';
 import { initReadingProgressDeps, noteKey, bookmarkKey, loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage, clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender, navigateHistoryBack, navigateHistoryForward, loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer, syncReadingTimerWithVisibility, resetReadingTime, _saveViewStateNow, saveViewState, renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress, saveRecent, clearRecent, renderRecent } from './modules/reading-progress-controller.js';
-import { initFileControllerDeps, revokeCurrentObjectUrl, saveDjvuData, openFile, reloadPdfFromBytes, saveCurrentPdfAs } from './modules/file-controller.js';
+import { initFileControllerDeps, revokeCurrentObjectUrl, saveDjvuData, openFile, reloadPdfFromBytes } from './modules/file-controller.js';
 import { initPdfOpsDeps, mergePdfFiles, splitPdfPages } from './modules/pdf-ops-controller.js';
 import { PDFAdapter, ImageAdapter, DjVuAdapter, DjVuNativeAdapter, UnsupportedAdapter } from './modules/adapters.js';
 import { initSettingsUiDeps, applyAppLanguage, applySectionVisibilitySettings, openSettingsModal, closeSettingsModal, previewUiSizeFromModal, saveSettingsFromModal } from './modules/settings-ui.js';
@@ -80,9 +80,9 @@ import { initOutlineControllerDeps, renderDocInfo, renderOutline, renderPagePrev
 import { initTextNavDeps, ensureTextToolsVisible, refreshPageText, copyPageText, exportPageText, setTextEditMode, saveCurrentPageTextEdits, exportCurrentDocToWord, goToPage, fitWidth, fitPage, downloadCurrentFile, printCanvasPage } from './modules/text-nav-controller.js';
 import { initLayoutControllerDeps, uiLayoutKey, applyAdvancedPanelsState, toggleAdvancedPanelsState, applyLayoutState, updateSearchToolbarRows, toggleLayoutState, setupResizableLayout, setupDragAndDrop, setupAnnotationEvents } from './modules/layout-controller.js';
 import { initPdfProHandlersDeps, initPdfProHandlers } from './modules/pdf-pro-handlers.js';
-import { initBookmarkController, renderBookmarkList, updateBookmarkButton } from './modules/bookmark-controller.js';
-import { initNotesController, loadNotesIntoUI } from './modules/notes-controller.js';
-import { renderPagePreviews as renderThumbnails, highlightCurrentPage as highlightThumbPage, invalidateThumbnailCache } from './modules/thumbnail-renderer.js';
+import { initBookmarkController, updateBookmarkButton } from './modules/bookmark-controller.js';
+import { initNotesController } from './modules/notes-controller.js';
+import { highlightCurrentPage as highlightThumbPage } from './modules/thumbnail-renderer.js';
 import { convertCurrentToPdf } from './modules/convert-to-pdf.js';
 import { initUiBlocks } from './modules/ui-init-blocks.js';
 import { initPhase2Modules } from './modules/app-init-phase2.js';
@@ -1400,8 +1400,8 @@ function saveTabsToSession() {
       // Only store bytes for files < 5MB
       bytes: t.bytes && t.bytes.length < 5 * 1024 * 1024 ? Array.from(t.bytes) : null,
     }));
-    sessionStorage.setItem('novareader-tabs', JSON.stringify(tabs));
-  } catch (_) { /* quota exceeded or unavailable */ }
+    window.sessionStorage.setItem('novareader-tabs', JSON.stringify(tabs));
+  } catch (e) { /* quota exceeded or unavailable */ void e; }
 }
 
 // Auto-save tabs on visibility change / before unload
@@ -1410,14 +1410,14 @@ window.addEventListener('beforeunload', saveTabsToSession);
 
 // Restore tabs from session on startup
 try {
-  const savedTabs = JSON.parse(sessionStorage.getItem('novareader-tabs') || '[]');
+  const savedTabs = JSON.parse(window.sessionStorage.getItem('novareader-tabs') || '[]');
   for (const t of savedTabs) {
     if (t.bytes && t.name) {
       const bytes = new Uint8Array(t.bytes);
       tabManager.open(t.name, t.type || 'pdf', bytes, t.state || {});
     }
   }
-} catch (_) { /* invalid or no session data */ }
+} catch (e) { /* invalid or no session data */ void e; }
 
 window._tabManagerInstance = tabManager;
 
