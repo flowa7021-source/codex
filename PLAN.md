@@ -16,8 +16,8 @@
 - Большие модули нуждаются в дальнейшей декомпозиции (ocr-controller 1442 LOC, docx-converter 1075 LOC)
 - cloud-integration.js — stub (требует OAuth2 ключи)
 - ai-features.js — partial (только heuristic, нет AI API)
-- Форм-валидация отсутствует (required, format checks)
-- Testing инфраструктура не создана
+- ~~Форм-валидация отсутствует~~ → Добавлена (validateAll, validateField, _validateFormat)
+- ~~Testing инфраструктура не создана~~ → 220 тестов / 45 suites (Node.js built-in test runner)
 
 ---
 
@@ -322,12 +322,13 @@
 - Предупреждение при приближении к лимиту
 - Garbage collection hints
 
-### 7.5 Testing ❌ НЕ НАЧАТО
-- Unit tests для всех модулей (Jest/Vitest)
-- Integration tests для PDF pipeline
-- Visual regression tests для рендеринга
-- Performance benchmarks
-- Файлы: `tests/` директория
+### 7.5 Testing ✅ РАСШИРЕНО
+- 10 unit test файлов в `tests/unit/` (Node.js built-in test runner)
+- 220 тестов / 45 suites — все проходят
+- Покрытие: pdf-print, annotations-core, app-persistence, error-handler, ocr-post-correct, ocr-search, ai-features, text-extractor, **pdf-forms** (47 тестов), **pdf-pro-tools** (23 теста)
+- pdf-forms: basics, export/import, hitTest, _mapFieldType, validation (required, length, pattern, numeric range, format validators)
+- pdf-pro-tools: addHeaderFooter, addBatesNumbering, flattenPdf, checkAccessibility, autoFixAccessibility, addPageNumbers, cropPdfPages
+- Файлы: `tests/unit/*.test.js`, запуск: `node --test tests/unit/*.test.js`
 
 ### 7.6 Build system ❌ НЕ НАЧАТО
 - Vite или esbuild для бандлинга
@@ -356,7 +357,7 @@
 | P2 | 6.6 Toolbar redesign | Профессиональный вид | ✅ Готово |
 | P3 | 4.5 Безопасность | Enterprise-функции | ✅ Готово |
 | P3 | 5.2 PDF→HTML | Дополнительный формат | ✅ Готово |
-| P3 | 7.5 Testing | Стабильность | ❌ Не начато |
+| P3 | 7.5 Testing | Стабильность | ✅ Готово (220 тестов) |
 | P3 | 7.6 Build system | Разработка | ❌ Не начато |
 
 ---
