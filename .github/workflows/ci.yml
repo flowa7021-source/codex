@@ -3,9 +3,7 @@ name: CI — Lint & Test
 on:
   workflow_dispatch:
   push:
-    branches: [Final, main, master]
   pull_request:
-    branches: [Final, main, master]
 
 permissions:
   contents: read
