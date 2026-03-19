@@ -100,7 +100,7 @@ export function applyAriaAttributes() {
   });
 
   // ─── Collapsible sections → aria-expanded ─────────────
-  document.querySelectorAll('.section-head').forEach(head => {
+  document.querySelectorAll('.section-head, .section-toggle').forEach(head => {
     const section = head.closest('section');
     if (!section) return;
     const isCollapsed = section.classList.contains('collapsed');
@@ -197,10 +197,12 @@ export function initA11y() {
   applyAriaAttributes();
   observeTabChanges();
   setupFocusVisibility();
+  setupTablistKeyboard();
+  setupModalEscape();
 
-  // Listen for section collapse changes
+  // Listen for section collapse changes (both .section-head and .section-toggle)
   document.addEventListener('click', (e) => {
-    const head = e.target.closest('.section-head');
+    const head = e.target.closest('.section-head, .section-toggle');
     if (head) {
       requestAnimationFrame(() => {
         const section = head.closest('section');
@@ -221,5 +223,55 @@ export function initA11y() {
         trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
       });
     }
+  });
+
+  // Sidebar toggle: sync aria-expanded
+  const sidebarBtn = document.getElementById('toggleSidebar');
+  if (sidebarBtn) {
+    sidebarBtn.addEventListener('click', () => {
+      const expanded = sidebarBtn.getAttribute('aria-expanded') === 'true';
+      sidebarBtn.setAttribute('aria-expanded', String(!expanded));
+    });
+  }
+}
+
+/** Arrow key navigation within tablists */
+function setupTablistKeyboard() {
+  document.querySelectorAll('[role="tablist"]').forEach(tablist => {
+    tablist.addEventListener('keydown', (e) => {
+      const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+      const current = tabs.indexOf(document.activeElement);
+      if (current === -1) return;
+
+      let next = -1;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        next = (current + 1) % tabs.length;
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        next = (current - 1 + tabs.length) % tabs.length;
+      } else if (e.key === 'Home') {
+        next = 0;
+      } else if (e.key === 'End') {
+        next = tabs.length - 1;
+      }
+
+      if (next !== -1) {
+        e.preventDefault();
+        tabs[next].focus();
+        tabs[next].click();
+      }
+    });
+  });
+}
+
+/** Escape key closes open modals and returns focus */
+function setupModalEscape() {
+  document.querySelectorAll('.modal[role="dialog"]').forEach(modal => {
+    modal.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        modal.setAttribute('aria-hidden', 'true');
+        if (modal.style) modal.style.display = 'none';
+        modal.classList.remove('open');
+      }
+    });
   });
 }

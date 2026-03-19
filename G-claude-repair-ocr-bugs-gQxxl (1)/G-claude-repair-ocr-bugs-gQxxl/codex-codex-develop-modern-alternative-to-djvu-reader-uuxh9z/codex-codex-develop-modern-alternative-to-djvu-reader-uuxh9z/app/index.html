@@ -25,14 +25,14 @@
       <!-- ═══════════════════════════════════════════════════════
            ROW 1: Command Bar (unified compact toolbar)
            ═══════════════════════════════════════════════════════ -->
-      <header class="command-bar" id="commandBar">
+      <header class="command-bar" id="commandBar" role="toolbar" aria-label="Панель инструментов">
         <!-- Navigation -->
         <div class="cb-group">
-          <button id="historyBack" class="cb-btn" title="Назад в истории">
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M11 2L5 8l6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <button id="historyBack" class="cb-btn" title="Назад в истории" aria-label="Назад в истории">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M11 2L5 8l6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <button id="historyForward" class="cb-btn" title="Вперёд в истории">
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M5 2l6 6-6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <button id="historyForward" class="cb-btn" title="Вперёд в истории" aria-label="Вперёд в истории">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2l6 6-6 6" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
         </div>
 
@@ -40,40 +40,40 @@
 
         <!-- Page navigation -->
         <div class="cb-group">
-          <button id="prevPage" class="cb-btn" title="Предыдущая страница">
-            <svg width="14" height="14" viewBox="0 0 14 14"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+          <button id="prevPage" class="cb-btn" title="Предыдущая страница" aria-label="Предыдущая страница">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M9 3L5 7l4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
           </button>
-          <input id="pageInput" type="number" min="1" value="1" class="cb-page-input" title="Номер страницы" />
-          <span id="pageStatus" class="cb-label">/ 0</span>
-          <button id="nextPage" class="cb-btn" title="Следующая страница">
-            <svg width="14" height="14" viewBox="0 0 14 14"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
+          <input id="pageInput" type="number" min="1" value="1" class="cb-page-input" title="Номер страницы" aria-label="Номер страницы" />
+          <span id="pageStatus" class="cb-label" aria-live="polite">/ 0</span>
+          <button id="nextPage" class="cb-btn" title="Следующая страница" aria-label="Следующая страница">
+            <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M5 3l4 4-4 4" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
           </button>
-          <button id="goToPage" class="cb-btn is-hidden" title="Перейти к странице">↵</button>
+          <button id="goToPage" class="cb-btn is-hidden" title="Перейти к странице" aria-label="Перейти к странице">↵</button>
         </div>
 
         <div class="cb-sep"></div>
 
         <!-- Zoom -->
         <div class="cb-group">
-          <button id="zoomOut" class="cb-btn" title="Уменьшить">−</button>
-          <span id="zoomStatus" class="cb-label cb-zoom-label">100%</span>
-          <button id="zoomIn" class="cb-btn" title="Увеличить">+</button>
-          <button id="fitWidth" class="cb-btn" title="По ширине">
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 8h12M2 8l3-3M2 8l3 3M14 8l-3-3M14 8l-3 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <button id="zoomOut" class="cb-btn" title="Уменьшить" aria-label="Уменьшить масштаб">−</button>
+          <span id="zoomStatus" class="cb-label cb-zoom-label" aria-live="polite">100%</span>
+          <button id="zoomIn" class="cb-btn" title="Увеличить" aria-label="Увеличить масштаб">+</button>
+          <button id="fitWidth" class="cb-btn" title="По ширине" aria-label="По ширине">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h12M2 8l3-3M2 8l3 3M14 8l-3-3M14 8l-3 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <button id="fitPage" class="cb-btn" title="Вся страница">
-            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
+          <button id="fitPage" class="cb-btn" title="Вся страница" aria-label="Вся страница">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="10" height="12" rx="1.5" stroke="currentColor" stroke-width="1.3" fill="none"/></svg>
           </button>
-          <button id="rotate" class="cb-btn" title="Повернуть 90°">
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M13 7a5 5 0 10-1 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M14 4l-2 3h3" fill="currentColor"/></svg>
+          <button id="rotate" class="cb-btn" title="Повернуть 90°" aria-label="Повернуть на 90°">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 7a5 5 0 10-1 3" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/><path d="M14 4l-2 3h3" fill="currentColor"/></svg>
           </button>
-          <button id="toggleContinuousScroll" class="cb-btn" title="Непрерывная прокрутка">
-            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="4" y="1" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="4" y="7" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><path d="M8 13v2M6 14l2 1 2-1" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <button id="toggleContinuousScroll" class="cb-btn" title="Непрерывная прокрутка" aria-label="Непрерывная прокрутка">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="4" y="1" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="4" y="7" width="8" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><path d="M8 13v2M6 14l2 1 2-1" stroke="currentColor" stroke-width="1" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
           <!-- View Mode Selector -->
           <div class="dropdown" id="viewModeDropdown">
-            <button class="cb-btn dropdown-trigger" title="Режим просмотра" aria-haspopup="true" aria-expanded="false">
-              <svg width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+            <button class="cb-btn dropdown-trigger" title="Режим просмотра" aria-haspopup="true" aria-expanded="false" aria-label="Режим просмотра">
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/></svg>
             </button>
             <div class="dropdown-menu" role="menu">
               <button class="dropdown-item active" data-view-mode="single" role="menuitem">Одна страница</button>
@@ -90,23 +90,23 @@
 
         <!-- Tool selectors (open right panel) -->
         <div class="cb-group cb-tools">
-          <button class="cb-tool-btn" data-tool="search" title="Поиск (Ctrl+F)">
-            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <button class="cb-tool-btn" data-tool="search" title="Поиск (Ctrl+F)" aria-label="Поиск (Ctrl+F)">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
           </button>
-          <button class="cb-tool-btn" data-tool="annotations" title="Аннотации">
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2.5 11.5l8-8 2 2-8 8-3 1z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
+          <button class="cb-tool-btn" data-tool="annotations" title="Аннотации" aria-label="Аннотации">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 11.5l8-8 2 2-8 8-3 1z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
           </button>
-          <button class="cb-tool-btn" data-tool="text-ocr" title="Текст / OCR">
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 4h10M3 8h7M3 12h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+          <button class="cb-tool-btn" data-tool="text-ocr" title="Текст / OCR" aria-label="Текст / OCR">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4h10M3 8h7M3 12h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
           </button>
-          <button class="cb-tool-btn" data-tool="forms" title="Формы PDF">
-            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5 7h6M5 10h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          <button class="cb-tool-btn" data-tool="forms" title="Формы PDF" aria-label="Формы PDF">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5 7h6M5 10h4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
           </button>
-          <button class="cb-tool-btn" data-tool="tools" title="Инструменты">
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M6.5 2.5a4 4 0 015 5l3 3-2 2-3-3a4 4 0 01-5-5l2 2 1.5-1.5z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
+          <button class="cb-tool-btn" data-tool="tools" title="Инструменты" aria-label="Инструменты">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 2.5a4 4 0 015 5l3 3-2 2-3-3a4 4 0 01-5-5l2 2 1.5-1.5z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
           </button>
-          <button class="cb-tool-btn" data-tool="organize" title="Организация страниц">
-            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="8" y="1" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="1" y="9" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="8" y="9" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>
+          <button class="cb-tool-btn" data-tool="organize" title="Организация страниц" aria-label="Организация страниц">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="8" y="1" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="1" y="9" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="8" y="9" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>
           </button>
         </div>
 
@@ -114,17 +114,17 @@
 
         <!-- View controls -->
         <div class="cb-group">
-          <button id="themeToggle" class="cb-btn" title="Сменить тему">
-            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 2.5v11a5.5 5.5 0 000-11z" fill="currentColor"/></svg>
+          <button id="themeToggle" class="cb-btn" title="Сменить тему" aria-label="Сменить тему">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M8 2.5v11a5.5 5.5 0 000-11z" fill="currentColor"/></svg>
           </button>
-          <button id="fullscreen" class="cb-btn" title="Полный экран">
-            <svg width="16" height="16" viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <button id="fullscreen" class="cb-btn" title="Полный экран" aria-label="Полный экран">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <button id="shortcutsHelp" class="cb-btn" title="Горячие клавиши (?)">
-            <svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2" fill="none"/><text x="8" y="11.5" text-anchor="middle" font-size="10" fill="currentColor" font-weight="600">?</text></svg>
+          <button id="shortcutsHelp" class="cb-btn" title="Горячие клавиши (?)" aria-label="Горячие клавиши">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.2" fill="none"/><text x="8" y="11.5" text-anchor="middle" font-size="10" fill="currentColor" font-weight="600">?</text></svg>
           </button>
-          <button id="toggleSidebar" class="cb-btn cb-toggle active" title="Левая панель">
-            <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1.5" y="2" width="13" height="12" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5.5 2v12" stroke="currentColor" stroke-width="1.2"/></svg>
+          <button id="toggleSidebar" class="cb-btn cb-toggle active" title="Левая панель" aria-label="Левая панель" aria-expanded="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2" width="13" height="12" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M5.5 2v12" stroke="currentColor" stroke-width="1.2"/></svg>
           </button>
         </div>
       </header>
@@ -136,36 +136,36 @@
         <div class="tab-bar-tabs" id="tabBarTabs">
           <!-- Tabs inserted dynamically -->
         </div>
-        <button class="tab-bar-new" id="tabBarNewTab" title="Открыть новый файл">+</button>
+        <button class="tab-bar-new" id="tabBarNewTab" title="Открыть новый файл" aria-label="Открыть новый файл">+</button>
       </div>
 
       <!-- ═══════════════════════════════════════════════════════
            ROW 2, COL 1: Left Panel (thumbnails, bookmarks, outline)
            ═══════════════════════════════════════════════════════ -->
-      <aside class="left-panel sidebar" id="sidebar">
-        <nav class="lp-tabs sidebar-tabs">
-          <button class="active" data-sidebar-tab="nav" title="Страницы">
-            <svg width="18" height="18" viewBox="0 0 18 18"><rect x="2" y="1" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="10" y="1" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="2" y="10" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="10" y="10" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+      <aside class="left-panel sidebar" id="sidebar" aria-label="Боковая панель">
+        <nav class="lp-tabs sidebar-tabs" role="tablist" aria-label="Панели боковой панели">
+          <button class="active" data-sidebar-tab="nav" title="Страницы" aria-label="Страницы" role="tab" aria-selected="true">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="2" y="1" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="10" y="1" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="2" y="10" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/><rect x="10" y="10" width="6" height="7" rx="1" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
           </button>
-          <button data-sidebar-tab="bookmarks-tab" title="Закладки">
-            <svg width="18" height="18" viewBox="0 0 18 18"><path d="M4 2h10v14l-5-3-5 3z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
+          <button data-sidebar-tab="bookmarks-tab" title="Закладки" aria-label="Закладки" role="tab" aria-selected="false">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 2h10v14l-5-3-5 3z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
           </button>
-          <button data-sidebar-tab="outline-tab" title="Структура">
-            <svg width="18" height="18" viewBox="0 0 18 18"><path d="M4 4h10M4 9h8M4 14h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <button data-sidebar-tab="outline-tab" title="Структура" aria-label="Структура" role="tab" aria-selected="false">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 4h10M4 9h8M4 14h6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
           </button>
-          <button data-sidebar-tab="notes" title="Заметки">
-            <svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="2" width="12" height="14" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M6 6h6M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+          <button data-sidebar-tab="notes" title="Заметки" aria-label="Заметки" role="tab" aria-selected="false">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="3" y="2" width="12" height="14" rx="1.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M6 6h6M6 9h6M6 12h4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
           </button>
-          <button data-sidebar-tab="analytics" title="Аналитика">
-            <svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="10" width="3" height="6" rx="0.5" stroke="currentColor" stroke-width="1" fill="none"/><rect x="7.5" y="6" width="3" height="10" rx="0.5" stroke="currentColor" stroke-width="1" fill="none"/><rect x="12" y="2" width="3" height="14" rx="0.5" stroke="currentColor" stroke-width="1" fill="none"/></svg>
+          <button data-sidebar-tab="analytics" title="Аналитика" aria-label="Аналитика" role="tab" aria-selected="false">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><rect x="3" y="10" width="3" height="6" rx="0.5" stroke="currentColor" stroke-width="1" fill="none"/><rect x="7.5" y="6" width="3" height="10" rx="0.5" stroke="currentColor" stroke-width="1" fill="none"/><rect x="12" y="2" width="3" height="14" rx="0.5" stroke="currentColor" stroke-width="1" fill="none"/></svg>
           </button>
-          <button data-sidebar-tab="settings" title="Настройки">
-            <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.3 3.3l1.4 1.4M13.3 13.3l1.4 1.4M3.3 14.7l1.4-1.4M13.3 4.7l1.4-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+          <button data-sidebar-tab="settings" title="Настройки" aria-label="Настройки" role="tab" aria-selected="false">
+            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle cx="9" cy="9" r="2.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.3 3.3l1.4 1.4M13.3 13.3l1.4 1.4M3.3 14.7l1.4-1.4M13.3 4.7l1.4-1.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
           </button>
         </nav>
 
         <!-- Tab: Pages (thumbnails first!) -->
-        <div class="sidebar-panel active" data-sidebar-panel="nav">
+        <div class="sidebar-panel active" data-sidebar-panel="nav" role="tabpanel" aria-label="Страницы">
           <div class="sidebar-header">
             <h1>NovaReader</h1>
             <span id="appVersion" class="ver-badge"></span>
@@ -191,7 +191,7 @@
         </div>
 
         <!-- Tab: Bookmarks -->
-        <div class="sidebar-panel" data-sidebar-panel="bookmarks-tab">
+        <div class="sidebar-panel" data-sidebar-panel="bookmarks-tab" role="tabpanel" aria-label="Закладки">
           <section data-sidebar-section="bookmarks">
             <h2 class="section-toggle">Закладки</h2>
             <ul id="bookmarkList"></ul>
@@ -218,7 +218,7 @@
         </div>
 
         <!-- Tab: Outline -->
-        <div class="sidebar-panel" data-sidebar-panel="outline-tab">
+        <div class="sidebar-panel" data-sidebar-panel="outline-tab" role="tabpanel" aria-label="Оглавление">
           <section data-sidebar-section="outline">
             <h2 class="section-toggle">Оглавление</h2>
             <ul id="outlineList"></ul>
@@ -226,7 +226,7 @@
         </div>
 
         <!-- Tab: Notes -->
-        <div class="sidebar-panel" data-sidebar-panel="notes">
+        <div class="sidebar-panel" data-sidebar-panel="notes" role="tabpanel" aria-label="Заметки">
           <section data-sidebar-section="notes">
             <h2>Заметки</h2>
             <input id="notesTitle" type="text" placeholder="Заголовок" class="input-compact" />
@@ -271,7 +271,7 @@
         </div>
 
         <!-- Tab: Analytics -->
-        <div class="sidebar-panel" data-sidebar-panel="analytics">
+        <div class="sidebar-panel" data-sidebar-panel="analytics" role="tabpanel" aria-label="Аналитика">
           <section data-sidebar-section="progress">
             <h2 class="section-toggle">Прогресс чтения</h2>
             <p id="progressStatus" class="status-line"></p>
@@ -357,7 +357,7 @@
         </div>
 
         <!-- Tab: Settings -->
-        <div class="sidebar-panel" data-sidebar-panel="settings">
+        <div class="sidebar-panel" data-sidebar-panel="settings" role="tabpanel" aria-label="Настройки">
           <section id="settingsSection">
             <h2>Настройки</h2>
             <div class="section-actions">
@@ -407,21 +407,21 @@
       <!-- ═══════════════════════════════════════════════════════
            ROW 2, COL 2: Document Viewport
            ═══════════════════════════════════════════════════════ -->
-      <main class="document-viewport viewer-area" id="documentViewport">
+      <main class="document-viewport viewer-area" id="documentViewport" aria-label="Область просмотра документа">
         <!-- Floating Search Bar (Ctrl+F) -->
-        <div class="search-floating" id="searchFloating">
-          <svg class="search-floating-icon" width="16" height="16" viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <input id="searchInput" type="text" placeholder="Поиск в документе…" class="search-floating-input" />
-          <select id="searchScope" class="search-floating-scope">
+        <div class="search-floating" id="searchFloating" role="search" aria-label="Поиск в документе">
+          <svg class="search-floating-icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <input id="searchInput" type="text" placeholder="Поиск в документе…" class="search-floating-input" aria-label="Поиск в документе" />
+          <select id="searchScope" class="search-floating-scope" aria-label="Область поиска">
             <option value="all">Весь документ</option>
             <option value="current">Текущая стр.</option>
           </select>
-          <button id="searchBtn" class="cb-btn" title="Найти">↵</button>
-          <button id="searchPrev" class="cb-btn" title="Предыдущий">▲</button>
-          <button id="searchNext" class="cb-btn" title="Следующий">▼</button>
-          <span id="searchStatus" class="search-floating-status"></span>
-          <button id="toggleSearchTools" class="cb-btn" title="Расширенный поиск">⌕</button>
-          <button id="closeSearch" class="cb-btn" title="Закрыть (Esc)">✕</button>
+          <button id="searchBtn" class="cb-btn" title="Найти" aria-label="Найти">↵</button>
+          <button id="searchPrev" class="cb-btn" title="Предыдущий" aria-label="Предыдущий результат">▲</button>
+          <button id="searchNext" class="cb-btn" title="Следующий" aria-label="Следующий результат">▼</button>
+          <span id="searchStatus" class="search-floating-status" aria-live="polite"></span>
+          <button id="toggleSearchTools" class="cb-btn" title="Расширенный поиск" aria-label="Расширенный поиск">⌕</button>
+          <button id="closeSearch" class="cb-btn" title="Закрыть (Esc)" aria-label="Закрыть поиск">✕</button>
         </div>
 
         <!-- Canvas Area (single page mode) -->
@@ -444,10 +444,10 @@
       <!-- ═══════════════════════════════════════════════════════
            ROW 2, COL 3: Right Panel (context tools)
            ═══════════════════════════════════════════════════════ -->
-      <aside class="right-panel" id="rightPanel">
+      <aside class="right-panel" id="rightPanel" aria-label="Панель инструментов">
         <div class="rp-header">
           <span class="rp-title" id="rpTitle">Инструменты</span>
-          <button class="rp-close cb-btn" id="closeRightPanel" title="Закрыть панель">✕</button>
+          <button class="rp-close cb-btn" id="closeRightPanel" title="Закрыть панель" aria-label="Закрыть панель инструментов">✕</button>
         </div>
 
         <!-- Panel: Annotations -->
@@ -539,7 +539,7 @@
               <button id="cancelBackgroundOcr" class="btn-xs">⏹ Остановить</button>
               <button id="toggleOcrConfidence" class="btn-xs tb-toggle">Качество</button>
             </div>
-            <p id="ocrStatus" class="status-line"></p>
+            <p id="ocrStatus" class="status-line" aria-live="polite"></p>
           </div>
           <div class="rp-section">
             <h3 class="rp-section-title">Пакетное OCR</h3>
@@ -552,7 +552,7 @@
               <button id="detectScanned" class="btn-xs">Определить скан</button>
             </div>
             <progress id="batchOcrProgress" value="0" max="100" style="width:100%; height:6px; margin-top:4px; display:none;"></progress>
-            <p id="batchOcrStatus" class="status-line"></p>
+            <p id="batchOcrStatus" class="status-line" aria-live="polite"></p>
           </div>
           <div class="rp-section">
             <h3 class="rp-section-title">Экспорт</h3>
@@ -692,7 +692,7 @@
       </aside>
 
       <!-- ═══ Status Bar ═══ -->
-      <footer class="status-bar" id="statusBar">
+      <footer class="status-bar" id="statusBar" role="status" aria-live="polite" aria-label="Строка состояния">
         <span class="status-bar-item" id="sbPage">Стр. — / —</span>
         <span class="status-bar-sep"></span>
         <span class="status-bar-item" id="sbZoom">100%</span>
@@ -720,23 +720,23 @@
     </div>
 
     <!-- ═══ Settings Modal ═══ -->
-    <div id="settingsModal" class="modal" aria-hidden="true">
+    <div id="settingsModal" class="modal" aria-hidden="true" role="dialog" aria-label="Настройки NovaReader">
       <div class="modal-card">
         <div class="modal-head">
           <h3>Настройки NovaReader</h3>
-          <button id="closeSettingsModal" class="btn-close">✕</button>
+          <button id="closeSettingsModal" class="btn-close" aria-label="Закрыть настройки">✕</button>
         </div>
 
-        <nav class="modal-tabs">
-          <button class="active" data-modal-tab="general">Общие</button>
-          <button data-modal-tab="appearance">Внешний вид</button>
-          <button data-modal-tab="ocr">OCR</button>
-          <button data-modal-tab="hotkeys">Клавиши</button>
-          <button data-modal-tab="advanced">Продвинутые</button>
+        <nav class="modal-tabs" role="tablist" aria-label="Разделы настроек">
+          <button class="active" data-modal-tab="general" role="tab" aria-selected="true">Общие</button>
+          <button data-modal-tab="appearance" role="tab" aria-selected="false">Внешний вид</button>
+          <button data-modal-tab="ocr" role="tab" aria-selected="false">OCR</button>
+          <button data-modal-tab="hotkeys" role="tab" aria-selected="false">Клавиши</button>
+          <button data-modal-tab="advanced" role="tab" aria-selected="false">Продвинутые</button>
         </nav>
 
         <div class="modal-body">
-          <div class="modal-tab-panel active" data-modal-panel="general">
+          <div class="modal-tab-panel active" data-modal-panel="general" role="tabpanel" aria-label="Общие настройки">
             <section>
               <h4>Панели</h4>
               <label class="checkbox-row"><input id="cfgShowSidebar" type="checkbox" checked /> <span>Левая панель</span></label>
@@ -751,7 +751,7 @@
             </section>
           </div>
 
-          <div class="modal-tab-panel" data-modal-panel="appearance">
+          <div class="modal-tab-panel" data-modal-panel="appearance" role="tabpanel" aria-label="Внешний вид">
             <section>
               <h4>Оформление</h4>
               <div class="settings-grid">
@@ -770,7 +770,7 @@
             </section>
           </div>
 
-          <div class="modal-tab-panel" data-modal-panel="ocr">
+          <div class="modal-tab-panel" data-modal-panel="ocr" role="tabpanel" aria-label="Настройки OCR">
             <section>
               <h4>Распознавание текста</h4>
               <div class="settings-grid">
@@ -811,7 +811,7 @@
             </section>
           </div>
 
-          <div class="modal-tab-panel" data-modal-panel="hotkeys">
+          <div class="modal-tab-panel" data-modal-panel="hotkeys" role="tabpanel" aria-label="Горячие клавиши">
             <section>
               <h4>Горячие клавиши</h4>
               <div class="shortcut-grid settings-hotkeys">
@@ -834,7 +834,7 @@
             </section>
           </div>
 
-          <div class="modal-tab-panel" data-modal-panel="advanced">
+          <div class="modal-tab-panel" data-modal-panel="advanced" role="tabpanel" aria-label="Продвинутые настройки">
             <section>
               <h4>Продвинутые размеры</h4>
               <div class="settings-grid">
@@ -854,11 +854,11 @@
     </div>
 
     <!-- ═══ Print Dialog ═══ -->
-    <div id="printModal" class="modal" aria-hidden="true">
+    <div id="printModal" class="modal" aria-hidden="true" role="dialog" aria-label="Печать документа">
       <div class="modal-card modal-card-sm">
         <div class="modal-head">
           <h3>Печать документа</h3>
-          <button id="closePrintModal" class="btn-close">✕</button>
+          <button id="closePrintModal" class="btn-close" aria-label="Закрыть печать">✕</button>
         </div>
         <div class="modal-body">
           <section>
@@ -909,11 +909,11 @@
     </div>
 
     <!-- ═══ Keyboard Shortcuts Quick Reference ═══ -->
-    <div id="shortcutsModal" class="modal" aria-hidden="true">
+    <div id="shortcutsModal" class="modal" aria-hidden="true" role="dialog" aria-label="Горячие клавиши">
       <div class="modal-card modal-card-sm">
         <div class="modal-head">
           <h3>Горячие клавиши</h3>
-          <button id="closeShortcutsModal" class="btn-close">✕</button>
+          <button id="closeShortcutsModal" class="btn-close" aria-label="Закрыть справку">✕</button>
         </div>
         <div class="modal-body">
           <div class="shortcuts-grid" id="shortcutsGrid">
@@ -948,7 +948,7 @@
     </div>
 
     <!-- Page Organizer Modal -->
-    <div id="pageOrganizerModal" class="modal page-organizer-modal" style="display:none">
+    <div id="pageOrganizerModal" class="modal page-organizer-modal" style="display:none" role="dialog" aria-label="Организатор страниц">
       <div class="modal-card page-organizer-card">
         <div class="modal-head">
           <h3>Организатор страниц</h3>
@@ -960,7 +960,7 @@
             <button id="pageOrgExtract" class="btn-xs" title="Извлечь выбранные в PDF">⬇ Извлечь</button>
             <button id="pageOrgReverse" class="btn-xs" title="Обратный порядок">⇅ Обратить</button>
           </div>
-          <button id="pageOrgClose" title="Закрыть">✕</button>
+          <button id="pageOrgClose" title="Закрыть" aria-label="Закрыть организатор">✕</button>
         </div>
         <div class="modal-body">
           <div id="pageOrgGrid" class="page-org-grid"></div>
@@ -972,6 +972,9 @@
         </div>
       </div>
     </div>
+
+    <!-- Screen reader announcements (aria-live region) -->
+    <div id="a11yAnnouncer" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
 
     <script type="module" src="./app.js"></script>
   </body>
