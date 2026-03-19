@@ -159,13 +159,13 @@ export async function renderPagePreviews() {
       li.appendChild(btn);
       els.pagePreviewList.appendChild(li);
     }
-  }
-
-  if (state.pageCount > maxPages) {
-    const li = document.createElement('li');
-    li.className = 'recent-item tiny muted';
-    li.textContent = `Показаны первые ${maxPages} из ${state.pageCount} страниц`;
-    els.pagePreviewList.appendChild(li);
+    const maxPages = 20;
+    if (state.pageCount > maxPages) {
+      const li = document.createElement('li');
+      li.className = 'recent-item tiny muted';
+      li.textContent = `Показаны первые ${maxPages} из ${state.pageCount} страниц`;
+      els.pagePreviewList.appendChild(li);
+    }
   }
 
   updatePreviewSelection();
