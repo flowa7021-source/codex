@@ -89,6 +89,7 @@ import { pdfEditState, initExportControllerDeps, getPageEdits, setPageEdits, und
 import { ocrSearchIndex, buildOcrSearchEntry, indexOcrPage, searchOcrIndex, exportOcrTextWithCoordinates, downloadOcrTextExport, canSearchCurrentDoc, searchScopeKey, loadSearchScope, saveSearchScope, searchHistoryKey, buildSearchResultsSummaryText, copySearchResultsSummary, exportSearchResultsSummaryTxt, exportSearchResultsCsv, exportSearchResultsJson, importSearchResultsJson, parseCsvLine, importSearchResultsCsv, clearSearchResults, renderSearchResultsList, loadSearchHistory, saveSearchHistory, renderSearchHistory, rememberSearchQuery, buildSearchHistoryText, exportSearchHistoryJson, exportSearchHistoryTxt, copySearchHistory, importSearchHistoryJson, clearSearchHistory, highlightSearchInTextLayer, scrollToSearchHighlight, searchInPdf, jumpToSearchResult, initSearchControllerDeps } from './modules/search-controller.js';
 import { initOcrControllerDeps, computeOcrConfidence, postCorrectOcrText, batchOcrState, enqueueBatchOcr, cancelBatchOcr, getBatchOcrProgress, getConfusableLatinToCyrillicMap, convertLatinLookalikesToCyrillic, hasMixedCyrillicLatinToken, computeOtsuThreshold, countHistogramPercentile, scoreCyrillicWordQuality, scoreRussianBigrams, scoreEnglishBigrams, medianDenoiseMonochrome, morphologyCloseMonochrome, estimateSkewAngleFromBinary, rotateCanvas, clearOcrRuntimeCaches, getOcrSourceCacheKey, updateOcrSourceCache, constrainOcrSourceCanvasPixels, getFreshOcrSourceCacheEntry, buildOcrSourceCanvas, estimatePageSkewAngle, cropCanvasByRelativeRect, preprocessOcrCanvas, pickVariantsByBudget, scoreOcrTextByLang, runOcrOnPreparedCanvas, normalizeOcrTextByLang, setOcrControlsBusy, cancelManualOcrTasks, enqueueOcrTask, setOcrStatus, setOcrStatusThrottled, setOcrRegionMode, drawOcrSelectionPreview, classifyOcrError, runOcrOnRectNow, runOcrOnRect, runOcrForCurrentPage, extractTextForPage, cancelBackgroundOcrScan, cancelAllOcrWork, scheduleBackgroundOcrScan, startBackgroundOcrScan } from './modules/ocr-controller.js';
 import { initWorkspaceDeps, setWorkspaceStatus, setStage4Status, initReleaseGuards, cloudSyncUrlKey, loadCloudSyncUrl, saveCloudSyncUrl, ocrTextKey, loadOcrTextData, saveOcrTextData, loadOcrTextDataAsync, buildWorkspacePayload, applyWorkspacePayload, pushWorkspaceToCloud, pullWorkspaceFromCloud, collabChannelName, broadcastWorkspaceSnapshot, toggleCollaborationChannel, importOcrJson, exportWorkspaceBundleJson, importWorkspaceBundleJson } from './modules/workspace-controller.js';
+import { initReadingProgressDeps, noteKey, bookmarkKey, viewStateKey, readingTimeKey, readingGoalKey, loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus, formatEta, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage, clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender, navigateHistoryBack, navigateHistoryForward, formatDuration, saveReadingTime, loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer, syncReadingTimerWithVisibility, resetReadingTime, _saveViewStateNow, saveViewState, loadViewState, clearViewState, renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress, saveRecent, removeRecent, clearRecent, renderRecent } from './modules/reading-progress-controller.js';
 
 // ─── Module-level loggers ───────────────────────────────────────────────────
 const logOcr = createLogger('ocr');
@@ -683,26 +684,8 @@ function saveDjvuData(payload) {
   localStorage.setItem(djvuTextKey(), JSON.stringify(payload));
 }
 
-function noteKey() {
-  return `novareader-notes:${state.docName || 'global'}`;
-}
-
-function bookmarkKey() {
-  return `novareader-bookmarks:${state.docName || 'global'}`;
-}
-
-
-function viewStateKey() {
-  return `novareader-view:${state.docName || 'global'}`;
-}
-
-function readingTimeKey() {
-  return `novareader-reading-time:${state.docName || 'global'}`;
-}
-
-function readingGoalKey() {
-  return `novareader-reading-goal:${state.docName || 'global'}`;
-}
+// noteKey, bookmarkKey, viewStateKey, readingTimeKey, readingGoalKey
+// — moved to reading-progress-controller.js
 
 // annotationKey, commentKey, invalidateAnnotationCaches, getCurrentAnnotationCtx,
 // getAnnotationDpr, loadStrokes, saveStrokes, loadComments, saveComments,
@@ -970,297 +953,15 @@ async function importDjvuDataJson(file) {
   }
 }
 
-function loadReadingGoal() {
-  try {
-    const raw = localStorage.getItem(readingGoalKey());
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!Number.isInteger(parsed?.page)) return null;
-    return parsed.page;
-  } catch (err) {
-    return null;
-  }
-}
+// loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus
+// — moved to reading-progress-controller.js
 
-function saveReadingGoal() {
-  if (!state.adapter || !state.pageCount) {
-    els.readingGoalStatus.textContent = 'Сначала откройте документ';
-    return;
-  }
-  const raw = Number.parseInt(els.readingGoalPage.value, 10);
-  if (Number.isNaN(raw)) {
-    els.readingGoalStatus.textContent = 'Введите корректный номер страницы';
-    return;
-  }
-  const goal = Math.max(1, Math.min(state.pageCount, raw));
-  state.readingGoalPage = goal;
-  localStorage.setItem(readingGoalKey(), JSON.stringify({ page: goal }));
-  renderReadingGoalStatus();
-}
-
-function clearReadingGoal() {
-  state.readingGoalPage = null;
-  localStorage.removeItem(readingGoalKey());
-  els.readingGoalPage.value = '';
-  renderReadingGoalStatus();
-}
-
-function renderReadingGoalStatus() {
-  if (!state.adapter || !state.pageCount) {
-    els.readingGoalStatus.textContent = '';
-    return;
-  }
-
-  const goal = state.readingGoalPage;
-  if (!goal) {
-    els.readingGoalStatus.textContent = '';
-    return;
-  }
-
-  els.readingGoalPage.value = String(goal);
-  const remaining = goal - state.currentPage;
-  if (remaining <= 0) {
-    els.readingGoalStatus.textContent = `Цель достигнута (стр. ${goal})`; 
-    return;
-  }
-
-  const activeMs = state.readingStartedAt ? Date.now() - state.readingStartedAt : 0;
-  const totalMs = state.readingTotalMs + activeMs;
-  const pagesDone = Math.max(1, state.currentPage);
-  const msPerPage = totalMs / pagesDone;
-  const goalEta = Number.isFinite(msPerPage) && msPerPage > 0 ? formatEta(msPerPage * remaining) : '—';
-  els.readingGoalStatus.textContent = `До цели стр. ${goal}: осталось ${remaining} стр., ETA ${goalEta}`;
-}
-
-function formatEta(ms) {
-  if (!Number.isFinite(ms) || ms <= 0) return '—';
-  const d = new Date(Date.now() + ms);
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-}
-
-function renderEtaStatus() {
-  if (!state.adapter || !state.pageCount) {
-    els.etaStatus.textContent = 'ETA завершения: —';
-    renderReadingGoalStatus();
-    return;
-  }
-
-  const activeMs = state.readingStartedAt ? Date.now() - state.readingStartedAt : 0;
-  const totalMs = state.readingTotalMs + activeMs;
-  const pagesDone = Math.max(1, state.currentPage);
-  const msPerPage = totalMs / pagesDone;
-  const remainingPages = Math.max(0, state.pageCount - state.currentPage);
-
-  if (!Number.isFinite(msPerPage) || msPerPage <= 0 || remainingPages === 0) {
-    els.etaStatus.textContent = remainingPages === 0 ? 'ETA завершения: документ пройден' : 'ETA завершения: —';
-    renderReadingGoalStatus();
-    return;
-  }
-
-  const etaMs = msPerPage * remainingPages;
-  els.etaStatus.textContent = `ETA завершения: ${formatEta(etaMs)}`;
-  renderReadingGoalStatus();
-}
-
-function renderDocStats() {
-  if (!state.adapter || !state.pageCount) {
-    els.docStats.textContent = '';
-    return;
-  }
-
-  let totalStrokes = 0;
-  let totalComments = 0;
-  for (let page = 1; page <= state.pageCount; page += 1) {
-    totalStrokes += loadStrokes(page).length;
-    totalComments += loadComments(page).length;
-  }
-
-  const bookmarks = loadBookmarks().length;
-  const activeMs = state.readingStartedAt ? Date.now() - state.readingStartedAt : 0;
-  const totalHours = (state.readingTotalMs + activeMs) / 3600000;
-  const pace = totalHours > 0.01 ? `${(state.currentPage / totalHours).toFixed(1)} стр/ч` : '—';
-
-  els.docStats.textContent = `${totalStrokes} аннот. · ${totalComments} комм. · ${bookmarks} закл. · ${pace}`;
-}
-
-function renderVisitTrail() {
-  els.visitTrailList.innerHTML = '';
-
-  if (!state.adapter || !state.visitTrail.length) {
-    const li = document.createElement('li');
-    li.className = 'recent-item';
-    li.textContent = 'История переходов пуста';
-    els.visitTrailList.appendChild(li);
-    return;
-  }
-
-  state.visitTrail.forEach((page) => {
-    const li = document.createElement('li');
-    li.className = 'recent-item';
-
-    const btn = document.createElement('button');
-    btn.textContent = `Стр. ${page}`;
-    btn.addEventListener('click', async () => {
-      if (!state.adapter) return;
-      state.currentPage = page;
-      await renderCurrentPage();
-    });
-
-    li.appendChild(btn);
-    els.visitTrailList.appendChild(li);
-  });
-}
-
-function trackVisitedPage(page) {
-  if (!state.adapter || !Number.isInteger(page)) return;
-  state.visitTrail = [page, ...state.visitTrail.filter((x) => x !== page)].slice(0, 12);
-  renderVisitTrail();
-}
-
-function clearVisitTrail() {
-  state.visitTrail = [];
-  renderVisitTrail();
-}
-
-function updateHistoryButtons() {
-  if (!els.historyBack || !els.historyForward) return;
-  els.historyBack.disabled = state.historyBack.length === 0;
-  els.historyForward.disabled = state.historyForward.length === 0;
-}
-
-function resetHistory() {
-  state.historyBack = [];
-  state.historyForward = [];
-  state.lastRenderedPage = null;
-  updateHistoryButtons();
-}
-
-function capturePageHistoryOnRender() {
-  if (!state.adapter) return;
-  const prev = state.lastRenderedPage;
-  const curr = state.currentPage;
-  if (typeof prev === 'number' && prev !== curr && !state.isHistoryNavigation) {
-    const top = state.historyBack[state.historyBack.length - 1];
-    if (top !== prev) {
-      state.historyBack.push(prev);
-      if (state.historyBack.length > 100) {
-        state.historyBack.shift();
-      }
-    }
-    state.historyForward = [];
-  }
-  state.lastRenderedPage = curr;
-  updateHistoryButtons();
-}
-
-async function navigateHistoryBack() {
-  if (!state.adapter || !state.historyBack.length) return;
-  const target = state.historyBack.pop();
-  if (!Number.isInteger(target)) return;
-  state.historyForward.push(state.currentPage);
-  state.isHistoryNavigation = true;
-  state.currentPage = target;
-  await renderCurrentPage();
-  state.isHistoryNavigation = false;
-  updateHistoryButtons();
-}
-
-async function navigateHistoryForward() {
-  if (!state.adapter || !state.historyForward.length) return;
-  const target = state.historyForward.pop();
-  if (!Number.isInteger(target)) return;
-  state.historyBack.push(state.currentPage);
-  state.isHistoryNavigation = true;
-  state.currentPage = target;
-  await renderCurrentPage();
-  state.isHistoryNavigation = false;
-  updateHistoryButtons();
-}
-
-
-let readingTimerId = null;
-
-function formatDuration(ms) {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
-  const m = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
-  const s = String(totalSeconds % 60).padStart(2, '0');
-  return `${h}:${m}:${s}`;
-}
-
-function saveReadingTime() {
-  if (!state.docName) return;
-  localStorage.setItem(readingTimeKey(), JSON.stringify({ totalMs: Math.max(0, Math.floor(state.readingTotalMs)) }));
-}
-
-function loadReadingTime() {
-  try {
-    const raw = localStorage.getItem(readingTimeKey());
-    if (!raw) return 0;
-    const parsed = JSON.parse(raw);
-    return Number.isFinite(parsed?.totalMs) ? Math.max(0, parsed.totalMs) : 0;
-  } catch (err) {
-    return 0;
-  }
-}
-
-function updateReadingTimeStatus() {
-  if (!state.adapter || !state.docName) {
-    els.readingTimeStatus.textContent = 'Время чтения: 00:00:00';
-    return;
-  }
-  const activeMs = state.readingStartedAt ? Date.now() - state.readingStartedAt : 0;
-  els.readingTimeStatus.textContent = formatDuration(state.readingTotalMs + activeMs);
-  renderDocStats();
-  renderEtaStatus();
-}
-
-function stopReadingTimer(commit = true) {
-  if (readingTimerId) {
-    clearInterval(readingTimerId);
-    readingTimerId = null;
-  }
-  if (state.readingStartedAt) {
-    state.readingTotalMs += Date.now() - state.readingStartedAt;
-    state.readingStartedAt = null;
-    if (commit) saveReadingTime();
-  }
-  updateReadingTimeStatus();
-}
-
-function startReadingTimer() {
-  if (!state.adapter || !state.docName) return;
-  if (document.hidden) return;
-  if (state.readingStartedAt) return;
-
-  state.readingStartedAt = Date.now();
-  if (!readingTimerId) {
-    readingTimerId = setInterval(updateReadingTimeStatus, 1000);
-  }
-  updateReadingTimeStatus();
-}
-
-function syncReadingTimerWithVisibility() {
-  if (!state.adapter) return;
-  if (document.hidden) {
-    stopReadingTimer(true);
-  } else {
-    startReadingTimer();
-  }
-}
-
-async function resetReadingTime() {
-  if (!state.adapter) {
-    els.readingTimeStatus.textContent = 'Сначала откройте документ';
-    return;
-  }
-  stopReadingTimer(false);
-  state.readingTotalMs = 0;
-  saveReadingTime();
-  updateReadingTimeStatus();
-  renderEtaStatus();
-  startReadingTimer();
-}
+// formatEta, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage,
+// clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender,
+// navigateHistoryBack, navigateHistoryForward, formatDuration, saveReadingTime,
+// loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer,
+// syncReadingTimerWithVisibility, resetReadingTime
+// — moved to reading-progress-controller.js
 
 async function isLikelyDjvuFile(file) {
   try {
@@ -1643,125 +1344,10 @@ function parsePageRange(str, maxPage) {
 }
 
 
-function _saveViewStateNow() {
-  if (!state.adapter || !state.docName) return;
-  const payload = {
-    page: state.currentPage,
-    zoom: Number(state.zoom.toFixed(3)),
-    rotation: state.rotation,
-    pageCount: state.pageCount,
-    updatedAt: new Date().toISOString(),
-  };
-  localStorage.setItem(viewStateKey(), JSON.stringify(payload));
-}
-const saveViewState = debounce(_saveViewStateNow, 2000);
-
-function loadViewState() {
-  try {
-    const raw = localStorage.getItem(viewStateKey());
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    return parsed;
-  } catch (err) {
-    return null;
-  }
-}
-
-function clearViewState() {
-  localStorage.removeItem(viewStateKey());
-}
-
-function renderReadingProgress() {
-  if (!state.adapter || !state.pageCount) {
-    els.progressStatus.textContent = '';
-    return;
-  }
-
-  const percent = Math.round((state.currentPage / state.pageCount) * 100);
-  els.progressStatus.textContent = `Страница ${state.currentPage} из ${state.pageCount} (${percent}%)`;
-  renderEtaStatus();
-}
-
-function restoreViewStateIfPresent() {
-  const saved = loadViewState();
-  if (!saved) return false;
-
-  if (Number.isInteger(saved.page) && saved.page >= 1 && saved.page <= state.pageCount) {
-    state.currentPage = saved.page;
-  }
-  if (typeof saved.zoom === 'number' && Number.isFinite(saved.zoom)) {
-    state.zoom = Math.min(4, Math.max(0.3, saved.zoom));
-  }
-  if (typeof saved.rotation === 'number' && Number.isFinite(saved.rotation)) {
-    state.rotation = ((saved.rotation % 360) + 360) % 360;
-  }
-  return true;
-}
-
-async function resetReadingProgress() {
-  if (!state.adapter) {
-    els.progressStatus.textContent = 'Сначала откройте документ';
-    return;
-  }
-  state.currentPage = 1;
-  state.zoom = 1;
-  state.rotation = 0;
-  clearViewState();
-  await renderCurrentPage();
-  renderSearchResultsList();
-}
-
-function saveRecent(fileName) {
-  const recent = JSON.parse(localStorage.getItem('novareader-recent') || '[]');
-  const next = [fileName, ...recent.filter((x) => x !== fileName)].slice(0, 12);
-  localStorage.setItem('novareader-recent', JSON.stringify(next));
-}
-
-function removeRecent(name) {
-  const recent = JSON.parse(localStorage.getItem('novareader-recent') || '[]');
-  const next = recent.filter((x) => x !== name);
-  localStorage.setItem('novareader-recent', JSON.stringify(next));
-  renderRecent();
-}
-
-function clearRecent() {
-  localStorage.removeItem('novareader-recent');
-  renderRecent();
-}
-
-function renderRecent() {
-  const recent = JSON.parse(localStorage.getItem('novareader-recent') || '[]');
-  els.recentList.innerHTML = '';
-
-  if (!recent.length) {
-    const li = document.createElement('li');
-    li.className = 'recent-item';
-    li.textContent = 'Список пуст';
-    els.recentList.appendChild(li);
-    return;
-  }
-
-  recent.forEach((name) => {
-    const li = document.createElement('li');
-    li.className = 'recent-item';
-
-    const nameEl = document.createElement('div');
-    nameEl.textContent = name;
-
-    const actions = document.createElement('div');
-    actions.className = 'inline-actions';
-
-    const removeBtn = document.createElement('button');
-    removeBtn.textContent = 'Удалить';
-    removeBtn.addEventListener('click', () => removeRecent(name));
-
-    actions.appendChild(removeBtn);
-    li.appendChild(nameEl);
-    li.appendChild(actions);
-    els.recentList.appendChild(li);
-  });
-}
+// _saveViewStateNow, saveViewState, loadViewState, clearViewState,
+// renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress,
+// saveRecent, removeRecent, clearRecent, renderRecent
+// — moved to reading-progress-controller.js
 
 const THEME_CLASSES = ['light', 'sepia', 'high-contrast', 'theme-auto'];
 
@@ -3710,6 +3296,13 @@ initWorkspaceDeps({
   renderAnnotations, renderCommentList,
   clearDocumentAnnotationStorage, clearDocumentCommentStorage,
   renderPagePreviews, renderCurrentPage,
+});
+initReadingProgressDeps({
+  renderCurrentPage,
+  renderSearchResultsList,
+  loadStrokes,
+  loadComments,
+  loadBookmarks,
 });
 
 setupRuntimeDiagnostics();
