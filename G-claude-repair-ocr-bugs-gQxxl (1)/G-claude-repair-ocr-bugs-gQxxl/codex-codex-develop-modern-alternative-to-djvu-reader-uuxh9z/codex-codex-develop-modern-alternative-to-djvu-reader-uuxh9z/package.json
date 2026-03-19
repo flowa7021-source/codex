@@ -3,7 +3,7 @@
   "version": "2.0.0-alpha",
   "description": "NovaReader desktop build (no Python/server runtime)",
   "type": "module",
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "author": "NovaReader",
   "license": "MIT",
   "scripts": {
