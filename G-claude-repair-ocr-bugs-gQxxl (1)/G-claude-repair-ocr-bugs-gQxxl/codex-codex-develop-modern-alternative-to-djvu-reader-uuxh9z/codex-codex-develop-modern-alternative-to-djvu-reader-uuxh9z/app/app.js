@@ -90,6 +90,8 @@ import { ocrSearchIndex, buildOcrSearchEntry, indexOcrPage, searchOcrIndex, expo
 import { initOcrControllerDeps, computeOcrConfidence, postCorrectOcrText, batchOcrState, enqueueBatchOcr, cancelBatchOcr, getBatchOcrProgress, getConfusableLatinToCyrillicMap, convertLatinLookalikesToCyrillic, hasMixedCyrillicLatinToken, computeOtsuThreshold, countHistogramPercentile, scoreCyrillicWordQuality, scoreRussianBigrams, scoreEnglishBigrams, medianDenoiseMonochrome, morphologyCloseMonochrome, estimateSkewAngleFromBinary, rotateCanvas, clearOcrRuntimeCaches, getOcrSourceCacheKey, updateOcrSourceCache, constrainOcrSourceCanvasPixels, getFreshOcrSourceCacheEntry, buildOcrSourceCanvas, estimatePageSkewAngle, cropCanvasByRelativeRect, preprocessOcrCanvas, pickVariantsByBudget, scoreOcrTextByLang, runOcrOnPreparedCanvas, normalizeOcrTextByLang, setOcrControlsBusy, cancelManualOcrTasks, enqueueOcrTask, setOcrStatus, setOcrStatusThrottled, setOcrRegionMode, drawOcrSelectionPreview, classifyOcrError, runOcrOnRectNow, runOcrOnRect, runOcrForCurrentPage, extractTextForPage, cancelBackgroundOcrScan, cancelAllOcrWork, scheduleBackgroundOcrScan, startBackgroundOcrScan } from './modules/ocr-controller.js';
 import { initWorkspaceDeps, setWorkspaceStatus, setStage4Status, initReleaseGuards, cloudSyncUrlKey, loadCloudSyncUrl, saveCloudSyncUrl, ocrTextKey, loadOcrTextData, saveOcrTextData, loadOcrTextDataAsync, buildWorkspacePayload, applyWorkspacePayload, pushWorkspaceToCloud, pullWorkspaceFromCloud, collabChannelName, broadcastWorkspaceSnapshot, toggleCollaborationChannel, importOcrJson, exportWorkspaceBundleJson, importWorkspaceBundleJson } from './modules/workspace-controller.js';
 import { initReadingProgressDeps, noteKey, bookmarkKey, viewStateKey, readingTimeKey, readingGoalKey, loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus, formatEta, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage, clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender, navigateHistoryBack, navigateHistoryForward, formatDuration, saveReadingTime, loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer, syncReadingTimerWithVisibility, resetReadingTime, _saveViewStateNow, saveViewState, loadViewState, clearViewState, renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress, saveRecent, removeRecent, clearRecent, renderRecent } from './modules/reading-progress-controller.js';
+import { initFileControllerDeps, revokeCurrentObjectUrl, djvuTextKey, loadDjvuData, saveDjvuData, isLikelyDjvuFile, extractDjvuFallbackText, openFile } from './modules/file-controller.js';
+import { initPdfOpsDeps, mergePdfFiles, buildMergedPdfFromCanvases, splitPdfPages, parsePageRange } from './modules/pdf-ops-controller.js';
 
 // ─── Module-level loggers ───────────────────────────────────────────────────
 const logOcr = createLogger('ocr');
@@ -660,29 +662,8 @@ class UnsupportedAdapter {
 }
 
 
-function revokeCurrentObjectUrl() {
-  if (state.currentObjectUrl) {
-    URL.revokeObjectURL(state.currentObjectUrl);
-    state.currentObjectUrl = null;
-  }
-}
-
-function djvuTextKey() {
-  return `novareader-djvu-data:${state.docName || 'global'}`;
-}
-
-function loadDjvuData() {
-  try {
-    const raw = localStorage.getItem(djvuTextKey());
-    return raw ? JSON.parse(raw) : null;
-  } catch (err) {
-    return null;
-  }
-}
-
-function saveDjvuData(payload) {
-  localStorage.setItem(djvuTextKey(), JSON.stringify(payload));
-}
+// revokeCurrentObjectUrl, djvuTextKey, loadDjvuData, saveDjvuData
+// — moved to file-controller.js
 
 // noteKey, bookmarkKey, viewStateKey, readingTimeKey, readingGoalKey
 // — moved to reading-progress-controller.js
@@ -963,207 +944,12 @@ async function importDjvuDataJson(file) {
 // syncReadingTimerWithVisibility, resetReadingTime
 // — moved to reading-progress-controller.js
 
-async function isLikelyDjvuFile(file) {
-  try {
-    const header = new Uint8Array(await file.slice(0, 16).arrayBuffer());
-    const text = new TextDecoder('ascii', { fatal: false }).decode(header);
-    return text.includes('AT&TFORM') || text.startsWith('AT&T');
-  } catch (err) {
-    return false;
-  }
-}
-
-async function extractDjvuFallbackText(file) {
-  try {
-    const sampleSize = Math.min(file.size, 2 * 1024 * 1024);
-    const bytes = new Uint8Array(await file.slice(0, sampleSize).arrayBuffer());
-    const utf8 = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
-    const chunks = utf8.match(/[A-Za-zА-Яа-яЁё0-9][A-Za-zА-Яа-яЁё0-9 ,.:;!?()\-]{20,}/g) || [];
-    let text = chunks
-      .map((x) => x.replace(/\s+/g, ' ').trim())
-      .filter((x) => x.length >= 20)
-      .slice(0, 40)
-      .join('\n');
-
-    if (!text) {
-      const normalized = utf8
-        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      text = normalized.length >= 20 ? normalized : '';
-    }
-
-    return text.slice(0, 5000);
-  } catch (err) {
-    return '';
-  }
-}
+// isLikelyDjvuFile, extractDjvuFallbackText
+// — moved to file-controller.js
 
 
-const _openFileImpl = async function openFileImpl(file) {
-  const openStartedAt = performance.now();
-  pushDiagnosticEvent('file.open.start', { name: file?.name || 'unknown', size: Number(file?.size) || 0 });
-  revokeCurrentObjectUrl();
-  clearPageRenderCache();
-  revokeAllTrackedUrls();
-  clearAllTimers(); // Q0.3: prevent timer leaks from previous document
-  state.file = file;
-  state.docName = file.name;
-  state.currentPage = 1;
-  state.zoom = 1;
-  state.rotation = 0;
-  state.searchResults = [];
-  state.searchCursor = -1;
-  state.outline = [];
-  state.visitTrail = [];
-  resetHistory();
-  els.searchStatus.textContent = '';
-  setWorkspaceStatus('');
-  setBookmarksStatus('');
-  els.pageText.value = '';
-  ensureTextToolsVisible();
-  state.djvuBinaryDetected = false;
-  invalidateAnnotationCaches();
-  clearOcrRuntimeCaches('file-open');
-  resetTesseractAvailability(); // allow Tesseract retry on each new file
-
-  const lower = file.name.toLowerCase();
-
-  if (lower.endsWith('.pdf')) {
-    try {
-      const pdf = await ensurePdfJs();
-      const data = await progressiveLoader.loadFileProgressive(file);
-      // For large files (>100MB), disable eager page fetching to reduce memory
-      const pdfOptions = { data };
-      if (file.size > 100 * 1024 * 1024) {
-        pdfOptions.disableAutoFetch = true;
-        pdfOptions.disableStream = true;
-      }
-      const pdfDoc = await pdf.getDocument(pdfOptions).promise;
-      state.adapter = new PDFAdapter(pdfDoc);
-    } catch (err) {
-      state.adapter = new UnsupportedAdapter(file.name);
-      els.searchStatus.textContent = 'Не удалось загрузить локальный PDF runtime. Проверьте целостность приложения.';
-    }
-  } else if (lower.endsWith('.djvu') || lower.endsWith('.djv')) {
-    const djvuData = loadDjvuData();
-    state.djvuBinaryDetected = await isLikelyDjvuFile(file);
-
-    let openedByNative = false;
-    try {
-      const DjVu = await ensureDjVuJs();
-      const data = await progressiveLoader.loadFileProgressive(file);
-      const doc = new DjVu.Document(data);
-      state.adapter = new DjVuNativeAdapter(doc, file.name);
-      openedByNative = true;
-      els.searchStatus.textContent = 'DjVu файл открыт встроенным runtime.';
-    } catch (err) {
-      const hasPageData = Array.isArray(djvuData?.pagesImages) && djvuData.pagesImages.length > 0;
-      let effectiveDjvuData = djvuData;
-
-      if (!hasPageData) {
-        const fallbackText = await extractDjvuFallbackText(file);
-        if (fallbackText) {
-          effectiveDjvuData = {
-            ...(djvuData || {}),
-            pageCount: Math.max(1, Number(djvuData?.pageCount) || 1),
-            pagesText: [fallbackText],
-          };
-        }
-      }
-
-      state.adapter = new DjVuAdapter(file.name, effectiveDjvuData);
-
-      if (!hasPageData) {
-        els.searchStatus.textContent = effectiveDjvuData?.pagesText?.[0]
-          ? 'DjVu открыт в режиме совместимости. Для полного рендера нужен встроенный runtime файл app/vendor/djvu.js.'
-          : 'DjVu-данные не найдены. Проверьте наличие app/vendor/djvu.js в поставке.';
-      }
-    }
-
-    if (openedByNative) {
-      saveDjvuData({});
-    }
-  } else if (lower.endsWith('.epub')) {
-    try {
-      const data = await progressiveLoader.loadFileProgressive(file);
-      const epubData = await parseEpub(data);
-      state.adapter = new EpubAdapter(epubData);
-    } catch (err) {
-      state.adapter = new UnsupportedAdapter(file.name);
-      els.searchStatus.textContent = `ePub ошибка: ${err?.message || 'неизвестная ошибка'}`;
-    }
-  } else if (/\.(png|jpe?g|webp|gif|bmp)$/i.test(lower)) {
-    const url = URL.createObjectURL(file);
-    state.currentObjectUrl = url;
-    const imageMeta = await loadImage(url);
-    state.adapter = new ImageAdapter(url, { width: imageMeta.width, height: imageMeta.height });
-  } else {
-    state.adapter = new UnsupportedAdapter(file.name);
-  }
-
-  state.pageCount = state.adapter.getPageCount();
-
-  // Auto-load PDF forms if adapter is PDF
-  if (state.adapter?.type === 'pdf') {
-    formManager.loadFromAdapter(state.adapter).catch(() => {});
-  }
-
-  const hadSavedState = restoreViewStateIfPresent();
-  // If no saved zoom, auto-fit page width for optimal initial display quality
-  if (!hadSavedState && state.adapter) {
-    try {
-      const vp = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);
-      const scrollbarW = els.canvasWrap.offsetWidth - els.canvasWrap.clientWidth;
-      const available = Math.max(200, els.canvasWrap.clientWidth - Math.max(16, scrollbarW + 16));
-      const autoZoom = available / vp.width;
-      if (autoZoom > 0.3 && autoZoom < 4) {
-        state.zoom = Math.round(autoZoom * 100) / 100;
-      }
-    } catch (err) { console.warn('[app] zoom restore fallback:', err?.message); }
-  }
-  stopReadingTimer(false);
-  state.readingTotalMs = loadReadingTime();
-  state.readingStartedAt = null;
-  state.readingGoalPage = loadReadingGoal();
-  els.pageInput.max = String(state.pageCount);
-  els.pageInput.value = String(state.currentPage);
-  if (els.cloudSyncUrl) {
-    els.cloudSyncUrl.value = loadCloudSyncUrl();
-  }
-  if (state.collabEnabled) {
-    toggleCollaborationChannel();
-  }
-
-  saveRecent(file.name);
-  renderRecent();
-  loadNotes();
-  renderBookmarks();
-  renderDocInfo();
-  renderVisitTrail();
-  renderSearchHistory();
-  renderSearchResultsList();
-  renderDocStats();
-  await renderOutline();
-  await renderPagePreviews();
-  await renderCurrentPage();
-  pushDiagnosticEvent('file.open.finish', { name: state.docName, ms: Math.round(performance.now() - openStartedAt), pages: state.pageCount });
-  estimatePageSkewAngle(state.currentPage);
-  if (state.settings?.backgroundOcr) {
-    scheduleBackgroundOcrScan('open-file', 900);
-  } else {
-    setOcrStatus('OCR: фоновое распознавание выключено в настройках');
-  }
-  loadPersistedEdits();
-  renderCommentList();
-  updateReadingTimeStatus();
-  renderEtaStatus();
-  startReadingTimer();
-  recordPerfMetric('pageLoadTimes', Math.round(performance.now() - openStartedAt));
-  try { toastInfo(`${state.docName || 'Документ'} — ${state.pageCount} стр.`); } catch (err) { console.warn('[file] toast failed:', err?.message); }
-  try { announce(`Документ ${state.docName} открыт, ${state.pageCount} страниц`); } catch (err) { console.warn('[a11y] announce failed:', err?.message); }
-};
-const openFile = withErrorBoundary(_openFileImpl, 'file-open');
+// openFile (_openFileImpl + withErrorBoundary wrapper)
+// — moved to file-controller.js
 
 // ─── Rendering & Text Layer (extracted to render-controller.js) ──────────────
 // Functions: _schedulePreRender, _preRenderAdjacent, _blitCacheToCanvas,
@@ -1175,173 +961,10 @@ const openFile = withErrorBoundary(_openFileImpl, 'file-open');
 // handleImageInsertion, addWatermarkToPage, addStampToPage, openSignaturePad
 // — now imported from ./modules/render-controller.js
 
-// ─── PDF Merge (via pdf-lib — preserves text, fonts, links, forms) ─────────
-async function mergePdfFiles() {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.pdf';
-  input.multiple = true;
-  input.addEventListener('change', async () => {
-    const files = Array.from(input.files || []);
-    if (files.length < 2) {
-      setOcrStatus('Выберите 2+ PDF файла для объединения');
-      return;
-    }
-    try {
-      setOcrStatus(`Объединение ${files.length} файлов (без потери данных)...`);
-      const mergedBlob = await mergePdfDocuments(files);
+// mergePdfFiles — moved to pdf-ops-controller.js
 
-      const url = safeCreateObjectURL(mergedBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'merged.pdf';
-      a.click();
-      URL.revokeObjectURL(url);
-      setOcrStatus(`Объединено: ${files.length} файлов (${Math.round(mergedBlob.size / 1024)} КБ)`);
-      pushDiagnosticEvent('pdf.merge', { files: files.length, sizeKb: Math.round(mergedBlob.size / 1024) });
-    } catch (err) {
-      setOcrStatus(`Ошибка объединения: ${err?.message || 'неизвестная'}`);
-      pushDiagnosticEvent('pdf.merge.error', { message: err?.message }, 'error');
-    }
-  });
-  input.click();
-}
-
-function buildMergedPdfFromCanvases(pages) {
-  // Simple PDF builder with images
-  const encoder = new TextEncoder();
-  let objects = [];
-  let xrefOffsets = [];
-  let body = '';
-  let offset = 0;
-
-  const header = '%PDF-1.4\n';
-  body += header;
-  offset = header.length;
-
-  // Catalog
-  objects.push(`1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`);
-  // Pages
-  const pageRefs = pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ');
-  objects.push(`2 0 obj\n<< /Type /Pages /Kids [${pageRefs}] /Count ${pages.length} >>\nendobj\n`);
-
-  let objNum = 3;
-  const imageObjects = [];
-
-  for (let i = 0; i < pages.length; i++) {
-    const p = pages[i];
-    const imgData = p.canvas.toDataURL('image/jpeg', 0.85);
-    const base64 = imgData.split(',')[1];
-    const imgBytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-
-    const pageObjNum = objNum++;
-    const contentsObjNum = objNum++;
-    const imgObjNum = objNum++;
-
-    const stream = `q ${p.width} 0 0 ${p.height} 0 0 cm /Img${i} Do Q`;
-
-    objects.push(`${pageObjNum} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${p.width} ${p.height}] /Contents ${contentsObjNum} 0 R /Resources << /XObject << /Img${i} ${imgObjNum} 0 R >> >> >>\nendobj\n`);
-    objects.push(`${contentsObjNum} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`);
-
-    imageObjects.push({ objNum: imgObjNum, data: imgBytes, width: p.width, height: p.height });
-  }
-
-  // Build the final PDF
-  let pdfParts = [header];
-  for (const obj of objects) {
-    xrefOffsets.push(offset);
-    pdfParts.push(obj);
-    offset += obj.length;
-  }
-
-  // Image stream objects
-  for (const img of imageObjects) {
-    const imgHeader = `${img.objNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.data.length} >>\nstream\n`;
-    const imgFooter = `\nendstream\nendobj\n`;
-    xrefOffsets.push(offset);
-    pdfParts.push(imgHeader);
-    offset += imgHeader.length;
-    pdfParts.push(img.data);
-    offset += img.data.length;
-    pdfParts.push(imgFooter);
-    offset += imgFooter.length;
-  }
-
-  const xrefStart = offset;
-  const totalObjs = objects.length + imageObjects.length + 1;
-  let xref = `xref\n0 ${totalObjs}\n0000000000 65535 f \n`;
-  for (const xo of xrefOffsets) {
-    xref += `${String(xo).padStart(10, '0')} 00000 n \n`;
-  }
-  xref += `trailer\n<< /Size ${totalObjs} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
-  pdfParts.push(xref);
-
-  // Combine text and binary parts
-  const textParts = pdfParts.filter(p => typeof p === 'string');
-  const allParts = pdfParts.map(p => typeof p === 'string' ? encoder.encode(p) : p);
-  const totalSize = allParts.reduce((s, p) => s + p.length, 0);
-  const result = new Uint8Array(totalSize);
-  let pos = 0;
-  for (const p of allParts) { result.set(p, pos); pos += p.length; }
-
-  return new Blob([result], { type: 'application/pdf' });
-}
-
-// ─── PDF Split (via pdf-lib — preserves all content) ────────────────────────
-async function splitPdfPages() {
-  if (!state.adapter || state.adapter.type !== 'pdf') {
-    setOcrStatus('Разделение доступно только для PDF');
-    return;
-  }
-  const rangeStr = await nrPrompt(`Введите диапазон страниц (напр. "1-3" или "1,3,5-7").\nВсего страниц: ${state.pageCount}`);
-  if (!rangeStr) return;
-
-  const pageNums = parsePageRangeLib(rangeStr, state.pageCount);
-  if (!pageNums.length) {
-    setOcrStatus('Неверный диапазон страниц');
-    return;
-  }
-
-  try {
-    setOcrStatus(`Извлечение ${pageNums.length} страниц (без потери данных)...`);
-    const arrayBuffer = await state.file.arrayBuffer();
-    const blob = await splitPdfDocument(arrayBuffer, pageNums);
-
-    if (!blob) {
-      setOcrStatus('Ошибка: не удалось извлечь страницы');
-      return;
-    }
-
-    const url = safeCreateObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${state.docName || 'document'}-pages-${rangeStr}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setOcrStatus(`Извлечено ${pageNums.length} страниц (${Math.round(blob.size / 1024)} КБ)`);
-    pushDiagnosticEvent('pdf.split', { pages: pageNums.length, sizeKb: Math.round(blob.size / 1024) });
-  } catch (err) {
-    setOcrStatus(`Ошибка: ${err?.message || 'неизвестная'}`);
-    pushDiagnosticEvent('pdf.split.error', { message: err?.message }, 'error');
-  }
-}
-
-function parsePageRange(str, maxPage) {
-  const parts = str.split(',').map(s => s.trim()).filter(Boolean);
-  const result = [];
-  for (const part of parts) {
-    const rangeParts = part.split('-').map(s => parseInt(s.trim(), 10));
-    if (rangeParts.length === 1 && !isNaN(rangeParts[0])) {
-      const p = rangeParts[0];
-      if (p >= 1 && p <= maxPage) result.push(p);
-    } else if (rangeParts.length === 2 && !isNaN(rangeParts[0]) && !isNaN(rangeParts[1])) {
-      const from = Math.max(1, rangeParts[0]);
-      const to = Math.min(maxPage, rangeParts[1]);
-      for (let i = from; i <= to; i++) result.push(i);
-    }
-  }
-  return [...new Set(result)].sort((a, b) => a - b);
-}
+// buildMergedPdfFromCanvases, splitPdfPages, parsePageRange
+// — moved to pdf-ops-controller.js
 
 
 // _saveViewStateNow, saveViewState, loadViewState, clearViewState,
@@ -3303,6 +2926,25 @@ initReadingProgressDeps({
   loadStrokes,
   loadComments,
   loadBookmarks,
+});
+initFileControllerDeps({
+  withErrorBoundary,
+  renderCurrentPage, renderOutline, renderPagePreviews,
+  resetHistory, setWorkspaceStatus, setBookmarksStatus,
+  ensureTextToolsVisible, invalidateAnnotationCaches, clearOcrRuntimeCaches,
+  restoreViewStateIfPresent, stopReadingTimer, loadReadingTime, loadReadingGoal,
+  loadCloudSyncUrl, toggleCollaborationChannel,
+  saveRecent, renderRecent, loadNotes, renderBookmarks,
+  renderDocInfo, renderVisitTrail, renderSearchHistory, renderSearchResultsList,
+  renderDocStats, estimatePageSkewAngle, scheduleBackgroundOcrScan, setOcrStatus,
+  loadPersistedEdits, renderCommentList, updateReadingTimeStatus, renderEtaStatus,
+  startReadingTimer,
+  PDFAdapter, DjVuAdapter, DjVuNativeAdapter, ImageAdapter, UnsupportedAdapter,
+});
+initPdfOpsDeps({
+  setOcrStatus, safeCreateObjectURL, pushDiagnosticEvent,
+  mergePdfDocuments, splitPdfDocument, parsePageRangeLib,
+  nrPrompt,
 });
 
 setupRuntimeDiagnostics();
