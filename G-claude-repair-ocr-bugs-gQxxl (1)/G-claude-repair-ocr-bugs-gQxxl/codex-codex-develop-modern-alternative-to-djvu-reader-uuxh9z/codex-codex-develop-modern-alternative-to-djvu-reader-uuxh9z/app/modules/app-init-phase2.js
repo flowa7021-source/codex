@@ -20,6 +20,7 @@ import { nrPrompt } from './modal-prompt.js';
 import { toastSuccess, toastError, toastWarning, toastInfo, toastProgress } from './toast.js';
 import { mergePdfDocuments } from './pdf-operations.js';
 import { clearPageRenderCache, revokeAllTrackedUrls } from './perf.js';
+import { _updatePageUI } from './render-controller.js';
 
 export function initPhase2Modules(deps) {
   const { renderCurrentPage, goToPage } = deps;
