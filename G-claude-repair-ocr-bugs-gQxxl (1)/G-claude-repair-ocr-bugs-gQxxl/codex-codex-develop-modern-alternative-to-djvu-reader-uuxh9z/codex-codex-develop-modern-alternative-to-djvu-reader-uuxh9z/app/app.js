@@ -250,7 +250,8 @@ els.cfgTextPanelHeight?.addEventListener('input', previewUiSizeFromModal);
 els.cfgAnnotationCanvasScale?.addEventListener('input', previewUiSizeFromModal);
 els.settingsModal?.addEventListener('click', (e) => { if (e.target === els.settingsModal) closeSettingsModal(); });
 
-els.fileInput.addEventListener('change', async (e) => {
+// File input handler — will be overridden by tab manager integration below
+els.fileInput.addEventListener('change', els.fileInput._nrChangeHandler = async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await openFile(file);
@@ -305,20 +306,7 @@ els.rotate.addEventListener('click', async () => {
   if (state.settings?.backgroundOcr) scheduleBackgroundOcrScan('save-settings', 600);
 });
 
-els.saveNotes.addEventListener('click', () => saveNotes('manual'));
-[els.notesTitle, els.notesTags, els.notes].filter(Boolean).forEach((el) => {
-  el.addEventListener('input', queueNotesAutosave);
-});
-els.exportNotes.addEventListener('click', exportNotes);
-els.exportNotesMd.addEventListener('click', exportNotesMarkdown);
-els.exportNotesJson.addEventListener('click', exportNotesJson);
-els.importNotesJson.addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importNotesJson(file);
-  e.target.value = '';
-});
-els.insertTimestamp.addEventListener('click', insertTimestamp);
+// Notes event bindings moved to notes-controller.js (initNotesController)
 els.saveHotkeys.addEventListener('click', saveHotkeys);
 els.resetHotkeys.addEventListener('click', resetHotkeys);
 els.autoFixHotkeys.addEventListener('click', autoFixHotkeys);
@@ -410,21 +398,7 @@ els.copySearchResults.addEventListener('click', async () => {
 els.saveReadingGoal.addEventListener('click', saveReadingGoal);
 els.clearReadingGoal.addEventListener('click', clearReadingGoal);
 els.themeToggle?.addEventListener('click', toggleTheme);
-els.addBookmark.addEventListener('click', addBookmark);
-els.addBookmarkToolbar?.addEventListener('click', addBookmark);
-els.clearBookmarks.addEventListener('click', clearBookmarks);
-els.exportBookmarks.addEventListener('click', exportBookmarksJson);
-els.importBookmarks.addEventListener('change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importBookmarksJson(file);
-  e.target.value = '';
-});
-els.bookmarkFilter.addEventListener('input', renderBookmarks);
-els.clearBookmarkFilter.addEventListener('click', () => {
-  els.bookmarkFilter.value = '';
-  renderBookmarks();
-});
+// Bookmark event bindings moved to bookmark-controller.js (initBookmarkController)
 els.downloadFile.addEventListener('click', downloadCurrentFile);
 els.printPage.addEventListener('click', printCanvasPage);
 els.importDjvuDataQuick?.addEventListener('click', () => els.importDjvuDataJson?.click());
@@ -1388,7 +1362,6 @@ tabManager.onDeactivate = (tab) => {
 };
 
 // Hook into file opening to register tabs
-const _originalOpenFile = openFile;
 const openFileWithTabs = async (file) => {
   const data = await file.arrayBuffer();
   const bytes = new Uint8Array(data);
@@ -1401,20 +1374,50 @@ const openFileWithTabs = async (file) => {
   tabManager.open(file.name, type, bytes);
 };
 
-// Override fileInput handler
-els.fileInput.removeEventListener('change', els.fileInput._changeHandler);
-els.fileInput._changeHandler = async (e) => {
+// Override fileInput handler: remove original, add tab-aware one
+if (els.fileInput._nrChangeHandler) {
+  els.fileInput.removeEventListener('change', els.fileInput._nrChangeHandler);
+}
+els.fileInput._nrChangeHandler = async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await openFileWithTabs(file);
   e.target.value = '';
 };
-els.fileInput.addEventListener('change', els.fileInput._changeHandler);
+els.fileInput.addEventListener('change', els.fileInput._nrChangeHandler);
 
 // Tab bar new tab button
 document.getElementById('tabBarNewTab')?.addEventListener('click', () => {
   els.fileInput?.click();
 });
+
+// Persist tab metadata to sessionStorage for session recovery
+function saveTabsToSession() {
+  try {
+    const tabs = tabManager.getAllTabs().map(t => ({
+      name: t.name, type: t.type, activeTabId: tabManager.activeTabId === t.id,
+      state: t.state, modified: t.modified,
+      // Only store bytes for files < 5MB
+      bytes: t.bytes && t.bytes.length < 5 * 1024 * 1024 ? Array.from(t.bytes) : null,
+    }));
+    sessionStorage.setItem('novareader-tabs', JSON.stringify(tabs));
+  } catch (_) { /* quota exceeded or unavailable */ }
+}
+
+// Auto-save tabs on visibility change / before unload
+window.addEventListener('visibilitychange', () => { if (document.hidden) saveTabsToSession(); });
+window.addEventListener('beforeunload', saveTabsToSession);
+
+// Restore tabs from session on startup
+try {
+  const savedTabs = JSON.parse(sessionStorage.getItem('novareader-tabs') || '[]');
+  for (const t of savedTabs) {
+    if (t.bytes && t.name) {
+      const bytes = new Uint8Array(t.bytes);
+      tabManager.open(t.name, t.type || 'pdf', bytes, t.state || {});
+    }
+  }
+} catch (_) { /* invalid or no session data */ }
 
 window._tabManagerInstance = tabManager;
 
@@ -1434,8 +1437,6 @@ window.addEventListener('novareader-goto-page', async (e) => {
 });
 
 // Hook page navigation to update bookmark button and thumbnails
-const _origRenderCurrentPage = renderCurrentPage;
-// Note: renderCurrentPage is already imported; we add a post-render hook
 window.addEventListener('page-rendered', () => {
   updateBookmarkButton();
   highlightThumbPage();
