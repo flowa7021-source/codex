@@ -1,375 +1,231 @@
-# NovaReader — План глобального обновления
+# План обновления NovaReader — PDF in-place, вкладки, OCR, закладки
 
-## Текущее состояние
+## Фаза 1: PDF-операции работают in-place (без создания новых файлов)
 
-| Компонент | LOC | Качество | Оценка |
-|-----------|-----|----------|--------|
-| app.js (декомпозирован) | 1,425 | Модульный, 84 импорта, ~870 event bindings | 7/10 архитектура |
-| styles.css | 2,559 | Полная тема: dark/light/sepia/high-contrast, a11y | 8/10 |
-| index.html | 981 | Семантичный, 104 aria-*, 37 role=, WCAG-ready | 9/10 |
-| 101 модуль | ~28,000 | 101 ready | 8/10 |
-| **Итого** | **~33,000** | | |
+### 1.1 Добавить функцию reloadPdfFromBytes() в file-controller.js
+- Принимает `Uint8Array`, обновляет `state.pdfBytes`, `state.file`, `state.adapter`
+- Переоткрывает PDF через pdf.js `getDocument({ data: bytes })`
+- Вызывает `renderCurrentPage()` для обновления отображения
+- Сохраняет текущую страницу и zoom
 
-**Сильные стороны:** PDF.js рендеринг, тёмная тема 2.0, OCR через Tesseract с предобработкой, PDF операции (merge/split/watermark/headers/Bates/flatten/accessibility), i18n 17 языков, кэширование страниц, 5 адаптеров (PDF, DjVu×2, Image, EPUB), полная a11y (ARIA, keyboard, screen reader), toast-уведомления, undo/redo, context menus, tooltips.
+### 1.2 Переписать обработчики в pdf-pro-handlers.js
+Вместо скачивания нового файла — вызывать `reloadPdfFromBytes()`:
+- **rotatePdfPages** → повернуть + перезагрузить в viewer
+- **splitPdfDocument** (удаление страницы) → удалить + перезагрузить
+- **flattenPdf** → выравнять + перезагрузить
+- **addHeaderFooter** → добавить + перезагрузить
+- **addBatesNumbering** → пронумеровать + перезагрузить
+- **createSearchablePdf** → применить + перезагрузить (вместо скачивания)
 
-**Оставшиеся задачи:**
-- ~~Большие модули нуждаются в дальнейшей декомпозиции~~ → ocr-controller 869 LOC + ocr-image-processing 592 LOC; docx-converter 411 LOC + docx-structure-detector 674 LOC
-- ~~Форм-валидация отсутствует~~ → Добавлена (validateAll, validateField, _validateFormat)
-- ~~Testing инфраструктура не создана~~ → 220 тестов / 45 suites (Node.js built-in test runner)
+### 1.3 Добавить кнопку "Сохранить как" для экспорта изменённого PDF
+- Кнопка в toolbar, скачивает текущий `state.pdfBytes` как файл
+- Это единственный путь получить файл наружу
 
----
-
-## Фаза 1: Стабильность и архитектура ✅ ЗАВЕРШЕНА
-
-> Цель: сделать код поддерживаемым и надёжным
-
-### 1.1 Декомпозиция app.js ✅
-Разделить монолит на модули по ответственности:
-
-| Новый модуль | Функции из app.js | ~LOC |
-|-------------|-------------------|------|
-| `viewer-core.js` | renderCurrentPage, renderTextLayer, zoom/fit/rotate, pan | ~800 |
-| `file-loader.js` | openFile, adapters (PDF/DjVu/Image/EPUB/Unsupported) | ~600 |
-| `annotations.js` | strokes, shapes, comments, import/export annotations | ~500 |
-| `ocr-pipeline.js` | buildOcrSourceCanvas, runOcrOnRect, runOcrForCurrentPage, background scan | ~700 |
-| `search-engine.js` | searchInPdf, highlightSearchInTextLayer, search history | ~400 |
-| `export-manager.js` | exportCurrentDocToWord, generateDocxBlob, capturePageAsImageData | ~300 |
-| `ui-bindings.js` | Все addEventListener, event handlers, UI state | ~1200 |
-| `outline-previews.js` | buildOutlineItems, renderOutline, renderPagePreviews | ~300 |
-| `workspace-cloud.js` | pushWorkspaceToCloud, pullWorkspaceFromCloud, import/export workspace | ~400 |
-| `pdf-tools-ui.js` | Pro PDF Tool Handlers (линии 8611-9739) | ~1100 |
-| `reading-session.js` | readingTime, readingProgress, page history navigation | ~200 |
-| `continuous-scroll.js` | Режим непрерывной прокрутки | ~200 |
-
-**Результат:** app.js → 28 модулей, каждый <800 строк, с чистыми импортами.
-
-### 1.2 Система уведомлений (Toast) ✅
-Заменить `setOcrStatus()` на полноценную toast-систему:
-- Типы: success, error, warning, info, progress
-- Автоскрытие через 3-5 секунд
-- Стек до 5 уведомлений
-- Прогресс-бар для длительных операций
-- Click-to-dismiss
-- Файл: `app/modules/toast.js` (~150 LOC)
-
-### 1.3 Undo/Redo система ✅
-- Глобальный стек команд (Command pattern)
-- Поддержка: редактирование текста, аннотации, перемещение блоков
-- Ctrl+Z / Ctrl+Shift+Z
-- Файл: `app/modules/undo-redo.js` (~200 LOC)
-
-### 1.4 Улучшение обработки ошибок ✅
-- Обёрнуть все 87 try/catch в единый error handler
-- Error boundary для рендеринга
-- Автовосстановление при крашах рендеринга (retry с fallback)
-- Сохранение состояния при ошибке
+**Файлы:** `file-controller.js`, `pdf-pro-handlers.js`, `render-controller.js`
 
 ---
 
-## Фаза 2: Качество просмотра документов ✅ ЗАВЕРШЕНА
+## Фаза 2: Поворот страниц (починить)
 
-> Цель: довести viewer до уровня Adobe Acrobat Reader
+### 2.1 Визуальный поворот через state.rotation
+- Кнопки CW/CCW в toolbar: `state.rotation = (state.rotation + 90) % 360`
+- `renderCurrentPage()` уже передаёт rotation в adapter — убедиться что работает
+- Убрать текущий код в pdf-pro-handlers.js который пытается создать новый PDF
 
-### 2.1 Режимы просмотра ✅
-- **Двухстраничный (Two-Up):** книжный разворот, чётная/нечётная
-- **Непрерывная прокрутка:** виртуализированный скролл с ленивой загрузкой
-- **Книжный режим:** Two-Up + обложка на первой странице
-- **Презентация:** полноэкранный слайд-шоу с переходами
-- Файл: `app/modules/view-modes.js` (~500 LOC)
+### 2.2 Постоянный поворот через pdf-lib + reloadPdfFromBytes()
+- Отдельная кнопка "Применить поворот к PDF" вызывает `rotatePdfPages()` + `reloadPdfFromBytes()`
+- После применения `state.rotation` сбрасывается в 0
 
-### 2.2 Улучшенный зум ✅
-- Marquee Zoom (выделение области для увеличения)
-- Zoom to Selection
-- Пресеты: 25%, 50%, 75%, 100%, 125%, 150%, 200%, 400%
-- Запоминание зума по документу
-- Pinch-to-zoom на тачскринах
-- Smooth zoom с анимацией
-
-### 2.3 Улучшение навигации ✅
-- **Page labels** (i, ii, iii, 1, 2, 3...)
-- **Named destinations** из PDF
-- **Thumbnail grid** — сетка миниатюр для быстрого перехода
-- **Minimap** — мини-карта текущей позиции на странице
-- **Link following** — клик по внутренним ссылкам PDF
-- **Reading position memory** — запоминание позиции по документу
-
-### 2.4 Text layer качества Acrobat ✅
-- Использовать PDF.js `TextLayerBuilder` вместо ручного span-creation
-- Точное попиксельное совпадение текста с рендером
-- Поддержка CJK, RTL, вертикального текста
-- Copy-paste с сохранением порядка чтения
-
-### 2.5 EPUB reader улучшения ✅
-- CSS preservation из EPUB
-- NCX Table of Contents
-- Embedded font loading
-- Chapter-based continuous scroll
-- Night mode / Sepia mode для EPUB
-- Adjustable font size / line height / margins
+**Файлы:** `pdf-pro-handlers.js`, `render-controller.js`, `ui-init-blocks.js`
 
 ---
 
-## Фаза 3: OCR и распознавание текста ✅ ЗАВЕРШЕНА
+## Фаза 3: Система вкладок (починить)
 
-> Цель: OCR качества ABBYY FineReader
+### 3.1 Интегрировать TabManager с file-controller
+- При открытии файла → `tabManager.open(name, type, bytes)`
+- `onActivate(tab)` → вызывать `reloadPdfFromBytes(tab.bytes)` или соответствующую функцию для djvu/image
+- `onDeactivate(tab)` → сохранять `{ currentPage, zoom, rotation, scrollY }` в tab.state
 
-### 3.1 Предобработка изображений ✅
-- **Deskew** — автоматическое выравнивание наклонённых страниц
-- **Denoise** — удаление шума (медианный фильтр)
-- **Binarization** — адаптивный Otsu/Sauvola
-- **Border removal** — удаление чёрных рамок сканов
-- Файл: `app/modules/ocr-preprocess.js` (~300 LOC)
+### 3.2 Сохранение состояния вкладок при переключении
+- При переключении: сохранить текущий tab state → загрузить новый файл → восстановить page/zoom/rotation
+- Восстанавливать позицию scrollY для continuous scroll mode
 
-### 3.2 Мультиязычность ✅
-- Расширить с 7 до 15+ языков
-- Добавить: китайский (chi_sim/chi_tra), японский (jpn), корейский (kor), арабский (ara), хинди (hin), турецкий (tur), польский (pol), чешский (ces)
-- Автодетекция языка до OCR
-- Мультиязычный OCR на одной странице
+### 3.3 Персистентность (sessionStorage)
+- Сохранять метаданные вкладок (имя, тип)
+- Для небольших файлов (<5MB) — сохранять bytes
+- При старте — восстанавливать вкладки
 
-### 3.3 Post-OCR коррекция ✅
-- Словарная проверка через Hunspell-like алгоритм
-- Контекстный анализ n-грамм (существующие биграммы расширить до триграмм)
-- Коррекция разрывов строк и переносов
-- Восстановление абзацной структуры
-- Confidence-based фильтрация (слова с confidence < 60% помечать)
-
-### 3.4 Layout analysis ✅
-- Определение зон: текст, изображение, таблица, формула
-- Reading order detection (колонки → строки)
-- Table structure recognition (строки, столбцы, merged cells)
-- Файл: `app/modules/ocr-layout.js` (~400 LOC)
-
-### 3.5 Пакетный OCR ✅
-- Параллельная обработка через Web Workers
-- Очередь с приоритетами (видимая страница → соседние → остальные)
-- Прогресс-бар с ETA
-- Возможность паузы/отмены
-- Сохранение промежуточных результатов
+**Файлы:** `tab-manager.js`, `file-controller.js`, `app.js`, `state.js`
 
 ---
 
-## Фаза 4: PDF-операции профессионального уровня ✅ В ОСНОВНОМ ЗАВЕРШЕНА
+## Фаза 4: Превью страниц (sidebar thumbnails)
 
-> Цель: полноценный PDF-редактор
+### 4.1 Создать thumbnail-renderer.js
+- Одностолбцовый layout в sidebar panel `data-sidebar-panel="pages"`
+- Каждая миниатюра ~150px шириной, рендерится с zoom=0.2
+- Lazy-рендеринг через IntersectionObserver (рендерить только видимые ±5)
+- Кеширование отрендеренных миниатюр в Map<pageNum, canvas>
 
-### 4.1 Исправить заглушки в pdf-pro-tools.js ✅
-Все функции реализованы (MODULE_STATUS='ready'):
-- **Bates numbering** — серийная нумерация страниц для юридических документов
-- **Headers/Footers** — добавление колонтитулов с переменными (дата, номер страницы, имя файла)
-- **Flatten annotations** — встраивание аннотаций в содержимое PDF
-- **Page deletion** — удаление страниц с preview
-- **Page reordering** — drag-and-drop изменение порядка страниц
+### 4.2 Интеграция с навигацией
+- Клик по миниатюре → `goToPage(n)`
+- Текущая страница подсвечена рамкой (синяя)
+- Номер страницы под каждой миниатюрой
+- `scrollIntoView` при навигации к другой странице
 
-### 4.2 Редактирование текста в PDF ✅
-- **Inline text editing** — прямое редактирование текста в PDF через pdf-lib
-- **Font replacement** — замена шрифтов с подбором метрик
-- **Spell-check** в PDF тексте
-- Файл: `app/modules/pdf-text-edit.js` (~500 LOC)
+### 4.3 Инвалидация при изменениях
+- При повороте/удалении страниц → очистить кеш, перерисовать
+- При добавлении страниц → расширить контейнер
 
-### 4.3 Аннотации профессионального уровня ✅
-- **Sticky notes** с threading (ответы на комментарии)
-- **Text markup:** highlight, underline, strikethrough, squiggly
-- **Measurement tools:** линейка, площадь, периметр
-- **Stamps:** одобрено, отклонено, черновик, конфиденциально + custom stamps
-- **Cloud annotations** — экспорт/импорт XFDF
-- **Annotation summary** — список всех аннотаций с фильтрацией
-
-### 4.4 Forms 🔧 ЧАСТИЧНО (нет валидации форм)
-- **Full AcroForm support** — text fields, checkboxes, radio buttons, dropdowns, signatures
-- **Form field creation** — drag-and-drop создание полей
-- **Form data export** — FDF/XFDF/JSON/CSV
-- **Form validation** — required fields, format validation
-- **Auto-fill** — заполнение из шаблонов
-
-### 4.5 Безопасность ✅
-- **PDF encryption** (AES-256) — установка паролей на документ
-- **Permission control** — запрет печати, копирования, редактирования
-- **Digital signatures** — подпись PDF (self-signed certificates)
-- **Redaction verification** — проверка полноты редактирования
-- **Metadata cleanup** — удаление скрытых данных
-
-### 4.6 Оптимизация PDF ✅
-- **Image downsampling** — уменьшение разрешения изображений
-- **Font subsetting** — включение только используемых глифов
-- **Stream compression** — Flate/LZW сжатие потоков
-- **Linearization** — оптимизация для web (fast web view)
-- **Audit report** — отчёт о размере каждого компонента
+**Файлы:** новый `thumbnail-renderer.js`, `navigation.js`, `index.html`
 
 ---
 
-## Фаза 5: Экспорт и конвертация ✅ ЗАВЕРШЕНА
+## Фаза 5: Конвертация файлов в PDF
 
-> Цель: конвертация не хуже Adobe Export PDF
+### 5.1 Image → PDF
+- Поддержка: JPG, PNG, TIFF, BMP, WebP
+- Создание PDF из одного или нескольких изображений через pdf-lib
+- Каждое изображение = одна страница, размер A4 или оригинальный
 
-### 5.1 PDF→DOCX ✅
-- **Таблицы:** определение merged cells, вложенных таблиц, borders
-- **Изображения:** извлечение встроенных изображений с positioning
-- **Формулы:** базовая обработка MathML/LaTeX
-- **Стили:** paragraph styles, character styles, numbering styles
-- **Headers/Footers:** извлечение колонтитулов из PDF
-- **Footnotes:** обнаружение и конвертация сносок
+### 5.2 DJVU → PDF
+- Рендеринг каждой страницы DJVU на canvas через adapter.renderPage()
+- Создание PDF с embedded images + OCR text layer через pdf-lib
+- Прогресс-бар для многостраничных файлов
 
-### 5.2 PDF→HTML ✅
-- Новый конвертер с сохранением layout
-- CSS positioning или flow-based
-- Responsive output
-- Файл: `app/modules/html-converter.js` (~400 LOC)
+### 5.3 UI: кнопка "Конвертировать в PDF"
+- Доступна для всех не-PDF форматов (djvu, image, epub)
+- После конвертации — открывает PDF в viewer через reloadPdfFromBytes()
 
-### 5.3 PDF→Plain Text ✅
-- Intelligent text extraction с reading order
-- Paragraph detection
-- Table → text formatting
-- Файл: встроить в `export-manager.js`
-
-### 5.4 PDF→PDF/A ✅
-- Конвертация в архивный формат
-- Встраивание шрифтов
-- Цветовые профили
-- Validation
-
-### 5.5 Batch conversion ✅
-- Множественные файлы в очередь
-- Выбор формата для каждого
-- ZIP-архив на выходе
+**Файлы:** новый `convert-to-pdf.js`, `pdf-operations.js`, `file-controller.js`
 
 ---
 
-## Фаза 6: UI/UX до уровня desktop-приложения ✅ ЗАВЕРШЕНА
+## Фаза 6: OCR для DJVU файлов
 
-> Цель: интерфейс как у Adobe Acrobat Pro DC
+### 6.1 OCR pipeline для DJVU страниц
+- При открытии DJVU (native mode) — проверить getText() на каждой странице
+- Если текст пустой — автоматически предложить OCR
+- Рендерить страницу DJVU на canvas → передать в существующий runOcrOnPreparedCanvas()
 
-### 6.1 Accessibility (a11y) ✅
-- ~~**ARIA attributes** на все интерактивные элементы (сейчас только 4)~~ → 104 aria-*, 37 role=
-- ✅ `aria-label` на icon-only кнопки (27+ в toolbar)
-- ✅ `aria-expanded` на collapsible секции
-- ✅ `role="tablist"/"tab"/"tabpanel"` на панели
-- ✅ `prefers-reduced-motion` media query
-- ✅ `prefers-contrast` для high-contrast mode
-- ✅ Focus visible ring на всех интерактивных элементах (:focus-visible CSS)
-- ✅ Screen reader announcements для status changes (#a11yAnnouncer)
-- ✅ Keyboard-only navigation для всех функций (arrow keys in tablists)
-- Файл: `app/modules/a11y.js` (275 LOC)
+### 6.2 Batch OCR для DJVU
+- Расширить batch OCR UI чтобы работал не только для PDF но и для DJVU
+- В `initBatchOcrUI`: убрать проверку `state.adapter.type !== 'pdf'`
+- Использовать adapter.renderPage() вместо прямого доступа к pdfDoc
+- Сохранение OCR текста в localStorage через saveDjvuData()
 
-### 6.2 Touch / Mobile ✅
-- Pinch-to-zoom с плавной анимацией
-- Swipe для переключения страниц
-- Touch-friendly toolbar (48px min target)
-- Responsive panel layout для планшетов
-- Virtual keyboard adaptation
-- Haptic feedback (Vibration API)
+### 6.3 Поиск по DJVU с OCR текстом
+- После OCR: индексация через `indexOcrPage(pageNum, text)`
+- Поиск через стандартный search-controller (уже работает с OCR fallback)
+- Text layer overlay через _renderOcrTextLayer() (уже работает)
 
-### 6.3 Context menus ✅
-- Right-click меню в viewer: copy, select all, zoom, OCR this area
-- Right-click на аннотации: edit, delete, reply, change color
-- Right-click на thumbnail: rotate, delete, extract
-- Файл: `app/modules/context-menu.js` (~200 LOC)
-
-### 6.4 Drag & Drop улучшения ✅
-- Drop zone с visual feedback (highlight, ghost preview)
-- Drag pages в outline для reorder
-- Drag files из файловой системы для merge
-- Drag annotations для перемещения
-
-### 6.5 Тёмная тема 2.0 ✅
-- Sepia / Blue light filter режим
-- Auto-switch по системным настройкам (`prefers-color-scheme`)
-- Customizable accent color
-- High contrast mode
-
-### 6.6 Toolbar redesign ✅
-- **Ribbon-like tabs** (Home, View, Edit, Tools, Review)
-- Contextual tabs (появляются при редактировании)
-- Customizable toolbar (drag-drop кнопок)
-- Quick Access bar
-
-### 6.7 Tooltips ✅
-- Визуальные всплывающие подсказки (сейчас только title-атрибуты)
-- Shortcut hints в tooltip
-- Rich tooltips с иконками
-- Delay: 500ms hover
-- Файл: `app/modules/tooltip.js` (~100 LOC)
+**Файлы:** `ocr-controller.js`, `ui-init-blocks.js`, `file-controller.js`, `adapters.js`
 
 ---
 
-## Фаза 7: Инфраструктура и производительность ✅ В ОСНОВНОМ ЗАВЕРШЕНА
+## Фаза 7: Улучшение наложения текстовых полей OCR
 
-> Цель: стабильность enterprise-уровня
+### 7.1 Коррекция координат
+- В `_renderOcrTextLayer()`: всегда использовать `parseFloat(els.canvas.style.width/height)` без fallback на canvas.width/dpr (сейчас fallback даёт неточные значения)
+- Добавить `padding-top` коррекцию = `h * 0.05` для baseline alignment
 
-### 7.1 Web Workers ✅
-- Вынести в worker: OCR, PDF parsing, image processing, DOCX generation
-- SharedArrayBuffer для zero-copy передачи данных
-- Worker pool с автомасштабированием
-- Файл: `app/modules/worker-pool.js` (~200 LOC)
+### 7.2 Улучшение font-size fitting
+- Текущая формула: `fontSize = h * 0.78` — слишком грубая
+- Заменить на: measureText() для каждого слова, подобрать fontSize чтобы реальная высота = h
+- Добавить `transform: scaleX()` если ширина текста не совпадает с bbox шириной
 
-### 7.2 IndexedDB хранилище ✅
-- Кэшировние отрендеренных страниц
-- Хранение OCR данных по документу
-- Хранение аннотаций
-- Автоочистка по размеру (LRU)
+### 7.3 Учёт скоса страницы
+- Если skew > 0.5° — применить CSS `transform: rotate()` к каждому span
+- Координаты bbox уже скорректированы в pipeline, нужна только визуальная ротация
 
-### 7.3 Виртуализация ✅
-- Virtual scrolling для continuous scroll (рендерить только видимые ±2 страницы)
-- Virtual list для thumbnail panel
-- Virtual list для search results
-- Lazy image loading
-
-### 7.4 Memory management ✅
-- Автоматическое освобождение ObjectURL
-- Canvas pooling (переиспользование canvas)
-- Мониторинг performance.memory
-- Предупреждение при приближении к лимиту
-- Garbage collection hints
-
-### 7.5 Testing ✅ РАСШИРЕНО
-- 10 unit test файлов в `tests/unit/` (Node.js built-in test runner)
-- 220 тестов / 45 suites — все проходят
-- Покрытие: pdf-print, annotations-core, app-persistence, error-handler, ocr-post-correct, ocr-search, ai-features, text-extractor, **pdf-forms** (47 тестов), **pdf-pro-tools** (23 теста)
-- pdf-forms: basics, export/import, hitTest, _mapFieldType, validation (required, length, pattern, numeric range, format validators)
-- pdf-pro-tools: addHeaderFooter, addBatesNumbering, flattenPdf, checkAccessibility, autoFixAccessibility, addPageNumbers, cropPdfPages
-- Файлы: `tests/unit/*.test.js`, запуск: `node --test tests/unit/*.test.js`
-
-### 7.6 Build system ✅ ГОТОВО
-- Vite 6 для бандлинга (`npx vite build` → `dist-vite/`)
-- Tree-shaking: 100 модулей → 504KB entry (156KB gzip)
-- Code splitting: pdf-lib (525KB) и docx (363KB) в отдельные chunks
-- Source maps: генерируются для всех JS chunks
-- HMR: `npx vite dev` на порту 5173
-- Исправлен broken import в text-nav-controller.js
-- Alias pdf-lib → non-minified ESM для корректной esbuild обработки
+**Файлы:** `render-controller.js` (_renderOcrTextLayer)
 
 ---
 
-## Приоритетность
+## Фаза 8: Расширение русского словаря для OCR
 
-| Приоритет | Фаза | Влияние | Статус |
-|-----------|-------|---------|--------|
-| P0 | 1.1 Декомпозиция app.js | Критично для дальнейшей работы | ✅ Готово |
-| P0 | 1.2 Toast-уведомления | Базовый UX | ✅ Готово |
-| P0 | 2.1 Режимы просмотра | Ключевая функциональность | ✅ Готово |
-| P1 | 2.4 Text layer качества | Селекция текста и копирование | ✅ Готово |
-| P1 | 3.1 Предобработка OCR | Качество распознавания | ✅ Готово |
-| P1 | 4.1 Исправить заглушки | Заявленные функции не работают | ✅ Готово |
-| P1 | 6.1 Accessibility | Доступность для всех | ✅ Готово |
-| P2 | 3.3 Post-OCR коррекция | Качество текста | ✅ Готово |
-| P2 | 4.3 Аннотации Pro | Профессиональный workflow | ✅ Готово |
-| P2 | 4.4 Forms validation | Валидация форм | 🔧 Частично |
-| P2 | 5.1 PDF→DOCX | Качество конвертации | ✅ Готово |
-| P2 | 6.6 Toolbar redesign | Профессиональный вид | ✅ Готово |
-| P3 | 4.5 Безопасность | Enterprise-функции | ✅ Готово |
-| P3 | 5.2 PDF→HTML | Дополнительный формат | ✅ Готово |
-| P3 | 7.5 Testing | Стабильность | ✅ Готово (220 тестов) |
-| P3 | 7.6 Build system | Разработка | ✅ Готово |
+### 8.1 Расширить commonWords (30 → 200)
+Добавить топ-200 частых русских слов:
+- Местоимения: я, мы, ты, вы, он, она, оно, они, мне, тебе, нам, вам, ему, ей, им, меня, тебя, нас, вас, его, её, их, себя, свой, кто, что, какой, который, чей, сколько, где, когда, куда, откуда, почему, зачем, как
+- Глаголы: быть, иметь, мочь, знать, хотеть, видеть, говорить, думать, стать, делать, идти, дать, сказать, работать, жить, стоять, называть, начать, должен, нужно
+- Существительные: человек, время, год, дело, жизнь, день, рука, работа, слово, место, лицо, друг, глаз, вопрос, дом, сторона, страна, мир, случай, голова, ребёнок, сила, конец
+- Прилагательные: большой, новый, хороший, старый, последний, другой, каждый, первый, должный, русский, молодой, главный, общий, важный, маленький
+- Наречия: уже, ещё, тоже, только, очень, здесь, сейчас, там, потом, тогда, вдруг, опять, сразу, даже, почти
+- Предлоги/союзы: о, об, к, с, у, через, между, после, перед, под, над, если, когда, чтобы, потому, хотя, или, либо, ведь, ибо
+
+### 8.2 Расширить bigrams (30 → 100)
+Добавить: 'ал', 'ан', 'ат', 'ва', 'ве', 'ви', 'во', 'го', 'да', 'де', 'ди', 'до', 'ед', 'ел', 'ем', 'ер', 'за', 'зн', 'ие', 'из', 'ик', 'ил', 'ин', 'ис', 'ит', 'ка', 'ки', 'ла', 'ле', 'ли', 'ло', 'ль', 'ма', 'ме', 'ми', 'мо', 'ны', 'ни', 'об', 'ов', 'ог', 'од', 'ой', 'ол', 'ом', 'он', 'ор', 'ос', 'от', 'ош', 'пе', 'пи', 'пр', 'ра', 'ре', 'ри', 'ру', 'ск', 'сл', 'со', 'та', 'те', 'ти', 'тр', 'ть', 'ул', 'ча', 'че', 'чи'
+
+### 8.3 Улучшить post-correction fixes
+Добавить:
+- `[/3([а-яё])/g, 'з$1']` — 3 → з перед кирилической буквой
+- `[/([а-яё])3/g, '$1з']` — 3 → з после кирилической буквой
+- `[/б([А-Я])/g, '6$1']` — Цифра/буква путаница (контекстно)
+- `[/\bТI/g, 'Т']` — I после кириллической Т
+- `[/\bСТ0/g, 'СТО']` — 0 → О в контексте
+- `[/\bС0/g, 'СО']` — 0 → О
+- `[/\bд0/g, 'до']` — 0 → о
+
+### 8.4 Добавить trigram scoring
+- В `scoreTextByLanguage()`: добавить бонус за русские триграммы
+- Топ-30 триграмм: 'ста', 'ени', 'ост', 'ого', 'ани', 'ова', 'про', 'при', 'что', 'нов', 'ото', 'ния', 'ные', 'тор', 'ско', 'ком', 'ной', 'ные', 'ели', 'тель', 'ать', 'ить', 'ест', 'ого', 'ным', 'ных', 'ный', 'ной', 'ски', 'ном'
+
+**Файлы:** `ocr-languages.js`
+
+---
+
+## Фаза 9: Система заметок и закладок
+
+### 9.1 Создать bookmark-controller.js
+```
+addBookmark(page, title?) → сохранить в localStorage
+removeBookmark(page) → удалить
+getBookmarks() → вернуть отсортированный массив [{page, title, createdAt}]
+goToBookmark(bookmark) → goToPage(bookmark.page)
+isBookmarked(page) → boolean
+toggleBookmark(page) → add/remove
+```
+- Ключ: `novareader-bookmarks:{docName}`
+- Максимум 500 закладок на документ
+
+### 9.2 UI для закладок
+- Кнопка-звёздочка в toolbar (заполненная если текущая страница в закладках)
+- Список закладок в sidebar panel `data-sidebar-panel="bookmarks"`
+- Каждая закладка: номер страницы + заголовок + кнопка удаления
+- Клик → goToPage()
+- Инпут фильтрации сверху
+
+### 9.3 Создать notes-controller.js
+```
+addNote(page, text, position?) → сохранить
+updateNote(id, text) → обновить
+deleteNote(id) → удалить
+getNotesForPage(page) → массив заметок на странице
+getAllNotes() → все заметки документа
+```
+- Ключ: `novareader-notes:{docName}`
+- Поля: id, page, text, position?, createdAt, updatedAt
+
+### 9.4 UI для заметок
+- Кнопка "Добавить заметку" в toolbar
+- Panel заметок в sidebar с группировкой по страницам
+- Inline-редактирование текста заметки
+- Индикатор заметки на миниатюре страницы
+- Экспорт всех заметок в .txt
+
+**Файлы:** новый `bookmark-controller.js`, новый `notes-controller.js`, `state.js`, `index.html`
 
 ---
 
 ## Порядок реализации
 
-```
-Неделя 1-2:  Фаза 1 — Декомпозиция, Toast, Undo/Redo, Error handling
-Неделя 3-4:  Фаза 2 — Режимы просмотра, зум, навигация
-Неделя 5-6:  Фаза 3 — OCR предобработка, layout analysis, пакетный OCR
-Неделя 7-8:  Фаза 4 — PDF-операции, формы, аннотации
-Неделя 9-10: Фаза 5 — Экспорт улучшения
-Неделя 11-12: Фаза 6 — UI/UX, a11y, touch, tooltips
-Неделя 13-14: Фаза 7 — Workers, виртуализация, тесты
-```
+1. **Фаза 1** (PDF in-place) — фундамент для всех PDF-операций
+2. **Фаза 2** (Поворот) — зависит от Фазы 1
+3. **Фаза 9** (Закладки/заметки) — независимый модуль
+4. **Фаза 3** (Вкладки) — зависит от Фазы 1
+5. **Фаза 8** (Русский словарь) — независимый, быстрый
+6. **Фаза 7** (Текстовые поля) — независимый
+7. **Фаза 4** (Превью) — независимый
+8. **Фаза 6** (DJVU OCR) — зависит от существующего OCR pipeline
+9. **Фаза 5** (Конвертация) — наименьший приоритет
