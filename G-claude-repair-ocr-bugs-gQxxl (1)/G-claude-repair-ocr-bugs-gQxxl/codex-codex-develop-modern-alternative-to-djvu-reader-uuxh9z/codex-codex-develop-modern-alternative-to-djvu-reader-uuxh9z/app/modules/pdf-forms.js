@@ -218,6 +218,130 @@ export class PdfFormManager {
     this.listeners.push(fn);
   }
 
+  /**
+   * Validate all form fields. Returns errors for invalid fields.
+   * @param {object} [rules] - Per-field validation rules: { fieldName: { required, pattern, minLength, maxLength, min, max } }
+   * @returns {{ valid: boolean, errors: Array<{ field: string, page: number, message: string }> }}
+   */
+  validateAll(rules = {}) {
+    const errors = [];
+
+    for (const [, pageFields] of this.fields) {
+      for (const field of pageFields) {
+        const fieldErrors = this.validateField(field, rules[field.name]);
+        errors.push(...fieldErrors);
+      }
+    }
+
+    return { valid: errors.length === 0, errors };
+  }
+
+  /**
+   * Validate a single form field.
+   * @param {object} field
+   * @param {object} [rule] - Validation rule override
+   * @returns {Array<{ field: string, page: number, message: string }>}
+   */
+  validateField(field, rule = {}) {
+    const errors = [];
+    const value = String(field.value ?? '').trim();
+
+    // Required check (from PDF annotation or rule override)
+    if (field.required || rule.required) {
+      if (!value) {
+        errors.push({ field: field.name, page: field.page, message: 'Обязательное поле' });
+        return errors; // No point checking further if empty and required
+      }
+    }
+
+    // Skip further validation if empty and not required
+    if (!value) return errors;
+
+    // Min length
+    if (rule.minLength && value.length < rule.minLength) {
+      errors.push({ field: field.name, page: field.page, message: `Минимум ${rule.minLength} символов` });
+    }
+
+    // Max length (from PDF maxLen or rule)
+    const maxLen = rule.maxLength || field.maxLen;
+    if (maxLen && value.length > maxLen) {
+      errors.push({ field: field.name, page: field.page, message: `Максимум ${maxLen} символов` });
+    }
+
+    // Pattern (regex)
+    if (rule.pattern) {
+      const regex = typeof rule.pattern === 'string' ? new RegExp(rule.pattern) : rule.pattern;
+      if (!regex.test(value)) {
+        errors.push({ field: field.name, page: field.page, message: rule.patternMessage || 'Неверный формат' });
+      }
+    }
+
+    // Numeric range
+    if (rule.min !== undefined || rule.max !== undefined) {
+      const num = Number(value);
+      if (isNaN(num)) {
+        errors.push({ field: field.name, page: field.page, message: 'Ожидается число' });
+      } else {
+        if (rule.min !== undefined && num < rule.min) {
+          errors.push({ field: field.name, page: field.page, message: `Минимум ${rule.min}` });
+        }
+        if (rule.max !== undefined && num > rule.max) {
+          errors.push({ field: field.name, page: field.page, message: `Максимум ${rule.max}` });
+        }
+      }
+    }
+
+    // Built-in format validators
+    if (rule.format) {
+      const formatError = this._validateFormat(value, rule.format, field);
+      if (formatError) errors.push(formatError);
+    }
+
+    return errors;
+  }
+
+  _validateFormat(value, format, field) {
+    const msg = (text) => ({ field: field.name, page: field.page, message: text });
+
+    switch (format) {
+      case 'email':
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return msg('Неверный email');
+        break;
+      case 'phone':
+        if (!/^[+]?[\d\s()-]{7,20}$/.test(value)) return msg('Неверный телефон');
+        break;
+      case 'date':
+        if (isNaN(Date.parse(value))) return msg('Неверная дата');
+        break;
+      case 'url':
+        try { new URL(value); } catch { return msg('Неверный URL'); }
+        break;
+      case 'integer':
+        if (!/^-?\d+$/.test(value)) return msg('Ожидается целое число');
+        break;
+      case 'decimal':
+        if (!/^-?\d+([.,]\d+)?$/.test(value)) return msg('Ожидается число');
+        break;
+    }
+    return null;
+  }
+
+  /**
+   * Get all required fields that are still empty.
+   * @returns {Array<{ name: string, page: number }>}
+   */
+  getEmptyRequiredFields() {
+    const empty = [];
+    for (const [, pageFields] of this.fields) {
+      for (const field of pageFields) {
+        if (field.required && !String(field.value ?? '').trim()) {
+          empty.push({ name: field.name, page: field.page });
+        }
+      }
+    }
+    return empty;
+  }
+
   _mapFieldType(fieldType, isCheckbox, isRadio) {
     if (isCheckbox) return 'checkbox';
     if (isRadio) return 'radio';
