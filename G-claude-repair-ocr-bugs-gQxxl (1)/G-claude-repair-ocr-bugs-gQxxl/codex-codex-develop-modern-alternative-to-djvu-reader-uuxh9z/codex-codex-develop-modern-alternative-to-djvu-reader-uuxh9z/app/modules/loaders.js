@@ -40,38 +40,40 @@ export async function ensureDjVuJs() {
 
   const url = new URL('../vendor/djvu.js', import.meta.url).href;
   djvuLoadPromise = (async () => {
-    await new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-djvu-runtime="1"]');
-    if (existing) {
-      if (window.DjVu) {
-        resolve();
-      } else {
-        existing.addEventListener('load', () => resolve(), { once: true });
-        existing.addEventListener('error', () => reject(new Error('DjVu runtime load error')), { once: true });
+    try {
+      await new Promise((resolve, reject) => {
+        const existing = document.querySelector('script[data-djvu-runtime="1"]');
+        if (existing) {
+          if (window.DjVu) {
+            resolve();
+          } else {
+            existing.addEventListener('load', () => resolve(), { once: true });
+            existing.addEventListener('error', () => reject(new Error('DjVu runtime load error')), { once: true });
+          }
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = url;
+        script.async = true;
+        script.dataset.djvuRuntime = '1';
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error('DjVu runtime load error'));
+        document.head.appendChild(script);
+      });
+
+      if (!window.DjVu) {
+        throw new Error('DjVu runtime не инициализирован');
       }
-      return;
+
+      djvuLib = window.DjVu;
+      return djvuLib;
+    } catch (err) {
+      console.warn('[loaders] DjVu load error:', err?.message);
+      djvuLoadPromise = null;
+      throw err;
     }
-
-    const script = document.createElement('script');
-    script.src = url;
-    script.async = true;
-    script.dataset.djvuRuntime = '1';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('DjVu runtime load error'));
-    document.head.appendChild(script);
-  });
-
-    if (!window.DjVu) {
-      throw new Error('DjVu runtime не инициализирован');
-    }
-
-    djvuLib = window.DjVu;
-    return djvuLib;
   })();
 
-  try {
-    return await djvuLoadPromise;
-  } finally {
-    djvuLoadPromise = null;
-  }
+  return djvuLoadPromise;
 }
