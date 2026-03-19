@@ -20,7 +20,7 @@ import { addSignatureToPdf } from './pdf-operations.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // Injected from app.js to avoid circular imports.
-let _deps = {
+const _deps = {
   renderAnnotations: () => {},
   capturePageHistoryOnRender: () => {},
   saveViewState: () => {},

@@ -6,7 +6,7 @@ import { state } from './state.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
-let _deps = {
+const _deps = {
   setOcrStatus: () => {},
   safeCreateObjectURL: (blob) => URL.createObjectURL(blob),
   pushDiagnosticEvent: () => {},
@@ -59,8 +59,8 @@ export async function mergePdfFiles() {
 export function buildMergedPdfFromCanvases(pages) {
   // Simple PDF builder with images
   const encoder = new TextEncoder();
-  let objects = [];
-  let xrefOffsets = [];
+  const objects = [];
+  const xrefOffsets = [];
   let body = '';
   let offset = 0;
 
@@ -96,7 +96,7 @@ export function buildMergedPdfFromCanvases(pages) {
   }
 
   // Build the final PDF
-  let pdfParts = [header];
+  const pdfParts = [header];
   for (const obj of objects) {
     xrefOffsets.push(offset);
     pdfParts.push(obj);

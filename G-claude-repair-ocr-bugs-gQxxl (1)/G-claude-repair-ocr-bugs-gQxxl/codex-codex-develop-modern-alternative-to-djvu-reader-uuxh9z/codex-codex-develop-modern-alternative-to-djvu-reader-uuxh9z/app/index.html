@@ -7,7 +7,11 @@
     <meta name="theme-color" content="#f0f0f4" media="(prefers-color-scheme: light)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <title>NovaReader</title>
+    <meta name="description" content="NovaReader — modern document viewer for PDF, DJVU, EPUB, XPS and images with OCR, annotations, and conversion tools" />
+    <meta name="application-name" content="NovaReader" />
+    <meta name="color-scheme" content="dark light" />
+    <link rel="manifest" href="./manifest.json" />
+    <title>NovaReader 4.0</title>
     <script type="importmap">
     {
       "imports": {
@@ -173,7 +177,7 @@
 
           <label class="file-open-btn">
             <span class="icon">📂</span> Открыть файл
-            <input id="fileInput" type="file" accept=".pdf,.djvu,.epub,.xps,.oxps,.cbz,.png,.jpg,.jpeg,.webp,.gif,.bmp" />
+            <input id="fileInput" type="file" accept=".pdf,.djvu,.epub,.xps,.oxps,.cbz,.png,.jpg,.jpeg,.webp,.gif,.bmp" aria-label="Открыть файл" />
           </label>
 
           <section data-sidebar-section="previews" class="lp-thumbnails-section">
@@ -210,7 +214,7 @@
               </div>
             </div>
             <div class="section-actions">
-              <input id="bookmarkFilter" type="text" placeholder="Фильтр закладок…" class="input-compact" />
+              <input id="bookmarkFilter" type="text" placeholder="Фильтр закладок…" class="input-compact" aria-label="Фильтр закладок" />
               <button id="clearBookmarkFilter" class="btn-ghost btn-xs">✕</button>
             </div>
             <p id="bookmarksStatus" class="status-line"></p>
@@ -229,8 +233,8 @@
         <div class="sidebar-panel" data-sidebar-panel="notes" role="tabpanel" aria-label="Заметки">
           <section data-sidebar-section="notes">
             <h2>Заметки</h2>
-            <input id="notesTitle" type="text" placeholder="Заголовок" class="input-compact" />
-            <input id="notesTags" type="text" placeholder="Теги (через запятую)" class="input-compact" />
+            <input id="notesTitle" type="text" placeholder="Заголовок" class="input-compact" aria-label="Заголовок заметки" />
+            <input id="notesTags" type="text" placeholder="Теги (через запятую)" class="input-compact" aria-label="Теги заметки" />
             <textarea id="notes" placeholder="Заметки к документу…" rows="6"></textarea>
             <p id="notesStatus" class="status-line"></p>
             <div class="section-actions">
@@ -278,7 +282,7 @@
             <p id="readingTimeStatus" class="status-line"></p>
             <p id="etaStatus" class="status-line"></p>
             <div class="section-actions">
-              <input id="readingGoalPage" type="number" min="1" placeholder="Цель (стр.)" class="input-compact input-narrow" />
+              <input id="readingGoalPage" type="number" min="1" placeholder="Цель (стр.)" class="input-compact input-narrow" aria-label="Цель чтения (страница)" />
               <button id="saveReadingGoal" class="btn-ghost btn-xs">Задать</button>
               <button id="clearReadingGoal" class="btn-ghost btn-xs">✕</button>
             </div>
@@ -379,7 +383,7 @@
               <input id="importOcrJson" type="file" accept="application/json,.json" />
             </label>
             <div class="section-actions">
-              <input id="cloudSyncUrl" type="url" placeholder="Endpoint URL" class="input-compact" />
+              <input id="cloudSyncUrl" type="url" placeholder="Endpoint URL" class="input-compact" aria-label="URL облачной синхронизации" />
               <button id="saveCloudSyncUrl" class="btn-ghost btn-xs">✓</button>
             </div>
             <div class="section-actions">
@@ -477,10 +481,10 @@
                 </select>
               </label>
               <label class="rp-label">Цвет
-                <input id="drawColor" type="color" value="#ffd84d" class="rp-color" />
+                <input id="drawColor" type="color" value="#ffd84d" class="rp-color" aria-label="Цвет кисти" />
               </label>
               <label class="rp-label">Толщина
-                <input id="drawSize" type="range" min="2" max="24" value="6" class="rp-range" />
+                <input id="drawSize" type="range" min="2" max="24" value="6" class="rp-range" aria-label="Размер кисти" />
               </label>
             </div>
           </div>

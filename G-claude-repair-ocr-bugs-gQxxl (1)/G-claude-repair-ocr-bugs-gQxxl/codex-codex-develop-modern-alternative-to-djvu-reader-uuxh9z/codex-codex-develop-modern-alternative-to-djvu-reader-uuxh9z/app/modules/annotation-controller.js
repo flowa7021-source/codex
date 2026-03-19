@@ -12,7 +12,7 @@ const _commentsCache = new Map();
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
-let _deps = {
+const _deps = {
   renderDocStats: () => {},
   renderReadingGoalStatus: () => {},
   renderEtaStatus: () => {},

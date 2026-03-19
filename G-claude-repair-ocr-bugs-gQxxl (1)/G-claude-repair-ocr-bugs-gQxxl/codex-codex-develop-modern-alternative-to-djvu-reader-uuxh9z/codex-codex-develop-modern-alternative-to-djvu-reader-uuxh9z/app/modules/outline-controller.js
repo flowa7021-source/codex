@@ -9,7 +9,7 @@ import { state, els } from './state.js';
 import { yieldToMainThread } from './utils.js';
 
 /* Late-bound cross-module dependencies */
-let _deps = {
+const _deps = {
   canSearchCurrentDoc: null,
   renderCurrentPage: null,
 };

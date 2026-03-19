@@ -6,7 +6,7 @@ import { state, els } from './state.js';
 import { throttle, debounce } from './utils.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
-let _deps = {
+const _deps = {
   openFile: async () => {},
   beginStroke: () => {},
   moveStroke: () => {},

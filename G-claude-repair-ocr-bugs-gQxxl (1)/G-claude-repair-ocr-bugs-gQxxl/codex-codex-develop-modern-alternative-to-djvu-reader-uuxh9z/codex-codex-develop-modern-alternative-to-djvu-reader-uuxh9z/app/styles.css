@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════
-   NovaReader 3.0 — Acrobat Pro-inspired UI
+   NovaReader 4.0 — Acrobat Pro-inspired UI
    ═══════════════════════════════════════════════════ */
 
 :root {
@@ -2575,3 +2575,64 @@ body.hand-tool-active:active canvas {
 }
 [dir="rtl"] .floating-search-panel { right: auto; left: 16px; }
 [dir="rtl"] .page-organizer-toolbar { direction: rtl; }
+
+/* ═══════════════════════════════════════════════════
+   Print Styles
+   ═══════════════════════════════════════════════════ */
+@media print {
+  .command-bar, .left-panel, .right-panel, .tab-bar,
+  .status-bar, .toast-container, .skip-nav, .floating-search-panel,
+  .modal-overlay, .context-menu, .tooltip { display: none !important; }
+  .app-shell {
+    display: block !important;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: auto !important;
+  }
+  .document-viewport {
+    grid-column: 1 / -1 !important;
+    grid-row: 1 !important;
+    overflow: visible !important;
+  }
+  .canvas-wrap { padding: 0 !important; }
+  canvas { max-width: 100% !important; height: auto !important; }
+  body { background: white !important; color: black !important; }
+}
+
+/* ═══════════════════════════════════════════════════
+   Reduced Motion
+   ═══════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   High Contrast Mode
+   ═══════════════════════════════════════════════════ */
+@media (forced-colors: active) {
+  .cb-btn, .cb-tool-btn, [role="tab"] {
+    border: 1px solid ButtonText;
+  }
+  .cb-btn:focus-visible, .cb-tool-btn:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   Extra small screens (mobile portrait)
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .command-bar { flex-wrap: wrap; height: auto; min-height: var(--command-bar-height); }
+  .cb-group { gap: 1px; }
+  .cb-sep { display: none; }
+  .cb-spacer { display: none; }
+  .cb-zoom-label { display: none; }
+  .cb-page-input { width: 36px; }
+  .status-bar { font-size: 10px; padding: 0 4px; }
+  .toast-container { max-width: calc(100vw - 32px); left: 16px; right: 16px; }
+}

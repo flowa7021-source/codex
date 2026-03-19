@@ -12,7 +12,7 @@ function initContinuousScroll(deps) {
   const scrollWrap = document.getElementById('continuousScrollWrap');
   const scrollContainer = document.getElementById('continuousScrollContainer');
   let continuousMode = false;
-  let renderedPages = new Set();
+  const renderedPages = new Set();
   let scrollObserver = null;
 
   if (!toggleBtn || !scrollWrap || !scrollContainer) return;

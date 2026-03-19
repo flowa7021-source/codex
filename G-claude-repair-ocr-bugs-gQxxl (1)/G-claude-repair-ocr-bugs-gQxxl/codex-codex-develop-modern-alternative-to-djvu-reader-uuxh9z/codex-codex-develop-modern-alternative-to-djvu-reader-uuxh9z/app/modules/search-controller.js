@@ -13,7 +13,7 @@ import { loadOcrTextData } from './workspace-controller.js';
 // Some functions live in app.js and are not yet modularised. We accept them
 // via initSearchControllerDeps() so the module stays self-contained.
 
-let _deps = {
+const _deps = {
   setOcrStatus: () => {},
   renderCurrentPage: async () => {},
 };

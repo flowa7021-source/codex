@@ -22,7 +22,7 @@ export const pdfEditState = {
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
-let _deps = {
+const _deps = {
   setOcrStatus: () => {},
   getCachedPage: () => null,
   getOcrLang: () => 'rus',

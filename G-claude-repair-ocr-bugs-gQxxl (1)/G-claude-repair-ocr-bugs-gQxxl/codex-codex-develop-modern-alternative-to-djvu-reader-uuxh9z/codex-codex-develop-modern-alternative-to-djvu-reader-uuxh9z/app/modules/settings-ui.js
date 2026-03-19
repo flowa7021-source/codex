@@ -7,7 +7,7 @@ import { state, els } from './state.js';
 import { SIDEBAR_SECTION_CONFIG, TOOLBAR_SECTION_CONFIG } from './constants.js';
 
 /* Late-bound cross-module dependencies */
-let _deps = {
+const _deps = {
   uiLayoutKey: null,
   refreshOcrStorageInfo: null,
   applyUiSizeSettings: null,

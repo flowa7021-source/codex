@@ -2,7 +2,7 @@
 // Floating toolbar that appears on text selection (like Notion/Google Docs).
 
 let actionBar = null;
-let hideTimeout = null;
+const hideTimeout = null;
 
 /**
  * @typedef {object} QuickAction

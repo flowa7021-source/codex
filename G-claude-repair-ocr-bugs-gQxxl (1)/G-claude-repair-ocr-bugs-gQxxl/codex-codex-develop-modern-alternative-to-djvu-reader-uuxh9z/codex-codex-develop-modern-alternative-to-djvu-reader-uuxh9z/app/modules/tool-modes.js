@@ -5,7 +5,7 @@ import { state, els } from './state.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
 
 // Dependencies injected from app.js at runtime
-let _deps = {
+const _deps = {
   renderAnnotations: () => {},
   updateOverlayInteractionState: () => {},
   setOcrStatus: () => {},

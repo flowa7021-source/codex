@@ -13,7 +13,7 @@ const log = createLogger('workspace');
 // ─── Dependency injection for app.js callbacks ──────────────────────────────
 // These are functions defined in app.js or other controllers that workspace
 // needs to call. They are registered via initWorkspaceDeps() during app init.
-let _deps = {
+const _deps = {
   loadStrokes: () => [],
   saveStrokes: () => {},
   loadComments: () => [],

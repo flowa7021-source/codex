@@ -231,50 +231,83 @@ function renderBookmarks() { SettingsController.renderBookmarks(bookmarkKey, sav
 async function addBookmark() { await SettingsController.addBookmark(bookmarkKey, saveBookmarks, renderBookmarks); }
 function clearBookmarks() { SettingsController.clearBookmarks(saveBookmarks, renderBookmarks); }
 
+// ─── Event Listener Cleanup Registry ─────────────────────────────────────────
+/** @type {Array<{el: EventTarget, type: string, handler: Function}>} */
+const _listenerRegistry = [];
+
+/**
+ * Safely attach an event listener with null-check and registry tracking.
+ * @param {EventTarget|null|undefined} el
+ * @param {string} type
+ * @param {Function} handler
+ * @param {AddEventListenerOptions} [opts]
+ */
+function safeOn(el, type, handler, opts) {
+  if (!el) return;
+  el.addEventListener(type, handler, opts);
+  _listenerRegistry.push({ el, type, handler });
+}
+
+/** Remove all tracked event listeners (call on cleanup/destroy). */
+function cleanupAllListeners() {
+  for (const { el, type, handler } of _listenerRegistry) {
+    try { el.removeEventListener(type, handler); } catch { /* noop */ }
+  }
+  _listenerRegistry.length = 0;
+}
+
+// Expose for diagnostics
+window._listenerRegistry = _listenerRegistry;
+window._cleanupAllListeners = cleanupAllListeners;
+
 // ─── Event Bindings ──────────────────────────────────────────────────────────
-els.clearRecent.addEventListener('click', clearRecent);
-els.toggleAdvancedPanels?.addEventListener('click', toggleAdvancedPanelsState);
-els.openSettingsModal?.addEventListener('click', openSettingsModal);
-els.closeSettingsModal?.addEventListener('click', closeSettingsModal);
-els.saveSettingsModal?.addEventListener('click', saveSettingsFromModal);
-els.exportDiagnostics?.addEventListener('click', exportDiagnostics);
-els.clearDiagnostics?.addEventListener('click', clearDiagnostics);
-els.runRuntimeSelfCheck?.addEventListener('click', () => { runRuntimeSelfCheck(); });
-els.cfgSidebarWidth?.addEventListener('input', previewUiSizeFromModal);
-els.cfgToolbarScale?.addEventListener('input', previewUiSizeFromModal);
-els.cfgTextMinHeight?.addEventListener('input', previewUiSizeFromModal);
-els.cfgPageAreaHeight?.addEventListener('input', previewUiSizeFromModal);
-els.cfgTopToolbarHeight?.addEventListener('input', previewUiSizeFromModal);
-els.cfgBottomToolbarHeight?.addEventListener('input', previewUiSizeFromModal);
-els.cfgTextPanelHeight?.addEventListener('input', previewUiSizeFromModal);
-els.cfgAnnotationCanvasScale?.addEventListener('input', previewUiSizeFromModal);
-els.settingsModal?.addEventListener('click', (e) => { if (e.target === els.settingsModal) closeSettingsModal(); });
+safeOn(els.clearRecent, 'click', clearRecent);
+safeOn(els.toggleAdvancedPanels, 'click', toggleAdvancedPanelsState);
+safeOn(els.openSettingsModal, 'click', openSettingsModal);
+safeOn(els.closeSettingsModal, 'click', closeSettingsModal);
+safeOn(els.saveSettingsModal, 'click', saveSettingsFromModal);
+safeOn(els.exportDiagnostics, 'click', exportDiagnostics);
+safeOn(els.clearDiagnostics, 'click', clearDiagnostics);
+safeOn(els.runRuntimeSelfCheck, 'click', () => { runRuntimeSelfCheck(); });
+safeOn(els.cfgSidebarWidth, 'input', previewUiSizeFromModal);
+safeOn(els.cfgToolbarScale, 'input', previewUiSizeFromModal);
+safeOn(els.cfgTextMinHeight, 'input', previewUiSizeFromModal);
+safeOn(els.cfgPageAreaHeight, 'input', previewUiSizeFromModal);
+safeOn(els.cfgTopToolbarHeight, 'input', previewUiSizeFromModal);
+safeOn(els.cfgBottomToolbarHeight, 'input', previewUiSizeFromModal);
+safeOn(els.cfgTextPanelHeight, 'input', previewUiSizeFromModal);
+safeOn(els.cfgAnnotationCanvasScale, 'input', previewUiSizeFromModal);
+safeOn(els.settingsModal, 'click', (e) => { if (e.target === els.settingsModal) closeSettingsModal(); });
 
 // File input handler — will be overridden by tab manager integration below
-els.fileInput.addEventListener('change', els.fileInput._nrChangeHandler = async (e) => {
+const _fileInputChangeHandler = async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await openFile(file);
   e.target.value = '';
-});
+};
+if (els.fileInput) {
+  els.fileInput._nrChangeHandler = _fileInputChangeHandler;
+  safeOn(els.fileInput, 'change', _fileInputChangeHandler);
+}
 
-els.historyBack.addEventListener('click', navigateHistoryBack);
-els.historyForward.addEventListener('click', navigateHistoryForward);
+safeOn(els.historyBack, 'click', navigateHistoryBack);
+safeOn(els.historyForward, 'click', navigateHistoryForward);
 
-els.prevPage.addEventListener('click', async () => {
+safeOn(els.prevPage, 'click', async () => {
   if (!state.adapter || state.currentPage <= 1) return;
   state.currentPage -= 1;
   await renderCurrentPage();
 });
 
-els.nextPage.addEventListener('click', async () => {
+safeOn(els.nextPage, 'click', async () => {
   if (!state.adapter || state.currentPage >= state.pageCount) return;
   state.currentPage += 1;
   await renderCurrentPage();
 });
 
-els.goToPage.addEventListener('click', goToPage);
-els.pageInput.addEventListener('keydown', async (e) => {
+safeOn(els.goToPage, 'click', goToPage);
+safeOn(els.pageInput, 'keydown', async (e) => {
   if (e.key === 'Enter') await goToPage();
 });
 
@@ -283,22 +316,22 @@ const debouncedZoomRender = debounce(async () => {
   await renderCurrentPage();
 }, 120);
 
-els.zoomIn.addEventListener('click', () => {
+safeOn(els.zoomIn, 'click', () => {
   state.zoom = Math.min(4, +(state.zoom + 0.1).toFixed(2));
-  els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
+  if (els.zoomStatus) els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
   debouncedZoomRender();
 });
 
-els.zoomOut.addEventListener('click', () => {
+safeOn(els.zoomOut, 'click', () => {
   state.zoom = Math.max(0.3, +(state.zoom - 0.1).toFixed(2));
-  els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
+  if (els.zoomStatus) els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
   debouncedZoomRender();
 });
 
-els.fitWidth.addEventListener('click', fitWidth);
-els.fitPage.addEventListener('click', fitPage);
+safeOn(els.fitWidth, 'click', fitWidth);
+safeOn(els.fitPage, 'click', fitPage);
 
-els.rotate.addEventListener('click', async () => {
+safeOn(els.rotate, 'click', async () => {
   state.rotation = (state.rotation + 90) % 360;
   clearOcrRuntimeCaches('rotation-changed');
   await renderPagePreviews();
@@ -307,106 +340,106 @@ els.rotate.addEventListener('click', async () => {
 });
 
 // Notes event bindings moved to notes-controller.js (initNotesController)
-els.saveHotkeys.addEventListener('click', saveHotkeys);
-els.resetHotkeys.addEventListener('click', resetHotkeys);
-els.autoFixHotkeys.addEventListener('click', autoFixHotkeys);
-els.applyCommonHotkeys?.addEventListener('click', () => {
+safeOn(els.saveHotkeys, 'click', saveHotkeys);
+safeOn(els.resetHotkeys, 'click', resetHotkeys);
+safeOn(els.autoFixHotkeys, 'click', autoFixHotkeys);
+safeOn(els.applyCommonHotkeys, 'click', () => {
   applyCommonHotkeys();
   setSettingsStatus('Применены стандартные hotkeys.');
 });
-els.toggleSidebarCompact?.addEventListener('click', () => {
+safeOn(els.toggleSidebarCompact, 'click', () => {
   const enabled = !document.body.classList.contains('sidebar-compact');
   setSidebarCompactMode(enabled);
   setSettingsStatus(enabled ? 'Включён компактный режим панели.' : 'Компактный режим отключён.');
 });
-els.collapseSidebarSections?.addEventListener('click', () => {
+safeOn(els.collapseSidebarSections, 'click', () => {
   setSidebarSectionsCollapsed(true);
   setSettingsStatus('Разделы панели свернуты.');
 });
-els.expandSidebarSections?.addEventListener('click', () => {
+safeOn(els.expandSidebarSections, 'click', () => {
   setSidebarSectionsCollapsed(false);
   setSettingsStatus('Разделы панели развернуты.');
 });
-els.exportWorkspace.addEventListener('click', exportWorkspaceBundleJson);
-els.importWorkspace.addEventListener('change', async (e) => {
+safeOn(els.exportWorkspace, 'click', exportWorkspaceBundleJson);
+safeOn(els.importWorkspace, 'change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await importWorkspaceBundleJson(file);
   e.target.value = '';
 });
-els.importOcrJson.addEventListener('change', async (e) => {
+safeOn(els.importOcrJson, 'change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await importOcrJson(file);
   e.target.value = '';
 });
-els.saveCloudSyncUrl.addEventListener('click', saveCloudSyncUrl);
-els.pushCloudSync.addEventListener('click', async () => {
+safeOn(els.saveCloudSyncUrl, 'click', saveCloudSyncUrl);
+safeOn(els.pushCloudSync, 'click', async () => {
   try {
     await pushWorkspaceToCloud();
   } catch (err) {
     setStage4Status('Ошибка cloud push.', 'error');
   }
 });
-els.pullCloudSync.addEventListener('click', async () => {
+safeOn(els.pullCloudSync, 'click', async () => {
   try {
     await pullWorkspaceFromCloud();
   } catch (err) {
     setStage4Status('Ошибка cloud pull.', 'error');
   }
 });
-els.toggleCollab.addEventListener('click', toggleCollaborationChannel);
-els.broadcastCollab.addEventListener('click', () => broadcastWorkspaceSnapshot('manual'));
-els.resetProgress.addEventListener('click', async () => {
+safeOn(els.toggleCollab, 'click', toggleCollaborationChannel);
+safeOn(els.broadcastCollab, 'click', () => broadcastWorkspaceSnapshot('manual'));
+safeOn(els.resetProgress, 'click', async () => {
   await resetReadingProgress();
 });
-els.resetReadingTime.addEventListener('click', async () => {
+safeOn(els.resetReadingTime, 'click', async () => {
   await resetReadingTime();
 });
-els.clearVisitTrail.addEventListener('click', clearVisitTrail);
-els.clearSearchHistory.addEventListener('click', clearSearchHistory);
-els.exportSearchHistory.addEventListener('click', exportSearchHistoryJson);
-els.exportSearchHistoryTxt.addEventListener('click', exportSearchHistoryTxt);
-els.copySearchHistory.addEventListener('click', async () => {
+safeOn(els.clearVisitTrail, 'click', clearVisitTrail);
+safeOn(els.clearSearchHistory, 'click', clearSearchHistory);
+safeOn(els.exportSearchHistory, 'click', exportSearchHistoryJson);
+safeOn(els.exportSearchHistoryTxt, 'click', exportSearchHistoryTxt);
+safeOn(els.copySearchHistory, 'click', async () => {
   await copySearchHistory();
 });
-els.importSearchHistoryJson.addEventListener('change', async (e) => {
+safeOn(els.importSearchHistoryJson, 'change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await importSearchHistoryJson(file);
   e.target.value = '';
 });
-els.clearSearchResults.addEventListener('click', clearSearchResults);
-els.exportSearchResults.addEventListener('click', exportSearchResultsJson);
-els.exportSearchResultsCsv.addEventListener('click', exportSearchResultsCsv);
-els.exportSearchSummaryTxt.addEventListener('click', exportSearchResultsSummaryTxt);
-els.importSearchResultsJson.addEventListener('change', async (e) => {
+safeOn(els.clearSearchResults, 'click', clearSearchResults);
+safeOn(els.exportSearchResults, 'click', exportSearchResultsJson);
+safeOn(els.exportSearchResultsCsv, 'click', exportSearchResultsCsv);
+safeOn(els.exportSearchSummaryTxt, 'click', exportSearchResultsSummaryTxt);
+safeOn(els.importSearchResultsJson, 'change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await importSearchResultsJson(file);
   e.target.value = '';
 });
-els.importSearchResultsCsv.addEventListener('change', async (e) => {
+safeOn(els.importSearchResultsCsv, 'change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await importSearchResultsCsv(file);
   e.target.value = '';
 });
-els.copySearchResults.addEventListener('click', async () => {
+safeOn(els.copySearchResults, 'click', async () => {
   await copySearchResultsSummary();
 });
-els.saveReadingGoal.addEventListener('click', saveReadingGoal);
-els.clearReadingGoal.addEventListener('click', clearReadingGoal);
-els.themeToggle?.addEventListener('click', toggleTheme);
+safeOn(els.saveReadingGoal, 'click', saveReadingGoal);
+safeOn(els.clearReadingGoal, 'click', clearReadingGoal);
+safeOn(els.themeToggle, 'click', toggleTheme);
 // Bookmark event bindings moved to bookmark-controller.js (initBookmarkController)
-els.downloadFile.addEventListener('click', downloadCurrentFile);
-els.printPage.addEventListener('click', printCanvasPage);
-els.importDjvuDataQuick?.addEventListener('click', () => els.importDjvuDataJson?.click());
-els.refreshText.addEventListener('click', refreshPageText);
-els.copyText.addEventListener('click', copyPageText);
-els.exportText.addEventListener('click', exportPageText);
-els.exportWord?.addEventListener('click', exportCurrentDocToWord);
-els.importDocx?.addEventListener('change', async (e) => {
+safeOn(els.downloadFile, 'click', downloadCurrentFile);
+safeOn(els.printPage, 'click', printCanvasPage);
+safeOn(els.importDjvuDataQuick, 'click', () => els.importDjvuDataJson?.click());
+safeOn(els.refreshText, 'click', refreshPageText);
+safeOn(els.copyText, 'click', copyPageText);
+safeOn(els.exportText, 'click', exportPageText);
+safeOn(els.exportWord, 'click', exportCurrentDocToWord);
+safeOn(els.importDocx, 'change', async (e) => {
   const file = e.target?.files?.[0];
   if (!file) { e.target.value = ''; return; }
   try {
@@ -432,31 +465,31 @@ els.importDocx?.addEventListener('change', async (e) => {
   }
   e.target.value = '';
 });
-els.exportOcrIndex?.addEventListener('click', downloadOcrTextExport);
-els.undoTextEdit?.addEventListener('click', () => {
+safeOn(els.exportOcrIndex, 'click', downloadOcrTextExport);
+safeOn(els.undoTextEdit, 'click', () => {
   const action = undoPageEdit();
   if (action && els.pageText) {
     els.pageText.value = action.text;
     setOcrStatus(`Отмена: страница ${action.page}`);
   }
 });
-els.redoTextEdit?.addEventListener('click', () => {
+safeOn(els.redoTextEdit, 'click', () => {
   const action = redoPageEdit();
   if (action && els.pageText) {
     els.pageText.value = action.text;
     setOcrStatus(`Повтор: страница ${action.page}`);
   }
 });
-els.exportHealthReport?.addEventListener('click', exportSessionHealthReport);
-els.toggleTextEdit?.addEventListener('click', () => setTextEditMode(!state.textEditMode));
-els.saveTextEdits?.addEventListener('click', saveCurrentPageTextEdits);
-els.ocrCurrentPage?.addEventListener('click', async () => {
+safeOn(els.exportHealthReport, 'click', exportSessionHealthReport);
+safeOn(els.toggleTextEdit, 'click', () => setTextEditMode(!state.textEditMode));
+safeOn(els.saveTextEdits, 'click', saveCurrentPageTextEdits);
+safeOn(els.ocrCurrentPage, 'click', async () => {
   await runOcrForCurrentPage();
 });
-els.ocrRegionMode?.addEventListener('click', () => {
+safeOn(els.ocrRegionMode, 'click', () => {
   setOcrRegionMode(!state.ocrRegionMode);
 });
-els.copyOcrText?.addEventListener('click', async () => {
+safeOn(els.copyOcrText, 'click', async () => {
   if (!els.pageText?.value) return;
   try {
     if (navigator.clipboard?.writeText) {
@@ -467,12 +500,12 @@ els.copyOcrText?.addEventListener('click', async () => {
     setOcrStatus('OCR: не удалось скопировать текст');
   }
 });
-els.cancelBackgroundOcr?.addEventListener('click', () => {
+safeOn(els.cancelBackgroundOcr, 'click', () => {
   cancelAllOcrWork('manual-button');
 });
 
 // ─── OCR Confidence Overlay Toggle ──────────────────────────────────────────
-els.toggleOcrConfidence?.addEventListener('click', () => {
+safeOn(els.toggleOcrConfidence, 'click', () => {
   state.ocrConfidenceMode = !state.ocrConfidenceMode;
   if (els.toggleOcrConfidence) {
     els.toggleOcrConfidence.classList.toggle('active', state.ocrConfidenceMode);
@@ -523,16 +556,16 @@ async function refreshOcrStorageInfo() {
   }
 }
 
-els.refreshOcrStorage?.addEventListener('click', refreshOcrStorageInfo);
+safeOn(els.refreshOcrStorage, 'click', refreshOcrStorageInfo);
 
-els.clearCurrentOcrData?.addEventListener('click', async () => {
+safeOn(els.clearCurrentOcrData, 'click', async () => {
   if (!state.docName) return;
   await deleteOcrData(state.docName);
   await refreshOcrStorageInfo();
   setOcrStatus('OCR: данные текущего документа очищены');
 });
 
-els.clearAllOcrData?.addEventListener('click', async () => {
+safeOn(els.clearAllOcrData, 'click', async () => {
   const docs = await listOcrDocuments();
   for (const doc of docs) {
     await deleteOcrData(doc);
@@ -541,20 +574,20 @@ els.clearAllOcrData?.addEventListener('click', async () => {
   setOcrStatus('OCR: все данные OCR очищены');
 });
 
-els.annotateToggle.addEventListener('click', () => setDrawMode(!state.drawEnabled));
-els.undoStroke.addEventListener('click', undoStroke);
-els.clearStrokes.addEventListener('click', clearStrokes);
-els.clearComments.addEventListener('click', clearComments);
-els.exportAnnotated.addEventListener('click', exportAnnotatedPng);
-els.exportAnnJson.addEventListener('click', exportAnnotationsJson);
-els.importAnnJson.addEventListener('change', async (e) => {
+safeOn(els.annotateToggle, 'click', () => setDrawMode(!state.drawEnabled));
+safeOn(els.undoStroke, 'click', undoStroke);
+safeOn(els.clearStrokes, 'click', clearStrokes);
+safeOn(els.clearComments, 'click', clearComments);
+safeOn(els.exportAnnotated, 'click', exportAnnotatedPng);
+safeOn(els.exportAnnJson, 'click', exportAnnotationsJson);
+safeOn(els.importAnnJson, 'change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await importAnnotationsJson(file);
   e.target.value = '';
 });
-els.exportAnnBundle.addEventListener('click', exportAnnotationBundleJson);
-els.importAnnBundle.addEventListener('change', async (e) => {
+safeOn(els.exportAnnBundle, 'click', exportAnnotationBundleJson);
+safeOn(els.importAnnBundle, 'change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await importAnnotationBundleJson(file);
@@ -562,7 +595,7 @@ els.importAnnBundle.addEventListener('change', async (e) => {
 });
 
 // ─── Annotation SVG/PDF export ──────────────────────────────────────────────
-els.exportAnnSvg?.addEventListener('click', () => {
+safeOn(els.exportAnnSvg, 'click', () => {
   if (!state.adapter) return;
   const strokes = loadStrokes();
   const blob = exportAnnotationsAsSvg(strokes, els.annotationCanvas.width, els.annotationCanvas.height);
@@ -576,7 +609,7 @@ els.exportAnnSvg?.addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-els.exportAnnPdf?.addEventListener('click', async () => {
+safeOn(els.exportAnnPdf, 'click', async () => {
   if (!state.adapter) return;
 
   // If we have the original PDF file, use pdf-lib to embed annotations directly
@@ -631,7 +664,7 @@ els.exportAnnPdf?.addEventListener('click', async () => {
 });
 
 // ─── PDF Forms (pdf-lib: fills and saves actual PDF) ────────────────────────
-els.pdfFormFill?.addEventListener('click', async () => {
+safeOn(els.pdfFormFill, 'click', async () => {
   if (!state.adapter || state.adapter.type !== 'pdf') {
     setOcrStatus('Формы доступны только для PDF');
     return;
@@ -643,7 +676,7 @@ els.pdfFormFill?.addEventListener('click', async () => {
   setOcrStatus(`Формы: ${totalFields} полей найдено`);
 });
 
-els.pdfFormExport?.addEventListener('click', async () => {
+safeOn(els.pdfFormExport, 'click', async () => {
   // Export as JSON (data only)
   const data = formManager.exportFormData();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -683,7 +716,7 @@ els.pdfFormExport?.addEventListener('click', async () => {
   }
 });
 
-els.pdfFormImport?.addEventListener('change', async (e) => {
+safeOn(els.pdfFormImport, 'change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   try {
@@ -699,13 +732,13 @@ els.pdfFormImport?.addEventListener('change', async (e) => {
   e.target.value = '';
 });
 
-els.pdfFormClear?.addEventListener('click', () => {
+safeOn(els.pdfFormClear, 'click', () => {
   formManager.clearAll();
   setOcrStatus('Формы очищены');
 });
 
 // ─── PDF Block Editor (with snap guides & pdf-lib export) ───────────────────
-els.pdfBlockEdit?.addEventListener('click', () => {
+safeOn(els.pdfBlockEdit, 'click', () => {
   if (!state.adapter || state.adapter.type !== 'pdf') {
     setOcrStatus('Редактор блоков доступен только для PDF');
     return;
@@ -750,7 +783,7 @@ async function exportBlockEditsToPdf() {
   }
 }
 
-els.pdfBlockEdit?.addEventListener('dblclick', exportBlockEditsToPdf);
+safeOn(els.pdfBlockEdit, 'dblclick', exportBlockEditsToPdf);
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.shiftKey && e.key === 'E' && blockEditor.active) {
     e.preventDefault();
@@ -759,14 +792,14 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ─── Image Insertion ─────────────────────────────────────────────────────────
-els.insertImageInput?.addEventListener('change', (e) => {
+safeOn(els.insertImageInput, 'change', (e) => {
   const file = e.target.files?.[0];
   if (file) handleImageInsertion(file);
   e.target.value = '';
 });
 
 // ─── Watermark (pdf-lib: saves into actual PDF) ────────────────────────────
-els.addWatermark?.addEventListener('click', async () => {
+safeOn(els.addWatermark, 'click', async () => {
   if (!state.adapter) return;
   const text = await nrPrompt('Текст водяного знака:', 'КОНФИДЕНЦИАЛЬНО');
   if (!text) return;
@@ -800,7 +833,7 @@ els.addWatermark?.addEventListener('click', async () => {
 });
 
 // ─── Stamps (pdf-lib: saves into actual PDF) ────────────────────────────────
-els.addStamp?.addEventListener('click', async () => {
+safeOn(els.addStamp, 'click', async () => {
   if (!state.adapter) return;
   const types = ['approved', 'rejected', 'draft', 'confidential', 'copy'];
   const labels = ['УТВЕРЖДЕНО', 'ОТКЛОНЕНО', 'ЧЕРНОВИК', 'КОНФИДЕНЦИАЛЬНО', 'КОПИЯ'];
@@ -832,7 +865,7 @@ els.addStamp?.addEventListener('click', async () => {
 });
 
 // ─── Signature ──────────────────────────────────────────────────────────────
-els.addSignature?.addEventListener('click', () => {
+safeOn(els.addSignature, 'click', () => {
   if (!state.adapter) return;
   openSignaturePad();
 });
@@ -841,8 +874,8 @@ els.addSignature?.addEventListener('click', () => {
 initPageOrganizerUI({ openFile });
 
 // ─── Merge / Split ──────────────────────────────────────────────────────────
-els.mergePages?.addEventListener('click', () => mergePdfFiles());
-els.splitPages?.addEventListener('click', () => splitPdfPages());
+safeOn(els.mergePages, 'click', () => mergePdfFiles());
+safeOn(els.splitPages, 'click', () => splitPdfPages());
 
 // ─── Conversion Plugins ─────────────────────────────────────────────────────
 function exportPluginResult(pluginId, result) {
@@ -861,7 +894,7 @@ document.getElementById('convertToPdfBtn')?.addEventListener('click', async () =
   await convertCurrentToPdf(reloadPdfFromBytes, setOcrStatus);
 });
 
-els.conversionInvoice?.addEventListener('click', async () => {
+safeOn(els.conversionInvoice, 'click', async () => {
   if (!state.adapter) return;
   const text = els.pageText?.value || '';
   const result = applyPlugin('invoice', text, state.currentPage);
@@ -872,7 +905,7 @@ els.conversionInvoice?.addEventListener('click', async () => {
   }
 });
 
-els.conversionReport?.addEventListener('click', async () => {
+safeOn(els.conversionReport, 'click', async () => {
   if (!state.adapter) return;
   const text = els.pageText?.value || '';
   const result = applyPlugin('report', text, state.currentPage);
@@ -883,7 +916,7 @@ els.conversionReport?.addEventListener('click', async () => {
   }
 });
 
-els.conversionTable?.addEventListener('click', async () => {
+safeOn(els.conversionTable, 'click', async () => {
   if (!state.adapter) return;
   const text = els.pageText?.value || '';
   const result = applyPlugin('custom-table', text, state.currentPage);
@@ -894,47 +927,47 @@ els.conversionTable?.addEventListener('click', async () => {
   }
 });
 
-els.importDjvuDataJson.addEventListener('change', async (e) => {
+safeOn(els.importDjvuDataJson, 'change', async (e) => {
   const file = e.target.files?.[0];
   if (!file) return;
   await importDjvuDataJson(file);
   e.target.value = '';
 });
-els.searchBtn.addEventListener('click', async () => {
-  await searchInPdf(els.searchInput.value);
+safeOn(els.searchBtn, 'click', async () => {
+  await searchInPdf(els.searchInput?.value);
 });
-els.searchInput.addEventListener('keydown', async (e) => {
+safeOn(els.searchInput, 'keydown', async (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
-    await searchInPdf(els.searchInput.value);
+    await searchInPdf(els.searchInput?.value);
   }
 });
-els.searchScope.addEventListener('change', () => {
+safeOn(els.searchScope, 'change', () => {
   saveSearchScope();
 });
 
-els.searchPrev.addEventListener('click', async () => {
+safeOn(els.searchPrev, 'click', async () => {
   await jumpToSearchResult(state.searchCursor - 1);
 });
 
-els.searchNext.addEventListener('click', async () => {
+safeOn(els.searchNext, 'click', async () => {
   await jumpToSearchResult(state.searchCursor + 1);
 });
 
 const debouncedUpdateSearchToolbarRows = debounce(updateSearchToolbarRows, 150);
 window.addEventListener('resize', debouncedUpdateSearchToolbarRows);
-els.searchInput?.addEventListener('input', debouncedUpdateSearchToolbarRows);
-els.searchScope?.addEventListener('change', debouncedUpdateSearchToolbarRows);
+safeOn(els.searchInput, 'input', debouncedUpdateSearchToolbarRows);
+safeOn(els.searchScope, 'change', debouncedUpdateSearchToolbarRows);
 
-els.shortcutsHelp?.addEventListener('click', showShortcutsHelp);
-els.toggleSidebar?.addEventListener('click', () => toggleLayoutState('sidebarHidden'));
-els.toggleToolsBar?.addEventListener('click', () => toggleLayoutState('toolsHidden'));
-els.toggleTextTools?.addEventListener('click', () => toggleLayoutState('textHidden'));
-els.toggleSearchTools?.addEventListener('click', () => toggleLayoutState('searchToolsHidden'));
-els.toggleAnnotTools?.addEventListener('click', () => toggleLayoutState('annotToolsHidden'));
-els.toggleTextToolsInline?.addEventListener('click', () => toggleLayoutState('textHidden'));
+safeOn(els.shortcutsHelp, 'click', showShortcutsHelp);
+safeOn(els.toggleSidebar, 'click', () => toggleLayoutState('sidebarHidden'));
+safeOn(els.toggleToolsBar, 'click', () => toggleLayoutState('toolsHidden'));
+safeOn(els.toggleTextTools, 'click', () => toggleLayoutState('textHidden'));
+safeOn(els.toggleSearchTools, 'click', () => toggleLayoutState('searchToolsHidden'));
+safeOn(els.toggleAnnotTools, 'click', () => toggleLayoutState('annotToolsHidden'));
+safeOn(els.toggleTextToolsInline, 'click', () => toggleLayoutState('textHidden'));
 
-els.fullscreen.addEventListener('click', async () => {
+safeOn(els.fullscreen, 'click', async () => {
   if (!document.fullscreenElement) {
     await document.documentElement.requestFullscreen();
   } else {
@@ -943,12 +976,12 @@ els.fullscreen.addEventListener('click', async () => {
 });
 
 let _wheelZoomPending = false;
-els.canvasWrap.addEventListener('wheel', (e) => {
+safeOn(els.canvasWrap, 'wheel', (e) => {
   if (!e.ctrlKey) return;
   e.preventDefault();
   const step = e.deltaY < 0 ? 0.08 : -0.08;
   state.zoom = Math.min(4, Math.max(0.3, state.zoom + step));
-  els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
+  if (els.zoomStatus) els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
   if (!_wheelZoomPending) {
     _wheelZoomPending = true;
     requestAnimationFrame(async () => {
@@ -1384,7 +1417,7 @@ els.fileInput._nrChangeHandler = async (e) => {
   await openFileWithTabs(file);
   e.target.value = '';
 };
-els.fileInput.addEventListener('change', els.fileInput._nrChangeHandler);
+safeOn(els.fileInput, 'change', els.fileInput._nrChangeHandler);
 
 // Tab bar new tab button
 document.getElementById('tabBarNewTab')?.addEventListener('click', () => {
@@ -1532,3 +1565,20 @@ registerHotkeyHandlers({
   fullscreen: () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); },
   print: () => window.print(),
 });
+
+// ─── Global Error Handlers ───────────────────────────────────────────────
+window.addEventListener('unhandledrejection', (event) => {
+  const msg = event.reason?.message || String(event.reason);
+  pushDiagnosticEvent('unhandled-rejection', { message: msg }, 'error');
+  if (typeof recordCrashEvent === 'function') recordCrashEvent('unhandled-rejection', msg, 'global');
+});
+
+window.addEventListener('error', (event) => {
+  const msg = event.message || 'Unknown error';
+  pushDiagnosticEvent('uncaught-error', { message: msg, filename: event.filename, line: event.lineno }, 'error');
+  if (typeof recordCrashEvent === 'function') recordCrashEvent('uncaught-error', msg, 'global');
+});
+
+// ─── Mark initialization complete ────────────────────────────────────────
+state.initComplete = true;
+pushDiagnosticEvent('app.init-complete', { listeners: _listenerRegistry.length, version: '4.0.0' });

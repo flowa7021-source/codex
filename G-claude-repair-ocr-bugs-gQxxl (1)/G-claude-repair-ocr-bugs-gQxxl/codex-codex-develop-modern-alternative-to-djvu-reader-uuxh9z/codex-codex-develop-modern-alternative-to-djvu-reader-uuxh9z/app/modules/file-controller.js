@@ -17,7 +17,7 @@ import { resetTesseractAvailability } from './tesseract-adapter.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
-let _deps = {
+const _deps = {
   withErrorBoundary: (fn, _ctx) => fn,
   renderCurrentPage: async () => {},
   renderOutline: async () => {},

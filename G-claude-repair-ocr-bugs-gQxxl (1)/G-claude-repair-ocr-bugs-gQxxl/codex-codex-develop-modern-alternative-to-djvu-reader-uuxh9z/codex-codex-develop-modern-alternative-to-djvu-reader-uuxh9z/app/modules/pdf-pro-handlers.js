@@ -7,7 +7,7 @@ import { PdfRedactor, REDACTION_PATTERNS } from './pdf-redact.js';
 import { state } from './state.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
-let _deps = {
+const _deps = {
   setOcrStatus: () => {},
   nrPrompt: async () => null,
   nrConfirm: async () => false,

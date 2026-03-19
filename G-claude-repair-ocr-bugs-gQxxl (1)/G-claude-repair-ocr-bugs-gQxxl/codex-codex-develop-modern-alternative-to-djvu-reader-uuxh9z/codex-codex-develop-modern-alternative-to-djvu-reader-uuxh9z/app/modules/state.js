@@ -57,6 +57,11 @@ export const state = {
   ocrCacheLastMissDiagAt: 0,
   ocrCacheOpsCount: 0,
   textEditMode: false,
+  pdfEditState: null,
+  lastDocxImportHtml: null,
+  lastDocxImportBlocks: null,
+  eventListenerRegistry: new Map(),
+  initComplete: false,
   diagnostics: { events: [], maxEvents: 500, sessionId: `nr-${Date.now().toString(36)}` },
 };
 

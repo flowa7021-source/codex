@@ -9,7 +9,7 @@ import { ensurePdfJs, ensureDjVuJs } from './loaders.js';
 import { isTesseractAvailable } from './tesseract-adapter.js';
 
 // Dependencies injected from app.js at runtime
-let _deps = {
+const _deps = {
   getEditHistory: () => ({ undoCount: 0, redoCount: 0, editedPages: [], dirty: false }),
   getBatchOcrProgress: () => ({ completed: 0, total: 0, percent: 0, running: false, queueLength: 0, confidenceStats: {} }),
   getSessionHealth: () => ({ sessionId: '', uptimeMs: 0, totalErrors: 0, crashes: 0, crashFreeRate: 100 }),

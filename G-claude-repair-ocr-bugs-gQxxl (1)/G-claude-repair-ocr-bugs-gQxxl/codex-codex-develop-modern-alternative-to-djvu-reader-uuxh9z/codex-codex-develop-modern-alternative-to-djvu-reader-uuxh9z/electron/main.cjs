@@ -12,6 +12,16 @@ app.commandLine.appendSwitch('enable-zero-copy');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 
 function createWindow() {
+  // Security: prevent navigation to external URLs
+  app.on('web-contents-created', (_event, contents) => {
+    contents.on('will-navigate', (event, url) => {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== 'file:') {
+        event.preventDefault();
+      }
+    });
+  });
+
   const win = new BrowserWindow({
     width: 1480,
     height: 920,
@@ -24,8 +34,11 @@ function createWindow() {
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
-      devTools: true,
-      spellcheck: false
+      devTools: !app.isPackaged,
+      spellcheck: false,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false,
     }
   });
 
