@@ -137,64 +137,28 @@ export async function _renderDeferredPreviews(from, to) {
 }
 
 export async function renderPagePreviews() {
-  els.pagePreviewList.innerHTML = '';
-
-  if (!state.adapter) {
-    const li = document.createElement('li');
-    li.className = 'recent-item';
-    li.textContent = 'Откройте документ для превью';
-    els.pagePreviewList.appendChild(li);
-    return;
-  }
-
-  const maxPages = state.adapter.type === 'pdf' ? Math.min(state.pageCount, 24) : Math.min(state.pageCount, 4);
-  // Render first batch immediately (fast initial paint), defer rest
-  const immediateBatch = Math.min(maxPages, 6);
-
-  for (let i = 1; i <= maxPages; i += 1) {
-    const li = document.createElement('li');
-    li.className = 'recent-item';
-    const btn = document.createElement('button');
-    btn.className = 'preview-btn';
-    btn.dataset.page = String(i);
-
-    const canvas = document.createElement('canvas');
-    canvas.width = 120;
-    canvas.height = 160;
-
-    // Only render first batch synchronously; the rest are placeholders
-    // that will be rendered after the main page is displayed
-    if (i <= immediateBatch) {
-      try {
-        const viewport = await state.adapter.getPageViewport(i, 1, state.rotation);
-        const scale = Math.min(120 / Math.max(1, viewport.width), 160 / Math.max(1, viewport.height));
-        await state.adapter.renderPage(i, canvas, { zoom: scale, rotation: state.rotation });
-      } catch (err) {
-        _drawPreviewPlaceholder(canvas, i);
-      }
-    } else {
-      _drawPreviewPlaceholder(canvas, i);
-      canvas.dataset.needsRender = '1';
+  // Delegate to new thumbnail-renderer module for lazy-loaded single-column previews
+  try {
+    const { renderPagePreviews: renderThumbs } = await import('./thumbnail-renderer.js');
+    await renderThumbs();
+  } catch (err) {
+    console.warn('[outline] thumbnail-renderer fallback:', err?.message);
+    // Fallback: simple list
+    els.pagePreviewList.innerHTML = '';
+    if (!state.adapter) return;
+    for (let i = 1; i <= Math.min(state.pageCount, 20); i++) {
+      const li = document.createElement('li');
+      li.className = 'recent-item';
+      const btn = document.createElement('button');
+      btn.className = 'preview-btn';
+      btn.textContent = `Страница ${i}`;
+      btn.addEventListener('click', async () => {
+        state.currentPage = i;
+        await _deps.renderCurrentPage();
+      });
+      li.appendChild(btn);
+      els.pagePreviewList.appendChild(li);
     }
-
-    const label = document.createElement('span');
-    label.className = 'preview-label';
-    label.textContent = `Страница ${i}`;
-
-    btn.appendChild(canvas);
-    btn.appendChild(label);
-    btn.addEventListener('click', async () => {
-      state.currentPage = i;
-      await _deps.renderCurrentPage();
-    });
-
-    li.appendChild(btn);
-    els.pagePreviewList.appendChild(li);
-  }
-
-  // Render deferred thumbnails in the background after file open completes
-  if (maxPages > immediateBatch) {
-    requestAnimationFrame(() => _renderDeferredPreviews(immediateBatch + 1, maxPages));
   }
 
   if (state.pageCount > maxPages) {

@@ -72,7 +72,7 @@ import { ocrSearchIndex, searchOcrIndex, downloadOcrTextExport, canSearchCurrent
 import { initOcrControllerDeps, getBatchOcrProgress, clearOcrRuntimeCaches, estimatePageSkewAngle, setOcrStatus, setOcrRegionMode, drawOcrSelectionPreview, runOcrOnRect, runOcrForCurrentPage, extractTextForPage, cancelAllOcrWork, scheduleBackgroundOcrScan } from './modules/ocr-controller.js';
 import { initWorkspaceDeps, setWorkspaceStatus, setStage4Status, initReleaseGuards, loadCloudSyncUrl, saveCloudSyncUrl, loadOcrTextData, saveOcrTextData, pushWorkspaceToCloud, pullWorkspaceFromCloud, broadcastWorkspaceSnapshot, toggleCollaborationChannel, importOcrJson, exportWorkspaceBundleJson, importWorkspaceBundleJson } from './modules/workspace-controller.js';
 import { initReadingProgressDeps, noteKey, bookmarkKey, loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage, clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender, navigateHistoryBack, navigateHistoryForward, loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer, syncReadingTimerWithVisibility, resetReadingTime, _saveViewStateNow, saveViewState, renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress, saveRecent, clearRecent, renderRecent } from './modules/reading-progress-controller.js';
-import { initFileControllerDeps, revokeCurrentObjectUrl, saveDjvuData, openFile } from './modules/file-controller.js';
+import { initFileControllerDeps, revokeCurrentObjectUrl, saveDjvuData, openFile, reloadPdfFromBytes, saveCurrentPdfAs } from './modules/file-controller.js';
 import { initPdfOpsDeps, mergePdfFiles, splitPdfPages } from './modules/pdf-ops-controller.js';
 import { PDFAdapter, ImageAdapter, DjVuAdapter, DjVuNativeAdapter, UnsupportedAdapter } from './modules/adapters.js';
 import { initSettingsUiDeps, applyAppLanguage, applySectionVisibilitySettings, openSettingsModal, closeSettingsModal, previewUiSizeFromModal, saveSettingsFromModal } from './modules/settings-ui.js';
@@ -80,6 +80,10 @@ import { initOutlineControllerDeps, renderDocInfo, renderOutline, renderPagePrev
 import { initTextNavDeps, ensureTextToolsVisible, refreshPageText, copyPageText, exportPageText, setTextEditMode, saveCurrentPageTextEdits, exportCurrentDocToWord, goToPage, fitWidth, fitPage, downloadCurrentFile, printCanvasPage } from './modules/text-nav-controller.js';
 import { initLayoutControllerDeps, uiLayoutKey, applyAdvancedPanelsState, toggleAdvancedPanelsState, applyLayoutState, updateSearchToolbarRows, toggleLayoutState, setupResizableLayout, setupDragAndDrop, setupAnnotationEvents } from './modules/layout-controller.js';
 import { initPdfProHandlersDeps, initPdfProHandlers } from './modules/pdf-pro-handlers.js';
+import { initBookmarkController, renderBookmarkList, updateBookmarkButton } from './modules/bookmark-controller.js';
+import { initNotesController, loadNotesIntoUI } from './modules/notes-controller.js';
+import { renderPagePreviews as renderThumbnails, highlightCurrentPage as highlightThumbPage, invalidateThumbnailCache } from './modules/thumbnail-renderer.js';
+import { convertCurrentToPdf } from './modules/convert-to-pdf.js';
 import { initUiBlocks } from './modules/ui-init-blocks.js';
 import { initPhase2Modules } from './modules/app-init-phase2.js';
 import { initPageOrganizerUI } from './modules/page-organizer-ui.js';
@@ -879,6 +883,10 @@ function exportPluginResult(pluginId, result) {
   URL.revokeObjectURL(url);
 }
 
+document.getElementById('convertToPdfBtn')?.addEventListener('click', async () => {
+  await convertCurrentToPdf(reloadPdfFromBytes, setOcrStatus);
+});
+
 els.conversionInvoice?.addEventListener('click', async () => {
   if (!state.adapter) return;
   const text = els.pageText?.value || '';
@@ -1278,6 +1286,7 @@ initPdfProHandlersDeps({
   pdfOptimizer, flattenPdf, checkAccessibility, autoFixAccessibility,
   pdfCompare, addHeaderFooter, addBatesNumbering,
   rotatePdfPages, splitPdfDocument, mergePdfDocuments, parsePageRangeLib,
+  reloadPdfFromBytes,
 });
 initPdfProHandlers();
 
@@ -1332,6 +1341,105 @@ window._toast = { toast, toastSuccess, toastError, toastWarning, toastInfo, toas
 window._viewModes = { setViewMode, getCurrentMode, VIEW_MODES };
 
 initPhase2Modules({ renderCurrentPage, goToPage });
+
+// ─── Tab Manager Integration ──────────────────────────────────────────────
+const tabBarEl = document.getElementById('tabBarTabs');
+const tabManager = new TabManager({
+  tabBar: tabBarEl,
+  onActivate: async (tab) => {
+    if (!tab.bytes) return;
+    const type = tab.type || 'pdf';
+    const file = new File([tab.bytes], tab.name, {
+      type: type === 'pdf' ? 'application/pdf' : 'application/octet-stream',
+    });
+    await openFile(file);
+    // Restore saved view state
+    if (tab.state?.currentPage) {
+      state.currentPage = Math.min(tab.state.currentPage, state.pageCount);
+    }
+    if (tab.state?.zoom) state.zoom = tab.state.zoom;
+    if (tab.state?.rotation != null) state.rotation = tab.state.rotation;
+    await renderCurrentPage();
+    if (tab.state?.scrollY && els.canvasWrap) {
+      els.canvasWrap.scrollTop = tab.state.scrollY;
+    }
+  },
+  onClose: (tab) => {
+    if (tab.modified) {
+      return confirm(`Файл "${tab.name}" изменён. Закрыть без сохранения?`);
+    }
+    return true;
+  },
+  maxTabs: 10,
+});
+
+// Save state when deactivating a tab
+tabManager.onDeactivate = (tab) => {
+  tab.state = {
+    currentPage: state.currentPage,
+    zoom: state.zoom,
+    rotation: state.rotation,
+    scrollY: els.canvasWrap?.scrollTop || 0,
+  };
+  // Update bytes if PDF was modified in-place
+  if (state.pdfBytes && tab.type === 'pdf') {
+    tab.bytes = state.pdfBytes;
+  }
+};
+
+// Hook into file opening to register tabs
+const _originalOpenFile = openFile;
+const openFileWithTabs = async (file) => {
+  const data = await file.arrayBuffer();
+  const bytes = new Uint8Array(data);
+  const lower = file.name.toLowerCase();
+  const type = lower.endsWith('.pdf') ? 'pdf'
+    : (lower.endsWith('.djvu') || lower.endsWith('.djv')) ? 'djvu'
+    : lower.endsWith('.epub') ? 'epub'
+    : /\.(png|jpe?g|webp|gif|bmp)$/i.test(lower) ? 'image'
+    : 'unknown';
+  tabManager.open(file.name, type, bytes);
+};
+
+// Override fileInput handler
+els.fileInput.removeEventListener('change', els.fileInput._changeHandler);
+els.fileInput._changeHandler = async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  await openFileWithTabs(file);
+  e.target.value = '';
+};
+els.fileInput.addEventListener('change', els.fileInput._changeHandler);
+
+// Tab bar new tab button
+document.getElementById('tabBarNewTab')?.addEventListener('click', () => {
+  els.fileInput?.click();
+});
+
+window._tabManagerInstance = tabManager;
+
+// ─── Bookmark & Notes Controllers ────────────────────────────────────────
+initBookmarkController();
+initNotesController();
+
+// Listen for page navigation events from bookmark-controller
+window.addEventListener('novareader-goto-page', async (e) => {
+  const page = e.detail?.page;
+  if (page && page >= 1 && page <= state.pageCount) {
+    state.currentPage = page;
+    await renderCurrentPage();
+    highlightThumbPage();
+    updateBookmarkButton();
+  }
+});
+
+// Hook page navigation to update bookmark button and thumbnails
+const _origRenderCurrentPage = renderCurrentPage;
+// Note: renderCurrentPage is already imported; we add a post-render hook
+window.addEventListener('page-rendered', () => {
+  updateBookmarkButton();
+  highlightThumbPage();
+});
 
 // ─── Expose globals for E2E testing and diagnostics ──────────────────────────
 window.crashTelemetry = crashTelemetry;

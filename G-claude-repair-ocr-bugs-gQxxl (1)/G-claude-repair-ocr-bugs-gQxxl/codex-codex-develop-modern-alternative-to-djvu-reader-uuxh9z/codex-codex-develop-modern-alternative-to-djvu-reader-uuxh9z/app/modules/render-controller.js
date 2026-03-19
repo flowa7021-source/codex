@@ -134,6 +134,8 @@ export function _updatePageUI(renderMs) {
       zoom: Number(state.zoom.toFixed(2)),
       ms: renderMs ?? 0,
     });
+    // Notify app of page render for bookmark/thumbnail updates
+    try { window.dispatchEvent(new CustomEvent('page-rendered', { detail: { page: renderedPage } })); } catch (_) { /* noop */ }
   });
 }
 
@@ -400,10 +402,23 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
     const w = (word.bbox.x1 - word.bbox.x0) * displayW;
     const h = (word.bbox.y1 - word.bbox.y0) * displayH;
 
-    const fontSize = Math.max(6, h * 0.78);
+    // Improved font-size fitting: use measureText to find optimal size
+    let fontSize = Math.max(6, h * 0.78);
+    if (word.text.length > 0 && h > 6) {
+      // Try to match text height more accurately
+      measureCtx.font = `${fontSize}px sans-serif`;
+      const metrics = measureCtx.measureText(word.text);
+      const actualH = (metrics.actualBoundingBoxAscent || fontSize * 0.8) + (metrics.actualBoundingBoxDescent || fontSize * 0.2);
+      if (actualH > 0) {
+        fontSize = Math.max(6, fontSize * (h / actualH) * 0.92);
+      }
+    }
+
+    // Baseline alignment correction: shift down slightly for better overlap
+    const baselineShift = h * 0.05;
 
     span.style.left = `${x}px`;
-    span.style.top = `${y}px`;
+    span.style.top = `${y + baselineShift}px`;
     span.style.fontSize = `${fontSize}px`;
     span.style.width = `${w}px`;
     span.style.height = `${h}px`;
@@ -413,12 +428,25 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
       measureCtx.font = `${fontSize}px sans-serif`;
       const measuredWidth = measureCtx.measureText(word.text).width;
       if (measuredWidth > 0 && Math.abs(w - measuredWidth) > 1) {
-        const spacing = (w - measuredWidth) / (word.text.length - 1);
-        const clampedSpacing = Math.max(-fontSize * 0.3, Math.min(fontSize * 0.5, spacing));
-        span.style.letterSpacing = `${clampedSpacing}px`;
+        // Use scaleX transform if width difference is large
+        const ratio = w / measuredWidth;
+        if (ratio > 0.5 && ratio < 2.0) {
+          span.style.transform = `scaleX(${ratio.toFixed(3)})`;
+          span.style.transformOrigin = 'left top';
+        } else {
+          const spacing = (w - measuredWidth) / (word.text.length - 1);
+          const clampedSpacing = Math.max(-fontSize * 0.3, Math.min(fontSize * 0.5, spacing));
+          span.style.letterSpacing = `${clampedSpacing}px`;
+        }
       }
     } else if (word.text.length === 1) {
       span.style.textAlign = 'center';
+    }
+
+    // Skew correction: apply rotation if word has baseline angle data
+    if (word.baseline?.angle && Math.abs(word.baseline.angle) > 0.5) {
+      span.style.transform = (span.style.transform || '') + ` rotate(${(-word.baseline.angle).toFixed(1)}deg)`;
+      span.style.transformOrigin = span.style.transformOrigin || 'left bottom';
     }
 
     fragment.appendChild(span);

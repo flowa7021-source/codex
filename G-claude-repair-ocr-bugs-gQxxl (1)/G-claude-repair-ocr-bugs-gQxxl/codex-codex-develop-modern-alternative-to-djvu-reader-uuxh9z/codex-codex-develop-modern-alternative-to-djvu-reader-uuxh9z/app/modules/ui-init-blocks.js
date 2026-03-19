@@ -113,8 +113,8 @@ function initBatchOcrUI(deps) {
   // Batch OCR all pages
   if (batchOcrAllBtn) {
     batchOcrAllBtn.addEventListener('click', async () => {
-      if (!state.adapter || state.adapter.type !== 'pdf') {
-        setBatchStatus('Откройте PDF для пакетного OCR');
+      if (!state.adapter || (state.adapter.type !== 'pdf' && state.adapter.type !== 'djvu')) {
+        setBatchStatus('Откройте PDF или DJVU для пакетного OCR');
         return;
       }
 
@@ -196,14 +196,14 @@ function initBatchOcrUI(deps) {
   // Detect scanned document
   if (detectScannedBtn) {
     detectScannedBtn.addEventListener('click', async () => {
-      if (!state.adapter || state.adapter.type !== 'pdf') {
-        setBatchStatus('Откройте PDF для анализа');
+      if (!state.adapter || (state.adapter.type !== 'pdf' && state.adapter.type !== 'djvu')) {
+        setBatchStatus('Откройте PDF или DJVU для анализа');
         return;
       }
 
       try {
         setBatchStatus('Анализ документа...');
-        const result = await detectScannedDocument(state.adapter.pdfDoc);
+        const result = await detectScannedDocument(state.adapter.pdfDoc || state.adapter);
         let msg = result.isScanned
           ? `Сканированный документ (${result.scannedPages}/${result.totalChecked} стр.)`
           : `Текстовый документ (${result.totalChecked - result.scannedPages}/${result.totalChecked} с текстом)`;

@@ -27,6 +27,7 @@ let _deps = {
   splitPdfDocument: async () => {},
   mergePdfDocuments: async () => {},
   parsePageRangeLib: () => [],
+  reloadPdfFromBytes: async () => {},
 };
 
 export function initPdfProHandlersDeps(deps) {
@@ -43,6 +44,18 @@ function requirePdfFile() {
     return null;
   }
   return state.file;
+}
+
+/** Extract Uint8Array from a Blob */
+async function blobToBytes(blob) {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+/** Apply PDF operation result in-place: reload from blob bytes */
+async function applyInPlace(blob, statusMsg) {
+  const bytes = await blobToBytes(blob);
+  await _deps.reloadPdfFromBytes(bytes);
+  _deps.setOcrStatus(statusMsg);
 }
 
 // ─── Init: register all Pro PDF event handlers ──────────────────────────────
@@ -100,13 +113,7 @@ export function initPdfProHandlers() {
 
         _deps.setOcrStatus('Применение редактирования...');
         const result = await pdfRedactor.applyRedactions(arrayBuffer);
-        const url = _deps.safeCreateObjectURL(result.blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-redacted.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
-        _deps.setOcrStatus(`Редактирование завершено: ${result.redactedCount} областей в ${result.pagesProcessed} стр.`);
+        await applyInPlace(result.blob, `Редактирование завершено: ${result.redactedCount} областей в ${result.pagesProcessed} стр.`);
         _deps.pushDiagnosticEvent('pdf.redact', { areas: result.redactedCount, pages: result.pagesProcessed });
       } catch (err) {
         _deps.setOcrStatus(`Ошибка редактирования: ${err?.message || 'неизвестная'}`);
@@ -124,13 +131,7 @@ export function initPdfProHandlers() {
         _deps.setOcrStatus('Оптимизация PDF...');
         const arrayBuffer = await file.arrayBuffer();
         const result = await _deps.pdfOptimizer.optimize(arrayBuffer);
-        const url = _deps.safeCreateObjectURL(result.blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-optimized.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
-        _deps.setOcrStatus(`Оптимизация: ${result.summary}`);
+        await applyInPlace(result.blob, `Оптимизация: ${result.summary}`);
         _deps.pushDiagnosticEvent('pdf.optimize', { original: result.original, optimized: result.optimized, savingsPercent: result.savingsPercent });
       } catch (err) {
         _deps.setOcrStatus(`Ошибка оптимизации: ${err?.message || 'неизвестная'}`);
@@ -148,13 +149,7 @@ export function initPdfProHandlers() {
         _deps.setOcrStatus('Выравнивание PDF...');
         const arrayBuffer = await file.arrayBuffer();
         const result = await _deps.flattenPdf(arrayBuffer, { flattenForms: true, flattenAnnotations: true });
-        const url = _deps.safeCreateObjectURL(result.blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-flattened.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
-        _deps.setOcrStatus(`Выровнено: ${result.formsFlattened} форм, ${result.annotationsFlattened} аннотаций`);
+        await applyInPlace(result.blob, `Выровнено: ${result.formsFlattened} форм, ${result.annotationsFlattened} аннотаций`);
         _deps.pushDiagnosticEvent('pdf.flatten', { forms: result.formsFlattened, annotations: result.annotationsFlattened });
       } catch (err) {
         _deps.setOcrStatus(`Ошибка выравнивания: ${err?.message || 'неизвестная'}`);
@@ -187,13 +182,7 @@ export function initPdfProHandlers() {
               title: state.docName || 'Document',
               language: 'ru',
             });
-            const url = _deps.safeCreateObjectURL(fixed.blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${state.docName || 'document'}-accessible.pdf`;
-            a.click();
-            URL.revokeObjectURL(url);
-            _deps.setOcrStatus(`Исправлено ${fixed.fixCount} проблем доступности`);
+            await applyInPlace(fixed.blob, `Исправлено ${fixed.fixCount} проблем доступности`);
             return;
           }
         }
@@ -282,13 +271,7 @@ export function initPdfProHandlers() {
         const blob = await _deps.addHeaderFooter(arrayBuffer, {
           [position === 'top' ? 'headerCenter' : 'footerCenter']: format,
         });
-        const url = _deps.safeCreateObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-with-headers.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
-        _deps.setOcrStatus('Колонтитулы добавлены');
+        await applyInPlace(blob, 'Колонтитулы добавлены');
         _deps.pushDiagnosticEvent('pdf.headerFooter');
       } catch (err) {
         _deps.setOcrStatus(`Ошибка: ${err?.message || 'неизвестная'}`);
@@ -316,13 +299,7 @@ export function initPdfProHandlers() {
           digits: 6,
           position: 'bottom-right',
         });
-        const url = _deps.safeCreateObjectURL(result.blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-bates.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
-        _deps.setOcrStatus(`Нумерация Бейтса: ${result.startNum}–${result.endNum} (${result.totalPages} стр.)`);
+        await applyInPlace(result.blob, `Нумерация Бейтса: ${result.startNum}–${result.endNum} (${result.totalPages} стр.)`);
         _deps.pushDiagnosticEvent('pdf.bates', { startNum: result.startNum, endNum: result.endNum });
       } catch (err) {
         _deps.setOcrStatus(`Ошибка нумерации: ${err?.message || 'неизвестная'}`);
@@ -340,13 +317,7 @@ export function initPdfProHandlers() {
         const arrayBuffer = await file.arrayBuffer();
         const blob = await _deps.rotatePdfPages(arrayBuffer, [state.currentPage], 90);
         if (blob) {
-          const url = _deps.safeCreateObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${state.docName || 'document'}-rotated.pdf`;
-          a.click();
-          URL.revokeObjectURL(url);
-          _deps.setOcrStatus('Страница повёрнута на 90°');
+          await applyInPlace(blob, 'Страница повёрнута на 90°');
         }
       } catch (err) {
         _deps.setOcrStatus(`Ошибка поворота: ${err?.message || 'неизвестная'}`);
@@ -363,13 +334,7 @@ export function initPdfProHandlers() {
         const arrayBuffer = await file.arrayBuffer();
         const blob = await _deps.rotatePdfPages(arrayBuffer, [state.currentPage], -90);
         if (blob) {
-          const url = _deps.safeCreateObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${state.docName || 'document'}-rotated.pdf`;
-          a.click();
-          URL.revokeObjectURL(url);
-          _deps.setOcrStatus('Страница повёрнута на -90°');
+          await applyInPlace(blob, 'Страница повёрнута на -90°');
         }
       } catch (err) {
         _deps.setOcrStatus(`Ошибка поворота: ${err?.message || 'неизвестная'}`);
@@ -391,20 +356,15 @@ export function initPdfProHandlers() {
       try {
         _deps.setOcrStatus('Удаление страницы...');
         const arrayBuffer = await file.arrayBuffer();
+        const deletedPage = state.currentPage;
         // Extract all pages except current
         const pages = [];
         for (let i = 1; i <= state.pageCount; i++) {
-          if (i !== state.currentPage) pages.push(i);
+          if (i !== deletedPage) pages.push(i);
         }
         const blob = await _deps.splitPdfDocument(arrayBuffer, pages);
         if (blob) {
-          const url = _deps.safeCreateObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${state.docName || 'document'}-page-removed.pdf`;
-          a.click();
-          URL.revokeObjectURL(url);
-          _deps.setOcrStatus(`Страница ${state.currentPage} удалена, сохранено ${pages.length} стр.`);
+          await applyInPlace(blob, `Страница ${deletedPage} удалена, осталось ${pages.length} стр.`);
         }
       } catch (err) {
         _deps.setOcrStatus(`Ошибка удаления: ${err?.message || 'неизвестная'}`);
@@ -455,13 +415,7 @@ export function initPdfProHandlers() {
         _deps.setOcrStatus('Объединение PDF...');
         const blob = await _deps.mergePdfDocuments([file, insertFile]);
         if (blob) {
-          const url = _deps.safeCreateObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${state.docName || 'document'}-merged.pdf`;
-          a.click();
-          URL.revokeObjectURL(url);
-          _deps.setOcrStatus('PDF-файлы объединены');
+          await applyInPlace(blob, 'PDF-файлы объединены');
         }
       } catch (err) {
         _deps.setOcrStatus(`Ошибка объединения: ${err?.message || 'неизвестная'}`);

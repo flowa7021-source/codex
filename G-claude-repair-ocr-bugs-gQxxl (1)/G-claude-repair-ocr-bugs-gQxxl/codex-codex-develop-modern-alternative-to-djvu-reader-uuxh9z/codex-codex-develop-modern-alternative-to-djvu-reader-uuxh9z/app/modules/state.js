@@ -3,6 +3,7 @@
 export const state = {
   adapter: null,
   file: null,
+  pdfBytes: null,
   docName: null,
   currentPage: 1,
   pageCount: 0,

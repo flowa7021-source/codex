@@ -133,6 +133,60 @@ export async function extractDjvuFallbackText(file) {
   }
 }
 
+// ─── Reload PDF In-Place ────────────────────────────────────────────────────
+
+/**
+ * Reload the current PDF from raw bytes without creating a new file.
+ * Preserves current page (clamped to new page count) and zoom.
+ * Used by PDF pro operations to apply changes in-place.
+ * @param {Uint8Array} bytes - New PDF bytes
+ */
+export async function reloadPdfFromBytes(bytes) {
+  if (!bytes || !(bytes instanceof Uint8Array)) {
+    throw new Error('reloadPdfFromBytes: expected Uint8Array');
+  }
+
+  const pdf = await ensurePdfJs();
+  const pdfDoc = await pdf.getDocument({ data: bytes.slice() }).promise;
+
+  // Update state
+  state.pdfBytes = bytes;
+  state.adapter = new _deps.PDFAdapter(pdfDoc);
+  state.pageCount = state.adapter.getPageCount();
+
+  // Clamp current page
+  if (state.currentPage > state.pageCount) {
+    state.currentPage = Math.max(1, state.pageCount);
+  }
+
+  // Update file object for consistency (so arrayBuffer() returns new data)
+  state.file = new File([bytes], state.docName || 'document.pdf', { type: 'application/pdf' });
+
+  // Clear render caches and re-render
+  clearPageRenderCache();
+  await _deps.renderCurrentPage();
+  await _deps.renderPagePreviews();
+  await _deps.renderOutline();
+}
+
+/**
+ * Download the current pdfBytes as a file ("Save As" functionality).
+ */
+export function saveCurrentPdfAs() {
+  const bytes = state.pdfBytes;
+  if (!bytes) {
+    console.warn('saveCurrentPdfAs: no pdfBytes available');
+    return;
+  }
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = state.docName || 'document.pdf';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ─── Open File ──────────────────────────────────────────────────────────────
 
 const _openFileImpl = async function openFileImpl(file) {
@@ -168,6 +222,8 @@ const _openFileImpl = async function openFileImpl(file) {
     try {
       const pdf = await ensurePdfJs();
       const data = await progressiveLoader.loadFileProgressive(file);
+      // Store raw bytes for in-place PDF operations
+      state.pdfBytes = new Uint8Array(data);
       // For large files (>100MB), disable eager page fetching to reduce memory
       const pdfOptions = { data };
       if (file.size > 100 * 1024 * 1024) {
