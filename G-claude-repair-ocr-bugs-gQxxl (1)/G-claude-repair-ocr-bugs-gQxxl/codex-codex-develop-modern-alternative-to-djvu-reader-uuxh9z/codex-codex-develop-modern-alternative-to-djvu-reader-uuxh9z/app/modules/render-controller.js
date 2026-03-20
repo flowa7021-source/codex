@@ -106,6 +106,9 @@ export function _updateAnnotationCanvas() {
   els.annotationCanvas.height = Math.ceil(displayHeight * annotDpr);
   els.annotationCanvas.style.width = `${displayWidth}px`;
   els.annotationCanvas.style.height = `${displayHeight}px`;
+  // Re-apply drawing-enabled class after canvas resize to preserve pointer events
+  const drawingActive = !!(state.drawEnabled || state.ocrRegionMode);
+  els.annotationCanvas.classList.toggle('drawing-enabled', drawingActive);
   _deps.renderAnnotations();
 }
 
