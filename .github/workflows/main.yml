@@ -3,14 +3,11 @@ name: Build Windows EXE
 on:
   workflow_dispatch:
   push:
-    branches: [ "main", "master", "work" ]
-    paths:
-      - "app/**"
-      - "electron/**"
-      - "package.json"
-      - "package-lock.json"
-      - "next.config.ts"
-      - ".github/workflows/main.yml"
+    branches:
+      - "main"
+      - "master"
+      - "work"
+      - "claude/**"
 
 jobs:
   build-exe:
