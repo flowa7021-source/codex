@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Avatar } from '@/app/components/ui/Avatar'
@@ -14,19 +14,16 @@ import type { User, Task, Document } from '@/app/types'
 
 type UserDetail = User & { assignedTasks: Task[]; documents: Document[] }
 
-export default function TeamMemberPage() {
-  const { id } = useParams()
+function MemberContent() {
+  const searchParams = useSearchParams()
+  const id = searchParams.get('id')
   const [user, setUser] = useState<UserDetail | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (!id) return
-    fetch(`/api/team/${id}`)
-      .then(r => r.json())
-      .then(j => {
-        setUser(j.data ?? null)
-        setLoading(false)
-      })
+    if (!id) { setLoading(false); return }
+    window.electronAPI.getTeamMember(id)
+      .then(data => { setUser(data ?? null); setLoading(false) })
       .catch(() => setLoading(false))
   }, [id])
 
@@ -54,7 +51,6 @@ export default function TeamMemberPage() {
 
   return (
     <div className="p-6 space-y-5 max-w-4xl">
-      {/* Back */}
       <Link
         href="/dashboard/team"
         className="flex items-center gap-2 font-sans text-sm"
@@ -90,7 +86,6 @@ export default function TeamMemberPage() {
               </span>
             </div>
           </div>
-          {/* KPI */}
           <div className="text-center">
             <DonutMini value={progress} max={100} size={56} />
             <div className="font-mono font-bold mt-2" style={{ fontSize: 18, color: 'var(--color-accent)' }}>
@@ -170,5 +165,17 @@ export default function TeamMemberPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function TeamMemberPage() {
+  return (
+    <Suspense fallback={
+      <div className="p-6 text-center font-sans" style={{ color: 'var(--color-text-muted)' }}>
+        Загрузка...
+      </div>
+    }>
+      <MemberContent />
+    </Suspense>
   )
 }

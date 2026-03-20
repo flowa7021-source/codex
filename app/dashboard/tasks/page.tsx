@@ -18,10 +18,7 @@ export default function TasksPage() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
 
   useEffect(() => {
-    fetch('/api/tasks')
-      .then(r => r.json())
-      .then(j => setTasks(j.data ?? []))
-      .catch(console.error)
+    window.electronAPI.getTasks().then(setTasks).catch(console.error)
   }, [])
 
   return (

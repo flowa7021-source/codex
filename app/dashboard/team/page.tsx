@@ -30,10 +30,7 @@ export default function TeamPage() {
   const [users, setUsers] = useState<UserWithTasks[]>([])
 
   useEffect(() => {
-    fetch('/api/team')
-      .then(r => r.json())
-      .then(j => setUsers(j.data ?? []))
-      .catch(console.error)
+    window.electronAPI.getTeam().then(setUsers).catch(console.error)
   }, [])
 
   const onlineCount = users.filter(u => u.status === 'ONLINE').length
@@ -66,7 +63,7 @@ export default function TeamPage() {
 
           return (
             <motion.div key={user.id} variants={cardVariants}>
-              <Link href={`/dashboard/team/${user.id}`}>
+              <Link href={`/dashboard/team/member?id=${user.id}`}>
                 <div
                   className="rounded-lg p-5 cursor-pointer transition-all duration-200"
                   style={{

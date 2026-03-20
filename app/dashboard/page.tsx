@@ -69,49 +69,34 @@ export default function DashboardPage() {
   const [weeklyData, setWeeklyData] = useState<number[]>([])
 
   useEffect(() => {
-    fetch('/api/metrics/overview')
-      .then(r => r.json())
-      .then(j => setMetrics(j.data))
-      .catch(console.error)
+    const api = window.electronAPI
 
-    fetch('/api/documents?pageSize=5&status=REVIEW')
-      .then(r => r.json())
-      .then(j => {
-        const all: Document[] = j.data || []
+    api.getMetricsOverview().then(setMetrics).catch(console.error)
+
+    api.getDocuments({ pageSize: 5, status: 'REVIEW' })
+      .then(async ({ data }) => {
+        const all: Document[] = data || []
         if (all.length < 5) {
-          return fetch('/api/documents?pageSize=5&status=ACTIVE')
-            .then(r => r.json())
-            .then(j2 => {
-              const combined = [...all, ...(j2.data || [])]
-              setDocuments(combined.slice(0, 5))
-            })
+          const { data: active } = await api.getDocuments({ pageSize: 5, status: 'ACTIVE' })
+          setDocuments([...all, ...(active || [])].slice(0, 5))
+        } else {
+          setDocuments(all.slice(0, 5))
         }
-        setDocuments(all.slice(0, 5))
       })
       .catch(console.error)
 
-    fetch('/api/tasks')
-      .then(r => r.json())
-      .then(j => {
-        const all: Task[] = (j.data || [])
+    api.getTasks()
+      .then((all: Task[]) => {
         setTasks(all.filter((t: Task) => !['DONE', 'CANCELLED'].includes(t.status)).slice(0, 5))
       })
       .catch(console.error)
 
-    fetch('/api/activity?limit=8')
-      .then(r => r.json())
-      .then(j => setActivities(j.data || []))
-      .catch(console.error)
+    api.getActivity({ limit: 8 }).then(setActivities).catch(console.error)
 
-    fetch('/api/team')
-      .then(r => r.json())
-      .then(j => setUsers((j.data || []).slice(0, 5)))
-      .catch(console.error)
+    api.getTeam().then(users => setUsers(users.slice(0, 5))).catch(console.error)
 
-    // Build weekly activity from daily metrics
-    fetch('/api/metrics/weekly')
-      .then(r => r.json())
-      .then(j => setWeeklyData(j.data || []))
+    api.getMetricsWeekly()
+      .then(setWeeklyData)
       .catch(() => setWeeklyData([3, 5, 4, 7, 6, 8, 5]))
   }, [])
 

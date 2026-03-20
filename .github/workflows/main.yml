@@ -26,13 +26,8 @@ jobs:
       - name: Install dependencies (skip postinstall)
         run: npm ci --ignore-scripts
 
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Build Next.js (standalone)
+      - name: Build Next.js (static export → out/)
         run: npx next build
-        env:
-          DATABASE_PATH: ":memory:"
 
       - name: Compile Electron TypeScript
         run: npx tsc -p electron/tsconfig.json

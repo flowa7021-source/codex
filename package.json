@@ -35,25 +35,9 @@
     ],
     "extraResources": [
       {
-        "from": ".next/standalone",
+        "from": "out",
         "to": "app",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": ".next/static",
-        "to": "app/.next/static",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "public",
-        "to": "app/public",
-        "filter": [
-          "**/*"
-        ]
+        "filter": ["**/*"]
       }
     ],
     "win": {
@@ -75,8 +59,6 @@
     "compression": "normal",
     "asar": true,
     "asarUnpack": [
-      "node_modules/@prisma/**",
-      "node_modules/.prisma/**",
       "node_modules/better-sqlite3/**",
       "node_modules/bindings/**",
       "node_modules/file-uri-to-path/**"
