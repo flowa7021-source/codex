@@ -1,6 +1,8 @@
 {
   "name": "nexus",
   "version": "1.0.0",
+  "description": "NEXUS — Operations Command Center",
+  "author": "УМиТ",
   "private": true,
   "main": "electron-dist/main.js",
   "scripts": {

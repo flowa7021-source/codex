@@ -29,9 +29,6 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Rebuild native modules for Electron
-        run: npx @electron/rebuild -f -w better-sqlite3
-
       - name: Build Next.js (standalone)
         run: npx next build
         env:
