@@ -9,7 +9,8 @@ on:
       - "electron/**"
       - "package.json"
       - "package-lock.json"
-      - ".github/workflows/build-windows-exe.yml"
+      - "next.config.ts"
+      - ".github/workflows/main.yml"
 
 jobs:
   build-exe:
@@ -28,23 +29,44 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # electron-builder uses electron-rebuild which needs Python + node-gyp on Windows
+      - name: Install Python (for native modules)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Skip postinstall prisma generate in CI (no DB available)
+      - name: Build Next.js (standalone)
+        run: npx next build
+        env:
+          # Provide a dummy DATABASE_URL so Prisma client initialises without error
+          DATABASE_URL: "postgresql://nexus:nexus@localhost:5432/nexus_db"
+
+      - name: Compile Electron TypeScript
+        run: npx tsc -p electron/tsconfig.json
+
       - name: Build portable EXE
         run: npm run build:win:nosign
+        env:
+          DATABASE_URL: "postgresql://nexus:nexus@localhost:5432/nexus_db"
+          # Disable code signing
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Generate SHA256
         shell: pwsh
         run: |
           $file = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
-          if (-not $file) { throw "EXE artifact not found" }
+          if (-not $file) { throw "EXE artifact not found in dist/" }
           $hash = Get-FileHash $file.FullName -Algorithm SHA256
-          "${($file.Name)}  ${($hash.Hash)}" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding ascii
-          Get-Content dist/SHA256SUMS.txt
+          "$($file.Name)  $($hash.Hash)" | Out-File -FilePath dist/SHA256SUMS.txt -Encoding ascii
+          Write-Host "✅ $($file.Name) — $($hash.Hash)"
 
-      - name: Upload artifacts
+      - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
         with:
-          name: novareader-windows-exe
+          name: NEXUS-windows-exe
           path: |
             dist/*.exe
             dist/SHA256SUMS.txt
           if-no-files-found: error
+          retention-days: 30
