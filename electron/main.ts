@@ -188,7 +188,9 @@ function createMainWindow() {
     backgroundColor: '#0C0C0E',
     show: false,
     title: 'NEXUS — Command Center',
-    icon: path.join(app.getAppPath(), 'electron', 'icon.ico'),
+    icon: app.isPackaged
+      ? undefined
+      : path.join(app.getAppPath(), 'electron', 'build', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
