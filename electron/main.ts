@@ -4,11 +4,26 @@ import { spawn, ChildProcess } from 'child_process'
 import http from 'http'
 import { initDatabase } from './db-init'
 
-const PORT = 3579 // fixed port to avoid conflicts
+const PORT = 3579
 let nextProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
 let splashWindow: BrowserWindow | null = null
 let databasePath = ''
+let serverReady = false
+
+// ─── Single-instance lock ──────────────────────────────────────────────────────
+// Prevents multiple app instances from opening separate windows
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+  process.exit(0)
+}
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  }
+})
 
 // ─── Path resolution ──────────────────────────────────────────────────────────
 
@@ -17,13 +32,6 @@ function getResourcePath(...segments: string[]): string {
     return path.join(process.resourcesPath, 'app', ...segments)
   }
   return path.join(app.getAppPath(), '.next', 'standalone', ...segments)
-}
-
-function getStaticPath(): string {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'app', '.next', 'static')
-  }
-  return path.join(app.getAppPath(), '.next', 'static')
 }
 
 // ─── Splash window ────────────────────────────────────────────────────────────
@@ -127,7 +135,7 @@ function waitForServer(timeout = 45000): Promise<void> {
         if (Date.now() - started > timeout) {
           reject(new Error('Тайм-аут: сервер не запустился за 45 секунд'))
         } else {
-          setTimeout(check, 600)
+          setTimeout(check, 200)
         }
       })
       req.setTimeout(1000, () => req.destroy())
@@ -149,16 +157,13 @@ function startNextServer(): Promise<void> {
         NODE_ENV: 'production',
         HOSTNAME: '127.0.0.1',
         DATABASE_PATH: databasePath,
-        // Static files path for standalone build
         NEXT_SHARP_PATH: '',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     })
 
     nextProcess.stdout?.on('data', (d: Buffer) => {
-      const msg = d.toString()
-      console.log('[Next]', msg.trim())
-      if (msg.includes('ready') || msg.includes('started')) resolve()
+      console.log('[Next]', d.toString().trim())
     })
 
     nextProcess.stderr?.on('data', (d: Buffer) => {
@@ -172,7 +177,6 @@ function startNextServer(): Promise<void> {
       }
     })
 
-    // Also resolve via HTTP poll regardless of stdout
     waitForServer().then(resolve).catch(reject)
   })
 }
@@ -199,8 +203,6 @@ function createMainWindow() {
     },
   })
 
-  mainWindow.loadURL(`http://localhost:${PORT}/dashboard`)
-
   mainWindow.once('ready-to-show', () => {
     splashWindow?.close()
     splashWindow = null
@@ -208,7 +210,6 @@ function createMainWindow() {
     mainWindow?.focus()
   })
 
-  // Open external links in the system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(`http://localhost:${PORT}`)) {
       shell.openExternal(url)
@@ -231,7 +232,6 @@ ipcMain.on('window:close', () => mainWindow?.close())
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
-  // Initialise SQLite database before starting the Next.js server
   const userDataDir = app.getPath('userData')
   databasePath = path.join(userDataDir, 'nexus.db')
   try {
@@ -242,17 +242,26 @@ app.whenReady().then(async () => {
 
   createSplash()
 
+  // Pre-create the main window so Chromium renderer initialises in parallel
+  // with the Next.js server startup. loadURL is called once the server is ready.
+  createMainWindow()
+
   try {
     await startNextServer()
-    createMainWindow()
+    serverReady = true
+    mainWindow?.loadURL(`http://localhost:${PORT}/dashboard`)
   } catch (err: any) {
     console.error('Ошибка запуска:', err)
     splashWindow?.close()
+    mainWindow?.close()
     app.quit()
   }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
+    if (BrowserWindow.getAllWindows().length === 0 && serverReady) {
+      createMainWindow()
+      mainWindow?.loadURL(`http://localhost:${PORT}/dashboard`)
+    }
   })
 })
 
