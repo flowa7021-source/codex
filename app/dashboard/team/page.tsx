@@ -1,11 +1,12 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import Link from 'next/link'
-import { MOCK_USERS, MOCK_TASKS } from '@/app/lib/mock-data'
 import { Avatar } from '@/app/components/ui/Avatar'
 import { DonutMini } from '@/app/components/charts/DonutMini'
 import { ONLINE_STATUS_COLORS, ROLE_LABELS } from '@/app/lib/constants'
+import type { User, Task } from '@/app/types'
 
 const containerVariants = {
   hidden: {},
@@ -17,13 +18,26 @@ const cardVariants = {
   visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.4, 0, 0.2, 1] as any } },
 }
 
-const STATUS_LABELS = {
+const STATUS_LABELS: Record<string, string> = {
   ONLINE: 'Онлайн',
   AWAY: 'Нет на месте',
   OFFLINE: 'Офлайн',
 }
 
+type UserWithTasks = User & { assignedTasks: Task[] }
+
 export default function TeamPage() {
+  const [users, setUsers] = useState<UserWithTasks[]>([])
+
+  useEffect(() => {
+    fetch('/api/team')
+      .then(r => r.json())
+      .then(j => setUsers(j.data ?? []))
+      .catch(console.error)
+  }, [])
+
+  const onlineCount = users.filter(u => u.status === 'ONLINE').length
+
   return (
     <div className="p-6 space-y-5">
       {/* Header */}
@@ -32,7 +46,7 @@ export default function TeamPage() {
           Команда
         </h1>
         <p className="font-sans mt-1" style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
-          {MOCK_USERS.filter(u => u.status === 'ONLINE').length} из {MOCK_USERS.length} онлайн
+          {onlineCount} из {users.length} онлайн
         </p>
       </div>
 
@@ -44,8 +58,8 @@ export default function TeamPage() {
         className="grid gap-4"
         style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}
       >
-        {MOCK_USERS.map((user) => {
-          const userTasks = MOCK_TASKS.filter(t => t.assigneeId === user.id)
+        {users.map((user) => {
+          const userTasks = user.assignedTasks ?? []
           const activeTasks = userTasks.filter(t => ['TODO', 'ACTIVE', 'PENDING', 'REVIEW'].includes(t.status))
           const doneTasks = userTasks.filter(t => t.status === 'DONE')
           const progress = userTasks.length > 0 ? Math.round((doneTasks.length / userTasks.length) * 100) : 0
@@ -72,7 +86,6 @@ export default function TeamPage() {
                 >
                   {/* Top section */}
                   <div className="flex items-start gap-4 mb-4">
-                    {/* Avatar with status dot */}
                     <div className="relative">
                       <div
                         className="flex items-center justify-center rounded-full font-mono font-semibold"
@@ -114,7 +127,7 @@ export default function TeamPage() {
                           }}
                         />
                         <span className="font-mono" style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
-                          {STATUS_LABELS[user.status]}
+                          {STATUS_LABELS[user.status] ?? user.status}
                         </span>
                       </div>
                     </div>
@@ -139,7 +152,6 @@ export default function TeamPage() {
                     className="flex items-center"
                     style={{ borderTop: '1px solid var(--color-border-subtle)', paddingTop: 12 }}
                   >
-                    {/* Active tasks */}
                     <div className="flex-1 text-center">
                       <div className="font-mono font-bold" style={{ fontSize: 20, color: 'var(--color-text)' }}>
                         {activeTasks.length}
@@ -148,7 +160,6 @@ export default function TeamPage() {
                         Активных
                       </div>
                     </div>
-                    {/* Done tasks */}
                     <div className="flex-1 text-center">
                       <div className="font-mono font-bold" style={{ fontSize: 20, color: 'var(--color-success)' }}>
                         {doneTasks.length}
@@ -157,7 +168,6 @@ export default function TeamPage() {
                         Завершено
                       </div>
                     </div>
-                    {/* Progress donut */}
                     <div className="flex-1 flex justify-center">
                       <div className="relative">
                         <DonutMini value={progress} max={100} size={40} />
@@ -175,6 +185,15 @@ export default function TeamPage() {
             </motion.div>
           )
         })}
+
+        {users.length === 0 && (
+          <div
+            className="col-span-3 text-center py-12 font-sans"
+            style={{ fontSize: 14, color: 'var(--color-text-muted)' }}
+          >
+            Загрузка...
+          </div>
+        )}
       </motion.div>
     </div>
   )

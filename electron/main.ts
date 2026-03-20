@@ -2,11 +2,13 @@ import { app, BrowserWindow, shell, ipcMain } from 'electron'
 import path from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import http from 'http'
+import { initDatabase } from './db-init'
 
 const PORT = 3579 // fixed port to avoid conflicts
 let nextProcess: ChildProcess | null = null
 let mainWindow: BrowserWindow | null = null
 let splashWindow: BrowserWindow | null = null
+let databasePath = ''
 
 // ─── Path resolution ──────────────────────────────────────────────────────────
 
@@ -146,6 +148,7 @@ function startNextServer(): Promise<void> {
         PORT: String(PORT),
         NODE_ENV: 'production',
         HOSTNAME: '127.0.0.1',
+        DATABASE_PATH: databasePath,
         // Static files path for standalone build
         NEXT_SHARP_PATH: '',
       },
@@ -226,6 +229,15 @@ ipcMain.on('window:close', () => mainWindow?.close())
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(async () => {
+  // Initialise SQLite database before starting the Next.js server
+  const userDataDir = app.getPath('userData')
+  databasePath = path.join(userDataDir, 'nexus.db')
+  try {
+    initDatabase(databasePath)
+  } catch (err: any) {
+    console.error('Ошибка инициализации БД:', err)
+  }
+
   createSplash()
 
   try {

@@ -1,17 +1,9 @@
 import { PrismaClient } from '@prisma/client'
-import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 
 function createPrismaClient() {
-  const databaseUrl = process.env.DATABASE_URL
-
-  if (!databaseUrl) {
-    // Return a non-connected client for build time
-    // In production, DATABASE_URL must be set
-    const adapter = new PrismaPg({ connectionString: 'postgresql://localhost:5432/nexus_db' })
-    return new PrismaClient({ adapter })
-  }
-
-  const adapter = new PrismaPg({ connectionString: databaseUrl })
+  const dbPath = process.env.DATABASE_PATH ?? ':memory:'
+  const adapter = new PrismaBetterSqlite3({ url: dbPath })
   return new PrismaClient({ adapter })
 }
 

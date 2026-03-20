@@ -29,10 +29,13 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Rebuild native modules for Electron
+        run: npx @electron/rebuild -f -w better-sqlite3
+
       - name: Build Next.js (standalone)
         run: npx next build
         env:
-          DATABASE_URL: "postgresql://nexus:nexus@localhost:5432/nexus_db"
+          DATABASE_PATH: ":memory:"
 
       - name: Compile Electron TypeScript
         run: npx tsc -p electron/tsconfig.json
@@ -40,7 +43,6 @@ jobs:
       - name: Build portable EXE
         run: npx electron-builder --win --publish never
         env:
-          DATABASE_URL: "postgresql://nexus:nexus@localhost:5432/nexus_db"
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: Generate SHA256

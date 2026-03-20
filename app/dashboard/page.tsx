@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   FileText, CheckSquare, Users, Zap, ArrowRight
@@ -11,11 +12,9 @@ import { BarChartMini } from '@/app/components/charts/BarChartMini'
 import { DonutMini } from '@/app/components/charts/DonutMini'
 import { Avatar } from '@/app/components/ui/Avatar'
 import { StatusBadge } from '@/app/components/ui/StatusBadge'
-import {
-  MOCK_METRICS, MOCK_DOCUMENTS, MOCK_TASKS, MOCK_ACTIVITY, WEEKLY_ACTIVITY, MOCK_USERS
-} from '@/app/lib/mock-data'
 import { formatDate } from '@/app/lib/utils'
 import { PRIORITY_COLORS } from '@/app/lib/constants'
+import type { Document, Task, ActivityLog, User } from '@/app/types'
 
 const containerVariants = {
   hidden: {},
@@ -26,9 +25,6 @@ const itemVariants = {
   hidden: { opacity: 0, y: 12 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.4, 0, 0.2, 1] as any } },
 }
-
-const recentDocuments = MOCK_DOCUMENTS.filter(d => ['REVIEW', 'ACTIVE'].includes(d.status)).slice(0, 5)
-const activeTasks = MOCK_TASKS.filter(t => !['DONE', 'CANCELLED'].includes(t.status)).slice(0, 5)
 
 function SectionHeader({ title, href }: { title: string; href: string }) {
   return (
@@ -50,9 +46,76 @@ function SectionHeader({ title, href }: { title: string; href: string }) {
   )
 }
 
+interface Metrics {
+  documentsInProgress: number
+  documentsTotal: number
+  tasksCompletedThisWeek: number
+  totalTasksThisWeek: number
+  teamOnline: number
+  teamTotal: number
+  avgKpi: number
+  deltas: { documents: number; tasks: number; team: number; kpi: number }
+}
+
 export default function DashboardPage() {
   const today = new Date()
   const dateStr = today.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })
+
+  const [metrics, setMetrics] = useState<Metrics | null>(null)
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [activities, setActivities] = useState<ActivityLog[]>([])
+  const [users, setUsers] = useState<(User & { assignedTasks: Task[] })[]>([])
+  const [weeklyData, setWeeklyData] = useState<number[]>([])
+
+  useEffect(() => {
+    fetch('/api/metrics/overview')
+      .then(r => r.json())
+      .then(j => setMetrics(j.data))
+      .catch(console.error)
+
+    fetch('/api/documents?pageSize=5&status=REVIEW')
+      .then(r => r.json())
+      .then(j => {
+        const all: Document[] = j.data || []
+        if (all.length < 5) {
+          return fetch('/api/documents?pageSize=5&status=ACTIVE')
+            .then(r => r.json())
+            .then(j2 => {
+              const combined = [...all, ...(j2.data || [])]
+              setDocuments(combined.slice(0, 5))
+            })
+        }
+        setDocuments(all.slice(0, 5))
+      })
+      .catch(console.error)
+
+    fetch('/api/tasks')
+      .then(r => r.json())
+      .then(j => {
+        const all: Task[] = (j.data || [])
+        setTasks(all.filter((t: Task) => !['DONE', 'CANCELLED'].includes(t.status)).slice(0, 5))
+      })
+      .catch(console.error)
+
+    fetch('/api/activity?limit=8')
+      .then(r => r.json())
+      .then(j => setActivities(j.data || []))
+      .catch(console.error)
+
+    fetch('/api/team')
+      .then(r => r.json())
+      .then(j => setUsers((j.data || []).slice(0, 5)))
+      .catch(console.error)
+
+    // Build weekly activity from daily metrics
+    fetch('/api/metrics/weekly')
+      .then(r => r.json())
+      .then(j => setWeeklyData(j.data || []))
+      .catch(() => setWeeklyData([3, 5, 4, 7, 6, 8, 5]))
+  }, [])
+
+  const sparkline = [20, 25, 30, 28, 35, 32, 38]
 
   return (
     <div className="p-6 space-y-5 max-w-screen-2xl">
@@ -76,41 +139,41 @@ export default function DashboardPage() {
       >
         <MetricCard
           label="Документы в работе"
-          value={MOCK_METRICS.documentsInProgress}
-          suffix={`/ ${MOCK_METRICS.documentsTotal}`}
-          delta={MOCK_METRICS.deltas.documents}
+          value={metrics?.documentsInProgress ?? 0}
+          suffix={`/ ${metrics?.documentsTotal ?? 0}`}
+          delta={metrics?.deltas.documents}
           color="var(--color-info)"
           icon={FileText}
-          sparkline={MOCK_METRICS.sparklines.documents}
+          sparkline={sparkline}
           delay={0}
         />
         <MetricCard
           label="Задач завершено"
-          value={MOCK_METRICS.tasksCompletedThisWeek}
-          suffix={`/ ${MOCK_METRICS.totalTasksThisWeek}`}
-          delta={MOCK_METRICS.deltas.tasks}
+          value={metrics?.tasksCompletedThisWeek ?? 0}
+          suffix={`/ ${metrics?.totalTasksThisWeek ?? 0}`}
+          delta={metrics?.deltas.tasks}
           color="var(--color-success)"
           icon={CheckSquare}
-          sparkline={MOCK_METRICS.sparklines.tasks}
+          sparkline={sparkline}
           delay={100}
         />
         <MetricCard
           label="Команда онлайн"
-          value={MOCK_METRICS.teamOnline}
-          suffix={`/ ${MOCK_METRICS.teamTotal}`}
+          value={metrics?.teamOnline ?? 0}
+          suffix={`/ ${metrics?.teamTotal ?? 0}`}
           color="var(--color-accent)"
           icon={Users}
-          sparkline={MOCK_METRICS.sparklines.team}
+          sparkline={sparkline}
           delay={200}
         />
         <MetricCard
           label="Средний KPI"
-          value={MOCK_METRICS.avgKpi}
+          value={metrics?.avgKpi ?? 0}
           suffix="%"
-          delta={MOCK_METRICS.deltas.kpi}
+          delta={metrics?.deltas.kpi}
           color="var(--color-warning)"
           icon={Zap}
-          sparkline={MOCK_METRICS.sparklines.kpi}
+          sparkline={sparkline}
           delay={300}
         />
       </motion.div>
@@ -128,7 +191,7 @@ export default function DashboardPage() {
         >
           <SectionHeader title="ДОКУМЕНТООБОРОТ" href="/dashboard/documents" />
           <div className="space-y-1">
-            {recentDocuments.map((doc) => (
+            {documents.map((doc) => (
               <div
                 key={doc.id}
                 className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-200"
@@ -142,7 +205,6 @@ export default function DashboardPage() {
                   e.currentTarget.style.borderColor = 'transparent'
                 }}
               >
-                {/* Priority dot */}
                 <span
                   style={{
                     width: 8,
@@ -152,7 +214,6 @@ export default function DashboardPage() {
                     flexShrink: 0,
                   }}
                 />
-                {/* Title + author */}
                 <div className="flex-1 min-w-0">
                   <div
                     className="font-sans font-medium truncate"
@@ -161,12 +222,10 @@ export default function DashboardPage() {
                     {doc.number} — {doc.title}
                   </div>
                   <div className="font-sans" style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                    {doc.author.name}
+                    {doc.author?.name ?? ''}
                   </div>
                 </div>
-                {/* Status */}
                 <StatusBadge type="document" status={doc.status} />
-                {/* Date */}
                 <span
                   className="font-mono flex-shrink-0"
                   style={{ fontSize: 11, color: 'var(--color-text-muted)' }}
@@ -175,6 +234,11 @@ export default function DashboardPage() {
                 </span>
               </div>
             ))}
+            {documents.length === 0 && (
+              <p className="font-sans text-center py-4" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+                Нет документов
+              </p>
+            )}
           </div>
         </motion.div>
 
@@ -189,7 +253,7 @@ export default function DashboardPage() {
         >
           <SectionHeader title="АКТИВНЫЕ ЗАДАЧИ" href="/dashboard/tasks" />
           <div className="space-y-1">
-            {activeTasks.map((task) => {
+            {tasks.map((task) => {
               const isOverdue = task.dueDate && new Date(task.dueDate) < new Date()
               return (
                 <div
@@ -198,7 +262,6 @@ export default function DashboardPage() {
                   onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
                   onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 >
-                  {/* Checkbox */}
                   <div
                     style={{
                       width: 18,
@@ -208,7 +271,6 @@ export default function DashboardPage() {
                       flexShrink: 0,
                     }}
                   />
-                  {/* Title + assignee */}
                   <div className="flex-1 min-w-0">
                     <div
                       className="font-sans truncate"
@@ -222,7 +284,6 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                  {/* Deadline */}
                   {task.dueDate && (
                     <span
                       className="font-mono flex-shrink-0"
@@ -237,6 +298,11 @@ export default function DashboardPage() {
                 </div>
               )
             })}
+            {tasks.length === 0 && (
+              <p className="font-sans text-center py-4" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+                Нет активных задач
+              </p>
+            )}
           </div>
         </motion.div>
       </div>
@@ -253,7 +319,7 @@ export default function DashboardPage() {
           animate="visible"
           transition={{ delay: 0.5 }}
         >
-          <ActivityFeed activities={MOCK_ACTIVITY} />
+          <ActivityFeed activities={activities} />
         </motion.div>
 
         {/* Weekly productivity */}
@@ -273,10 +339,10 @@ export default function DashboardPage() {
               ПРОДУКТИВНОСТЬ
             </span>
           </div>
-          <BarChartMini data={WEEKLY_ACTIVITY} height={100} />
+          <BarChartMini data={weeklyData.length > 0 ? weeklyData : sparkline} height={100} />
           <div className="mt-3">
             <span className="font-mono font-bold" style={{ fontSize: 24, color: 'var(--color-text)' }}>
-              {WEEKLY_ACTIVITY.reduce((a, b) => a + b, 0)}
+              {(weeklyData.length > 0 ? weeklyData : sparkline).reduce((a, b) => a + b, 0)}
             </span>
             <span className="font-mono ml-2" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
               действий
@@ -295,9 +361,9 @@ export default function DashboardPage() {
         >
           <SectionHeader title="КОМАНДА" href="/dashboard/team" />
           <div className="space-y-2">
-            {MOCK_USERS.slice(0, 5).map((user) => {
-              const userTasks = MOCK_TASKS.filter(t => t.assigneeId === user.id)
-              const doneTasks = userTasks.filter(t => t.status === 'DONE').length
+            {users.map((user) => {
+              const userTasks = user.assignedTasks ?? []
+              const doneTasks = userTasks.filter((t: Task) => t.status === 'DONE').length
               return (
                 <div key={user.id} className="flex items-center gap-2">
                   <Avatar name={user.name} size={32} status={user.status} showStatus />
@@ -316,6 +382,11 @@ export default function DashboardPage() {
                 </div>
               )
             })}
+            {users.length === 0 && (
+              <p className="font-sans text-center py-4" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+                Загрузка...
+              </p>
+            )}
           </div>
         </motion.div>
       </div>

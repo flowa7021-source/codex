@@ -1,22 +1,28 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Plus, LayoutGrid, List } from 'lucide-react'
 import { Button } from '@/app/components/ui/Button'
 import { StatusBadge } from '@/app/components/ui/StatusBadge'
 import { Avatar } from '@/app/components/ui/Avatar'
 import { KanbanBoard } from '@/app/components/tasks/KanbanBoard'
-import { MOCK_TASKS } from '@/app/lib/mock-data'
 import { formatDate } from '@/app/lib/utils'
 import type { Task } from '@/app/types'
 
 type ViewMode = 'kanban' | 'list'
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS)
+  const [tasks, setTasks] = useState<Task[]>([])
   const [viewMode, setViewMode] = useState<ViewMode>('kanban')
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
+
+  useEffect(() => {
+    fetch('/api/tasks')
+      .then(r => r.json())
+      .then(j => setTasks(j.data ?? []))
+      .catch(console.error)
+  }, [])
 
   return (
     <div className="p-6 space-y-4">

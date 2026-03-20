@@ -1,32 +1,56 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { MOCK_USERS, MOCK_TASKS, MOCK_DOCUMENTS, WEEKLY_ACTIVITY } from '@/app/lib/mock-data'
 import { Avatar } from '@/app/components/ui/Avatar'
 import { StatusBadge } from '@/app/components/ui/StatusBadge'
 import { BarChartMini } from '@/app/components/charts/BarChartMini'
 import { DonutMini } from '@/app/components/charts/DonutMini'
-import { ROLE_LABELS, ONLINE_STATUS_COLORS } from '@/app/lib/constants'
+import { ROLE_LABELS } from '@/app/lib/constants'
 import { formatDate } from '@/app/lib/utils'
+import type { User, Task, Document } from '@/app/types'
+
+type UserDetail = User & { assignedTasks: Task[]; documents: Document[] }
 
 export default function TeamMemberPage() {
   const { id } = useParams()
-  const user = MOCK_USERS.find(u => u.id === id)
+  const [user, setUser] = useState<UserDetail | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!id) return
+    fetch(`/api/team/${id}`)
+      .then(r => r.json())
+      .then(j => {
+        setUser(j.data ?? null)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="p-6 text-center font-sans" style={{ color: 'var(--color-text-muted)' }}>
+        Загрузка...
+      </div>
+    )
+  }
 
   if (!user) {
     return (
-      <div className="p-6 text-center" style={{ color: 'var(--color-text-muted)' }}>
+      <div className="p-6 text-center font-sans" style={{ color: 'var(--color-text-muted)' }}>
         Сотрудник не найден
       </div>
     )
   }
 
-  const userTasks = MOCK_TASKS.filter(t => t.assigneeId === user.id)
-  const userDocs = MOCK_DOCUMENTS.filter(d => d.authorId === user.id)
+  const userTasks = user.assignedTasks ?? []
+  const userDocs = user.documents ?? []
   const doneTasks = userTasks.filter(t => t.status === 'DONE')
   const progress = userTasks.length > 0 ? Math.round((doneTasks.length / userTasks.length) * 100) : 0
+  const weeklyActivity = [3, 5, 4, 7, 6, 8, 5]
 
   return (
     <div className="p-6 space-y-5 max-w-4xl">
@@ -108,7 +132,7 @@ export default function TeamMemberPage() {
         <h2 className="font-mono font-semibold uppercase tracking-widest mb-4" style={{ fontSize: 11, color: 'var(--color-text-secondary)', letterSpacing: '0.1em' }}>
           АКТИВНОСТЬ ЗА НЕДЕЛЮ
         </h2>
-        <BarChartMini data={WEEKLY_ACTIVITY.map(v => Math.round(v * Math.random()))} height={80} />
+        <BarChartMini data={weeklyActivity} height={80} />
       </div>
 
       {/* Tasks */}

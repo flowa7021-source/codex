@@ -17,8 +17,8 @@ export async function GET(req: NextRequest) {
     if (authorId) where.authorId = authorId
     if (search) {
       where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { number: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search } },
+        { number: { contains: search } },
       ]
     }
 

@@ -3,12 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
-
-// ═══════════════════════════════════
-// ПОЛЬЗОВАТЕЛИ И АУТЕНТИФИКАЦИЯ
-// ═══════════════════════════════════
 
 model User {
   id            String       @id @default(cuid())
@@ -45,10 +41,6 @@ enum OnlineStatus {
   AWAY
   OFFLINE
 }
-
-// ═══════════════════════════════════
-// ДОКУМЕНТЫ
-// ═══════════════════════════════════
 
 model Document {
   id          String           @id @default(cuid())
@@ -118,10 +110,6 @@ model DocumentCategory {
   @@map("document_categories")
 }
 
-// ═══════════════════════════════════
-// ЗАДАЧИ
-// ═══════════════════════════════════
-
 model Task {
   id          String     @id @default(cuid())
   title       String
@@ -174,10 +162,6 @@ model Subtask {
   @@map("subtasks")
 }
 
-// ═══════════════════════════════════
-// ОБЩИЕ СУЩНОСТИ
-// ═══════════════════════════════════
-
 enum Priority {
   LOW
   MEDIUM
@@ -192,11 +176,11 @@ model Comment {
   updatedAt DateTime @updatedAt
 
   authorId   String
-  author     User     @relation(fields: [authorId], references: [id])
+  author     User      @relation(fields: [authorId], references: [id])
   documentId String?
   document   Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
   taskId     String?
-  task       Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task       Task?     @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   parentId  String?
   parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
@@ -233,11 +217,11 @@ model ActivityLog {
   createdAt DateTime @default(now())
 
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
   documentId String?
   document   Document? @relation(fields: [documentId], references: [id], onDelete: SetNull)
   taskId     String?
-  task       Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  task       Task?     @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([userId])
@@ -274,13 +258,9 @@ model TagOnTask {
   @@map("tags_on_tasks")
 }
 
-// ═══════════════════════════════════
-// МЕТРИКИ
-// ═══════════════════════════════════
-
 model DailyMetric {
   id                 String   @id @default(cuid())
-  date               DateTime @db.Date
+  date               DateTime
   documentsCreated   Int      @default(0)
   documentsCompleted Int      @default(0)
   tasksCreated       Int      @default(0)
