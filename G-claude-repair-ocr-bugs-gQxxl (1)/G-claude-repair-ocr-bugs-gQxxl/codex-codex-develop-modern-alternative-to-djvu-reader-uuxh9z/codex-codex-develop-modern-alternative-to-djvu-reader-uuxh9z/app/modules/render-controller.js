@@ -463,6 +463,9 @@ export function enableInlineTextEditing() {
   if (!container) return;
   container.classList.add('editing');
 
+  // Single click activates inline editing for better UX (Acrobat-style)
+  container.addEventListener('click', _handleTextLayerClick);
+  // Keep dblclick as fallback for paragraph-level editing
   container.addEventListener('dblclick', _handleTextLayerDblClick);
 }
 
@@ -470,11 +473,38 @@ export function disableInlineTextEditing() {
   const container = els.textLayerDiv;
   if (!container) return;
   container.classList.remove('editing');
+  container.removeEventListener('click', _handleTextLayerClick);
   container.removeEventListener('dblclick', _handleTextLayerDblClick);
   if (_activeInlineEditor) {
     _activeInlineEditor.remove();
     _activeInlineEditor = null;
   }
+}
+
+/**
+ * Single-click handler: open an inline editor on the clicked span directly.
+ * This gives an Acrobat-style "click to edit" experience.
+ */
+export function _handleTextLayerClick(e) {
+  // Ignore clicks on an already-active inline editor
+  if (e.target.closest('.inline-editor')) return;
+
+  const span = e.target.closest('span');
+  if (!span) {
+    // Click on empty area -> create a new text block
+    const rect = els.textLayerDiv.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    _createInlineEditor(x, y, '', null, []);
+    return;
+  }
+
+  // Open single-span editor immediately on click
+  const rect = span.getBoundingClientRect();
+  const containerRect = els.textLayerDiv.getBoundingClientRect();
+  const x = rect.left - containerRect.left;
+  const y = rect.top - containerRect.top;
+  _createInlineEditor(x, y, span.textContent, span, []);
 }
 
 export function _handleTextLayerDblClick(e) {

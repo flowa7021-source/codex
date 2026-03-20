@@ -98,7 +98,7 @@ function initContinuousScroll(deps) {
 
 // ── Batch OCR UI Integration ────────────────────────────────────────────────
 function initBatchOcrUI(deps) {
-  const { state, recognizeWithBoxes, batchOcr, createSearchablePdf, detectScannedDocument, autoDetectLanguage, safeCreateObjectURL, pushDiagnosticEvent, setOcrStatus: _setOcrStatus } = deps;
+  const { state, recognizeWithBoxes, batchOcr, createSearchablePdf, detectScannedDocument, autoDetectLanguage, pushDiagnosticEvent, reloadPdfFromBytes, renderCurrentPage } = deps;
 
   const batchOcrAllBtn = document.getElementById('batchOcrAll');
   const batchOcrCancelBtn = document.getElementById('batchOcrCancel');
@@ -180,14 +180,12 @@ function initBatchOcrUI(deps) {
         setBatchStatus('Создание searchable PDF...');
         const arrayBuffer = await state.file.arrayBuffer();
         const result = await createSearchablePdf(arrayBuffer, batchOcr.results);
-        const url = safeCreateObjectURL(result.blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-searchable.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setBatchStatus(`Searchable PDF создан: ${result.pagesProcessed} страниц`);
-        pushDiagnosticEvent('searchable-pdf.created', { pages: result.pagesProcessed });
+        // Reload the searchable PDF in-place instead of downloading a separate file
+        const bytes = new Uint8Array(await result.blob.arrayBuffer());
+        await reloadPdfFromBytes(bytes);
+        await renderCurrentPage();
+        setBatchStatus(`Searchable PDF применён: ${result.pagesProcessed} страниц`);
+        pushDiagnosticEvent('searchable-pdf.created', { pages: result.pagesProcessed, inPlace: true });
       } catch (err) {
         setBatchStatus(`Ошибка: ${err?.message || 'неизвестная'}`);
       }

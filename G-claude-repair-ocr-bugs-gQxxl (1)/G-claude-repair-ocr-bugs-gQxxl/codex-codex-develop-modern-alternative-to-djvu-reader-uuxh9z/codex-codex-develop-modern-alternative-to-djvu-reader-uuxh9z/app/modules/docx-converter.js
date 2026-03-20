@@ -415,6 +415,28 @@ function buildDocxTable(block) {
 // ─── Build blocks from OCR word-level data ──────────────────────────────────
 // Used when PDF has no native text (scanned documents). Applies post-correction
 // and detects basic structure from word positions.
+
+// Heading patterns for OCR text
+const OCR_HEADING_PATTERNS = [
+  /^(глава|chapter|teil|chapitre|capítulo)\s+\d/i,
+  /^(раздел|section|abschnitt)\s+\d/i,
+  /^(часть|part|partie|parte)\s+[IVXivx\d]/i,
+  /^\d+\.\s+[А-ЯA-Z]/,
+  /^\d+\.\d+\s+[А-ЯA-Z]/,
+  /^(введение|заключение|приложение|содержание|оглавление|предисловие)/i,
+  /^(introduction|conclusion|appendix|abstract|summary|preface|foreword|bibliography|references)/i,
+];
+
+// List patterns including dashes/en-dashes/em-dashes
+const OCR_BULLET_RE = /^([\u2022\u2023\u25E6\u25CF\u25CB•●○◦‣\-–—]\s)/;
+const OCR_NUM_RE = /^(\d{1,3}[.)]\s)/;
+const OCR_ALPHA_RE = /^([a-zA-Zа-яА-Я][.)]\s(?=[A-ZА-Я]))/;
+
+function _isAllCapsText(text) {
+  const letters = text.replace(/[^а-яА-Яa-zA-ZÀ-ÿ]/g, '');
+  return letters.length >= 3 && letters === letters.toUpperCase();
+}
+
 function buildBlocksFromOcrWords(words, ocrLanguage) {
   if (!words || !words.length) return [];
 
@@ -430,7 +452,6 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
 
   for (let i = 1; i < sorted.length; i++) {
     const w = sorted[i];
-    // Use the average line height of the current line for thresholding
     const avgH = currentLine.reduce((s, cw) => s + Math.abs(cw.bbox.y1 - cw.bbox.y0), 0) / currentLine.length;
     const threshold = Math.max(5, avgH * 0.45);
     if (Math.abs(w.bbox.y0 - currentY) <= threshold) {
@@ -446,24 +467,34 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
 
   // Compute stats
   const allHeights = sorted.map(w => Math.abs(w.bbox.y1 - w.bbox.y0));
-  const medianH = allHeights.sort((a, b) => a - b)[Math.floor(allHeights.length / 2)] || 12;
+  const sortedHeights = [...allHeights].sort((a, b) => a - b);
+  const medianH = sortedHeights[Math.floor(sortedHeights.length / 2)] || 12;
   const leftPositions = lines.map(l => Math.min(...l.map(w => w.bbox.x0)));
   const leftMargin = Math.min(...leftPositions);
 
   // Build blocks with structure detection
   const blocks = [];
   let prevBottom = 0;
+  let tableCandidate = [];
 
   for (const lineWords of lines) {
     // Join words with smart spacing — detect large gaps as tab stops
     const sortedWords = [...lineWords].sort((a, b) => a.bbox.x0 - b.bbox.x0);
     let lineText = '';
+    let hasLargeGap = false;
     for (let i = 0; i < sortedWords.length; i++) {
       if (i > 0) {
         const gap = sortedWords[i].bbox.x0 - sortedWords[i - 1].bbox.x1;
         const avgWordH = (Math.abs(sortedWords[i].bbox.y1 - sortedWords[i].bbox.y0) +
                           Math.abs(sortedWords[i - 1].bbox.y1 - sortedWords[i - 1].bbox.y0)) / 2;
-        lineText += gap > avgWordH * 0.8 ? '  ' : ' ';
+        if (gap > avgWordH * 2) {
+          hasLargeGap = true;
+          lineText += '\t';
+        } else if (gap > avgWordH * 0.8) {
+          lineText += '  ';
+        } else {
+          lineText += ' ';
+        }
       }
       lineText += sortedWords[i].text;
     }
@@ -482,29 +513,135 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
     const lineX = Math.min(...lineWords.map(w => w.bbox.x0));
     const indent = Math.max(0, Math.round((lineX - leftMargin) / medianH));
 
-    // Detect heading by size
+    // Detect font info from word-level data when available
+    const wordFontName = lineWords[0].fontName || lineWords[0].font || '';
+    const isBoldLine = /bold|black|heavy/i.test(wordFontName) ||
+      lineWords.every(w => /bold|black|heavy/i.test(w.fontName || w.font || ''));
+    const isItalicLine = /italic|oblique/i.test(wordFontName) ||
+      lineWords.every(w => /italic|oblique/i.test(w.fontName || w.font || ''));
+
+    // Build runs with per-word font detection
+    const buildLineRuns = () => {
+      const runs = [];
+      let currentRun = {
+        text: sortedWords[0].text,
+        bold: /bold|black|heavy/i.test(sortedWords[0].fontName || sortedWords[0].font || '') || isBoldLine,
+        italic: /italic|oblique/i.test(sortedWords[0].fontName || sortedWords[0].font || '') || isItalicLine,
+        fontFamily: 'Arial',
+        fontSize: avgH,
+      };
+      for (let wi = 1; wi < sortedWords.length; wi++) {
+        const w = sortedWords[wi];
+        const wBold = /bold|black|heavy/i.test(w.fontName || w.font || '') || isBoldLine;
+        const wItalic = /italic|oblique/i.test(w.fontName || w.font || '') || isItalicLine;
+        if (wBold === currentRun.bold && wItalic === currentRun.italic) {
+          currentRun.text += ' ' + w.text;
+        } else {
+          runs.push(currentRun);
+          currentRun = { text: w.text, bold: wBold, italic: wItalic, fontFamily: 'Arial', fontSize: avgH };
+        }
+      }
+      runs.push(currentRun);
+      return runs;
+    };
+
+    // Flush table on large gap or non-table line
+    if (tableCandidate.length && gap > avgH * 1.5) {
+      if (tableCandidate.length >= 2) {
+        const maxCols = Math.max(...tableCandidate.map(r => r.cells.length));
+        blocks.push({
+          type: 'table',
+          rows: tableCandidate.map(r => ({
+            cells: Array.from({ length: maxCols }, (_, c) => r.cells[c] || { text: '', runs: [] }),
+          })),
+          maxCols,
+        });
+      } else {
+        for (const tc of tableCandidate) {
+          blocks.push({
+            type: 'paragraph', text: tc.text,
+            runs: [{ text: tc.text, bold: false, italic: false, fontFamily: 'Arial', fontSize: avgH }],
+            indent: 0, paragraphBreak: false, fontSize: avgH, alignment: AlignmentType.LEFT,
+          });
+        }
+      }
+      tableCandidate = [];
+    }
+
+    // Table detection: multiple distinct x-position clusters with large gaps
+    if (hasLargeGap && sortedWords.length >= 2) {
+      const cells = lineText.split(/\t/).map(c => c.trim()).filter(Boolean);
+      if (cells.length >= 2) {
+        tableCandidate.push({
+          cells: cells.map(c => ({ text: c, runs: [{ text: c, bold: false, italic: false, fontFamily: 'Arial', fontSize: avgH }] })),
+          text: lineText,
+        });
+        prevBottom = lineBottom;
+        continue;
+      }
+    }
+
+    // Flush any pending table
+    if (tableCandidate.length) {
+      if (tableCandidate.length >= 2) {
+        const maxCols = Math.max(...tableCandidate.map(r => r.cells.length));
+        blocks.push({
+          type: 'table',
+          rows: tableCandidate.map(r => ({
+            cells: Array.from({ length: maxCols }, (_, c) => r.cells[c] || { text: '', runs: [] }),
+          })),
+          maxCols,
+        });
+      } else {
+        for (const tc of tableCandidate) {
+          blocks.push({
+            type: 'paragraph', text: tc.text,
+            runs: [{ text: tc.text, bold: false, italic: false, fontFamily: 'Arial', fontSize: avgH }],
+            indent: 0, paragraphBreak: false, fontSize: avgH, alignment: AlignmentType.LEFT,
+          });
+        }
+      }
+      tableCandidate = [];
+    }
+
+    // Detect heading by size, semantic patterns, bold + short, or ALL CAPS
     const sizeRatio = avgH / medianH;
     const isShort = lineText.length < 80;
+    const isSemantic = OCR_HEADING_PATTERNS.some(p => p.test(lineText));
+    const isCaps = _isAllCapsText(lineText) && isShort && lineText.length > 2;
 
-    if (sizeRatio > 1.4 && isShort) {
+    if ((sizeRatio > 1.4 && isShort) || (isSemantic && isShort) || (isCaps && isBoldLine && isShort)) {
+      let level;
+      if (sizeRatio > 1.8) level = HeadingLevel.HEADING_1;
+      else if (sizeRatio > 1.4 || isSemantic) level = HeadingLevel.HEADING_2;
+      else level = HeadingLevel.HEADING_3;
+
       blocks.push({
         type: 'heading',
-        level: sizeRatio > 1.8 ? HeadingLevel.HEADING_1 : HeadingLevel.HEADING_2,
+        level,
         text: lineText,
-        runs: [{ text: lineText, bold: true, italic: false, fontFamily: 'Arial', fontSize: avgH }],
+        runs: buildLineRuns(),
         alignment: AlignmentType.LEFT,
       });
     } else {
-      // Check for list
-      const listMatch = lineText.match(/^([\u2022\u2023\u25CF\u25CB•●○◦‣]\s)|^(\d{1,3}[.)]\s)/);
-      if (listMatch && indent > 0) {
-        const cleanText = lineText.replace(/^[\u2022\u2023\u25CF\u25CB•●○◦‣]\s*/, '').replace(/^\d{1,3}[.)]\s/, '').trim();
+      // Check for list (extended patterns: dashes, en-dashes, em-dashes)
+      const bulletMatch = OCR_BULLET_RE.test(lineText);
+      const numMatch = OCR_NUM_RE.test(lineText);
+      const alphaMatch = OCR_ALPHA_RE.test(lineText);
+      const isList = (bulletMatch || numMatch || alphaMatch) && (indent > 0 || bulletMatch || numMatch);
+
+      if (isList) {
+        const cleanText = lineText
+          .replace(OCR_BULLET_RE, '')
+          .replace(OCR_NUM_RE, '')
+          .replace(OCR_ALPHA_RE, '')
+          .trim();
         blocks.push({
           type: 'list',
           text: cleanText,
-          bullet: !lineText.match(/^\d/),
+          bullet: !numMatch,
           level: Math.min(indent, 3),
-          runs: [{ text: cleanText, bold: false, italic: false, fontFamily: 'Arial', fontSize: avgH }],
+          runs: buildLineRuns(),
         });
       } else {
         const isParagraphBreak = gap > avgH * 1.2;
@@ -514,12 +651,14 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
         if (prev && prev.type === 'paragraph' && !isParagraphBreak &&
             prev.indent === indent && Math.abs((prev.fontSize || medianH) - avgH) < medianH * 0.2) {
           prev.text += ' ' + lineText;
-          prev.runs[prev.runs.length - 1].text += ' ' + lineText;
+          // Append new runs rather than concatenating text in last run
+          const newRuns = buildLineRuns();
+          prev.runs.push(...newRuns);
         } else {
           blocks.push({
             type: 'paragraph',
             text: lineText,
-            runs: [{ text: lineText, bold: false, italic: false, fontFamily: 'Arial', fontSize: avgH }],
+            runs: buildLineRuns(),
             indent,
             paragraphBreak: isParagraphBreak,
             fontSize: avgH,
@@ -529,6 +668,25 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
       }
     }
     prevBottom = lineBottom;
+  }
+
+  // Flush remaining table candidates
+  if (tableCandidate.length >= 2) {
+    const maxCols = Math.max(...tableCandidate.map(r => r.cells.length));
+    blocks.push({
+      type: 'table',
+      rows: tableCandidate.map(r => ({
+        cells: Array.from({ length: maxCols }, (_, c) => r.cells[c] || { text: '', runs: [] }),
+      })),
+      maxCols,
+    });
+  } else if (tableCandidate.length === 1) {
+    const tc = tableCandidate[0];
+    blocks.push({
+      type: 'paragraph', text: tc.text,
+      runs: [{ text: tc.text, bold: false, italic: false, fontFamily: 'Arial', fontSize: medianH }],
+      indent: 0, paragraphBreak: false, fontSize: medianH, alignment: AlignmentType.LEFT,
+    });
   }
 
   return blocks;

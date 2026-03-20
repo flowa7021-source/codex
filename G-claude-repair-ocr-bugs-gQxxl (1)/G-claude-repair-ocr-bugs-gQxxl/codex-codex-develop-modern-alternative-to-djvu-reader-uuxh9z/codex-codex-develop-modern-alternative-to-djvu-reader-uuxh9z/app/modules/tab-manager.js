@@ -113,10 +113,19 @@ export class TabManager {
     const tab = this.tabs.get(id);
     if (!tab) return false;
 
-    if (tab.modified && !this.onClose(tab)) {
+    // Ask for confirmation (onClose can veto for modified or any tab)
+    if (!this.onClose(tab)) {
       return false;
     }
 
+    // Save current tab state before closing if it's the active tab
+    if (this.activeTabId === id && this.onDeactivate) {
+      this.onDeactivate(tab);
+    }
+
+    // Clean up resources: release byte data
+    tab.bytes = null;
+    tab.state = null;
     this.tabs.delete(id);
 
     // If closing active tab, switch to adjacent
@@ -178,11 +187,15 @@ export class TabManager {
     if (!this.tabBar) return;
     this.tabBar.innerHTML = '';
     this.tabBar.className = 'tab-bar';
+    this.tabBar.setAttribute('role', 'tablist');
 
     for (const [id, tab] of this.tabs) {
       const tabEl = document.createElement('div');
-      tabEl.className = `tab-item${id === this.activeTabId ? ' active' : ''}${tab.modified ? ' modified' : ''}`;
+      const isActive = id === this.activeTabId;
+      tabEl.className = `tab-item${isActive ? ' active' : ''}${tab.modified ? ' modified' : ''}`;
       tabEl.dataset.tabId = id;
+      tabEl.setAttribute('role', 'tab');
+      tabEl.setAttribute('aria-selected', String(isActive));
 
       const icon = this._getTypeIcon(tab.type);
       const label = document.createElement('span');

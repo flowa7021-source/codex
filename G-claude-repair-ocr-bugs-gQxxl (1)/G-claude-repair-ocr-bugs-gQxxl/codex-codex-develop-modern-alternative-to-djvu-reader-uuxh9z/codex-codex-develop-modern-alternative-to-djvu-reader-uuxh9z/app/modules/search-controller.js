@@ -760,23 +760,36 @@ export async function searchInPdf(query) {
   const ocrData = loadOcrTextData();
   const ocrPages = ocrData?.pagesText || [];
 
+  // Merge native text with OCR text for comprehensive search
+  const _getSearchText = async (pageNum) => {
+    const native = (await state.adapter.getText(pageNum)).toLowerCase();
+    const ocr = String(ocrPages[pageNum - 1] || '').toLowerCase();
+    // Use whichever is longer, or combine both if they differ substantially
+    if (!native) return ocr;
+    if (!ocr) return native;
+    if (native.includes(normalized) || ocr.length < native.length * 0.3) return native;
+    return native + '\n' + ocr;
+  };
+
   if (scope === 'current') {
-    let txt = (await state.adapter.getText(state.currentPage)).toLowerCase();
-    if (!txt) {
-      txt = String(ocrPages[state.currentPage - 1] || '').toLowerCase();
-    }
+    const txt = await _getSearchText(state.currentPage);
     const count = txt.split(normalized).length - 1;
     if (count > 0) {
       state.searchResults = [state.currentPage];
       state.searchResultCounts[state.currentPage] = count;
     }
   } else {
+    // Also leverage OCR search index for fast pre-screening
+    const ocrHits = searchOcrIndex(query);
+    const ocrHitPages = new Set(ocrHits.map(h => h.page));
+
     for (let i = 1; i <= state.pageCount; i += 1) {
-      let txt = (await state.adapter.getText(i)).toLowerCase();
-      if (!txt) {
-        txt = String(ocrPages[i - 1] || '').toLowerCase();
+      const txt = await _getSearchText(i);
+      let count = txt.split(normalized).length - 1;
+      // Supplement with OCR index matches for pages not caught by text
+      if (count === 0 && ocrHitPages.has(i)) {
+        count = ocrHits.find(h => h.page === i)?.matchCount || 0;
       }
-      const count = txt.split(normalized).length - 1;
       if (count > 0) {
         state.searchResults.push(i);
         state.searchResultCounts[i] = count;

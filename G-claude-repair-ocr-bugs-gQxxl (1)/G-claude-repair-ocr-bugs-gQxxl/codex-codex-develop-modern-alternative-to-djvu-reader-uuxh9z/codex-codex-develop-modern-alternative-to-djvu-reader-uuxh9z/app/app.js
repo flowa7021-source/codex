@@ -4,7 +4,7 @@ import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state
 import { ensurePdfJs } from './modules/loaders.js';
 import { getCachedPage, clearPageRenderCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
 import { toolStateMachine, initToolModeDeps } from './modules/tool-modes.js';
-import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps } from './modules/diagnostics.js';
+import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps, novaLog, exportLogsAsJson, clearActivityLog, getLogEntries } from './modules/diagnostics.js';
 import { setLanguage, getLanguage, loadLanguage, applyI18nToDOM } from './modules/i18n.js';
 import { blockEditor } from './modules/pdf-advanced-edit.js';
 import { formManager } from './modules/pdf-forms.js';
@@ -335,6 +335,18 @@ safeOn(els.fitPage, 'click', fitPage);
 safeOn(els.rotate, 'click', async () => {
   state.rotation = (state.rotation + 90) % 360;
   clearOcrRuntimeCaches('rotation-changed');
+  // Recalculate auto-zoom for new dimensions after rotation
+  if (state.adapter) {
+    try {
+      const vp = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);
+      const scrollbarW = els.canvasWrap.offsetWidth - els.canvasWrap.clientWidth;
+      const available = Math.max(200, els.canvasWrap.clientWidth - Math.max(16, scrollbarW + 16));
+      const autoZoom = available / vp.width;
+      if (autoZoom > 0.3 && autoZoom < 4) {
+        state.zoom = Math.round(autoZoom * 100) / 100;
+      }
+    } catch (_e) { /* keep current zoom */ }
+  }
   await renderPagePreviews();
   await renderCurrentPage();
   if (state.settings?.backgroundOcr) scheduleBackgroundOcrScan('save-settings', 600);
@@ -581,6 +593,7 @@ safeOn(els.clearAllOcrData, 'click', async () => {
 });
 
 safeOn(els.annotateToggle, 'click', () => setDrawMode(!state.drawEnabled));
+safeOn(els.drawTool, 'change', () => { if (!state.drawEnabled) setDrawMode(true); });
 safeOn(els.undoStroke, 'click', undoStroke);
 safeOn(els.clearStrokes, 'click', clearStrokes);
 safeOn(els.clearComments, 'click', clearComments);
@@ -1329,6 +1342,7 @@ initUiBlocks({
   nrPrompt, nrConfirm, toastSuccess, toastInfo,
   parsePageRangeLib, setViewMode, VIEW_MODES,
   getCurrentMode, extractTextForPage, convertToHtml, downloadHtml,
+  reloadPdfFromBytes,
 });
 
 // ─── Initialize Phase 2+ Modules (extracted to modules/app-init-phase2.js) ───
@@ -1585,6 +1599,9 @@ window.addEventListener('error', (event) => {
   pushDiagnosticEvent('uncaught-error', { message: msg, filename: event.filename, line: event.lineno }, 'error');
   if (typeof recordCrashEvent === 'function') recordCrashEvent('uncaught-error', msg, 'global');
 });
+
+// ─── Expose Activity Log for E2E and debugging ──────────────────────────────
+window._activityLog = { novaLog, exportLogsAsJson, clearActivityLog, getLogEntries };
 
 // ─── Mark initialization complete ────────────────────────────────────────
 state.initComplete = true;

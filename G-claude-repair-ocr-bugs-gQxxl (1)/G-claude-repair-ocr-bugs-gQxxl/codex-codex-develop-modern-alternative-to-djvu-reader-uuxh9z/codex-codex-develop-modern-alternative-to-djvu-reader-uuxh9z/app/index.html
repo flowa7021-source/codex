@@ -653,7 +653,7 @@
           <div class="rp-section">
             <h3 class="rp-section-title">Pro-инструменты</h3>
             <div class="rp-actions">
-              <button id="pdfRedact" class="btn-xs">🔒 Редактирование</button>
+              <button id="pdfRedact" class="btn-xs">🔒 Редакция ПД</button>
               <button id="pdfOptimize" class="btn-xs">📦 Оптимизировать</button>
               <button id="pdfFlatten" class="btn-xs">📋 Выровнять</button>
             </div>
@@ -709,7 +709,39 @@
         <span class="status-bar-item" id="sbReadingTime">Чтение: 0 мин</span>
         <span class="status-bar-sep"></span>
         <span class="status-bar-item" id="docInfo"></span>
+        <span class="status-bar-spacer"></span>
+        <button id="toggleLogViewer" class="status-bar-btn" title="Activity Log" aria-label="Activity Log">
+          Log
+          <span id="logViewerBadge" class="log-viewer-badge"></span>
+        </button>
       </footer>
+    </div>
+
+    <!-- ═══ Activity Log Viewer Panel ═══ -->
+    <div id="logViewerPanel" class="log-viewer-panel" style="display:none" role="dialog" aria-label="Activity Log Viewer">
+      <div class="log-viewer-header">
+        <h3>Activity Log</h3>
+        <div class="log-viewer-filters">
+          <select id="logFilterModule" class="log-filter-select" aria-label="Filter by module">
+            <option value="">All modules</option>
+          </select>
+          <select id="logFilterLevel" class="log-filter-select" aria-label="Filter by level">
+            <option value="">All levels</option>
+            <option value="debug">Debug</option>
+            <option value="info">Info</option>
+            <option value="warn">Warn</option>
+            <option value="error">Error</option>
+          </select>
+          <input id="logFilterSearch" type="text" placeholder="Search logs..." class="log-filter-input" aria-label="Search logs" />
+        </div>
+        <div class="log-viewer-actions">
+          <span id="logViewerCount" class="log-viewer-count"></span>
+          <button id="exportLogsJson" class="btn-xs" title="Export as JSON">Export JSON</button>
+          <button id="clearActivityLog" class="btn-xs" title="Clear all logs">Clear</button>
+          <button id="closeLogViewer" class="btn-close btn-xs" title="Close" aria-label="Close log viewer">&#10005;</button>
+        </div>
+      </div>
+      <div id="logViewerList" class="log-viewer-list"></div>
     </div>
 
     <!-- Compatibility: hidden elements referenced by state.js -->

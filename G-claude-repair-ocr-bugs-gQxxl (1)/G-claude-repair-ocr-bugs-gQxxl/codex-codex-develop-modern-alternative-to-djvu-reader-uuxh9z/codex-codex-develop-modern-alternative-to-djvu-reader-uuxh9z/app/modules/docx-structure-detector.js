@@ -452,7 +452,7 @@ async function extractStructuredContent(pdfDoc, pageNum) {
     const columns = splitLinesIntoColumns(lines, columnInfo);
     allBlocks = [];
     for (let ci = 0; ci < columns.length; ci++) {
-      const colBlocks = processLinesToBlocks(columns[ci], bodyFontSize, avgFontSize, leftMargin, pageWidth);
+      const colBlocks = processLinesToBlocks(columns[ci], bodyFontSize, avgFontSize, leftMargin, pageWidth, pageHeight);
       allBlocks.push(...colBlocks);
       // Add column separator between columns (except after last)
       if (ci < columns.length - 1 && colBlocks.length > 0) {
@@ -460,7 +460,7 @@ async function extractStructuredContent(pdfDoc, pageNum) {
       }
     }
   } else {
-    allBlocks = processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, pageWidth);
+    allBlocks = processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, pageWidth, pageHeight);
   }
 
   // Compute page margins
@@ -477,12 +477,35 @@ async function extractStructuredContent(pdfDoc, pageNum) {
   };
 }
 
+// ─── Footnote detection helpers ──────────────────────────────────────────────
+const FOOTNOTE_MARKER_RE = /^(\d{1,3})[.)]\s|^(\*{1,3})\s|^(†|‡|§|¶)\s/;
+
+function _isFootnoteCandidate(lineAvgFontSize, bodyFontSize, lineY, pageHeight) {
+  // Footnotes are typically smaller text in the bottom 25% of the page
+  const isSmall = lineAvgFontSize < bodyFontSize * 0.85;
+  const isBottom = lineY > pageHeight * 0.75;
+  return isSmall && isBottom;
+}
+
+// ─── Improved table detection: check column alignment consistency ────────────
+function _validateTableCandidate(rows) {
+  // A valid table should have consistent column count (or close) and
+  // column x-positions should roughly align across rows
+  if (rows.length < 2) return false;
+  const colCounts = rows.map(r => r.cellData.length);
+  const modeCount = colCounts.sort((a, b) => a - b)[Math.floor(colCounts.length / 2)];
+  // At least 60% of rows should have similar column count (within +/-1)
+  const consistent = colCounts.filter(c => Math.abs(c - modeCount) <= 1).length;
+  return consistent >= rows.length * 0.6;
+}
+
 // Process a set of lines (from one column or the whole page) into blocks
-function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, pageWidth) {
+function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, pageWidth, pageHeight) {
   const blocks = [];
   let tableCandidate = [];
   let prevLineBottom = 0;
   let consecutiveParagraphs = []; // For merging continuation paragraphs
+  const _pageH = pageHeight || 842; // Default A4 height in points
 
   for (let li = 0; li < lines.length; li++) {
     const rawLine = lines[li];
@@ -494,7 +517,14 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
 
     // Flush table if gap is large
     if (tableCandidate.length && gap > lineAvgFontSize * 1.5) {
-      flushTable(tableCandidate, blocks, avgFontSize, leftMargin);
+      flushParagraphGroup(consecutiveParagraphs, blocks);
+      consecutiveParagraphs = [];
+      if (_validateTableCandidate(tableCandidate)) {
+        flushTable(tableCandidate, blocks, avgFontSize, leftMargin);
+      } else {
+        // Not a real table — emit as regular paragraphs
+        tableCandidate.forEach(tc => blocks.push(buildParagraphBlock(tc.line, avgFontSize, leftMargin)));
+      }
       tableCandidate = [];
     }
 
@@ -502,7 +532,7 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
     const lineText = line.map(i => i.text).join(' ').trim();
     if (!lineText) { prevLineBottom = lineBottom; continue; }
 
-    // Check if line looks like a table row
+    // Check if line looks like a table row: multiple items with large x-gaps
     const xPositions = line.map(i => i.x);
     const xSpan = Math.max(...xPositions) - Math.min(...xPositions);
     const hasMultipleColumns = line.length >= 2 && xSpan > pageWidth * 0.25;
@@ -510,7 +540,13 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
       item.x - (rawLine[idx-1].x + (rawLine[idx-1].width || 0)) > avgFontSize * 2.5);
     const tabSeparated = lineText.includes('\t');
 
-    if ((hasMultipleColumns && hasLargeGap) || tabSeparated) {
+    // Additional table heuristic: check if items form distinct aligned columns
+    const _lineItemXPositions = line.map(i => i.x);
+    const _uniqueXRegions = _lineItemXPositions.filter((x, idx) =>
+      idx === 0 || x - _lineItemXPositions[idx - 1] > avgFontSize * 2);
+    const hasAlignedColumns = _uniqueXRegions.length >= 2;
+
+    if ((hasMultipleColumns && (hasLargeGap || hasAlignedColumns)) || tabSeparated) {
       const columnItems = clusterByXGap(rawLine, avgFontSize * 2);
       if (columnItems.length >= 2) {
         // Flush pending paragraphs before table
@@ -522,22 +558,41 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
       }
     }
 
-    // Flush pending table
+    // Flush pending table with validation
     if (tableCandidate.length) {
       flushParagraphGroup(consecutiveParagraphs, blocks);
       consecutiveParagraphs = [];
-      flushTable(tableCandidate, blocks, avgFontSize, leftMargin);
+      if (_validateTableCandidate(tableCandidate)) {
+        flushTable(tableCandidate, blocks, avgFontSize, leftMargin);
+      } else {
+        tableCandidate.forEach(tc => blocks.push(buildParagraphBlock(tc.line, avgFontSize, leftMargin)));
+      }
       tableCandidate = [];
+    }
+
+    // Footnote detection: small text at bottom of page with marker
+    if (_isFootnoteCandidate(lineAvgFontSize, bodyFontSize, lineTop, _pageH) &&
+        FOOTNOTE_MARKER_RE.test(lineText.trim())) {
+      flushParagraphGroup(consecutiveParagraphs, blocks);
+      consecutiveParagraphs = [];
+      blocks.push({
+        type: 'footnote',
+        text: lineText,
+        runs: buildRuns(line),
+        y: lineTop,
+      });
+      prevLineBottom = lineBottom;
+      continue;
     }
 
     // Detect list items (more precise: require indent or clear bullet/number prefix)
     const trimmedText = lineText.trimStart();
     const listMatch = trimmedText.match(
-      /^([\u2022\u2023\u25E6\u25CF\u25CB•●○◦‣]\s)|^(\d{1,3}[.)]\s)|^([a-zA-Zа-яА-Я][.)]\s(?=[A-ZА-Я]))/
+      /^([\u2022\u2023\u25E6\u25CF\u25CB•●○◦‣\-–—]\s)|^(\d{1,3}[.)]\s)|^([a-zA-Zа-яА-Я][.)]\s(?=[A-ZА-Я]))/
     );
     const lineIndent = line[0].x - leftMargin;
     const isIndentedList = listMatch && lineIndent > avgFontSize * 0.5;
-    const isClearList = listMatch && (trimmedText.match(/^[\u2022\u2023\u25E6\u25CF\u25CB•●○◦‣]/) ||
+    const isClearList = listMatch && (trimmedText.match(/^[\u2022\u2023\u25E6\u25CF\u25CB•●○◦‣\-–—]/) ||
       trimmedText.match(/^\d{1,3}[.)]\s/));
 
     if (isIndentedList || isClearList) {
@@ -545,7 +600,7 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
       consecutiveParagraphs = [];
       const indent = Math.max(0, Math.round(lineIndent / avgFontSize));
       const cleanText = trimmedText
-        .replace(/^[\u2022\u2023\u25E6\u25CF\u25CB•●○◦‣]\s*/, '')
+        .replace(/^[\u2022\u2023\u25E6\u25CF\u25CB•●○◦‣\-–—]\s*/, '')
         .replace(/^\d{1,3}[.)]\s/, '')
         .replace(/^[a-zA-Zа-яА-Я][.)]\s/, '')
         .trim();
@@ -555,12 +610,13 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
         bullet: !trimmedText.match(/^\d/),
         level: Math.min(indent, 3),
         runs: buildRuns(line),
+        y: lineTop,
       });
       prevLineBottom = lineBottom;
       continue;
     }
 
-    // Detect heading by font size, semantic patterns, or all-caps
+    // Detect heading by font size, semantic patterns, bold + short, or all-caps
     const sizeRatio = lineAvgFontSize / bodyFontSize;
     const isSemantic = isSemanticHeading(lineText);
     const isCaps = isAllCaps(lineText) && lineText.length > 2 && lineText.length < 80;
@@ -573,6 +629,7 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
     else if (sizeRatio > 1.15 && isShortLine) headingLevel = HeadingLevel.HEADING_3;
     else if (isSemantic && isShortLine) headingLevel = HeadingLevel.HEADING_2;
     else if (isCaps && isBold && isShortLine) headingLevel = HeadingLevel.HEADING_3;
+    else if (isBold && isShortLine && sizeRatio >= 1.0 && lineText.length < 60) headingLevel = HeadingLevel.HEADING_3;
 
     if (headingLevel) {
       flushParagraphGroup(consecutiveParagraphs, blocks);
@@ -583,6 +640,7 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
         text: lineText,
         runs: buildRuns(line),
         alignment: detectAlignment(line, pageWidth, leftMargin),
+        y: lineTop,
       });
     } else {
       // Regular paragraph — collect for potential merging
@@ -599,6 +657,7 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
         fontSize: lineAvgFontSize,
         alignment,
         lineBottom,
+        y: lineTop,
       };
 
       // Merge continuation lines into previous paragraph when:
@@ -629,7 +688,11 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
   // Flush remaining
   flushParagraphGroup(consecutiveParagraphs, blocks);
   if (tableCandidate.length) {
-    flushTable(tableCandidate, blocks, avgFontSize, leftMargin);
+    if (_validateTableCandidate(tableCandidate)) {
+      flushTable(tableCandidate, blocks, avgFontSize, leftMargin);
+    } else {
+      tableCandidate.forEach(tc => blocks.push(buildParagraphBlock(tc.line, avgFontSize, leftMargin)));
+    }
   }
 
   return blocks;

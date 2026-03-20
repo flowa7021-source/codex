@@ -68,10 +68,35 @@ export function initPdfProHandlers() {
       const file = requirePdfFile();
       if (!file) return;
 
-      const patternName = await _deps.nrPrompt(
-        'Выберите тип данных для редактирования:\n' +
-        Object.keys(REDACTION_PATTERNS).join(', ') +
-        '\n\nИли введите произвольный regex:');
+      // Show pattern selection modal instead of text prompt
+      const patternName = await new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal open';
+        modal.style.zIndex = '2000';
+        const patterns = Object.keys(REDACTION_PATTERNS);
+        const btns = patterns.map(p =>
+          `<button class="btn-xs" data-pat="${p}" style="margin:4px;padding:6px 12px;">${p}</button>`
+        ).join('');
+        modal.innerHTML = `<div class="modal-card" style="max-width:420px;">
+          <div class="modal-head"><h3 style="margin:0;">Тип редакции</h3><button id="_redCloseModal" class="btn-xs">✕</button></div>
+          <div class="modal-body" style="padding:12px;">
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">${btns}</div>
+            <div style="margin-top:12px;"><input id="_redCustom" type="text" placeholder="Или regex..." class="input-sm" style="width:100%;padding:6px;"/></div>
+            <div style="margin-top:8px;text-align:right;"><button id="_redApplyCustom" class="btn-xs" style="background:var(--accent);color:white;padding:6px 16px;">Применить</button></div>
+          </div>
+        </div>`;
+        document.body.appendChild(modal);
+        modal.querySelectorAll('[data-pat]').forEach(btn => {
+          btn.addEventListener('click', () => { modal.remove(); resolve(btn.dataset.pat); });
+        });
+        modal.querySelector('#_redCloseModal').addEventListener('click', () => { modal.remove(); resolve(null); });
+        modal.querySelector('#_redApplyCustom').addEventListener('click', () => {
+          const v = modal.querySelector('#_redCustom').value.trim();
+          modal.remove();
+          resolve(v || null);
+        });
+        modal.addEventListener('click', (ev) => { if (ev.target === modal) { modal.remove(); resolve(null); } });
+      });
       if (!patternName) return;
 
       try {
@@ -196,7 +221,7 @@ export function initPdfProHandlers() {
     });
   }
 
-  // ── PDF Compare ──
+  // ── PDF Compare (side-by-side like MS Word) ──
   if (document.getElementById('pdfCompare')) {
     document.getElementById('pdfCompare').addEventListener('click', async () => {
       if (!state.adapter || state.adapter.type !== 'pdf') {
@@ -218,28 +243,167 @@ export function initPdfProHandlers() {
           const pdfDoc2 = await pdf.getDocument({ data: ab2 }).promise;
 
           const result = await _deps.pdfCompare.compareText(state.adapter.pdfDoc, pdfDoc2);
-          const html = _deps.pdfCompare.generateDiffHtml(result.diff);
+          const maxPages = Math.max(state.adapter.pdfDoc.numPages, pdfDoc2.numPages);
 
-          // Show results in a new window
-          const win = window.open('', '_blank', 'width=800,height=600');
-          if (win) {
-            win.document.write(`
-              <html><head><title>Сравнение документов</title>
-              <style>
-                body { font-family: monospace; font-size: 13px; padding: 16px; background: #1b1b1f; color: #d4d4d8; }
-                .diff-add { background: #1a3a1a; color: #4ade80; }
-                .diff-remove { background: #3a1a1a; color: #f87171; }
-                .diff-equal { color: #71717a; }
-                .diff-prefix { display: inline-block; width: 20px; }
-                h2 { color: #e4e4e7; }
-              </style></head><body>
-              <h2>Сравнение: ${state.docName} vs ${file2.name}</h2>
-              <p>Изменено строк: ${result.summary.changePercent}% (${result.summary.addedLines} добавлено, ${result.summary.removedLines} удалено)</p>
-              ${html}
-              </body></html>`);
-            win.document.close();
+          // Build side-by-side comparison modal
+          const overlay = document.createElement('div');
+          overlay.className = 'modal open';
+          overlay.style.cssText = 'z-index:2000;';
+          overlay.innerHTML = `
+            <div class="modal-card" style="width:96vw;max-width:1600px;height:90vh;display:flex;flex-direction:column;">
+              <div class="modal-head" style="flex-shrink:0;">
+                <h3 style="margin:0;">Сравнение документов</h3>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <span style="font-size:0.8rem;color:var(--text-muted);">
+                    Изменено: ${result.summary.changePercent}% (${result.summary.addedLines} добавлено, ${result.summary.removedLines} удалено)
+                  </span>
+                  <select id="cmpViewMode" class="select-xs" style="font-size:0.75rem;">
+                    <option value="text">Текст</option>
+                    <option value="visual">Визуально</option>
+                  </select>
+                  <button id="cmpPrev" class="btn-xs">&larr;</button>
+                  <span id="cmpPageLabel" style="font-size:0.8rem;">1 / ${maxPages}</span>
+                  <button id="cmpNext" class="btn-xs">&rarr;</button>
+                  <button id="closeCompare" class="btn-xs">✕</button>
+                </div>
+              </div>
+              <div style="display:flex;flex:1;overflow:hidden;gap:2px;min-height:0;">
+                <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+                  <div style="padding:4px 8px;background:var(--bg-secondary);font-size:0.75rem;font-weight:600;flex-shrink:0;">
+                    ${state.docName} (${state.adapter.pdfDoc.numPages} стр.)
+                  </div>
+                  <div id="cmpPanelA" style="flex:1;overflow:auto;padding:8px;font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.6;background:var(--bg);"></div>
+                </div>
+                <div style="width:2px;background:var(--border);flex-shrink:0;"></div>
+                <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+                  <div style="padding:4px 8px;background:var(--bg-secondary);font-size:0.75rem;font-weight:600;flex-shrink:0;">
+                    ${file2.name} (${pdfDoc2.numPages} стр.)
+                  </div>
+                  <div id="cmpPanelB" style="flex:1;overflow:auto;padding:8px;font-family:monospace;font-size:12px;white-space:pre-wrap;line-height:1.6;background:var(--bg);"></div>
+                </div>
+              </div>
+            </div>`;
+
+          document.body.appendChild(overlay);
+
+          const panelA = overlay.querySelector('#cmpPanelA');
+          const panelB = overlay.querySelector('#cmpPanelB');
+          const pageLabel = overlay.querySelector('#cmpPageLabel');
+          const viewMode = overlay.querySelector('#cmpViewMode');
+          let currentPage = 1;
+
+          // Synchronized scroll
+          let scrolling = false;
+          panelA.addEventListener('scroll', () => {
+            if (scrolling) return;
+            scrolling = true;
+            panelB.scrollTop = panelA.scrollTop;
+            requestAnimationFrame(() => { scrolling = false; });
+          });
+          panelB.addEventListener('scroll', () => {
+            if (scrolling) return;
+            scrolling = true;
+            panelA.scrollTop = panelB.scrollTop;
+            requestAnimationFrame(() => { scrolling = false; });
+          });
+
+          const escXml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+          async function renderTextComparison(pageNum) {
+            const getPageText = async (doc, p) => {
+              if (p > doc.numPages) return '';
+              const page = await doc.getPage(p);
+              const content = await page.getTextContent();
+              return content.items.map(item => item.str).join(' ');
+            };
+
+            const [textA, textB] = await Promise.all([
+              getPageText(state.adapter.pdfDoc, pageNum),
+              getPageText(pdfDoc2, pageNum),
+            ]);
+
+            const linesA = textA.split(/\n|(?<=\.)\s+/);
+            const linesB = textB.split(/\n|(?<=\.)\s+/);
+
+            // Side-by-side with diff highlighting
+            let htmlA = '', htmlB = '';
+            const maxLines = Math.max(linesA.length, linesB.length);
+            for (let i = 0; i < maxLines; i++) {
+              const a = linesA[i] || '';
+              const b = linesB[i] || '';
+              if (a === b) {
+                htmlA += `<div style="padding:1px 4px;">${escXml(a)}</div>`;
+                htmlB += `<div style="padding:1px 4px;">${escXml(b)}</div>`;
+              } else {
+                htmlA += `<div style="padding:1px 4px;background:rgba(248,113,113,0.15);border-left:3px solid #f87171;">${escXml(a) || '&nbsp;'}</div>`;
+                htmlB += `<div style="padding:1px 4px;background:rgba(74,222,128,0.15);border-left:3px solid #4ade80;">${escXml(b) || '&nbsp;'}</div>`;
+              }
+            }
+            panelA.innerHTML = htmlA;
+            panelB.innerHTML = htmlB;
           }
 
+          async function renderVisualComparison(pageNum) {
+            panelA.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Рендер...</div>';
+            panelB.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-muted);">Рендер...</div>';
+
+            const renderPage = async (doc, p) => {
+              if (p > doc.numPages) return null;
+              const page = await doc.getPage(p);
+              const vp = page.getViewport({ scale: 1.2 });
+              const canvas = document.createElement('canvas');
+              canvas.width = vp.width;
+              canvas.height = vp.height;
+              canvas.style.cssText = 'max-width:100%;height:auto;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.15);';
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#fff';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              await page.render({ canvasContext: ctx, viewport: vp }).promise;
+              return canvas;
+            };
+
+            const [canvasA, canvasB] = await Promise.all([
+              renderPage(state.adapter.pdfDoc, pageNum),
+              renderPage(pdfDoc2, pageNum),
+            ]);
+
+            panelA.innerHTML = '';
+            panelB.innerHTML = '';
+            if (canvasA) panelA.appendChild(canvasA);
+            else panelA.innerHTML = '<div style="padding:20px;color:var(--text-muted);">Нет страницы</div>';
+            if (canvasB) panelB.appendChild(canvasB);
+            else panelB.innerHTML = '<div style="padding:20px;color:var(--text-muted);">Нет страницы</div>';
+          }
+
+          async function renderPage() {
+            pageLabel.textContent = `${currentPage} / ${maxPages}`;
+            if (viewMode.value === 'visual') {
+              await renderVisualComparison(currentPage);
+            } else {
+              await renderTextComparison(currentPage);
+            }
+          }
+
+          overlay.querySelector('#cmpPrev').addEventListener('click', async () => {
+            if (currentPage > 1) { currentPage--; await renderPage(); }
+          });
+          overlay.querySelector('#cmpNext').addEventListener('click', async () => {
+            if (currentPage < maxPages) { currentPage++; await renderPage(); }
+          });
+          viewMode.addEventListener('change', () => renderPage());
+          overlay.querySelector('#closeCompare').addEventListener('click', () => overlay.remove());
+          overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+
+          // Keyboard navigation
+          const keyHandler = (ev) => {
+            if (!document.body.contains(overlay)) { document.removeEventListener('keydown', keyHandler); return; }
+            if (ev.key === 'Escape') overlay.remove();
+            if (ev.key === 'ArrowLeft' && currentPage > 1) { currentPage--; renderPage(); }
+            if (ev.key === 'ArrowRight' && currentPage < maxPages) { currentPage++; renderPage(); }
+          };
+          document.addEventListener('keydown', keyHandler);
+
+          await renderPage();
           _deps.setOcrStatus(`Сравнение: ${result.summary.changePercent}% различий (${result.summary.addedLines}+, ${result.summary.removedLines}-)`);
           _deps.pushDiagnosticEvent('pdf.compare', { changePercent: result.summary.changePercent });
         } catch (err) {

@@ -125,6 +125,70 @@ export function loadPersistedEdits() {
 
 // ─── DOCX XML Builders ─────────────────────────────────────────────────────
 
+// ─── Heading / list / formatting detection helpers for plain-text DOCX ──────
+
+const _HEADING_PATTERNS = [
+  /^(глава|chapter|teil|chapitre|capítulo)\s+\d/i,
+  /^(раздел|section|abschnitt)\s+\d/i,
+  /^(часть|part|partie|parte)\s+[IVXivx\d]/i,
+  /^\d+\.\s+[А-ЯA-Z]/,
+  /^\d+\.\d+\s+[А-ЯA-Z]/,
+  /^(введение|заключение|приложение|содержание|оглавление|предисловие)/i,
+  /^(introduction|conclusion|appendix|abstract|summary|preface|foreword|bibliography|references)/i,
+  /^(table of contents|index|acknowledgements)/i,
+];
+
+const _BULLET_RE = /^([\u2022\u2023\u25E6\u25CF\u25CB•●○◦‣\-–—]\s)/;
+const _NUM_LIST_RE = /^(\d{1,3}[.)]\s)/;
+const _ALPHA_LIST_RE = /^([a-zA-Zа-яА-Я][.)]\s(?=[A-ZА-Я]))/;
+
+function _isAllCapsLine(text) {
+  const letters = text.replace(/[^а-яА-Яa-zA-ZÀ-ÿ]/g, '');
+  return letters.length >= 3 && letters === letters.toUpperCase();
+}
+
+function _detectListType(line) {
+  if (_BULLET_RE.test(line)) return { type: 'bullet', clean: line.replace(_BULLET_RE, '').trim() };
+  if (_NUM_LIST_RE.test(line)) return { type: 'numbered', clean: line.replace(_NUM_LIST_RE, '').trim() };
+  if (_ALPHA_LIST_RE.test(line)) return { type: 'numbered', clean: line.replace(_ALPHA_LIST_RE, '').trim() };
+  return null;
+}
+
+function _detectHeadingLevel(text) {
+  const trimmed = text.trim();
+  if (trimmed.length > 120 || trimmed.length < 2) return null;
+  if (_HEADING_PATTERNS.some(p => p.test(trimmed))) return 'Heading2';
+  if (_isAllCapsLine(trimmed) && trimmed.length < 80) return 'Heading3';
+  return null;
+}
+
+function _measureLeadingSpaces(line) {
+  const match = line.match(/^(\s+)/);
+  if (!match) return 0;
+  return Math.floor(match[1].length / 2);
+}
+
+function _buildListParagraph(escapeXml, text, listType, indentLevel) {
+  const numId = listType === 'bullet' ? '1' : '2';
+  const ilvl = Math.min(indentLevel, 2);
+  return `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr></w:pPr><w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
+}
+
+function _buildFormattedParagraph(escapeXml, text, style, indent) {
+  let pPr = '';
+  if (style || indent > 0) {
+    pPr = '<w:pPr>';
+    if (style) pPr += `<w:pStyle w:val="${style}"/>`;
+    if (indent > 0) pPr += `<w:ind w:left="${indent * 720}"/>`;
+    pPr += '</w:pPr>';
+  }
+  // Detect inline bold (*text* or ALL CAPS short segments)
+  const escaped = escapeXml(text);
+  const isBold = style && style.startsWith('Heading');
+  const rPr = isBold ? '<w:rPr><w:b/></w:rPr>' : '';
+  return `<w:p>${pPr}<w:r>${rPr}<w:t xml:space="preserve">${escaped}</w:t></w:r></w:p>`;
+}
+
 export function buildDocxXml(title, pages) {
   const escapeXml = (s) => String(s || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -156,6 +220,7 @@ export function buildDocxXml(title, pages) {
         continue;
       }
 
+      // Table detection: tab-separated or multiple large gaps or pipe-separated
       const cells = trimmed.split(/\t|  {2,}|\|/).map(c => c.trim()).filter(Boolean);
       if (cells.length >= 2 && cells.length <= 20) {
         inTable = true;
@@ -169,8 +234,25 @@ export function buildDocxXml(title, pages) {
         inTable = false;
       }
 
-      const escapedLine = escapeXml(trimmed);
-      paragraphs.push(`<w:p><w:r><w:t xml:space="preserve">${escapedLine}</w:t></w:r></w:p>`);
+      // List detection (bullet and numbered)
+      const listInfo = _detectListType(trimmed);
+      if (listInfo) {
+        const indent = _measureLeadingSpaces(line);
+        paragraphs.push(_buildListParagraph(escapeXml, listInfo.clean, listInfo.type, indent));
+        continue;
+      }
+
+      // Heading detection from semantic patterns and ALL CAPS
+      const headingStyle = _detectHeadingLevel(trimmed);
+      if (headingStyle) {
+        const indent = _measureLeadingSpaces(line);
+        paragraphs.push(_buildFormattedParagraph(escapeXml, trimmed, headingStyle, indent));
+        continue;
+      }
+
+      // Regular paragraph with indentation preservation
+      const indent = _measureLeadingSpaces(line);
+      paragraphs.push(_buildFormattedParagraph(escapeXml, trimmed, null, indent));
     }
 
     if (inTable && tableRows.length) {
@@ -528,15 +610,23 @@ export async function generateDocxBlob(title, pages) {
 // ─── DOCX Image Embedding ──────────────────────────────────────────────────
 
 export async function capturePageAsImageData(pageNum) {
+  // Use a higher zoom factor (2x) for better image quality in DOCX export
+  const EXPORT_ZOOM = 2;
+
   const cachedEntry = _deps.getCachedPage(pageNum);
   if (cachedEntry && cachedEntry.canvas && cachedEntry.canvas.width > 0) {
-    return cachedEntry.canvas.toDataURL('image/png').split(',')[1];
+    // If cached canvas is high-res already, use it directly
+    if (cachedEntry.canvas.width >= 800) {
+      return cachedEntry.canvas.toDataURL('image/png', 1.0).split(',')[1];
+    }
+    // Otherwise re-render at higher quality below
   }
   if (!state.adapter) return null;
   const tempCanvas = document.createElement('canvas');
   try {
-    await state.adapter.renderPage(pageNum, tempCanvas, { zoom: 1, rotation: 0 });
-    const base64 = tempCanvas.toDataURL('image/png').split(',')[1];
+    await state.adapter.renderPage(pageNum, tempCanvas, { zoom: EXPORT_ZOOM, rotation: 0 });
+    // Use quality 1.0 for lossless PNG output
+    const base64 = tempCanvas.toDataURL('image/png', 1.0).split(',')[1];
     return base64;
   } catch (err) {
     console.warn('[export-controller] error:', err?.message);
@@ -636,6 +726,59 @@ export function _groupWordsIntoLines(words) {
   return lines;
 }
 
+// ─── Word-level font name helpers for XML builder ───────────────────────────
+
+function _isBoldFromFont(fontName) {
+  return /bold|black|heavy|demi(?!-?italic)/i.test(fontName || '');
+}
+
+function _isItalicFromFont(fontName) {
+  return /italic|oblique|slant/i.test(fontName || '');
+}
+
+function _buildRunXml(escapeXml, text, opts = {}) {
+  let rPr = '';
+  const parts = [];
+  if (opts.bold) parts.push('<w:b/>');
+  if (opts.italic) parts.push('<w:i/>');
+  if (opts.fontSize) parts.push(`<w:sz w:val="${opts.fontSize}"/><w:szCs w:val="${opts.fontSize}"/>`);
+  if (opts.fontFamily) parts.push(`<w:rFonts w:ascii="${escapeXml(opts.fontFamily)}" w:hAnsi="${escapeXml(opts.fontFamily)}"/>`);
+  if (parts.length) rPr = `<w:rPr>${parts.join('')}</w:rPr>`;
+  return `<w:r>${rPr}<w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r>`;
+}
+
+// Build runs from word-level data, grouping by font formatting
+function _buildWordRunsXml(escapeXml, lineWords) {
+  if (!lineWords.length) return '';
+  const runs = [];
+  let currentRun = { texts: [lineWords[0].text], bold: false, italic: false, fontName: '' };
+
+  // Check if word has font info (from OCR bbox data)
+  const getWordFont = (w) => w.fontName || w.font || '';
+  const firstFont = getWordFont(lineWords[0]);
+  currentRun.bold = _isBoldFromFont(firstFont);
+  currentRun.italic = _isItalicFromFont(firstFont);
+  currentRun.fontName = firstFont;
+
+  for (let wi = 1; wi < lineWords.length; wi++) {
+    const w = lineWords[wi];
+    const font = getWordFont(w);
+    const bold = _isBoldFromFont(font);
+    const italic = _isItalicFromFont(font);
+    if (bold === currentRun.bold && italic === currentRun.italic) {
+      currentRun.texts.push(w.text);
+    } else {
+      runs.push(currentRun);
+      currentRun = { texts: [w.text], bold, italic, fontName: font };
+    }
+  }
+  runs.push(currentRun);
+
+  return runs.map(r => _buildRunXml(escapeXml, r.texts.join(' '), {
+    bold: r.bold, italic: r.italic,
+  })).join('');
+}
+
 export function buildDocxXmlWithImages(title, pages, imageRels) {
   const escapeXml = (s) => String(s || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -658,8 +801,15 @@ export function buildDocxXmlWithImages(title, pages, imageRels) {
       const fontSizes = words.map(w => w.bbox ? Math.abs(w.bbox.y1 - w.bbox.y0) : 12);
       const avgFontSize = fontSizes.reduce((a, b) => a + b, 0) / Math.max(1, fontSizes.length);
 
+      // Compute left margin from all word positions for indentation detection
+      const allXPositions = words.filter(w => w.bbox).map(w => w.bbox.x0);
+      const leftMargin = allXPositions.length ? Math.min(...allXPositions) : 0;
+
       // Detect paragraphs by line spacing
       let prevLineBottom = 0;
+      let inTable = false;
+      let tableRows = [];
+
       for (const lineWords of lineGroups) {
         if (!lineWords.length) continue;
         const lineTop = Math.min(...lineWords.map(w => w.bbox?.y0 || 0));
@@ -667,34 +817,90 @@ export function buildDocxXmlWithImages(title, pages, imageRels) {
         const lineHeight = lineBottom - lineTop;
         const gap = lineTop - prevLineBottom;
 
-        // Detect heading: larger font or significant gap before line
-        const lineAvgHeight = lineHeight;
-        const isHeading = lineAvgHeight > avgFontSize * 1.3 && gap > avgFontSize * 0.5;
-        const isParagraphBreak = gap > lineHeight * 1.5;
-
         const lineText = lineWords.map(w => w.text).join(' ').trim();
-        if (!lineText) continue;
+        if (!lineText) { prevLineBottom = lineBottom; continue; }
 
-        // Check if this line looks like a table row
+        // Flush table on large gap
+        if (inTable && tableRows.length && gap > avgFontSize * 1.5) {
+          paragraphs.push(buildDocxTable(tableRows));
+          tableRows = [];
+          inTable = false;
+        }
+
+        // Table detection: tab-separated or pipe-separated or multiple large x-gaps
         const cells = lineText.split(/\t|  {2,}|\|/).map(c => c.trim()).filter(Boolean);
-        if (cells.length >= 2 && cells.length <= 20) {
-          // Will be handled in next pass
-          paragraphs.push(`<w:p><w:r><w:t xml:space="preserve">${escapeXml(lineText)}</w:t></w:r></w:p>`);
-        } else if (isHeading) {
-          const sz = Math.round(Math.min(36, Math.max(14, lineAvgHeight * 0.75)) * 2);
-          paragraphs.push(`<w:p><w:pPr><w:jc w:val="left"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${escapeXml(lineText)}</w:t></w:r></w:p>`);
+        const sortedByX = [...lineWords].sort((a, b) => (a.bbox?.x0 || 0) - (b.bbox?.x0 || 0));
+        const hasLargeGap = sortedByX.some((w, idx) => idx > 0 &&
+          (w.bbox?.x0 || 0) - ((sortedByX[idx - 1].bbox?.x1 || sortedByX[idx - 1].bbox?.x0 || 0) +
+          (sortedByX[idx - 1].text?.length || 1) * avgFontSize * 0.3) > avgFontSize * 2);
+
+        if ((cells.length >= 2 && cells.length <= 20) || (lineWords.length >= 2 && hasLargeGap && cells.length >= 2)) {
+          inTable = true;
+          tableRows.push(cells);
+          prevLineBottom = lineBottom;
+          continue;
+        }
+
+        if (inTable && tableRows.length) {
+          paragraphs.push(buildDocxTable(tableRows));
+          tableRows = [];
+          inTable = false;
+        }
+
+        // Compute x-based indentation
+        const lineX = Math.min(...lineWords.map(w => w.bbox?.x0 || 0));
+        const indentLevel = avgFontSize > 0 ? Math.max(0, Math.round((lineX - leftMargin) / (avgFontSize * 2))) : 0;
+        const indentTwips = indentLevel * 720;
+
+        // List detection from text content
+        const listInfo = _detectListType(lineText);
+        if (listInfo) {
+          const numId = listInfo.type === 'bullet' ? '1' : '2';
+          const ilvl = Math.min(indentLevel, 2);
+          paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="${ilvl}"/><w:numId w:val="${numId}"/></w:numPr></w:pPr>${_buildWordRunsXml(escapeXml, lineWords)}</w:p>`);
+          prevLineBottom = lineBottom;
+          continue;
+        }
+
+        // Heading detection: larger font, semantic patterns, or ALL CAPS
+        const lineAvgHeight = lineHeight;
+        const sizeRatio = lineAvgHeight / avgFontSize;
+        const isHeading = (sizeRatio > 1.3 && lineText.length < 100) ||
+          _HEADING_PATTERNS.some(p => p.test(lineText)) ||
+          (_isAllCapsLine(lineText) && lineText.length < 80 && lineText.length > 2);
+
+        const sz = Math.round(Math.min(36, Math.max(10, lineAvgHeight * 0.65)) * 2);
+
+        if (isHeading) {
+          let headingStyle = 'Heading2';
+          if (sizeRatio > 1.8) headingStyle = 'Heading1';
+          else if (sizeRatio > 1.4) headingStyle = 'Heading2';
+          else headingStyle = 'Heading3';
+          paragraphs.push(`<w:p><w:pPr><w:pStyle w:val="${headingStyle}"/></w:pPr>${_buildWordRunsXml(escapeXml, lineWords)}</w:p>`);
         } else {
-          const sz = Math.round(Math.min(28, Math.max(10, lineAvgHeight * 0.55)) * 2);
-          if (isParagraphBreak && prevLineBottom > 0) {
-            paragraphs.push(`<w:p><w:pPr><w:spacing w:before="120"/></w:pPr><w:r><w:rPr><w:sz w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${escapeXml(lineText)}</w:t></w:r></w:p>`);
+          // Regular paragraph with font formatting and indentation
+          const isParagraphBreak = gap > lineHeight * 1.5;
+          let pPr = '<w:pPr>';
+          if (isParagraphBreak && prevLineBottom > 0) pPr += '<w:spacing w:before="120"/>';
+          if (indentTwips > 0) pPr += `<w:ind w:left="${indentTwips}"/>`;
+          pPr += '</w:pPr>';
+
+          const runsXml = _buildWordRunsXml(escapeXml, lineWords);
+          // If no special run formatting, fall back to sized run
+          if (runsXml.includes('<w:rPr>')) {
+            paragraphs.push(`<w:p>${pPr}${runsXml}</w:p>`);
           } else {
-            paragraphs.push(`<w:p><w:r><w:rPr><w:sz w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${escapeXml(lineText)}</w:t></w:r></w:p>`);
+            paragraphs.push(`<w:p>${pPr}<w:r><w:rPr><w:sz w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${escapeXml(lineText)}</w:t></w:r></w:p>`);
           }
         }
         prevLineBottom = lineBottom;
       }
+
+      if (inTable && tableRows.length) {
+        paragraphs.push(buildDocxTable(tableRows));
+      }
     } else if (text) {
-      // Fallback: text-only layout with table detection
+      // Fallback: text-only layout with full structure detection
       const lines = text.split('\n');
       let inTable = false;
       let tableRows = [];
@@ -720,7 +926,26 @@ export function buildDocxXmlWithImages(title, pages, imageRels) {
           tableRows = [];
           inTable = false;
         }
-        paragraphs.push(`<w:p><w:r><w:t xml:space="preserve">${escapeXml(trimmed)}</w:t></w:r></w:p>`);
+
+        // List detection
+        const listInfo = _detectListType(trimmed);
+        if (listInfo) {
+          const indent = _measureLeadingSpaces(line);
+          paragraphs.push(_buildListParagraph(escapeXml, listInfo.clean, listInfo.type, indent));
+          continue;
+        }
+
+        // Heading detection
+        const headingStyle = _detectHeadingLevel(trimmed);
+        if (headingStyle) {
+          const indent = _measureLeadingSpaces(line);
+          paragraphs.push(_buildFormattedParagraph(escapeXml, trimmed, headingStyle, indent));
+          continue;
+        }
+
+        // Regular paragraph with indentation
+        const indent = _measureLeadingSpaces(line);
+        paragraphs.push(_buildFormattedParagraph(escapeXml, trimmed, null, indent));
       }
       if (inTable && tableRows.length) paragraphs.push(buildDocxTable(tableRows));
     }
