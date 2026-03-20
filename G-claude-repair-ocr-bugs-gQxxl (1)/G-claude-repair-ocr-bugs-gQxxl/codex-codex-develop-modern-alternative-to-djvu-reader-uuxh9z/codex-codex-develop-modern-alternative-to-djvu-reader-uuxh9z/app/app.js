@@ -49,6 +49,8 @@ import { createPdfFromImages, createBlankPdf, canvasesToPdf } from './modules/pd
 import { initQuickActions, hideQuickActions } from './modules/quick-actions.js';
 import { initHotkeys, onHotkey, registerHotkeyHandlers, isSpaceHeld, getBindings, getCheatsheet } from './modules/hotkeys.js';
 import { CbzAdapter } from './modules/cbz-adapter.js';
+import { initAutosave, triggerAutosave, markCleanExit, checkForRecovery, clearRecoveryData, startAutosaveTimer, stopAutosaveTimer, applyRecoveredSnapshot } from './modules/autosave.js';
+import { initAutoScroll, startAutoScroll, stopAutoScroll, toggleAutoScroll, setAutoScrollSpeed, isAutoScrolling } from './modules/auto-scroll.js';
 
 // ─── Wave 8: Decomposition Facade Modules ────────────────────────────────
 import * as AppPersistence from './modules/app-persistence.js';
@@ -87,6 +89,8 @@ import { convertCurrentToPdf } from './modules/convert-to-pdf.js';
 import { initUiBlocks } from './modules/ui-init-blocks.js';
 import { initPhase2Modules } from './modules/app-init-phase2.js';
 import { initPageOrganizerUI } from './modules/page-organizer-ui.js';
+import { initMinimap, updateMinimap, showMinimap, hideMinimap, toggleMinimap } from './modules/minimap.js';
+import { initCommandPalette, showCommandPalette, hideCommandPalette, registerCommand } from './modules/command-palette.js';
 
 // ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
 function withErrorBoundary(fn, context, options = {}) {
@@ -1068,6 +1072,7 @@ function applyCommonHotkeys() {
 window.addEventListener('beforeunload', () => {
   revokeCurrentObjectUrl();
   _saveViewStateNow();
+  markCleanExit();
 });
 
 document.addEventListener('keydown', async (e) => {
@@ -1602,6 +1607,86 @@ window.addEventListener('error', (event) => {
 
 // ─── Expose Activity Log for E2E and debugging ──────────────────────────────
 window._activityLog = { novaLog, exportLogsAsJson, clearActivityLog, getLogEntries };
+
+// ─── Minimap Navigation ────────────────────────────────────────────────────
+initMinimap({
+  state,
+  els,
+  onPageChange: () => renderCurrentPage(),
+});
+
+// Update minimap on scroll
+const _debouncedMinimapUpdate = debounce(() => updateMinimap(), 60);
+safeOn(els.canvasWrap, 'scroll', _debouncedMinimapUpdate, { passive: true });
+
+// Update minimap when page is rendered
+window.addEventListener('page-rendered', () => updateMinimap());
+
+// Expose minimap controls
+window._minimap = { initMinimap, updateMinimap, showMinimap, hideMinimap, toggleMinimap };
+
+// ─── Auto-Scroll Reading Mode ────────────────────────────────────────────
+initAutoScroll({ state, els, goToPage });
+safeOn(document.getElementById('autoScrollBtn'), 'click', () => {
+  if (isAutoScrolling()) {
+    stopAutoScroll();
+  } else {
+    startAutoScroll();
+  }
+});
+window._autoScroll = { startAutoScroll, stopAutoScroll, toggleAutoScroll, setAutoScrollSpeed, isAutoScrolling };
+
+// ─── Auto-save & Crash Recovery ──────────────────────────────────────────
+initAutosave({
+  state,
+  els,
+  getAnnotations: () => {
+    try { return loadStrokes(); } catch (_e) { return null; }
+  },
+  setAnnotations: (data) => {
+    try { saveStrokes(data); } catch (_e) { /* ignore */ }
+  },
+  showToast: (msg) => {
+    try { toastSuccess(msg); } catch (_e) { /* ignore */ }
+  },
+});
+
+// Check for crash recovery on startup
+checkForRecovery().then((snapshot) => {
+  if (snapshot) {
+    applyRecoveredSnapshot(snapshot);
+    pushDiagnosticEvent('autosave.recovery-applied', {
+      fileName: snapshot.fileName,
+      page: snapshot.currentPage,
+      age: Date.now() - snapshot.timestamp,
+    });
+  }
+}).catch((err) => {
+  console.warn('[autosave] recovery check failed:', err?.message);
+});
+
+// Hook into file opening to start autosave timer
+window.addEventListener('page-rendered', () => {
+  if (state.adapter && state.docName) {
+    startAutosaveTimer();
+  }
+}, { once: true });
+
+// Expose autosave for debugging
+window._autosave = { triggerAutosave, markCleanExit, checkForRecovery, clearRecoveryData, startAutosaveTimer, stopAutosaveTimer };
+
+// ─── Command Palette (Ctrl+K) ────────────────────────────────────────────
+initCommandPalette({
+  state,
+  els,
+  goToPage: (n) => {
+    if (n >= 1 && n <= state.pageCount) {
+      state.currentPage = n;
+      renderCurrentPage();
+    }
+  },
+});
+window._commandPalette = { showCommandPalette, hideCommandPalette, registerCommand };
 
 // ─── Mark initialization complete ────────────────────────────────────────
 state.initComplete = true;

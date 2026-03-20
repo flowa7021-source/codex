@@ -56,81 +56,22 @@ export async function mergePdfFiles() {
   input.click();
 }
 
-export function buildMergedPdfFromCanvases(pages) {
-  // Simple PDF builder with images
-  const encoder = new TextEncoder();
-  const objects = [];
-  const xrefOffsets = [];
-  let offset = 0;
-
-  const header = '%PDF-1.4\n';
-  offset = header.length;
-
-  // Catalog
-  objects.push(`1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`);
-  // Pages
-  const pageRefs = pages.map((_, i) => `${3 + i * 3} 0 R`).join(' ');
-  objects.push(`2 0 obj\n<< /Type /Pages /Kids [${pageRefs}] /Count ${pages.length} >>\nendobj\n`);
-
-  let objNum = 3;
-  const imageObjects = [];
-
-  for (let i = 0; i < pages.length; i++) {
-    const p = pages[i];
-    const imgData = p.canvas.toDataURL('image/jpeg', 0.85);
-    const base64 = imgData.split(',')[1];
-    const imgBytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-
-    const pageObjNum = objNum++;
-    const contentsObjNum = objNum++;
-    const imgObjNum = objNum++;
-
-    const stream = `q ${p.width} 0 0 ${p.height} 0 0 cm /Img${i} Do Q`;
-
-    objects.push(`${pageObjNum} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${p.width} ${p.height}] /Contents ${contentsObjNum} 0 R /Resources << /XObject << /Img${i} ${imgObjNum} 0 R >> >> >>\nendobj\n`);
-    objects.push(`${contentsObjNum} 0 obj\n<< /Length ${stream.length} >>\nstream\n${stream}\nendstream\nendobj\n`);
-
-    imageObjects.push({ objNum: imgObjNum, data: imgBytes, width: p.width, height: p.height });
+/**
+ * @deprecated Use mergePdfDocuments() from pdf-operations.js instead.
+ * This function previously rendered pages to canvas images, destroying the
+ * text layer, fonts, annotations, and other PDF structure. It now delegates
+ * to the pdf-lib-based merge which preserves all content via copyPages().
+ *
+ * @param {Array<{file: File}>} pages - Array of objects with a `file` property
+ * @returns {Promise<Blob>}
+ */
+export async function buildMergedPdfFromCanvases(pages) {
+  // Extract File objects and delegate to the proper pdf-lib merge
+  const files = pages.map(p => p.file).filter(Boolean);
+  if (!files.length) {
+    throw new Error('No valid PDF files provided');
   }
-
-  // Build the final PDF
-  const pdfParts = [header];
-  for (const obj of objects) {
-    xrefOffsets.push(offset);
-    pdfParts.push(obj);
-    offset += obj.length;
-  }
-
-  // Image stream objects
-  for (const img of imageObjects) {
-    const imgHeader = `${img.objNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${img.width} /Height ${img.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.data.length} >>\nstream\n`;
-    const imgFooter = `\nendstream\nendobj\n`;
-    xrefOffsets.push(offset);
-    pdfParts.push(imgHeader);
-    offset += imgHeader.length;
-    pdfParts.push(img.data);
-    offset += img.data.length;
-    pdfParts.push(imgFooter);
-    offset += imgFooter.length;
-  }
-
-  const xrefStart = offset;
-  const totalObjs = objects.length + imageObjects.length + 1;
-  let xref = `xref\n0 ${totalObjs}\n0000000000 65535 f \n`;
-  for (const xo of xrefOffsets) {
-    xref += `${String(xo).padStart(10, '0')} 00000 n \n`;
-  }
-  xref += `trailer\n<< /Size ${totalObjs} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`;
-  pdfParts.push(xref);
-
-  // Combine text and binary parts
-  const allParts = pdfParts.map(p => typeof p === 'string' ? encoder.encode(p) : p);
-  const totalSize = allParts.reduce((s, p) => s + p.length, 0);
-  const result = new Uint8Array(totalSize);
-  let pos = 0;
-  for (const p of allParts) { result.set(p, pos); pos += p.length; }
-
-  return new Blob([result], { type: 'application/pdf' });
+  return _deps.mergePdfDocuments(files);
 }
 
 // ─── PDF Split (via pdf-lib — preserves all content) ────────────────────────

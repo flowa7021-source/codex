@@ -2810,3 +2810,493 @@ body.hand-tool-active:active canvas {
   white-space: pre-wrap;
   word-break: break-all;
 }
+
+/* ─── Recovery Banner (Auto-save & Crash Recovery) ────────────────────────── */
+.recovery-banner {
+  position: fixed;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-elev, #2a2a2f);
+  border: 1px solid var(--accent, #4f9cff);
+  border-radius: 8px;
+  padding: 16px 24px;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  animation: slideDown 0.3s ease;
+  max-width: 90vw;
+  color: var(--text, #e8e8ed);
+  font-size: 14px;
+}
+.recovery-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+.recovery-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.recovery-text strong {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.recovery-text span {
+  font-size: 12px;
+  color: var(--muted, #9e9ea8);
+}
+.recovery-banner .btn-accent {
+  flex-shrink: 0;
+}
+.recovery-banner .btn-secondary {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--border, #3a3a44);
+  color: var(--muted, #9e9ea8);
+  padding: 6px 14px;
+  border-radius: var(--radius, 6px);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, color 0.15s;
+}
+.recovery-banner .btn-secondary:hover {
+  background: var(--panel-2, #27272d);
+  color: var(--text, #e8e8ed);
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateX(-50%) translateY(-16px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════
+   MINIMAP — VS Code-style page thumbnail strip
+   ═══════════════════════════════════════════════════ */
+.minimap-container {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 48px;
+  background: var(--panel, #1e1e23);
+  border-left: 1px solid var(--border, #3a3a44);
+  overflow-y: hidden;
+  overflow-x: hidden;
+  z-index: 5;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  pointer-events: auto;
+}
+.minimap-container:hover,
+.minimap-container.minimap-dragging {
+  opacity: 1;
+}
+
+.minimap-track {
+  position: relative;
+  width: 100%;
+  padding: 4px;
+}
+
+.minimap-thumb {
+  position: relative;
+  width: 40px;
+  overflow: hidden;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.minimap-thumb canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  image-rendering: auto;
+}
+.minimap-thumb:hover {
+  box-shadow: 0 0 0 1px var(--accent, #4f9cff);
+}
+.minimap-thumb-active {
+  box-shadow: 0 0 0 1.5px var(--accent, #4f9cff);
+}
+
+.minimap-viewport {
+  position: absolute;
+  left: 0;
+  right: 0;
+  background: var(--accent, #4f9cff);
+  opacity: 0.18;
+  border-radius: 2px;
+  cursor: grab;
+  z-index: 2;
+  pointer-events: auto;
+  min-height: 8px;
+  transition: opacity 0.15s;
+}
+.minimap-viewport:hover {
+  opacity: 0.28;
+}
+.minimap-container.minimap-dragging .minimap-viewport {
+  cursor: grabbing;
+  opacity: 0.32;
+}
+
+/* Light theme adjustments */
+body.light .minimap-container {
+  background: var(--panel, #ffffff);
+}
+body.light .minimap-viewport {
+  opacity: 0.22;
+}
+body.light .minimap-viewport:hover {
+  opacity: 0.32;
+}
+
+/* Sepia theme adjustments */
+body.sepia .minimap-container {
+  background: var(--panel, #f5ecd7);
+}
+
+/* High-contrast theme */
+body.high-contrast .minimap-container {
+  background: #000;
+  border-left-color: #fff;
+}
+body.high-contrast .minimap-viewport {
+  opacity: 0.35;
+}
+
+/* Canvas-wrap needs position:relative for the absolute minimap */
+.canvas-wrap {
+  position: relative;
+}
+
+/* Hide minimap in presentation mode */
+.vmode-presentation .minimap-container {
+  display: none !important;
+}
+
+/* Responsive: hide minimap on small screens */
+@media (max-width: 640px) {
+  .minimap-container {
+    display: none !important;
+  }
+}
+
+/* ─── Auto-Scroll Widget ──────────────────────────────────────────────────── */
+.auto-scroll-widget {
+  position: fixed;
+  bottom: 48px;
+  right: 20px;
+  background: var(--bg-elevated, #2a2a2f);
+  border: 1px solid var(--border, #3a3a3f);
+  border-radius: 12px;
+  padding: 8px 16px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  font-size: 13px;
+  user-select: none;
+  cursor: move;
+  transition: opacity 0.2s;
+  opacity: 0.85;
+  color: var(--fg, #e0e0e4);
+}
+.auto-scroll-widget:hover {
+  opacity: 1 !important;
+}
+.auto-scroll-btn {
+  background: none;
+  border: 1px solid var(--border, #3a3a3f);
+  border-radius: 6px;
+  color: var(--fg, #e0e0e4);
+  cursor: pointer;
+  padding: 2px 8px;
+  font-size: 13px;
+  line-height: 1.4;
+  transition: background 0.15s;
+}
+.auto-scroll-btn:hover {
+  background: var(--bg-hover, rgba(255,255,255,0.08));
+}
+.auto-scroll-speed-bar {
+  width: 80px;
+  height: 6px;
+  background: var(--border, #3a3a3f);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+.auto-scroll-speed-fill {
+  height: 100%;
+  background: var(--accent, #6e8efb);
+  border-radius: 3px;
+  transition: width 0.15s ease;
+  width: 50%;
+}
+.auto-scroll-speed-label {
+  min-width: 24px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--accent, #6e8efb);
+}
+
+/* ═══════════════════════════════════════════════════
+   COMMAND PALETTE (Ctrl+K)
+   ═══════════════════════════════════════════════════ */
+.command-palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 300;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 20vh;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.command-palette-overlay.open {
+  opacity: 1;
+}
+.command-palette-modal {
+  width: min(600px, 90vw);
+  max-height: 60vh;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow), 0 12px 48px rgba(0,0,0,0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: cp-slide-in 0.12s ease;
+}
+@keyframes cp-slide-in {
+  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.command-palette-input {
+  width: 100%;
+  padding: 14px 18px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  outline: none;
+  font-family: inherit;
+}
+.command-palette-input::placeholder {
+  color: var(--muted);
+}
+.command-palette-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.command-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background 0.08s;
+  user-select: none;
+}
+.command-palette-item:hover,
+.command-palette-item.selected {
+  background: var(--panel-3);
+}
+.command-palette-item.selected {
+  background: color-mix(in srgb, var(--accent) 15%, var(--panel-3));
+}
+.command-palette-icon {
+  flex: 0 0 24px;
+  text-align: center;
+  font-size: 15px;
+  line-height: 1;
+}
+.command-palette-label {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.command-palette-shortcut {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-family: inherit;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.command-palette-badge {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text);
+  background: var(--panel-2);
+}
+.command-palette-badge--nav   { background: color-mix(in srgb, var(--accent) 25%, var(--panel-2)); }
+.command-palette-badge--zoom  { background: color-mix(in srgb, var(--success) 25%, var(--panel-2)); }
+.command-palette-badge--view  { background: color-mix(in srgb, var(--warn) 20%, var(--panel-2)); }
+.command-palette-badge--edit  { background: color-mix(in srgb, var(--accent-2) 25%, var(--panel-2)); }
+.command-palette-badge--ocr   { background: color-mix(in srgb, var(--danger) 20%, var(--panel-2)); }
+.command-palette-badge--export { background: color-mix(in srgb, var(--success) 20%, var(--panel-2)); }
+.command-palette-badge--tools { background: color-mix(in srgb, var(--warn) 25%, var(--panel-2)); }
+.command-palette-badge--file  { background: color-mix(in srgb, var(--accent) 20%, var(--panel-2)); }
+.command-palette-badge--app   { background: color-mix(in srgb, var(--muted) 25%, var(--panel-2)); }
+.command-palette-badge--page  { background: color-mix(in srgb, var(--accent-2) 20%, var(--panel-2)); }
+.command-palette-footer {
+  display: flex;
+  gap: 16px;
+  padding: 6px 18px;
+  font-size: 11px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  background: var(--panel-2);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   MICRO-ANIMATIONS, TRANSITIONS & VISUAL POLISH
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ─── 1. Page transition animation ─────────────────────────────────────────── */
+@keyframes pageFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+#viewerCanvas.page-transitioning {
+  animation: pageFadeIn 0.2s ease-out;
+}
+
+/* ─── 2. Skeleton loading placeholder ──────────────────────────────────────── */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
+}
+.page-skeleton {
+  background: linear-gradient(90deg, var(--bg-secondary, #1e1e22) 25%, var(--bg-tertiary, #333) 50%, var(--bg-secondary, #1e1e22) 75%);
+  background-size: 200% 100%;
+  animation: skeletonPulse 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+/* ─── 3. Button press feedback ─────────────────────────────────────────────── */
+.cmd-bar button:active,
+.sidebar-tab:active,
+.right-panel button:active {
+  transform: scale(0.95);
+  transition: transform 0.1s;
+}
+
+/* ─── 4. Smooth sidebar toggle ─────────────────────────────────────────────── */
+.left-panel {
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease;
+}
+.left-panel.collapsed {
+  width: 0 !important;
+  opacity: 0;
+  overflow: hidden;
+}
+
+/* ─── 5. Toast slide-in enhancement ────────────────────────────────────────── */
+.toast {
+  animation: toastSlideIn 0.3s ease-out;
+}
+@keyframes toastSlideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.toast-progress {
+  animation: toastProgress 3s linear forwards;
+}
+@keyframes toastProgress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* ─── 6. Hover effects for thumbnails ──────────────────────────────────────── */
+.thumbnail-cell {
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.thumbnail-cell:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.thumbnail-cell.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* ─── 7. Tab bar animations ────────────────────────────────────────────────── */
+.tab-item {
+  transition: background 0.15s, padding 0.15s;
+}
+.tab-item:hover {
+  background: var(--hover-bg, rgba(255,255,255,0.08));
+}
+.tab-close:hover {
+  background: rgba(255,50,50,0.3);
+  border-radius: 50%;
+}
+
+/* ─── 8. Right panel slide-in ──────────────────────────────────────────────── */
+.right-panel {
+  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease;
+}
+.right-panel:empty,
+.right-panel[data-collapsed="true"] {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+/* ─── 9. Focus ring for accessibility ──────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── 10. Scrollbar styling (webkit + firefox) ─────────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.15);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.25); }
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+
+/* ─── 11. Smooth zoom transition ───────────────────────────────────────────── */
+#viewerCanvas {
+  transition: transform 0.15s ease-out;
+}
+
+/* ─── 12. Reduced motion respect ───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

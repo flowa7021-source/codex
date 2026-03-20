@@ -152,6 +152,15 @@ export async function renderCurrentPage() {
 
   els.emptyState.style.display = 'none';
 
+  // ── Trigger page transition animation ──
+  els.canvas.classList.remove('page-transitioning');
+  // Force reflow so re-adding the class restarts the animation
+  void els.canvas.offsetWidth;
+  els.canvas.classList.add('page-transitioning');
+  els.canvas.addEventListener('animationend', () => {
+    els.canvas.classList.remove('page-transitioning');
+  }, { once: true });
+
   // ── Fast path: exact cache hit (same zoom & rotation) → instant display ──
   const cached = getCachedPage(page);
   if (cached && cached.zoom === zoom && cached.rotation === rotation && cached.canvas.width > 0) {
@@ -167,13 +176,30 @@ export async function renderCurrentPage() {
     _blitCacheToCanvas(cached, els.canvas);
   }
 
+  // ── Show skeleton loading placeholder while rendering ──
+  let skeleton = null;
+  const canvasWrap = els.canvasWrap;
+  if (canvasWrap) {
+    skeleton = document.createElement('div');
+    skeleton.className = 'page-skeleton';
+    skeleton.style.position = 'absolute';
+    skeleton.style.inset = '0';
+    skeleton.style.zIndex = '1';
+    skeleton.style.pointerEvents = 'none';
+    canvasWrap.appendChild(skeleton);
+  }
+
   // ── Full render ──
   try {
     await state.adapter.renderPage(page, els.canvas, { zoom, rotation });
   } catch (err) {
+    if (skeleton) skeleton.remove();
     if (err?.name === 'RenderingCancelledException' || err?.message?.includes('Rendering cancelled')) return;
     throw err;
   }
+
+  // ── Remove skeleton after render ──
+  if (skeleton) skeleton.remove();
 
   _updateAnnotationCanvas();
   _updatePageUI(Math.round(performance.now() - renderStartedAt));

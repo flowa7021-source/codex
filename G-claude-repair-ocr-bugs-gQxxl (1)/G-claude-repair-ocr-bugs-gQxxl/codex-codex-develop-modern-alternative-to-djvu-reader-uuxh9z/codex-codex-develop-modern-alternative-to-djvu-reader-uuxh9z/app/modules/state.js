@@ -61,6 +61,7 @@ export const state = {
   lastDocxImportHtml: null,
   lastDocxImportBlocks: null,
   eventListenerRegistry: new Map(),
+  minimapEnabled: true,
   initComplete: false,
   diagnostics: { events: [], maxEvents: 500, sessionId: `nr-${Date.now().toString(36)}` },
 };
