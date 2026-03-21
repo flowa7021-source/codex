@@ -10,7 +10,9 @@
 //   import { tablePluginRegistry, convertTable } from './table-conversion-plugins.js';
 //   const result = tablePluginRegistry.convertTable(blocks, pageContext);
 
-import { AlignmentType } from 'docx';
+// Lazily resolved — docx is in a separate chunk, loaded on first use
+let _AlignmentType = { LEFT: 'left', CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'justified' };
+try { import('docx').then(m => { _AlignmentType = m.AlignmentType || _AlignmentType; }); } catch (_e) { /* fallback to defaults */ }
 
 // ---------------------------------------------------------------------------
 // Base class — TableConversionPlugin
@@ -168,8 +170,8 @@ export class InvoiceTablePlugin extends TableConversionPlugin {
         const txt = normCell(cell);
         const role = colRoles[ci] || 'other';
         const alignment = (role === 'qty' || role === 'price' || isNumericValue(txt))
-          ? AlignmentType.RIGHT
-          : AlignmentType.LEFT;
+          ? _AlignmentType.RIGHT
+          : _AlignmentType.LEFT;
 
         // Currency formatting: normalise thousands separators
         let formattedText = txt;
@@ -245,7 +247,7 @@ export class FinancialTablePlugin extends TableConversionPlugin {
         const leadingSpaces = (cell?.text || '').match(/^(\s*)/)?.[1]?.length || 0;
         const nestLevel = Math.floor(leadingSpaces / 2);
 
-        const alignment = isNumber ? AlignmentType.RIGHT : AlignmentType.LEFT;
+        const alignment = isNumber ? _AlignmentType.RIGHT : _AlignmentType.LEFT;
         const bold = ri === 0 || isSubtotal || isCategory;
 
         // Format negative numbers: (123) or -123
@@ -354,7 +356,7 @@ export class ScientificTablePlugin extends TableConversionPlugin {
           txt = txt.replace(/\n|<br\s*\/?>/gi, ' ').trim();
         }
 
-        const alignment = isNumber ? AlignmentType.RIGHT : AlignmentType.CENTER;
+        const alignment = isNumber ? _AlignmentType.RIGHT : _AlignmentType.CENTER;
 
         return {
           text: txt,
@@ -425,7 +427,7 @@ export class TimetablePlugin extends TableConversionPlugin {
         const isDay = DAY_RE.test(txt);
         const isHeader = ri === 0 || (ci === 0 && isTime);
 
-        const alignment = isTime ? AlignmentType.CENTER : AlignmentType.LEFT;
+        const alignment = isTime ? _AlignmentType.CENTER : _AlignmentType.LEFT;
 
         return {
           text: txt,
@@ -457,7 +459,7 @@ function genericConvert(blocks, _pageContext) {
       return {
         text: txt,
         runs: cell.runs || [{ text: txt, bold: ri === 0, italic: false, fontFamily: 'Arial', fontSize: 10 }],
-        alignment: isNumber ? AlignmentType.RIGHT : AlignmentType.LEFT,
+        alignment: isNumber ? _AlignmentType.RIGHT : _AlignmentType.LEFT,
         bold: ri === 0,
       };
     });

@@ -2,6 +2,8 @@
 // E2E encryption for cloud sync using Web Crypto API (AES-GCM).
 // Key is derived from a user passphrase via PBKDF2.
 
+const _hasCrypto = typeof crypto !== 'undefined' && crypto.subtle;
+
 const PBKDF2_ITERATIONS = 100_000;
 const AES_KEY_BITS = 256;
 const IV_BYTES = 12;
@@ -14,6 +16,7 @@ const SALT_BYTES = 16;
  * @returns {Promise<CryptoKey>}
  */
 export async function deriveKey(passphrase, salt) {
+  if (!_hasCrypto) throw new Error('Web Crypto API not available (requires HTTPS)');
   if (!passphrase) throw new Error('Passphrase is required');
   if (!salt || salt.length !== 16) throw new Error('Salt must be 16 bytes');
   const encoder = new TextEncoder();

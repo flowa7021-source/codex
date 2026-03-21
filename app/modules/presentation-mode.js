@@ -57,6 +57,7 @@ export class PresentationMode {
     this._transition  = 'fade';
     this._autoAdvance = 0;       // seconds; 0 = off
     this._autoTimer   = null;
+    this._cursorTimer = null;
     this._laserOn     = false;
     this._blanked     = null;    // null | 'black' | 'white'
 

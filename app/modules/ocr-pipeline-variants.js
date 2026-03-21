@@ -30,7 +30,7 @@ export function initOcrPipelineVariantsDeps(deps) {
 export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   // Guard: canvas must have valid dimensions for OCR pipeline
   if (!canvas || !canvas.width || !canvas.height) {
-    return { text: '', words: [], confidence: 0, lang: '', preprocessMs: 0, ocrMs: 0 };
+    return '';
   }
   try { performance.mark('ocr-start'); } catch (_e) { /* Performance API unavailable */ }
   const startedAt = performance.now();
@@ -55,13 +55,13 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
     if (!initOk) {
       pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-init-failed', lang, ms: Math.round(performance.now() - startedAt), lastError: tessStatus.lastError || undefined });
       setOcrStatus(`OCR: ошибка инициализации движка (попытка ${tessStatus.initFailCount}/3)`);
-      return { text: '', words: [], confidence: 0, lang: '', preprocessMs: 0, ocrMs: 0 };
+      return '';
     }
   } else {
     pushDiagnosticEvent('ocr.tesseract.init', { available: false, initialized: false, lang }, 'error');
     pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-unavailable', lang, ms: Math.round(performance.now() - startedAt) });
     setOcrStatus('OCR: движок Tesseract недоступен');
-    return { text: '', words: [], confidence: 0, lang: '', preprocessMs: 0, ocrMs: 0 };
+    return '';
   }
 
   const preprocessStart = performance.now();
@@ -93,7 +93,7 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   const baseVariants = [];
   reportPreprocess(recipeList.length);
   for (let i = 0; i < recipeList.length; i += 1) {
-    if (taskId && taskId !== state.ocrTaskId) return { text: '', words: [], confidence: 0, lang: '', preprocessMs: 0, ocrMs: 0 };
+    if (taskId && taskId !== state.ocrTaskId) return '';
     const [contrast, thresholdMode, invert, sharpen] = recipeList[i];
     baseVariants.push(preprocessOcrCanvas(canvas, contrast, thresholdMode, invert, sharpen));
     preprocessDone += 1;
@@ -125,7 +125,7 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
     const expanded = [];
     const totalSteps = recipeList.length + variants.length;
     for (let i = 0; i < variants.length; i += 1) {
-      if (taskId && taskId !== state.ocrTaskId) return { text: '', words: [], confidence: 0, lang: '', preprocessMs: 0, ocrMs: 0 };
+      if (taskId && taskId !== state.ocrTaskId) return '';
       const v = variants[i];
       expanded.push(v);
       expanded.push(rotateCanvas(v, -skewToApply));

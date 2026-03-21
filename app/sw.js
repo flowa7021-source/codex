@@ -1,4 +1,4 @@
-/* global self, caches, fetch, URL */
+/* global self, caches, fetch, URL, Response */
 // NovaReader Service Worker — cache-first strategy for offline access
 const APP_CACHE = 'novareader-app-v1';
 const DOC_CACHE = 'novareader-docs-v1';
@@ -50,7 +50,7 @@ self.addEventListener('fetch', (event) => {
               cache.put(request, response.clone());
             }
             return response;
-          });
+          }).catch(() => cached || new Response('Offline', { status: 503 }));
         })
       )
     );

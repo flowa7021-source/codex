@@ -165,6 +165,7 @@ export function showCriticalErrorScreen(error) {
     </div>
   `;
 
+  if (!document.body) return;
   document.body.innerHTML = html;
   document.body.style.margin = '0';
   document.body.style.padding = '0';

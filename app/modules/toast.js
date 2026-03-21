@@ -43,11 +43,11 @@ function removeToast(id) {
   clearSafeTimeout(entry.timer);
   entry.el.classList.add('toast-exit');
   entry.el.addEventListener('animationend', () => {
-    entry.el.remove();
+    if (entry.el.parentNode) entry.el.remove();
   }, { once: true });
   // Fallback: remove after 350ms even if animationend doesn't fire
   safeTimeout(() => {
-    entry.el.remove();
+    if (entry.el.parentNode) entry.el.remove();
   }, 350);
 }
 
