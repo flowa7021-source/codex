@@ -122,7 +122,10 @@ export class BatchOcrEngine {
     const running = this.running.size;
     const avgConfidence = this.jobs
       .filter(j => j.confidence != null)
-      .reduce((sum, j) => sum + j.confidence, 0) / (done || 1);
+      .reduce((sum, j) => {
+        const conf = typeof j.confidence === 'number' ? j.confidence : 0;
+        return sum + conf;
+      }, 0) / (done || 1);
 
     return {
       total,
