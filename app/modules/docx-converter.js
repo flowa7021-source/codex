@@ -129,6 +129,8 @@ function makeHyperlinkRun(run) {
 
 // ─── Main conversion function ───────────────────────────────────────────────
 export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
+  await _loadDocx();
+
   const {
     mode = 'text',  // 'text', 'text+images', 'layout', 'images-only'
     pageRange = null, // null = all, or [1,2,3]
@@ -415,7 +417,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
     sections,
   });
 
-  return await Packer.toBlob(doc);
+  return await _docx.Packer.toBlob(doc);
 }
 
 function buildDocxTable(block) {
@@ -435,13 +437,13 @@ function buildDocxTable(block) {
 
       cells.push(new _docx.TableCell({
         children: [new _docx.Paragraph({ children })],
-        width: { size: colWidth, type: WidthType.DXA },
-        shading: rowIdx === 0 ? { type: ShadingType.CLEAR, fill: 'E8E8E8' } : undefined,
+        width: { size: colWidth, type: _docx.WidthType.DXA },
+        shading: rowIdx === 0 ? { type: _docx.ShadingType.CLEAR, fill: 'E8E8E8' } : undefined,
         borders: {
-          top: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
-          bottom: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
-          left: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
-          right: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          top: { style: _docx.BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          bottom: { style: _docx.BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          left: { style: _docx.BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          right: { style: _docx.BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
         },
       }));
     }
@@ -450,7 +452,7 @@ function buildDocxTable(block) {
 
   return new _docx.Table({
     rows: tableRows,
-    width: { size: 9000, type: WidthType.DXA },
+    width: { size: 9000, type: _docx.WidthType.DXA },
   });
 }
 

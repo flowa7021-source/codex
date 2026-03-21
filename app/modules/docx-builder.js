@@ -28,7 +28,7 @@ async function _loadDocx() {
 /** Points → twips (1 pt = 20 twips). */
 const PT = 20;
 
-/** Map semantic alignment strings to docx _docx.AlignmentType (lazy — uses cached _docx). */
+/** Map semantic alignment strings to docx AlignmentType (lazy — uses cached _docx). */
 let _alignmentMap = null;
 function getAlignmentMap() {
   if (!_alignmentMap) {
@@ -42,7 +42,7 @@ function getAlignmentMap() {
   return _alignmentMap;
 }
 
-/** Map heading levels (1-based) to docx _docx.HeadingLevel constants (lazy — uses cached _docx). */
+/** Map heading levels (1-based) to docx HeadingLevel constants (lazy — uses cached _docx). */
 let _headingLevelMap = null;
 function getHeadingLevelMap() {
   if (!_headingLevelMap) {
@@ -567,7 +567,7 @@ function buildTable(block) {
         },
       };
 
-      // _docx.Header row shading
+      // Header row shading
       if (rowIdx === 0) {
         cellProps.shading = { type: _docx.ShadingType.CLEAR, fill: 'E8E8E8' };
       }
@@ -614,7 +614,7 @@ function extractRuns(block) {
 }
 
 /**
- * Convert an array of raw runs into docx _docx.TextRun / _docx.ExternalHyperlink objects,
+ * Convert an array of raw runs into docx TextRun / ExternalHyperlink objects,
  * inserting space runs between them.
  */
 function buildFormattedRuns(runs, opts = {}) {
@@ -639,7 +639,7 @@ function buildFormattedRuns(runs, opts = {}) {
   return result;
 }
 
-/** Create a single _docx.TextRun from a raw run object. */
+/** Create a single TextRun from a raw run object. */
 function makeTextRun(run, opts = {}) {
   const fontSize = run.fontSize || 12;
   const clampedSize = Math.min(opts.maxSize || 72, Math.max(opts.minSize || 8, fontSize));
