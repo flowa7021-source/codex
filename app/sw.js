@@ -1,3 +1,4 @@
+/* global self, caches, fetch, URL */
 // NovaReader Service Worker — cache-first strategy for offline access
 const APP_CACHE = 'novareader-app-v1';
 const DOC_CACHE = 'novareader-docs-v1';
