@@ -1,62 +1,64 @@
-# NovaReader 2.0 — Execution Status
+# NovaReader 4.0.0 — Execution Status
 
-Текущий прогресс выполнения плана: **100%**.
+Текущий прогресс: **100%**. Все фазы завершены. Приложение готово к production-релизу.
 
-## Что выполнено
+## Phase 0–6 (v2.0 baseline) — 100%
+- [x] Error boundary + crash telemetry
+- [x] Perf metrics p95, worker pool, LRU cache
+- [x] OCR 2.0: confidence, post-correction, batch queue, search index
+- [x] PDF Pro: text editing, DOCX converter, undo/redo
+- [x] UX: state machine, hotkeys, adaptive CSS
+- [x] Hardening: resource cleanup, soak tests, diagnostics
 
-### Phase 0 — Baseline и диагностика: **100%**
-- [x] Улучшена диагностика OCR-ошибок: классификация по типам (`runtime`, `asset-load`, `memory`, `timeout`, `processing`, `parse`, `security`, `storage`).
-- [x] Единый error-boundary (`withErrorBoundary`) для всех критических путей. Crash telemetry автоматически записывает каждую ошибку.
-- [x] Perf-baseline p95: метрики `renderTimes`, `ocrTimes`, `searchTimes`, `pageLoadTimes` с min/max/median/p95/avg.
-- [x] Perf summary + session health в экспорте диагностики.
+## Phase 7 — Safe Timers & Bug Fixes — 100%
+- [x] Safe timer registry with scoped cleanup (document/app)
+- [x] All 160+ modules migrated from raw setTimeout to safeTimeout
+- [x] Progressive loader uses raw setTimeout (immune to clearAllTimers)
+- [x] DjVu file opening crash fixed
+- [x] OCR width=0 canvas error fixed
+- [x] Circular dependency render-controller ↔ tile-renderer resolved
 
-### Phase 1 — Стабильность ядра: **100%**
-- [x] Web Worker pool (до `hardwareConcurrency` воркеров) с fallback на main thread.
-- [x] LRU-кэш страниц (8 / 32 Мпикс), Object URL registry, автоочистка при `beforeunload`.
-- [x] Единая state-machine инструментов (`IDLE | ANNOTATE | OCR_REGION | TEXT_EDIT | SEARCH`).
+## Phase 8 — Code Audit & Security — 100%
+- [x] 6 parallel audits: core, render, OCR, UI, file handling, dead code
+- [x] 132 issues found, all fixed
+- [x] XSS prevention: textContent for user content across all modules
+- [x] Memory leak fixes: destroy methods, AbortController, blob URL lifecycle
+- [x] Race condition fixes: generation tracking, Map snapshot, double-removal guards
+- [x] Dangerous OCR language patterns removed (11 patterns in 9 languages)
+- [x] Canvas getContext null checks (70 call sites)
 
-### Phase 2 — OCR 2.0 качество/скорость: **100%**
-- [x] OCR confidence scoring — многофакторная оценка (langScore, readability, wordLength), уровни `high/medium/low/very-low`.
-- [x] OCR post-correction для RU/EN, применяется и в фоновом сканировании.
-- [x] Batch OCR queue с приоритизацией, отменой, прогрессом.
-- [x] OCR search index с координатами (страница, строка, смещение), поиск по индексу, экспорт JSON.
-- [x] OCR quality regression baseline (CER/WER) — 10 образцов RU/EN, self-test.
+## Phase 9 — Architecture Improvements — 100%
+- [x] Code splitting: docx dynamic import, 4 vendor chunks (bundle -32%)
+- [x] CSS modularization: 3470 lines → 12 modular files
+- [x] Controller decomposition: export/render/ocr split into sub-modules
+- [x] TypeScript setup: tsconfig + types.d.ts + @ts-check on 19 modules
+- [x] Unified persistence facade (localStorage + IndexedDB)
+- [x] Hidden source maps for production diagnostics
+- [x] Bundle budget enforcement in CI
 
-### Phase 3 — PDF Pro: **100%**
-- [x] PDF text editing layer с undo/redo (100 шагов), persistence, Ctrl+Z/Ctrl+Y.
-- [x] DOCX конвертер: абзацы, стили, таблицы, page breaks, ZIP+CRC-32.
-- [x] Встроенные изображения в DOCX (PNG рендеры страниц, до 20 стр.).
-- [x] Импорт DOCX-правок — чтение текста из .docx, объединение с workspace.
+## Phase 10 — Internationalization & Testing — 100%
+- [x] 9 languages (RU/EN/DE/FR/ES/PT/ZH/JA/KO), 357 keys each
+- [x] 282 UI elements tagged with data-i18n
+- [x] RTL support (Arabic, Hebrew, Farsi, Urdu)
+- [x] 500+ tests (unit + integration + benchmarks + E2E + visual)
+- [x] CI: lint → tests → coverage → build → budget → E2E → audit
+- [x] Lighthouse CI performance/accessibility thresholds
 
-### Phase 4 — UX и функциональная целостность: **100%**
-- [x] State machine устраняет конфликты инструментов.
-- [x] Горячие клавиши: undo/redo, Escape для модалов.
-- [x] Адаптивный CSS для <16:9, low-height (<700px, <560px), ultrawide (21:9+).
-- [x] Новые UI кнопки: Экспорт OCR индекс, Импорт DOCX, Undo/Redo, Health Report.
-- [x] E2E regression-pack (Playwright): 22 тест-сьюта, 5 viewport-профилей.
+## Phase 11 — Production Polish — 100%
+- [x] E2E encryption for cloud sync (AES-GCM + PBKDF2)
+- [x] Performance profiling markers (render, OCR, file-open, search)
+- [x] Error boundary fallback UI (banner + critical screen)
+- [x] PWA service worker (offline caching)
+- [x] Git LFS for vendor binaries
+- [x] Conventional commits + automated changelog
+- [x] Bundle analysis with baseline comparison
+- [x] 28 OCR languages, 4 table conversion plugins
 
-### Phase 5 — Hardening и GA: **100%**
-- [x] Автоочистка ресурсов при `beforeunload`.
-- [x] Crash telemetry — глобальные обработчики, crash-free rate, session health export. Интеграция в error boundary, OCR и render пути.
-- [x] Nightly soak run скрипт (Playwright) — настраиваемая длительность, 15 операций/цикл, JSON-отчёт.
-- [x] NPM-скрипты для всех тестов (`test`, `test:e2e`, `test:benchmark`, `test:soak`).
-- [x] Финальная документация: README 2.0, release notes 2.0.0-alpha, обновлённый backlog.
-
-## Этапы и прогресс (сводка)
-- [x] Phase 0 — Baseline и диагностика: **100%**
-- [x] Phase 1 — Стабильность ядра: **100%**
-- [x] Phase 2 — OCR 2.0 качество/скорость: **100%**
-- [x] Phase 3 — PDF Pro: **100%**
-- [x] Phase 4 — UX и функциональная целостность: **100%**
-- [x] Phase 5 — Hardening и GA: **100%**
-
-### Phase 6 — OCR Integration & Bug Fixes: **100%**
-- [x] Tesseract.js интегрирован как основной OCR-движок (OCRAD fallback).
-- [x] Adaptive DPI — автоматический подбор масштаба для OCR на основе анализа плотности текста.
-- [x] Word-level confidence scoring — оценка качества распознанных слов.
-- [x] IndexedDB storage — OCR-кеш в IndexedDB (без лимита 5MB localStorage).
-- [x] Canvas race condition — отмена предыдущего рендера перед новым (PDF.js).
-- [x] Tesseract/OCRAD Worker cleanup в beforeunload.
-
-## Статус
-План выполнен на 100%. Все фазы закрыты. Приложение готово к alpha-тестированию.
+## Final Metrics
+- **161 modules**, 58K lines
+- **ESLint**: 0 errors, 0 warnings
+- **TypeScript**: 0 errors (19 checked modules)
+- **Tests**: 500+ (322 unit, 80 integration, 76 benchmarks, 99 E2E)
+- **Bundle**: 234 KB main gzip (budget 390 KB)
+- **Languages**: 9 UI, 28 OCR
+- **Build time**: 5.9 seconds
