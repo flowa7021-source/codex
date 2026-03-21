@@ -10,12 +10,16 @@
  * Output: Blob               – ready-to-download DOCX file
  */
 
-import {
-  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  ImageRun, HeadingLevel, AlignmentType, BorderStyle, WidthType,
-  Header, Footer, PageNumber,
-  ShadingType, ExternalHyperlink, PageOrientation,
-} from 'docx';
+// Heavy 'docx' library is loaded lazily on first use to reduce initial bundle size.
+// The cached module reference is populated by _loadDocx().
+let _docx = null;
+
+async function _loadDocx() {
+  if (!_docx) {
+    _docx = await import('docx');
+  }
+  return _docx;
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -24,23 +28,35 @@ import {
 /** Points → twips (1 pt = 20 twips). */
 const PT = 20;
 
-/** Map semantic alignment strings to docx AlignmentType. */
-const ALIGNMENT_MAP = {
-  left: AlignmentType.LEFT,
-  right: AlignmentType.RIGHT,
-  center: AlignmentType.CENTER,
-  justified: AlignmentType.JUSTIFIED,
-};
+/** Map semantic alignment strings to docx _docx.AlignmentType (lazy — uses cached _docx). */
+let _alignmentMap = null;
+function getAlignmentMap() {
+  if (!_alignmentMap) {
+    _alignmentMap = {
+      left: _docx.AlignmentType.LEFT,
+      right: _docx.AlignmentType.RIGHT,
+      center: _docx.AlignmentType.CENTER,
+      justified: _docx.AlignmentType.JUSTIFIED,
+    };
+  }
+  return _alignmentMap;
+}
 
-/** Map heading levels (1-based) to docx HeadingLevel constants. */
-const HEADING_LEVEL_MAP = {
-  1: HeadingLevel.HEADING_1,
-  2: HeadingLevel.HEADING_2,
-  3: HeadingLevel.HEADING_3,
-  4: HeadingLevel.HEADING_4,
-  5: HeadingLevel.HEADING_5,
-  6: HeadingLevel.HEADING_6,
-};
+/** Map heading levels (1-based) to docx _docx.HeadingLevel constants (lazy — uses cached _docx). */
+let _headingLevelMap = null;
+function getHeadingLevelMap() {
+  if (!_headingLevelMap) {
+    _headingLevelMap = {
+      1: _docx.HeadingLevel.HEADING_1,
+      2: _docx.HeadingLevel.HEADING_2,
+      3: _docx.HeadingLevel.HEADING_3,
+      4: _docx.HeadingLevel.HEADING_4,
+      5: _docx.HeadingLevel.HEADING_5,
+      6: _docx.HeadingLevel.HEADING_6,
+    };
+  }
+  return _headingLevelMap;
+}
 
 /** PDF font family → DOCX-safe font. */
 const FONT_MAP = {
@@ -69,6 +85,8 @@ const FONT_MAP = {
  * @returns {Promise<Blob>}
  */
 export async function buildDocxDocument(semanticSections, options = {}) {
+  await _loadDocx();
+
   const {
     title = 'NovaReader Export',
     includeHeader = false,
@@ -88,13 +106,13 @@ export async function buildDocxDocument(semanticSections, options = {}) {
         for (let p = section.startPage; p <= section.endPage; p++) {
           const imgData = await capturePageImage(p);
           if (imgData) {
-            children.push(new Paragraph({
-              children: [new ImageRun({
+            children.push(new _docx.Paragraph({
+              children: [new _docx.ImageRun({
                 data: imgData,
                 transformation: { width: 595, height: 842 },
                 type: 'png',
               })],
-              alignment: AlignmentType.CENTER,
+              alignment: _docx.AlignmentType.CENTER,
             }));
           }
         }
@@ -107,8 +125,8 @@ export async function buildDocxDocument(semanticSections, options = {}) {
       for (const block of blocks) {
         // Insert page break when page number changes
         if (block.pageNumber && block.pageNumber > prevPageNum) {
-          children.push(new Paragraph({
-            children: [new TextRun({ break: 1 })],
+          children.push(new _docx.Paragraph({
+            children: [new _docx.TextRun({ break: 1 })],
             pageBreakBefore: true,
           }));
           prevPageNum = block.pageNumber;
@@ -152,8 +170,8 @@ export async function buildDocxDocument(semanticSections, options = {}) {
             break;
 
           case 'page-break':
-            children.push(new Paragraph({
-              children: [new TextRun({ break: 1 })],
+            children.push(new _docx.Paragraph({
+              children: [new _docx.TextRun({ break: 1 })],
               pageBreakBefore: true,
             }));
             break;
@@ -170,14 +188,14 @@ export async function buildDocxDocument(semanticSections, options = {}) {
         for (let p = section.startPage; p <= section.endPage; p++) {
           const imgData = await capturePageImage(p);
           if (imgData) {
-            children.push(new Paragraph({ spacing: { before: 200 } }));
-            children.push(new Paragraph({
-              children: [new ImageRun({
+            children.push(new _docx.Paragraph({ spacing: { before: 200 } }));
+            children.push(new _docx.Paragraph({
+              children: [new _docx.ImageRun({
                 data: imgData,
                 transformation: { width: 500, height: 700 },
                 type: 'png',
               })],
-              alignment: AlignmentType.CENTER,
+              alignment: _docx.AlignmentType.CENTER,
             }));
           }
         }
@@ -186,7 +204,7 @@ export async function buildDocxDocument(semanticSections, options = {}) {
 
     // Ensure at least one child (DOCX sections must not be empty)
     if (!children.length) {
-      children.push(new Paragraph({ text: '' }));
+      children.push(new _docx.Paragraph({ text: '' }));
     }
 
     // --- Section properties -----------------------------------------------
@@ -203,7 +221,7 @@ export async function buildDocxDocument(semanticSections, options = {}) {
         size: {
           width: isLandscape ? Math.max(pgWidth, pgHeight) : pgWidth,
           height: isLandscape ? Math.min(pgWidth, pgHeight) : pgHeight,
-          orientation: isLandscape ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT,
+          orientation: isLandscape ? _docx.PageOrientation.LANDSCAPE : _docx.PageOrientation.PORTRAIT,
         },
         margin: {
           top: Math.round((margins.top || 72) * PT),
@@ -232,13 +250,13 @@ export async function buildDocxDocument(semanticSections, options = {}) {
     if (includeHeader) {
       const headerContent = section.header && section.header.length
         ? buildRunsFromContentLines(section.header)
-        : [new TextRun({ text: title || 'NovaReader', font: 'Arial', size: 16, color: '999999' })];
+        : [new _docx.TextRun({ text: title || 'NovaReader', font: 'Arial', size: 16, color: '999999' })];
 
       sectionObj.headers = {
-        default: new Header({
-          children: [new Paragraph({
+        default: new _docx.Header({
+          children: [new _docx.Paragraph({
             children: headerContent,
-            alignment: AlignmentType.RIGHT,
+            alignment: _docx.AlignmentType.RIGHT,
           })],
         }),
       };
@@ -251,18 +269,18 @@ export async function buildDocxDocument(semanticSections, options = {}) {
         footerChildren.push(...buildRunsFromContentLines(section.footer));
       } else {
         footerChildren.push(
-          new TextRun({ text: 'Стр. ', font: 'Arial', size: 16, color: '999999' }),
-          new TextRun({ children: [PageNumber.CURRENT], font: 'Arial', size: 16, color: '999999' }),
-          new TextRun({ text: ' из ', font: 'Arial', size: 16, color: '999999' }),
-          new TextRun({ children: [PageNumber.TOTAL_PAGES], font: 'Arial', size: 16, color: '999999' }),
+          new _docx.TextRun({ text: 'Стр. ', font: 'Arial', size: 16, color: '999999' }),
+          new _docx.TextRun({ children: [_docx.PageNumber.CURRENT], font: 'Arial', size: 16, color: '999999' }),
+          new _docx.TextRun({ text: ' из ', font: 'Arial', size: 16, color: '999999' }),
+          new _docx.TextRun({ children: [_docx.PageNumber.TOTAL_PAGES], font: 'Arial', size: 16, color: '999999' }),
         );
       }
 
       sectionObj.footers = {
-        default: new Footer({
-          children: [new Paragraph({
+        default: new _docx.Footer({
+          children: [new _docx.Paragraph({
             children: footerChildren,
-            alignment: AlignmentType.CENTER,
+            alignment: _docx.AlignmentType.CENTER,
           })],
         }),
       };
@@ -272,7 +290,7 @@ export async function buildDocxDocument(semanticSections, options = {}) {
   }
 
   // --- Assemble full document ---------------------------------------------
-  const doc = new Document({
+  const doc = new _docx.Document({
     title: title || 'NovaReader Export',
     creator: 'NovaReader',
     description: `Converted from PDF: ${title || 'unknown'}`,
@@ -310,22 +328,22 @@ export async function buildDocxDocument(semanticSections, options = {}) {
         {
           reference: 'bullet-list',
           levels: [
-            { level: 0, format: 'bullet', text: '\u2022', alignment: AlignmentType.LEFT,
+            { level: 0, format: 'bullet', text: '\u2022', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 720, hanging: 360 } } } },
-            { level: 1, format: 'bullet', text: '\u25CB', alignment: AlignmentType.LEFT,
+            { level: 1, format: 'bullet', text: '\u25CB', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 1440, hanging: 360 } } } },
-            { level: 2, format: 'bullet', text: '\u25AA', alignment: AlignmentType.LEFT,
+            { level: 2, format: 'bullet', text: '\u25AA', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 2160, hanging: 360 } } } },
           ],
         },
         {
           reference: 'numbered-list',
           levels: [
-            { level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.LEFT,
+            { level: 0, format: 'decimal', text: '%1.', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 720, hanging: 360 } } } },
-            { level: 1, format: 'lowerLetter', text: '%2)', alignment: AlignmentType.LEFT,
+            { level: 1, format: 'lowerLetter', text: '%2)', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 1440, hanging: 360 } } } },
-            { level: 2, format: 'lowerRoman', text: '%3.', alignment: AlignmentType.LEFT,
+            { level: 2, format: 'lowerRoman', text: '%3.', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 2160, hanging: 360 } } } },
           ],
         },
@@ -334,7 +352,7 @@ export async function buildDocxDocument(semanticSections, options = {}) {
     sections,
   });
 
-  return Packer.toBlob(doc);
+  return _docx.Packer.toBlob(doc);
 }
 
 // ---------------------------------------------------------------------------
@@ -343,9 +361,9 @@ export async function buildDocxDocument(semanticSections, options = {}) {
 
 /** Build a heading paragraph. */
 function buildHeading(block) {
-  const level = HEADING_LEVEL_MAP[block.headingLevel] || HeadingLevel.HEADING_2;
+  const level = getHeadingLevelMap()[block.headingLevel] || _docx.HeadingLevel.HEADING_2;
   const runs = extractRuns(block);
-  return new Paragraph({
+  return new _docx.Paragraph({
     heading: level,
     children: buildFormattedRuns(runs, { bold: true }),
     spacing: { before: 240, after: 120 },
@@ -366,7 +384,7 @@ function buildParagraph(block) {
     indent.left = Math.round(content.leftIndent * PT);
   }
 
-  return new Paragraph({
+  return new _docx.Paragraph({
     children: buildFormattedRuns(runs),
     spacing: {
       before: Math.round((content.spaceBefore || 0) * PT),
@@ -384,7 +402,7 @@ function buildListItem(block) {
   const level = listInfo.level || 0;
   const runs = extractRuns(block);
 
-  return new Paragraph({
+  return new _docx.Paragraph({
     children: buildFormattedRuns(runs),
     numbering: {
       reference: isBullet ? 'bullet-list' : 'numbered-list',
@@ -402,7 +420,7 @@ function buildFootnote(block) {
 
   // Prepend footnote marker if available
   if (block.footnoteId) {
-    children.push(new TextRun({
+    children.push(new _docx.TextRun({
       text: block.footnoteId + ' ',
       superScript: true,
       font: 'Arial',
@@ -411,7 +429,7 @@ function buildFootnote(block) {
   }
   children.push(...buildFormattedRuns(runs, { maxSize: 18 }));
 
-  return new Paragraph({
+  return new _docx.Paragraph({
     children,
     spacing: { before: 40, after: 20 },
     indent: { left: 360, hanging: 360 },
@@ -421,9 +439,9 @@ function buildFootnote(block) {
 /** Build a formula paragraph (monospace, centered). */
 function buildFormula(block) {
   const runs = extractRuns(block);
-  return new Paragraph({
+  return new _docx.Paragraph({
     children: buildFormattedRuns(runs, { fontOverride: 'Cambria Math' }),
-    alignment: AlignmentType.CENTER,
+    alignment: _docx.AlignmentType.CENTER,
     spacing: { before: 120, after: 120 },
   });
 }
@@ -437,7 +455,7 @@ function buildTocEntry(block) {
     indent.left = Math.round(content.leftIndent * PT);
   }
 
-  return new Paragraph({
+  return new _docx.Paragraph({
     children: buildFormattedRuns(runs),
     spacing: { after: 20 },
     indent: indent.left ? indent : undefined,
@@ -447,9 +465,9 @@ function buildTocEntry(block) {
 /** Build a caption paragraph (italic, centered, smaller). */
 function buildCaption(block) {
   const runs = extractRuns(block);
-  return new Paragraph({
+  return new _docx.Paragraph({
     children: buildFormattedRuns(runs, { italic: true, maxSize: 20 }),
-    alignment: AlignmentType.CENTER,
+    alignment: _docx.AlignmentType.CENTER,
     spacing: { before: 60, after: 60 },
   });
 }
@@ -461,15 +479,15 @@ function buildImage(block) {
 
   if (!imageData) {
     // No image data — render alt text as placeholder
-    return new Paragraph({
-      children: [new TextRun({
+    return new _docx.Paragraph({
+      children: [new _docx.TextRun({
         text: `[Image: ${block.altText || content.altText || 'image'}]`,
         italics: true,
         color: '888888',
         font: 'Arial',
         size: 20,
       })],
-      alignment: AlignmentType.CENTER,
+      alignment: _docx.AlignmentType.CENTER,
       spacing: { before: 100, after: 100 },
     });
   }
@@ -478,13 +496,13 @@ function buildImage(block) {
   const imgWidth = Math.min(bbox.w || content.width || 400, 500);
   const imgHeight = Math.min(bbox.h || content.height || 300, 700);
 
-  return new Paragraph({
-    children: [new ImageRun({
+  return new _docx.Paragraph({
+    children: [new _docx.ImageRun({
       data: imageData,
       transformation: { width: imgWidth, height: imgHeight },
       type: content.mimeType === 'image/jpeg' ? 'jpg' : 'png',
     })],
-    alignment: AlignmentType.CENTER,
+    alignment: _docx.AlignmentType.CENTER,
     spacing: { before: 100, after: 100 },
   });
 }
@@ -493,7 +511,7 @@ function buildImage(block) {
 function buildTable(block) {
   const rows = block.rows || [];
   if (!rows.length) {
-    return new Paragraph({ text: '' });
+    return new _docx.Paragraph({ text: '' });
   }
 
   // Determine column count from the widest row
@@ -524,13 +542,13 @@ function buildTable(block) {
         if (cellRuns.length) {
           cellChildren.push(...buildFormattedRuns(cellRuns));
         } else {
-          cellChildren.push(new TextRun({ text: '', font: 'Arial', size: 20 }));
+          cellChildren.push(new _docx.TextRun({ text: '', font: 'Arial', size: 20 }));
         }
       } else {
         const cellText = (cellData && typeof cellData === 'object')
           ? (cellData.text || '')
           : (typeof cellData === 'string' ? cellData : '');
-        cellChildren.push(new TextRun({
+        cellChildren.push(new _docx.TextRun({
           text: cellText,
           font: 'Arial',
           size: 20,
@@ -539,19 +557,19 @@ function buildTable(block) {
       }
 
       const cellProps = {
-        children: [new Paragraph({ children: cellChildren })],
-        width: { size: colWidth, type: WidthType.DXA },
+        children: [new _docx.Paragraph({ children: cellChildren })],
+        width: { size: colWidth, type: _docx.WidthType.DXA },
         borders: {
-          top: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
-          bottom: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
-          left: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
-          right: { style: BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          top: { style: _docx.BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          bottom: { style: _docx.BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          left: { style: _docx.BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
+          right: { style: _docx.BorderStyle.SINGLE, size: 1, color: 'AAAAAA' },
         },
       };
 
-      // Header row shading
+      // _docx.Header row shading
       if (rowIdx === 0) {
-        cellProps.shading = { type: ShadingType.CLEAR, fill: 'E8E8E8' };
+        cellProps.shading = { type: _docx.ShadingType.CLEAR, fill: 'E8E8E8' };
       }
 
       // Cell spanning
@@ -562,15 +580,15 @@ function buildTable(block) {
         cellProps.rowSpan = cellData.rowSpan;
       }
 
-      cells.push(new TableCell(cellProps));
+      cells.push(new _docx.TableCell(cellProps));
     }
 
-    return new TableRow({ children: cells });
+    return new _docx.TableRow({ children: cells });
   });
 
-  return new Table({
+  return new _docx.Table({
     rows: tableRows,
-    width: { size: 9000, type: WidthType.DXA },
+    width: { size: 9000, type: _docx.WidthType.DXA },
   });
 }
 
@@ -596,11 +614,11 @@ function extractRuns(block) {
 }
 
 /**
- * Convert an array of raw runs into docx TextRun / ExternalHyperlink objects,
+ * Convert an array of raw runs into docx _docx.TextRun / _docx.ExternalHyperlink objects,
  * inserting space runs between them.
  */
 function buildFormattedRuns(runs, opts = {}) {
-  if (!runs.length) return [new TextRun({ text: '' })];
+  if (!runs.length) return [new _docx.TextRun({ text: '' })];
 
   const result = [];
   for (let i = 0; i < runs.length; i++) {
@@ -615,13 +633,13 @@ function buildFormattedRuns(runs, opts = {}) {
     if (i < runs.length - 1) {
       const font = resolveFont(run.fontFamily);
       const size = Math.round((run.fontSize || 12) * 2);
-      result.push(new TextRun({ text: ' ', font, size }));
+      result.push(new _docx.TextRun({ text: ' ', font, size }));
     }
   }
   return result;
 }
 
-/** Create a single TextRun from a raw run object. */
+/** Create a single _docx.TextRun from a raw run object. */
 function makeTextRun(run, opts = {}) {
   const fontSize = run.fontSize || 12;
   const clampedSize = Math.min(opts.maxSize || 72, Math.max(opts.minSize || 8, fontSize));
@@ -660,14 +678,14 @@ function makeTextRun(run, opts = {}) {
     props.characterSpacing = Math.round(run.charSpacing * 20);
   }
 
-  return new TextRun(props);
+  return new _docx.TextRun(props);
 }
 
 /** Create a hyperlink from a run with a url property. */
 function makeHyperlink(run) {
   const font = resolveFont(run.fontFamily);
-  return new ExternalHyperlink({
-    children: [new TextRun({
+  return new _docx.ExternalHyperlink({
+    children: [new _docx.TextRun({
       text: run.text || '',
       style: 'Hyperlink',
       color: '0563C1',
@@ -688,7 +706,7 @@ function resolveFont(fontFamily) {
 /** Resolve alignment from a block's content. */
 function resolveAlignment(block) {
   const alignment = block.content?.alignment || 'left';
-  return ALIGNMENT_MAP[alignment] || AlignmentType.LEFT;
+  return getAlignmentMap()[alignment] || _docx.AlignmentType.LEFT;
 }
 
 /**
@@ -709,7 +727,7 @@ function buildRunsFromContentLines(regions) {
     }
   }
   if (!result.length) {
-    result.push(new TextRun({ text: '', font: 'Arial', size: 16 }));
+    result.push(new _docx.TextRun({ text: '', font: 'Arial', size: 16 }));
   }
   return result;
 }
