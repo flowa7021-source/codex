@@ -72,6 +72,11 @@ export function analyzeTextDensity(canvas) {
 
   const avgStrokeWidth = totalRuns > 0 ? totalRunLength / totalRuns : 1;
 
+  // Guard: if no dark runs were found, return a safe default DPI/scale
+  if (totalRuns === 0) {
+    return { density: 0, avgStrokeWidth: 1, contrast: Math.round(contrast * 100) / 100, suggestedScale: 2.0 };
+  }
+
   // Compute suggested scale
   let suggestedScale = TARGET_STROKE_PX / Math.max(0.5, avgStrokeWidth);
 

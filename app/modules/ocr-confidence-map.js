@@ -70,6 +70,9 @@ export function renderConfidenceOverlay(words, canvas, pageWidth, pageHeight) {
   for (const word of words) {
     if (word.confidence == null || !word.bbox) continue;
 
+    // Skip words with out-of-range normalised coordinates
+    if (word.bbox.x0 < 0 || word.bbox.x1 > 1 || word.bbox.y0 < 0 || word.bbox.y1 > 1) continue;
+
     const level = getLevel(word.confidence);
 
     // Map normalised [0,1] bbox → canvas backing-store pixels.
