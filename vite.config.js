@@ -2,15 +2,20 @@
 //
 // Usage:
 //   npm run dev           — Vite dev server (for browser testing or Tauri dev)
-//   npm run build         — Production build to dist/
+//   npm run build         — Production build to dist/ (obfuscated)
+//   npm run build:dev     — Dev build without obfuscation
 //   npm run tauri:dev     — Tauri dev mode (opens native window)
 //   npm run tauri:build   — Tauri production build (creates installer)
 
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
-
 // Tauri sets TAURI_DEV_HOST for mobile dev
 const host = process.env.TAURI_DEV_HOST;
+const isDebug = !!process.env.TAURI_ENV_DEBUG;
+
+// Obfuscation is handled post-build by scripts/obfuscate-dist.js
+// Run `npm run build` for obfuscated production build
+// Run `npm run build:dev` for unobfuscated development build
 
 export default defineConfig({
   root: 'app',
@@ -36,12 +41,14 @@ export default defineConfig({
     outDir: resolve(__dirname, 'dist'),
     emptyOutDir: true,
     // WebView2 on Windows supports es2021+
-    target: process.env.TAURI_ENV_PLATFORM === 'windows'
-      ? 'chrome105'
-      : 'safari14',
-    minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
-    // Hidden source maps in production for crash diagnostics (not exposed to users)
-    sourcemap: process.env.TAURI_ENV_DEBUG ? true : 'hidden',
+    target: isDebug
+      ? 'esnext'
+      : process.env.TAURI_ENV_PLATFORM === 'windows'
+        ? 'chrome105'
+        : 'safari14',
+    minify: !isDebug ? 'esbuild' : false,
+    // No source maps in production (obfuscated code shouldn't be mappable)
+    sourcemap: isDebug ? true : false,
 
     rollupOptions: {
       input: resolve(__dirname, 'app/index.html'),
@@ -55,7 +62,7 @@ export default defineConfig({
           'fflate': ['fflate'],
           'tesseract': ['tesseract.js'],
         },
-        assetFileNames: 'assets/[name]-[hash][extname]',
+        assetFileNames: 'assets/[hash][extname]',
         chunkFileNames: 'chunks/[name]-[hash].js',
         entryFileNames: 'js/[name]-[hash].js',
       },
