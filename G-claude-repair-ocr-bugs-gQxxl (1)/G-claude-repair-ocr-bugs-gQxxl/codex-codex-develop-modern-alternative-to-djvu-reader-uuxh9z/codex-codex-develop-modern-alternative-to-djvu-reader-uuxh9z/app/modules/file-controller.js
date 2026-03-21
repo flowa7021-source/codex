@@ -171,6 +171,11 @@ export async function reloadPdfFromBytes(bytes) {
   await _deps.renderCurrentPage();
   await _deps.renderPagePreviews();
   await _deps.renderOutline();
+
+  // Re-bootstrap advanced tools with updated PDF bytes
+  if (typeof window._bootstrapAdvancedTools === 'function') {
+    try { window._bootstrapAdvancedTools(); } catch (_e) { /* non-critical */ }
+  }
 }
 
 /**
@@ -373,6 +378,11 @@ const _openFileImpl = async function openFileImpl(file) {
   recordPerfMetric('pageLoadTimes', Math.round(performance.now() - openStartedAt));
   try { toastInfo(`${state.docName || 'Документ'} — ${state.pageCount} стр.`); } catch (err) { console.warn('[file] toast failed:', err?.message); }
   try { announce(`Документ ${state.docName} открыт, ${state.pageCount} страниц`); } catch (err) { console.warn('[a11y] announce failed:', err?.message); }
+
+  // Bootstrap advanced tools (Phase 0-8 + Pro modules) for the loaded PDF
+  if (typeof window._bootstrapAdvancedTools === 'function') {
+    try { window._bootstrapAdvancedTools(); } catch (err) { console.warn('[advanced-tools] bootstrap failed:', err?.message); }
+  }
 };
 
 export const openFile = (() => {

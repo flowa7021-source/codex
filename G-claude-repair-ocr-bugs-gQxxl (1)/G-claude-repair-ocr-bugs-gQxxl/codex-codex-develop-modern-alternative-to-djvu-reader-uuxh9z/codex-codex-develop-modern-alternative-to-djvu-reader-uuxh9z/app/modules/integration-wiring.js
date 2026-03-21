@@ -455,10 +455,54 @@ function _initInlineEditor(ctx, handles) {
 // Page model rebuild
 // ---------------------------------------------------------------------------
 
-function _rebuildPageModel(_ctx, _handles) {
-  // Placeholder: rebuild PageModel from current page data.
-  // In a full integration this would call DocumentModel.fromExtractedPage()
-  // for the current page using the text content and rendered image.
+async function _rebuildPageModel(ctx, handles) {
+  if (!ctx.pdfBytes || !handles.docModel) return;
+
+  const pageNum = ctx.getPageNum();
+  if (!pageNum || pageNum < 1) return;
+
+  try {
+    // Extract text content from the current page via pdf.js
+    const { getDocument } = await import('pdfjs-dist/build/pdf.mjs');
+    const pdfJsDoc = await getDocument({ data: ctx.pdfBytes.slice() }).promise;
+    const page     = await pdfJsDoc.getPage(pageNum);
+    const viewport = page.getViewport({ scale: 1 });
+    const content  = await page.getTextContent();
+
+    // Build a lightweight ExtractedPage-compatible object
+    const textRuns = content.items
+      .filter(item => item.str?.trim())
+      .map(item => ({
+        text:     item.str,
+        x:        item.transform[4],
+        y:        item.transform[5],
+        width:    item.width  || 0,
+        height:   item.height || Math.abs(item.transform[0]),
+        fontSize: Math.abs(item.transform[0]),
+        font:     item.fontName || 'sans-serif',
+        color:    '#000000',
+        bold:     false,
+        italic:   false,
+      }));
+
+    const extracted = {
+      pageNumber: pageNum,
+      width:      viewport.width,
+      height:     viewport.height,
+      rotation:   0,
+      textRuns,
+      images:     [],
+      paths:      [],
+    };
+
+    const { DocumentModel } = await import('./page-model.js');
+    const pageModel = DocumentModel.fromExtractedPage(extracted);
+    handles.docModel.pages.set(pageNum, pageModel);
+
+    pdfJsDoc.destroy();
+  } catch (_e) {
+    // Non-critical: page model rebuild failure doesn't block the app
+  }
 }
 
 // ---------------------------------------------------------------------------
