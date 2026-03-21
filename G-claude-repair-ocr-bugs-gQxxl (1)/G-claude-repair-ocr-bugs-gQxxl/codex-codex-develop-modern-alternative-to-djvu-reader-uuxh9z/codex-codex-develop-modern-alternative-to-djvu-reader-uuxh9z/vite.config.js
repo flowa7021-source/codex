@@ -44,6 +44,8 @@ export default defineConfig({
 
     rollupOptions: {
       input: resolve(__dirname, 'app/index.html'),
+      // Optional deps loaded via try/catch dynamic import — don't fail build
+      external: ['katex'],
       output: {
         manualChunks: {
           'pdf-lib': ['pdf-lib'],

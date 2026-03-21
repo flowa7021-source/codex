@@ -31,7 +31,7 @@ jobs:
           node-version: '20'
 
       - name: Install dependencies
-        run: cd /tmp/nr && npm install --no-audit --no-fund
+        run: cd /tmp/nr && npm ci
 
       - name: ESLint (zero warnings)
         run: cd /tmp/nr && npm run lint
@@ -114,7 +114,7 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: C:\nr
-        run: npm install --no-audit --no-fund
+        run: npm ci
 
       - name: Build frontend
         working-directory: C:\nr
