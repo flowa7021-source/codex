@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Performance Metrics, Worker Pool, Page Cache, Object URL Registry ──────
 
 import { reportBudgetViolation } from './perf-budgets.js';
