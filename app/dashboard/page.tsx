@@ -100,7 +100,7 @@ function MetricTile({
             border: `1px solid ${color}22`,
           }}
         >
-          <Icon size={14} strokeWidth={2} style={{ color }} />
+          <span style={{ color, display: 'flex' }}><Icon size={14} strokeWidth={2} /></span>
         </div>
       </div>
 
