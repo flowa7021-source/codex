@@ -5,7 +5,7 @@ initPlatform().catch(() => {});   // non-blocking; fallback to browser mode
 // ─── Module Imports ─────────────────────────────────────────────────────────
 import { debounce } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
-import { ensurePdfJs } from './modules/loaders.js';
+import { ensurePdfJs, preloadPdfRuntime } from './modules/loaders.js';
 import { getCachedPage, clearPageRenderCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
 import { toolStateMachine, initToolModeDeps } from './modules/tool-modes.js';
 import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps, novaLog, exportLogsAsJson, clearActivityLog, getLogEntries } from './modules/diagnostics.js';
@@ -154,6 +154,9 @@ function showUserError(context, errorType, message) {
 }
 
 initCrashTelemetry();
+
+// Pre-warm PDF.js worker during idle time so first PDF open is faster
+preloadPdfRuntime();
 
 // ─── Settings proxy wrappers (delegate to SettingsController) ────────────────
 function defaultSettings() { return SettingsController.defaultSettings(); }

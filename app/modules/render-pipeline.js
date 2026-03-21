@@ -147,6 +147,79 @@ export function getCacheStats() {
   };
 }
 
+/**
+ * Progressive render: first paint at DPR=1 for speed, then upgrade to real DPR.
+ * Falls back to standard render for non-PDF adapters or DPR <= 1.
+ *
+ * @param {RenderOptions} options
+ * @param {RenderContext} ctx
+ * @param {object} [callbacks] - Same as renderPage, plus onFirstPaint and onHighRes
+ * @returns {Promise<{width: number, height: number, renderMs: number}>}
+ */
+export async function renderPageProgressive(options, ctx, callbacks = {}) {
+  const { page, zoom, rotation, adapter } = options;
+  const realDPR = DPR;
+
+  // Only use progressive rendering for high-DPR screens with PDF adapter
+  const isPdf = adapter?.type === 'pdf' || adapter?.pdfDoc;
+  if (!isPdf || realDPR <= 1) {
+    return renderPage(options, ctx, callbacks);
+  }
+
+  const start = performance.now();
+
+  // Phase 1: Quick render at DPR=1
+  await adapter.renderPage(page, ctx.canvas, { zoom, rotation, dpr: 1 });
+
+  if (callbacks.onFirstPaint) {
+    callbacks.onFirstPaint(page, { renderMs: Math.round(performance.now() - start) });
+  }
+
+  // Update annotation canvas for the initial render
+  if (ctx.annotationCanvas) {
+    updateAnnotationCanvasSize(ctx.annotationCanvas, ctx.canvas);
+  }
+
+  // Render text layer and annotations on first paint
+  if (ctx.textLayerDiv && callbacks.onTextLayer) {
+    callbacks.onTextLayer(page, ctx.textLayerDiv);
+  }
+  if (ctx.annotationCanvas && callbacks.onAnnotations) {
+    callbacks.onAnnotations(page, ctx.annotationCanvas);
+  }
+
+  // Phase 2: High-res upgrade in idle time
+  const scheduleIdle = typeof requestIdleCallback === 'function'
+    ? requestIdleCallback
+    : (cb) => safeTimeout(cb, 16);
+
+  scheduleIdle(() => {
+    adapter.renderPage(page, ctx.canvas, { zoom, rotation, dpr: realDPR })
+      .then(() => {
+        if (ctx.annotationCanvas) {
+          updateAnnotationCanvasSize(ctx.annotationCanvas, ctx.canvas);
+        }
+        // Re-render annotations at high-res
+        if (ctx.annotationCanvas && callbacks.onAnnotations) {
+          callbacks.onAnnotations(page, ctx.annotationCanvas);
+        }
+        if (callbacks.onHighRes) {
+          callbacks.onHighRes(page, { renderMs: Math.round(performance.now() - start) });
+        }
+        // Cache the high-res result
+        const cacheKey = `${page}_${zoom}_${rotation}`;
+        cachePageResult(cacheKey, ctx.canvas);
+      })
+      .catch(err => {
+        if (err?.name !== 'RenderingCancelledException') {
+          console.warn('[render-pipeline] high-res upgrade failed:', err?.message);
+        }
+      });
+  });
+
+  return { width: ctx.canvas.width, height: ctx.canvas.height, fromCache: false, renderMs: Math.round(performance.now() - start) };
+}
+
 // ─── Internal helpers ───────────────────────────────────────────────────────
 
 function cachePageResult(key, canvas) {

@@ -43,9 +43,9 @@ export class PDFAdapter {
     return page.getViewport({ scale, rotation });
   }
 
-  async renderPage(pageNumber, canvas, { zoom, rotation }) {
+  async renderPage(pageNumber, canvas, { zoom, rotation, dpr: dprOverride }) {
     const page = await this.pdfDoc.getPage(pageNumber);
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const dpr = dprOverride ?? Math.max(1, window.devicePixelRatio || 1);
     // Render at higher resolution for sharper text: use ceil to avoid
     // sub-pixel truncation that causes blurry edges on text glyphs.
     const renderScale = zoom * dpr;
