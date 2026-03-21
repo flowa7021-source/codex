@@ -417,8 +417,14 @@ const translations = {
 
     // Command Palette
     'cmdPalette.placeholder': 'Введите команду или номер страницы...',
+    'cmdPalette.navigate': '↑↓ навигация',
+    'cmdPalette.select': '↵ выбрать',
+    'cmdPalette.close': 'esc закрыть',
+    'cmdPalette.page': '# страница',
+    'cmdPalette.commands': '> команды',
 
     // Status bar
+    'status.page': 'Стр. — / —',
     'status.readingTime': 'Чтение: 0 мин',
   },
 
@@ -838,8 +844,14 @@ const translations = {
 
     // Command Palette
     'cmdPalette.placeholder': 'Type a command or page number...',
+    'cmdPalette.navigate': '↑↓ navigate',
+    'cmdPalette.select': '↵ select',
+    'cmdPalette.close': 'esc close',
+    'cmdPalette.page': '# page',
+    'cmdPalette.commands': '> commands',
 
     // Status bar
+    'status.page': 'Page — / —',
     'status.readingTime': 'Reading: 0 min',
   },
 
@@ -1099,7 +1111,8 @@ export function applyI18nToDOM() {
     if (key) el.placeholder = t(key);
   });
 
-  document.documentElement.lang = lang === 'en' ? 'en' : 'ru';
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
 }
 
 export function getAvailableLanguages() {

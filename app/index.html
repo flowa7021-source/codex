@@ -710,7 +710,7 @@
 
       <!-- ═══ Status Bar ═══ -->
       <footer class="status-bar" id="statusBar" role="status" aria-live="polite" aria-label="Строка состояния">
-        <span class="status-bar-item" id="sbPage">Стр. — / —</span>
+        <span class="status-bar-item" id="sbPage" data-i18n="status.page">Стр. — / —</span>
         <span class="status-bar-sep"></span>
         <span class="status-bar-item" id="sbZoom">100%</span>
         <span class="status-bar-sep"></span>
@@ -1054,8 +1054,8 @@
         <input type="text" id="commandPaletteInput" class="command-palette-input" placeholder="Введите команду или номер страницы..." autocomplete="off" spellcheck="false" data-i18n-placeholder="cmdPalette.placeholder">
         <div id="commandPaletteList" class="command-palette-list"></div>
         <div class="command-palette-footer">
-          <span>&#8593;&#8595; навигация</span> <span>&#8629; выбрать</span> <span>esc закрыть</span>
-          <span># страница</span> <span>&gt; команды</span>
+          <span data-i18n="cmdPalette.navigate">&#8593;&#8595; навигация</span> <span data-i18n="cmdPalette.select">&#8629; выбрать</span> <span data-i18n="cmdPalette.close">esc закрыть</span>
+          <span data-i18n="cmdPalette.page"># страница</span> <span data-i18n="cmdPalette.commands">&gt; команды</span>
         </div>
       </div>
     </div>
