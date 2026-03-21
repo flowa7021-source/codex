@@ -27,6 +27,7 @@
     "test": "npm run test:benchmark",
     "test:coverage": "c8 --reporter=text --reporter=lcov node --import ./tests/unit/setup-dom.js --test tests/unit/*.test.js",
     "test:coverage:check": "c8 check-coverage --lines 40 --functions 30 --branches 30",
+    "test:visual": "npx playwright test tests/e2e/visual-regression.spec.js",
     "typecheck": "tsc --noEmit",
     "release": "standard-version"
   },
