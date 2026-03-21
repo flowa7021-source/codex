@@ -542,6 +542,7 @@ export class UnsupportedAdapter {
     canvas.width = 1200;
     canvas.height = 700;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     ctx.fillStyle = '#10141b';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = '#f8fafc';

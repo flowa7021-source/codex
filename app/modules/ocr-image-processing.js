@@ -277,6 +277,7 @@ export function rotateCanvas(source, angleDeg) {
   const outH = Math.max(1, Math.round((w * sin) + (h * cos)));
   const out = createOcrCanvas(outW, outH);
   const ctx = out.getContext('2d');
+  if (!ctx) return out;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, out.width, out.height);
   ctx.translate(out.width / 2, out.height / 2);
@@ -383,6 +384,7 @@ export function constrainOcrSourceCanvasPixels(canvas, maxPixels = OCR_SOURCE_MA
   const height = Math.max(1, Math.floor(canvas.height * scale));
   const out = createOcrCanvas(width, height);
   const ctx = out.getContext('2d');
+  if (!ctx) return { canvas: out, scaled: true, scale, sourcePixels: totalPx, outputPixels: width * height };
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(canvas, 0, 0, width, height);
@@ -486,7 +488,9 @@ export async function estimatePageSkewAngle(pageNumber) {
     try {
     const src = await buildOcrSourceCanvas(pageNumber);
     const probe = preprocessOcrCanvas(src, 0, 'otsu', false, 0.85);
-    const img = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
+    const probeCtx = probe.getContext('2d');
+    if (!probeCtx) { state.pageSkewAngles[pageNumber] = 0; return 0; }
+    const img = probeCtx.getImageData(0, 0, probe.width, probe.height);
     const skew = estimateSkewAngleFromBinary(img);
     state.pageSkewAngles[pageNumber] = skew;
     return skew;
@@ -508,7 +512,9 @@ export function cropCanvasByRelativeRect(sourceCanvas, relativeRect) {
   const sw = Math.max(1, Math.floor(sourceCanvas.width * relativeRect.w));
   const sh = Math.max(1, Math.floor(sourceCanvas.height * relativeRect.h));
   const out = createOcrCanvas(sw, sh);
-  out.getContext('2d').drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+  const outCtx = out.getContext('2d');
+  if (!outCtx) return out;
+  outCtx.drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
   return out;
 }
 

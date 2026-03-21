@@ -272,6 +272,7 @@ export function preprocessCanvas(src, opts = {}) {
   dst.width  = src.width;
   dst.height = src.height;
   const ctx = dst.getContext('2d');
+  if (!ctx) return dst;
   ctx.drawImage(src, 0, 0);
 
   if (!doDenoise && !doNormalise) return dst;
@@ -337,6 +338,7 @@ export function preprocessCanvas(src, opts = {}) {
  */
 export function detectSkewAngle(canvas) {
   const ctx  = canvas.getContext('2d');
+  if (!ctx) return 0;
   const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   const w = canvas.width;
   const h = canvas.height;
@@ -406,6 +408,7 @@ export function deskewCanvas(src, angleDeg) {
   dst.width  = src.width;
   dst.height = src.height;
   const ctx = dst.getContext('2d');
+  if (!ctx) return dst;
 
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, dst.width, dst.height);
@@ -446,6 +449,7 @@ function upscaleCanvas(src, factor) {
   dst.width  = Math.round(src.width  * factor);
   dst.height = Math.round(src.height * factor);
   const ctx = dst.getContext('2d');
+  if (!ctx) return dst;
   ctx.imageSmoothingEnabled  = true;
   ctx.imageSmoothingQuality  = 'high';
   ctx.drawImage(src, 0, 0, dst.width, dst.height);

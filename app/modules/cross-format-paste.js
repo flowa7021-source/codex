@@ -382,7 +382,9 @@ function _cropCanvas(canvas, rect) {
   const out = document.createElement('canvas');
   out.width  = Math.round(rect.width);
   out.height = Math.round(rect.height);
-  out.getContext('2d').drawImage(
+  const ctx = out.getContext('2d');
+  if (!ctx) return out;
+  ctx.drawImage(
     canvas,
     rect.x, rect.y, rect.width, rect.height,
     0, 0, out.width, out.height,

@@ -14,6 +14,7 @@ const TARGET_STROKE_PX = 3.0; // ideal stroke width after scaling
  */
 export function analyzeTextDensity(canvas) {
   const ctx = canvas.getContext('2d');
+  if (!ctx) return { density: 0, avgStrokeWidth: 1, contrast: 0, suggestedScale: 2.0 };
   const w = canvas.width;
   const h = canvas.height;
   if (!w || !h) return { density: 0, avgStrokeWidth: 1, contrast: 0, suggestedScale: 2.0 };

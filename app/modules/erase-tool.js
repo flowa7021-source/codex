@@ -124,6 +124,7 @@ export class EraseTool {
     canvas.width = imgEl.naturalWidth;
     canvas.height = imgEl.naturalHeight;
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     ctx.drawImage(imgEl, 0, 0);
 
     // --- Convert page pt → image pixels -------------------------------------
@@ -279,6 +280,7 @@ export class EraseUIController {
   constructor(overlayCanvas, onErase, opts = {}) {
     this.canvas = overlayCanvas;
     this.ctx = overlayCanvas.getContext('2d');
+    if (!this.ctx) return;
     this.onErase = onErase;
     this.subMode = opts.subMode || 'rect';
     this.pageWidth = opts.pageWidth || 595;

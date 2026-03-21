@@ -170,6 +170,7 @@ function _renderFallback(latex, opts) {
   const display = _latexToUnicode(latex);
   const canvas  = document.createElement('canvas');
   const ctx     = canvas.getContext('2d');
+  if (!ctx) return null;
 
   const fontPx = fontSize * scale;
   ctx.font = `${fontPx}px "Times New Roman", serif`;
@@ -465,6 +466,7 @@ async function _htmlToPng(html, scale) {
     const img = new Image();
     img.onload = () => {
       const ctx = canvas.getContext('2d');
+      if (!ctx) { resolve(_renderFallback(html.replace(/<[^>]+>/g, ''), { fontSize: 20, color: '#000', bg: 'transparent', padding: 6, scale })); return; }
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
       resolve(_canvasToPngResult(canvas, scale));
     };

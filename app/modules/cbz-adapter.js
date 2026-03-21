@@ -76,6 +76,7 @@ export class CbzAdapter {
 
     const img = await this._getImage(pageNum);
     const ctx = canvas.getContext('2d');
+    if (!ctx) return { width: 0, height: 0 };
 
     canvas.width = Math.round(img.naturalWidth * zoom);
     canvas.height = Math.round(img.naturalHeight * zoom);

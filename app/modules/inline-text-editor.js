@@ -280,6 +280,7 @@ export class InlineTextEditor {
     if (!bgCanvas) return;
 
     const ctx = bgCanvas.getContext('2d');
+    if (!ctx) return;
     const run = _firstRun(block);
     const bbox = block.boundingBox;
     const ph   = this.page.height;

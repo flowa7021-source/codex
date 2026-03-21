@@ -285,6 +285,7 @@ export class PdfBlockEditor {
     // Current page from data attribute or default 1
     const pageNum = Number(container.dataset?.page || 1);
     const ctx = this._overlay.getContext('2d');
+    if (!ctx) return;
     ctx.clearRect(0, 0, this._overlay.width, this._overlay.height);
     this.renderBlocks(ctx, pageNum, 1);
   }

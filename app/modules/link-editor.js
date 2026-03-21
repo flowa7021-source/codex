@@ -342,6 +342,7 @@ export class LinkEditor {
     this._overlay.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:40';
 
     const ctx = this._overlay.getContext('2d');
+    if (!ctx) return;
     ctx.strokeStyle = 'rgba(0, 120, 212, 0.6)';
     ctx.lineWidth   = 2;
     ctx.setLineDash([4, 3]);

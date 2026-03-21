@@ -14,6 +14,7 @@
 export function preprocessForOcr(canvas, opts = {}) {
   const { deskew = true, denoise = true, binarize = true, removeBorders = true } = opts;
   const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
   let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
   // Convert to grayscale
@@ -39,6 +40,7 @@ export function preprocessForOcr(canvas, opts = {}) {
   out.width = imageData.width;
   out.height = imageData.height;
   const outCtx = out.getContext('2d');
+  if (!outCtx) return out;
   outCtx.putImageData(imageData, 0, 0);
 
   // Deskew
@@ -218,6 +220,7 @@ export function rotateCanvas(canvas, angleDeg) {
   out.width = newW;
   out.height = newH;
   const ctx = out.getContext('2d');
+  if (!ctx) return out;
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, newW, newH);
   ctx.translate(newW / 2, newH / 2);

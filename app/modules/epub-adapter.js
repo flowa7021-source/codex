@@ -219,6 +219,7 @@ export class EpubAdapter {
     }
 
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     ctx.save();
     ctx.scale(dpr, dpr);
 

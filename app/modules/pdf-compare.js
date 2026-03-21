@@ -170,6 +170,7 @@ export class PdfCompare {
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       const ctx = canvas.getContext('2d');
+      if (!ctx) return { canvas, ctx: null, width: viewport.width, height: viewport.height };
       await page.render({ canvasContext: ctx, viewport }).promise;
       return { canvas, ctx, width: viewport.width, height: viewport.height };
     };
@@ -189,6 +190,7 @@ export class PdfCompare {
     diffCanvas.width = width;
     diffCanvas.height = height;
     const diffCtx = diffCanvas.getContext('2d');
+    if (!diffCtx) return null;
 
     const imgDataA = a.ctx.getImageData(0, 0, a.width, a.height);
     const imgDataB = b.ctx.getImageData(0, 0, b.width, b.height);

@@ -210,6 +210,7 @@ export class BatchOcrEditor {
     canvas.height = Math.round(viewport.height);
 
     const ctx = canvas.getContext('2d');
+    if (!ctx) return canvas;
     await page.render({ canvasContext: ctx, viewport }).promise;
     return canvas;
   }

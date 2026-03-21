@@ -111,6 +111,7 @@ export function updatePreviewSelection() {
 
 export function _drawPreviewPlaceholder(canvas, pageNum) {
   const ctx = canvas.getContext('2d');
+  if (!ctx) return;
   ctx.fillStyle = '#10141b';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#cbd5e1';

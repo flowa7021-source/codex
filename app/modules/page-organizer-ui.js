@@ -133,6 +133,7 @@ export function initPageOrganizerUI(deps) {
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       const ctx = canvas.getContext('2d');
+      if (!ctx) return;
       await page.render({ canvasContext: ctx, viewport }).promise;
     } catch (err) { console.warn('[page-org] render error (non-critical):', err?.message); }
   }

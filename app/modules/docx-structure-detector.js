@@ -296,6 +296,7 @@ async function extractPageImages(page, viewport) {
           canvas.width = w;
           canvas.height = h;
           const ctx = canvas.getContext('2d');
+          if (!ctx) return null;
           const idata = ctx.createImageData(w, h);
 
           // imgData.data can be Uint8ClampedArray (RGBA) or Uint8Array (RGB/RGBA)

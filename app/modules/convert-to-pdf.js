@@ -37,6 +37,7 @@ export async function imagesToPdf(files) {
         canvas.width = img.width;
         canvas.height = img.height;
         const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas 2D context unavailable');
         ctx.drawImage(img, 0, 0);
         const pngBlob = await new Promise(r => canvas.toBlob(r, 'image/png'));
         const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());

@@ -283,6 +283,7 @@ export class MeasurementOverlay {
     ].join(';');
 
     this._ctx = this._canvas.getContext('2d');
+    if (!this._ctx) return;
 
     this._canvas.addEventListener('mousedown', this._onMouseDown);
     this._canvas.addEventListener('mousemove', this._onMouseMove);

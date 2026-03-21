@@ -245,7 +245,9 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
     skewToApply = preferredSkew;
   } else if (!fast) {
     const probe = variants[Math.min(2, variants.length - 1)];
-    const probeImg = probe.getContext('2d').getImageData(0, 0, probe.width, probe.height);
+    const probeCtx = probe.getContext('2d');
+    if (!probeCtx) continue;
+    const probeImg = probeCtx.getImageData(0, 0, probe.width, probe.height);
     const skew = estimateSkewAngleFromBinary(probeImg);
     skewProbeDeg = Number(skew.toFixed(2));
     if (Math.abs(skew) >= 0.35) {

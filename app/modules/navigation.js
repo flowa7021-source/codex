@@ -174,6 +174,7 @@ export function updateMinimap(mainCanvas) {
   minimapCanvas.height = Math.max(1, Math.round(mainCanvas.height * scale));
 
   minimapCtx = minimapCanvas.getContext('2d');
+  if (!minimapCtx) return;
   minimapCtx.drawImage(mainCanvas, 0, 0, minimapCanvas.width, minimapCanvas.height);
 }
 
