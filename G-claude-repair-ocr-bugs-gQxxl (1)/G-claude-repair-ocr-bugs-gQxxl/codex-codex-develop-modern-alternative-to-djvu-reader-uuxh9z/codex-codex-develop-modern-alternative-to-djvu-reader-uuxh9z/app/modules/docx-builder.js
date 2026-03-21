@@ -13,7 +13,7 @@
 import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   ImageRun, HeadingLevel, AlignmentType, BorderStyle, WidthType,
-  Header, Footer, PageNumber, PageBreak,
+  Header, Footer, PageNumber,
   ShadingType, ExternalHyperlink, PageOrientation,
 } from 'docx';
 
@@ -23,13 +23,6 @@ import {
 
 /** Points → twips (1 pt = 20 twips). */
 const PT = 20;
-
-/** Default A4 dimensions in twips. */
-const A4_WIDTH = 11906;
-const A4_HEIGHT = 16838;
-
-/** Default margin in twips (≈ 1 inch / 2.54 cm). */
-const DEFAULT_MARGIN = 1440;
 
 /** Map semantic alignment strings to docx AlignmentType. */
 const ALIGNMENT_MAP = {
