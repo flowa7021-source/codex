@@ -16,7 +16,9 @@
     "postinstall": "prisma generate",
     "electron:compile": "tsc -p electron/tsconfig.json",
     "electron:dev": "npm run build && npm run electron:compile && electron .",
-    "build:win:nosign": "npm run build && npm run electron:compile && electron-builder --win --publish never"
+    "build:win:nosign": "npm run build && npm run electron:compile && electron-builder --win --publish never",
+    "build:win:installer": "npm run build && npm run electron:compile && electron-builder --win nsis --publish never",
+    "build:win:all": "npm run build && npm run electron:compile && electron-builder --win nsis portable --publish never"
   },
   "prisma": {
     "seed": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"
@@ -43,14 +45,31 @@
     "win": {
       "target": [
         {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
           "target": "portable",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
       "icon": "electron/build/icon.ico",
       "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "installerIcon": "electron/build/icon.ico",
+      "uninstallerIcon": "electron/build/icon.ico",
+      "installerHeaderIcon": "electron/build/icon.ico",
+      "artifactName": "NEXUS-${version}-setup.exe",
+      "shortcutName": "NEXUS",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "license": "electron/build/license.txt"
     },
     "portable": {
       "artifactName": "NEXUS-${version}-portable.exe",
