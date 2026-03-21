@@ -45,7 +45,14 @@ export function initQuickActions(options) {
     btn.className = 'quick-action-btn';
     btn.dataset.actionId = action.id;
     btn.title = action.label;
-    btn.innerHTML = `<span class="qa-icon">${action.icon}</span><span class="qa-label">${action.label}</span>`;
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'qa-icon';
+    iconSpan.textContent = action.icon;
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'qa-label';
+    labelSpan.textContent = action.label;
+    btn.appendChild(iconSpan);
+    btn.appendChild(labelSpan);
 
     btn.addEventListener('click', (e) => {
       e.preventDefault();
@@ -160,7 +167,14 @@ export function addQuickAction(action) {
   btn.className = 'quick-action-btn';
   btn.dataset.actionId = action.id;
   btn.title = action.label;
-  btn.innerHTML = `<span class="qa-icon">${action.icon}</span><span class="qa-label">${action.label}</span>`;
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'qa-icon';
+  iconSpan.textContent = action.icon;
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'qa-label';
+  labelSpan.textContent = action.label;
+  btn.appendChild(iconSpan);
+  btn.appendChild(labelSpan);
 
   btn.addEventListener('click', (e) => {
     e.preventDefault();

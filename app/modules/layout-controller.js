@@ -314,10 +314,27 @@ export function setupAnnotationEvents() {
       if (d <= 14) {
         const overlay = document.createElement('div');
         overlay.className = 'modal open';
-        overlay.innerHTML = `<div class="modal-card" style="width:min(400px,80vw)">
-          <div class="modal-head"><h3>Комментарий</h3><button id="closeCommentPopup">✕</button></div>
-          <div class="modal-body"><p style="margin:0;white-space:pre-wrap">${comments[i].text.replace(/</g, '&lt;')}</p></div>
-        </div>`;
+        const card = document.createElement('div');
+        card.className = 'modal-card';
+        card.style.width = 'min(400px,80vw)';
+        const head = document.createElement('div');
+        head.className = 'modal-head';
+        const h3 = document.createElement('h3');
+        h3.textContent = 'Комментарий';
+        const closeBtn = document.createElement('button');
+        closeBtn.id = 'closeCommentPopup';
+        closeBtn.textContent = '✕';
+        head.appendChild(h3);
+        head.appendChild(closeBtn);
+        const body = document.createElement('div');
+        body.className = 'modal-body';
+        const p = document.createElement('p');
+        p.style.cssText = 'margin:0;white-space:pre-wrap';
+        p.textContent = comments[i].text;
+        body.appendChild(p);
+        card.appendChild(head);
+        card.appendChild(body);
+        overlay.appendChild(card);
         document.body.appendChild(overlay);
         const close = () => overlay.remove();
         overlay.querySelector('#closeCommentPopup').addEventListener('click', close);

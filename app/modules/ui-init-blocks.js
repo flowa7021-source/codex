@@ -312,11 +312,19 @@ function initTabBar(deps) {
     const tab = document.createElement('div');
     tab.className = 'doc-tab';
     tab.dataset.tabId = id;
-    tab.innerHTML = `
-      <span class="tab-icon">${type === 'pdf' ? '📄' : type === 'djvu' ? '📘' : type === 'epub' ? '📗' : '🖼'}</span>
-      <span class="tab-label">${name}</span>
-      <button class="tab-close" title="Закрыть">✕</button>
-    `;
+    const tabIcon = document.createElement('span');
+    tabIcon.className = 'tab-icon';
+    tabIcon.textContent = type === 'pdf' ? '📄' : type === 'djvu' ? '📘' : type === 'epub' ? '📗' : '🖼';
+    const tabLabel = document.createElement('span');
+    tabLabel.className = 'tab-label';
+    tabLabel.textContent = name;
+    const tabClose = document.createElement('button');
+    tabClose.className = 'tab-close';
+    tabClose.title = 'Закрыть';
+    tabClose.textContent = '✕';
+    tab.appendChild(tabIcon);
+    tab.appendChild(tabLabel);
+    tab.appendChild(tabClose);
 
     tab.addEventListener('click', (e) => {
       if (e.target.closest('.tab-close')) return;
