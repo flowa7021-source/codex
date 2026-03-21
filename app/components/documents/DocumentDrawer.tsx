@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Download, Check, RotateCcw, MessageSquare, Clock, GitBranch, CheckCircle } from 'lucide-react'
+import { X, Download, Check, RotateCcw, MessageSquare, GitBranch, CheckCircle, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Document } from '@/app/types'
 import { StatusBadge } from '@/app/components/ui/StatusBadge'
@@ -15,14 +15,23 @@ interface DocumentDrawerProps {
   document: Document | null
   onClose: () => void
   onStatusChange?: (docId: string, status: Document['status']) => void
+  onDelete?: (docId: string) => void
 }
 
 type Tab = 'overview' | 'versions' | 'comments' | 'approvals'
 
-export function DocumentDrawer({ document: doc, onClose, onStatusChange }: DocumentDrawerProps) {
+export function DocumentDrawer({ document: doc, onClose, onStatusChange, onDelete }: DocumentDrawerProps) {
   const [activeTab, setActiveTab] = useState<Tab>('overview')
   const [approveComment, setApproveComment] = useState('')
   const [showRejectForm, setShowRejectForm] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+
+  const handleDelete = () => {
+    if (!doc) return
+    onDelete?.(doc.id)
+    toast.success(`Документ ${doc.number} удалён`)
+    onClose()
+  }
 
   const handleApprove = () => {
     if (!doc) return
@@ -314,6 +323,29 @@ export function DocumentDrawer({ document: doc, onClose, onStatusChange }: Docum
                 <Button variant="ghost" size="md" onClick={() => toast.info('Функция скачивания в разработке')}>
                   <Download size={14} />
                 </Button>
+                {onDelete && !confirmDelete && (
+                  <Button variant="ghost" size="md" onClick={() => setConfirmDelete(true)}>
+                    <Trash2 size={14} />
+                  </Button>
+                )}
+                {confirmDelete && (
+                  <div className="flex items-center gap-1 ml-auto">
+                    <button
+                      onClick={handleDelete}
+                      className="px-3 py-1.5 rounded-lg font-mono text-xs font-semibold"
+                      style={{ background: 'var(--color-danger)', color: '#fff', fontSize: 12 }}
+                    >
+                      Удалить
+                    </button>
+                    <button
+                      onClick={() => setConfirmDelete(false)}
+                      className="px-3 py-1.5 rounded-lg font-mono text-xs"
+                      style={{ background: 'var(--color-surface-hover)', color: 'var(--color-text-muted)', fontSize: 12 }}
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="p-4" style={{ borderTop: '1px solid var(--color-border)' }}>

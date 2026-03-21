@@ -349,6 +349,11 @@ export default function DocumentsPage() {
     updateDocs([doc, ...documents])
   }
 
+  const handleDelete = (docId: string) => {
+    updateDocs(documents.filter(d => d.id !== docId))
+    setSelectedDoc(null)
+  }
+
   const filtered = useMemo(() => {
     let result = [...documents]
     const q = search.toLowerCase()
@@ -566,6 +571,7 @@ export default function DocumentsPage() {
         document={selectedDoc}
         onClose={() => setSelectedDoc(null)}
         onStatusChange={handleStatusChange}
+        onDelete={handleDelete}
       />
 
       {/* New document modal */}
