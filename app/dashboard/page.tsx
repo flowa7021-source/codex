@@ -53,28 +53,69 @@ function MetricTile({
   label, value, sub, color, icon: Icon, index,
 }: {
   label: string; value: number; sub?: string; color: string;
-  icon: React.ComponentType<{ size?: number }>; index: number
+  icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; index: number
 }) {
   return (
     <motion.div
       custom={index} variants={fadeUp} initial="hidden" animate="visible"
-      className="rounded-xl p-5 flex flex-col gap-3"
-      style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+      className="rounded-xl p-5 flex flex-col gap-4 relative overflow-hidden"
+      style={{
+        background: 'var(--color-surface)',
+        border: '1px solid var(--color-border)',
+      }}
     >
-      <div className="flex items-center justify-between">
-        <span className="font-mono uppercase tracking-widest" style={{ fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.1em' }}>
+      {/* Subtle top-left accent line */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0, left: 0,
+          width: '60%',
+          height: 1,
+          background: `linear-gradient(to right, ${color}50, transparent)`,
+        }}
+      />
+      {/* Subtle background glow */}
+      <div
+        style={{
+          position: 'absolute',
+          top: -20, left: -20,
+          width: 100, height: 100,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${color}0D 0%, transparent 70%)`,
+          pointerEvents: 'none',
+        }}
+      />
+
+      <div className="flex items-start justify-between relative">
+        <span
+          className="font-mono uppercase"
+          style={{ fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.12em' }}
+        >
           {label}
         </span>
-        <div className="p-2 rounded-lg" style={{ background: `${color}15`, color }}>
-          <Icon size={15} />
+        <div
+          className="p-2 rounded-lg flex-shrink-0"
+          style={{
+            background: `${color}14`,
+            border: `1px solid ${color}22`,
+          }}
+        >
+          <Icon size={14} strokeWidth={2} style={{ color }} />
         </div>
       </div>
-      <div className="flex items-end gap-2">
-        <span className="font-mono font-bold tabular-nums" style={{ fontSize: 34, lineHeight: 1, color }}>
+
+      <div className="flex items-end gap-2 relative">
+        <span
+          className="font-mono font-bold tabular-nums leading-none"
+          style={{ fontSize: 36, color }}
+        >
           {value}
         </span>
         {sub && (
-          <span className="font-mono pb-1" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+          <span
+            className="font-mono pb-0.5"
+            style={{ fontSize: 12, color: 'var(--color-text-muted)' }}
+          >
             {sub}
           </span>
         )}
@@ -87,21 +128,34 @@ function SectionHeader({ title, href, count }: { title: string; href: string; co
   return (
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2">
-        <span className="font-mono font-semibold uppercase" style={{ fontSize: 11, color: 'var(--color-text-secondary)', letterSpacing: '0.1em' }}>
+        <span
+          className="font-mono font-semibold uppercase"
+          style={{ fontSize: 10, color: 'var(--color-text-secondary)', letterSpacing: '0.12em' }}
+        >
           {title}
         </span>
         {count !== undefined && count > 0 && (
-          <span className="font-mono px-1.5 py-0.5 rounded-sm" style={{ fontSize: 10, background: 'var(--color-elevated)', color: 'var(--color-text-muted)' }}>
+          <span
+            className="font-mono px-1.5 py-0.5 rounded-md tabular-nums"
+            style={{
+              fontSize: 10,
+              background: 'var(--color-overlay)',
+              color: 'var(--color-text-muted)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
             {count}
           </span>
         )}
       </div>
       <Link
         href={href}
-        className="flex items-center gap-1 font-mono transition-all"
-        style={{ fontSize: 12, color: 'var(--color-accent)' }}
+        className="flex items-center gap-1 font-mono transition-all duration-150"
+        style={{ fontSize: 11, color: 'var(--color-accent)', letterSpacing: '0.02em' }}
+        onMouseEnter={(e) => e.currentTarget.style.color = 'var(--color-accent-hover)'}
+        onMouseLeave={(e) => e.currentTarget.style.color = 'var(--color-accent)'}
       >
-        Все <ArrowRight size={11} />
+        Все <ArrowRight size={10} />
       </Link>
     </div>
   )
@@ -182,10 +236,21 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="font-mono font-bold" style={{ fontSize: 24, color: 'var(--color-text)' }}>
+          <h1
+            style={{
+              fontSize: 22,
+              fontWeight: 600,
+              color: 'var(--color-text)',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.2,
+            }}
+          >
             Оперативная сводка
           </h1>
-          <p className="font-sans mt-1 capitalize" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
+          <p
+            className="mt-1 capitalize"
+            style={{ fontSize: 12, color: 'var(--color-text-muted)', letterSpacing: '0.01em' }}
+          >
             {dateStr}
           </p>
         </div>
@@ -193,17 +258,39 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2">
             <Link
               href="/dashboard/tasks"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono transition-all"
-              style={{ fontSize: 12, background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}
+              className="flex items-center gap-1.5 rounded-lg transition-all duration-150"
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-muted)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border-strong)'
+                e.currentTarget.style.color = 'var(--color-text-secondary)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--color-border)'
+                e.currentTarget.style.color = 'var(--color-text-muted)'
+              }}
             >
-              <Plus size={13} /> Задача
+              <Plus size={13} strokeWidth={2} /> Задача
             </Link>
             <Link
               href="/dashboard/documents"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-mono transition-all"
-              style={{ fontSize: 12, background: 'var(--color-surface)', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}
+              className="flex items-center gap-1.5 rounded-lg transition-all duration-150"
+              style={{
+                padding: '6px 12px',
+                fontSize: 12,
+                background: 'var(--color-accent)',
+                color: '#fff',
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-accent-hover)'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'var(--color-accent)'}
             >
-              <Plus size={13} /> Документ
+              <Plus size={13} strokeWidth={2} /> Документ
             </Link>
           </div>
         )}
@@ -274,7 +361,10 @@ export default function DashboardPage() {
             <motion.div
               custom={4} variants={fadeUp} initial="hidden" animate="visible"
               className="rounded-xl p-5"
-              style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+              style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+              }}
             >
               <SectionHeader title="Документы" href="/dashboard/documents" count={documents.length} />
               {recentDocs.length === 0 ? (
@@ -327,7 +417,10 @@ export default function DashboardPage() {
             <motion.div
               custom={5} variants={fadeUp} initial="hidden" animate="visible"
               className="rounded-xl p-5"
-              style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
+              style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+              }}
             >
               <SectionHeader title="Активные задачи" href="/dashboard/tasks" count={activeTasks.length} />
               {recentActiveTasks.length === 0 && tasks.length > 0 ? (
