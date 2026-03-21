@@ -32,8 +32,17 @@ jobs:
       - name: ESLint (zero warnings)
         run: npm run lint
 
-      - name: Tests
-        run: npm test
+      - name: Unit tests (322 tests, node:test runner)
+        run: npm run test:unit
+
+      - name: Benchmark – OCR quality baseline
+        run: npm run test:benchmark
+
+      - name: Benchmark – OCR corpus
+        run: npm run test:benchmark:ocr
+
+      - name: Benchmark – PDF conversion
+        run: npm run test:benchmark:pdf
 
       - name: Vite build
         run: npm run build
@@ -45,6 +54,24 @@ jobs:
             exit 1
           fi
           echo "Build OK: $(find dist -type f | wc -l) files"
+
+      - name: Performance budget – bundle size check
+        run: |
+          MAX_BYTES=$((400 * 1024))
+          BUNDLE=$(ls dist/js/index-*.js 2>/dev/null | head -1)
+          if [ -z "$BUNDLE" ]; then
+            echo "ERROR: dist/js/index-*.js not found"
+            exit 1
+          fi
+          GZIP_SIZE=$(gzip -c "$BUNDLE" | wc -c)
+          GZIP_KB=$(( GZIP_SIZE / 1024 ))
+          echo "Bundle: $BUNDLE"
+          echo "Gzipped size: ${GZIP_KB}KB (${GZIP_SIZE} bytes)"
+          if [ "$GZIP_SIZE" -gt "$MAX_BYTES" ]; then
+            echo "FAIL: Gzipped bundle (${GZIP_KB}KB) exceeds 400KB budget"
+            exit 1
+          fi
+          echo "PASS: Gzipped bundle is within 400KB budget"
 
   # ──────────────────────────────────────────────────────
   # Job 2: Rust check (every push, ~3 min with cache)
