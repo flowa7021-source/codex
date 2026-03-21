@@ -309,6 +309,7 @@ export const els = {
   openSettingsModal: document.getElementById('openSettingsModal'),
   closeSettingsModal: document.getElementById('closeSettingsModal'),
   saveSettingsModal: document.getElementById('saveSettingsModal'),
+  resetUiSizeDefaults: document.getElementById('resetUiSizeDefaults'),
   settingsModal: document.getElementById('settingsModal'),
   cfgShowSidebar: document.getElementById('cfgShowSidebar'),
   cfgShowSearch: document.getElementById('cfgShowSearch'),

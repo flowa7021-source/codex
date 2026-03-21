@@ -81,10 +81,10 @@ import { initReadingProgressDeps, noteKey, bookmarkKey, loadReadingGoal, saveRea
 import { initFileControllerDeps, revokeCurrentObjectUrl, saveDjvuData, openFile, reloadPdfFromBytes } from './modules/file-controller.js';
 import { initPdfOpsDeps, mergePdfFiles, splitPdfPages } from './modules/pdf-ops-controller.js';
 import { PDFAdapter, ImageAdapter, DjVuAdapter, DjVuNativeAdapter, UnsupportedAdapter } from './modules/adapters.js';
-import { initSettingsUiDeps, applyAppLanguage, applySectionVisibilitySettings, openSettingsModal, closeSettingsModal, previewUiSizeFromModal, saveSettingsFromModal } from './modules/settings-ui.js';
+import { initSettingsUiDeps, applyAppLanguage, applySectionVisibilitySettings, openSettingsModal, closeSettingsModal, previewUiSizeFromModal, saveSettingsFromModal, resetUiSizeToDefaults } from './modules/settings-ui.js';
 import { initOutlineControllerDeps, renderDocInfo, renderOutline, renderPagePreviews } from './modules/outline-controller.js';
 import { initTextNavDeps, ensureTextToolsVisible, refreshPageText, copyPageText, exportPageText, setTextEditMode, saveCurrentPageTextEdits, exportCurrentDocToWord, goToPage, fitWidth, fitPage, downloadCurrentFile, printCanvasPage } from './modules/text-nav-controller.js';
-import { initLayoutControllerDeps, uiLayoutKey, applyAdvancedPanelsState, toggleAdvancedPanelsState, applyLayoutState, updateSearchToolbarRows, toggleLayoutState, setupResizableLayout, setupDragAndDrop, setupAnnotationEvents } from './modules/layout-controller.js';
+import { initLayoutControllerDeps, uiLayoutKey, applyAdvancedPanelsState, toggleAdvancedPanelsState, applyLayoutState, updateSearchToolbarRows, toggleLayoutState, setupResizableLayout, applyLayoutWithTransition, setupDragAndDrop, setupAnnotationEvents } from './modules/layout-controller.js';
 import { initPdfProHandlersDeps, initPdfProHandlers } from './modules/pdf-pro-handlers.js';
 import { initBookmarkController, updateBookmarkButton } from './modules/bookmark-controller.js';
 import { initNotesController } from './modules/notes-controller.js';
@@ -284,6 +284,7 @@ safeOn(els.toggleAdvancedPanels, 'click', toggleAdvancedPanelsState);
 safeOn(els.openSettingsModal, 'click', openSettingsModal);
 safeOn(els.closeSettingsModal, 'click', closeSettingsModal);
 safeOn(els.saveSettingsModal, 'click', saveSettingsFromModal);
+safeOn(els.resetUiSizeDefaults, 'click', resetUiSizeToDefaults);
 safeOn(els.exportDiagnostics, 'click', exportDiagnostics);
 safeOn(els.clearDiagnostics, 'click', clearDiagnostics);
 safeOn(els.runRuntimeSelfCheck, 'click', () => { runRuntimeSelfCheck(); });
@@ -1267,6 +1268,7 @@ initPdfOpsDeps({
 initSettingsUiDeps({
   uiLayoutKey, refreshOcrStorageInfo, applyUiSizeSettings,
   defaultSettings, saveAppSettings, clearOcrRuntimeCaches, applyLayoutState,
+  applyLayoutWithTransition,
 });
 initOutlineControllerDeps({
   canSearchCurrentDoc, renderCurrentPage,
