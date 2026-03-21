@@ -734,6 +734,7 @@ export function scrollToSearchHighlight(index) {
 // ─── Main Search Function ───────────────────────────────────────────────────
 
 export async function searchInPdf(query) {
+  try { performance.mark('search-start'); } catch (_e) { /* Performance API unavailable */ }
   const searchStartedAt = performance.now();
   state.searchResults = [];
   state.searchCursor = -1;
@@ -816,6 +817,11 @@ export async function searchInPdf(query) {
     els.searchStatus.textContent = scope === 'current' ? 'На текущей странице не найдено' : 'Ничего не найдено';
     renderSearchResultsList();
   }
+
+  try {
+    performance.mark('search-end');
+    performance.measure('search', 'search-start', 'search-end');
+  } catch (_e) { /* Performance API unavailable */ }
 }
 
 export async function jumpToSearchResult(index) {
