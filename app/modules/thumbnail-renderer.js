@@ -120,6 +120,7 @@ async function renderThumb(pageNum, canvas) {
     canvas.style.height = `${thumbH}px`;
 
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     ctx.drawImage(offscreen, 0, 0, THUMB_WIDTH, thumbH);
 
     thumbCache.set(pageNum, canvas);

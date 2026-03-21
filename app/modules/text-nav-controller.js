@@ -312,6 +312,7 @@ export function printCanvasPage() {
   exportCanvas.width = els.canvas.width;
   exportCanvas.height = els.canvas.height;
   const ctx = exportCanvas.getContext('2d');
+  if (!ctx) return;
   ctx.drawImage(els.canvas, 0, 0);
   ctx.drawImage(els.annotationCanvas, 0, 0, els.annotationCanvas.width, els.annotationCanvas.height, 0, 0, els.canvas.width, els.canvas.height);
 

@@ -68,6 +68,7 @@ export function detectContentBounds(canvas, opts = {}) {
   const minRatio     = opts.minContentRatio ?? 0.05;
 
   const ctx = canvas.getContext('2d');
+  if (!ctx) return { x: 0, y: 0, width: canvas.width, height: canvas.height };
   const { width, height } = canvas;
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
@@ -185,6 +186,7 @@ export async function smartCropPage(pdfBytes, pageNum, opts = {}) {
     canvas.width  = Math.round(pageW);
     canvas.height = Math.round(pageH);
     const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
   }
@@ -263,6 +265,7 @@ export async function smartCropAll(pdfBytes, opts = {}) {
       canvas.width = Math.round(pageW);
       canvas.height = Math.round(pageH);
       const ctx = canvas.getContext('2d');
+      if (!ctx) continue;
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
@@ -321,6 +324,7 @@ export class SmartCropPreview {
   constructor(overlayCanvas, pageWidthPt, pageHeightPt, zoom = 1) {
     this.canvas    = overlayCanvas;
     this.ctx       = overlayCanvas.getContext('2d');
+    if (!this.ctx) return;
     this.pageW     = pageWidthPt;
     this.pageH     = pageHeightPt;
     this.zoom      = zoom;

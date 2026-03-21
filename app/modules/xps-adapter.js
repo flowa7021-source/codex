@@ -86,6 +86,7 @@ export class XpsAdapter {
     if (!page) return;
 
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     canvas.width = Math.round(page.width * zoom);
     canvas.height = Math.round(page.height * zoom);
 

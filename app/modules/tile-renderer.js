@@ -276,6 +276,7 @@ async function _renderSingleTile(adapter, page, zoom, rotation, col, row, tileSi
   }
 
   const tileCtx = tileCanvas.getContext('2d');
+  if (!tileCtx) return null;
   tileCtx.drawImage(tmpCanvas, tx, ty, tw, th, 0, 0, tw, th);
 
   // Free the temporary full-page canvas

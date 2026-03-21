@@ -404,6 +404,7 @@ export function detectTableRegions(canvas, opts = {}) {
   const thresh   = opts.threshold ?? 200;
 
   const ctx  = canvas.getContext('2d');
+  if (!ctx) return [];
   const { width, height } = canvas;
   const data = ctx.getImageData(0, 0, width, height).data;
 

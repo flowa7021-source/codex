@@ -52,6 +52,7 @@ export async function renderPageToCanvas(pdfBytes, pageNum, scale = DEFAULT_REND
   canvas.height  = Math.round(viewport.height);
 
   const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
   await page.render({ canvasContext: ctx, viewport }).promise;
   pdfDoc.destroy();
   return canvas;
@@ -96,6 +97,7 @@ export function computePixelDiff(canvasA, canvasB, opts = {}) {
   diffCanvas.width  = w;
   diffCanvas.height = h;
   const diffCtx = diffCanvas.getContext('2d');
+  if (!diffCtx) return { diffCanvas, changedPercent: 0, changedPixels: 0, totalPixels: w * h, diffRect: null };
   const diffImg = diffCtx.createImageData(w, h);
   const out     = diffImg.data;
   const a       = dataA.data;
@@ -384,6 +386,7 @@ export class VisualDiff {
     composite.width  = w;
     composite.height = h;
     const ctx = composite.getContext('2d');
+    if (!ctx) return;
 
     ctx.drawImage(this._canvasB, 0, 0, w, h);
     ctx.globalAlpha = this._opacity;
@@ -434,12 +437,15 @@ export class VisualDiff {
  */
 function _getScaledImageData(src, w, h) {
   if (src.width === w && src.height === h) {
-    return src.getContext('2d').getImageData(0, 0, w, h);
+    const srcCtx = src.getContext('2d');
+    if (!srcCtx) return new ImageData(w, h);
+    return srcCtx.getImageData(0, 0, w, h);
   }
   const tmp = document.createElement('canvas');
   tmp.width  = w;
   tmp.height = h;
   const ctx  = tmp.getContext('2d');
+  if (!ctx) return new ImageData(w, h);
   ctx.drawImage(src, 0, 0, w, h);
   return ctx.getImageData(0, 0, w, h);
 }
@@ -481,7 +487,8 @@ function _labelledCanvas(canvas, label) {
   display.width  = Math.round(canvas.width  * ratio);
   display.height = Math.round(canvas.height * ratio);
   display.style.cssText = 'border:1px solid #444;border-radius:2px;box-shadow:0 2px 8px rgba(0,0,0,.5)';
-  display.getContext('2d').drawImage(canvas, 0, 0, display.width, display.height);
+  const displayCtx = display.getContext('2d');
+  if (displayCtx) displayCtx.drawImage(canvas, 0, 0, display.width, display.height);
 
   wrapper.append(lbl, display);
   return wrapper;
