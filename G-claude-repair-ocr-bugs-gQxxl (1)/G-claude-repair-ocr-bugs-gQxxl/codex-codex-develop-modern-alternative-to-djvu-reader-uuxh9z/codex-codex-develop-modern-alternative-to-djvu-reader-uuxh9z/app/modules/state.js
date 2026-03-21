@@ -1,6 +1,70 @@
-// ─── Application State ──────────────────────────────────────────────────────
+// ─── Reactive State Store ────────────────────────────────────────────────────
 
-export const state = {
+function createReactiveState(initial) {
+  const listeners = {};       // field -> Set<callback>
+  const data = { ...initial };
+  let batchDepth = 0;
+  const batchedChanges = new Map(); // field -> { oldValue, newValue }
+
+  function getListenerSet(field) {
+    if (!listeners[field]) listeners[field] = new Set();
+    return listeners[field];
+  }
+
+  function emitChange(field, oldValue, newValue) {
+    const set = listeners[field];
+    if (!set) return;
+    for (const cb of set) {
+      try { cb(newValue, oldValue, field); } catch (_) { /* observer must not break state */ }
+    }
+  }
+
+  const proxy = new Proxy(data, {
+    get(target, prop) {
+      if (prop === 'on') return (field, cb) => { getListenerSet(field).add(cb); };
+      if (prop === 'off') return (field, cb) => { getListenerSet(field).delete(cb); };
+      if (prop === 'batch') return (fn) => {
+        batchDepth++;
+        try {
+          fn();
+        } finally {
+          batchDepth--;
+          if (batchDepth === 0) {
+            const pending = new Map(batchedChanges);
+            batchedChanges.clear();
+            for (const [field, { oldValue, newValue }] of pending) {
+              emitChange(field, oldValue, newValue);
+            }
+          }
+        }
+      };
+      return target[prop];
+    },
+    set(target, prop, value) {
+      const oldValue = target[prop];
+      if (oldValue === value) return true;  // shallow equality — skip
+      target[prop] = value;
+      if (batchDepth > 0) {
+        // Keep the original oldValue from before the batch started
+        const existing = batchedChanges.get(prop);
+        if (existing) {
+          existing.newValue = value;
+          // If batched back to original, remove from pending
+          if (existing.oldValue === value) batchedChanges.delete(prop);
+        } else {
+          batchedChanges.set(prop, { oldValue, newValue: value });
+        }
+      } else {
+        emitChange(prop, oldValue, value);
+      }
+      return true;
+    }
+  });
+
+  return proxy;
+}
+
+export const state = createReactiveState({
   adapter: null,
   file: null,
   pdfBytes: null,
@@ -64,7 +128,7 @@ export const state = {
   minimapEnabled: true,
   initComplete: false,
   diagnostics: { events: [], maxEvents: 500, sessionId: `nr-${Date.now().toString(36)}` },
-};
+});
 
 export const defaultHotkeys = {
   next: 'pagedown',

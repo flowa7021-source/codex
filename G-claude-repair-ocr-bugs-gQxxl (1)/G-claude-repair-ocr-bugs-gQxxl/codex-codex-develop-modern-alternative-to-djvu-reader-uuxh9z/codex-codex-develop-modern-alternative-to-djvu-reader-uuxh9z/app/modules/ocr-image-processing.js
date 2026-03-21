@@ -7,6 +7,24 @@ import { getOcrScale } from './settings-controller.js';
 import { preprocessForOcr } from './ocr-preprocess.js';
 import { analyzeTextDensity, computeOcrZoom, hasSmallText } from './ocr-adaptive-dpi.js';
 
+/**
+ * Create an off-screen canvas for OCR preprocessing.
+ * Uses OffscreenCanvas when available to move heavy pixel manipulation
+ * off the main thread; falls back to a regular DOM canvas otherwise.
+ * @param {number} width  - Canvas width in pixels
+ * @param {number} height - Canvas height in pixels
+ * @returns {HTMLCanvasElement|OffscreenCanvas}
+ */
+function createOcrCanvas(width, height) {
+  if (typeof OffscreenCanvas !== 'undefined') {
+    return new OffscreenCanvas(width, height);
+  }
+  const c = document.createElement('canvas');
+  c.width = width;
+  c.height = height;
+  return c;
+}
+
 export function getConfusableLatinToCyrillicMap() {
   return {
     A: 'А', a: 'а', B: 'В', E: 'Е', e: 'е', K: 'К', k: 'к', M: 'М', m: 'м',
@@ -255,9 +273,9 @@ export function rotateCanvas(source, angleDeg) {
   const sin = Math.abs(Math.sin(rad));
   const w = source.width;
   const h = source.height;
-  const out = document.createElement('canvas');
-  out.width = Math.max(1, Math.round((w * cos) + (h * sin)));
-  out.height = Math.max(1, Math.round((w * sin) + (h * cos)));
+  const outW = Math.max(1, Math.round((w * cos) + (h * sin)));
+  const outH = Math.max(1, Math.round((w * sin) + (h * cos)));
+  const out = createOcrCanvas(outW, outH);
   const ctx = out.getContext('2d');
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, out.width, out.height);
