@@ -276,24 +276,24 @@ export function runInWorker(fn, payload, transfer) {
     const worker = new Worker(url);
     const id = `inline-${++taskIdCounter}`;
 
+    let cleaned = false;
+    const cleanup = () => { if (cleaned) return; cleaned = true; worker.terminate(); URL.revokeObjectURL(url); };
+
     const timer = safeTimeout(() => {
-      worker.terminate();
-      URL.revokeObjectURL(url);
+      cleanup();
       reject(new Error('Inline worker timed out'));
     }, 30000);
 
     worker.onmessage = (e) => {
       clearSafeTimeout(timer);
-      worker.terminate();
-      URL.revokeObjectURL(url);
+      cleanup();
       if (e.data.error) reject(new Error(e.data.error));
       else resolve(e.data.result);
     };
 
     worker.onerror = (e) => {
       clearSafeTimeout(timer);
-      worker.terminate();
-      URL.revokeObjectURL(url);
+      cleanup();
       reject(new Error(e.message || 'Worker error'));
     };
 

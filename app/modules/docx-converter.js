@@ -54,7 +54,7 @@ function makeTextRun(run, opts = {}) {
     bold: opts.bold ?? run.bold,
     italics: opts.italic ?? run.italic,
     font: mappedFont,
-    size: Math.round(Math.min(opts.maxSize || 72, Math.max(opts.minSize || 8, run.fontSize)) * 2),
+    size: Math.min((opts.maxSize || 72) * 2, Math.max((opts.minSize || 8) * 2, Math.round(run.fontSize * 2))),
   };
 
   // Apply monospace-specific formatting: use Courier New and slightly smaller size
@@ -184,7 +184,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
             spacing: { before: 240, after: 120 },
             alignment: block.alignment || AlignmentType.LEFT,
           });
-          headingPara._blockY = block.y;
+          headingPara._blockY = block.y ?? Infinity;
           children.push(headingPara);
         } else if (block.type === 'paragraph') {
           const spacing = {};
@@ -216,7 +216,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
             spacing,
             alignment: block.alignment || AlignmentType.LEFT,
           });
-          para._blockY = block.y;
+          para._blockY = block.y ?? Infinity;
           children.push(para);
         } else if (block.type === 'table') {
           children.push(buildDocxTable(block));

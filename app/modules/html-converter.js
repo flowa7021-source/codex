@@ -213,7 +213,7 @@ export function downloadHtml(htmlString, filename = 'document.html') {
   a.href = url;
   a.download = filename;
   a.click();
-  safeTimeout(() => URL.revokeObjectURL(url), 5000);
+  safeTimeout(() => URL.revokeObjectURL(url), 200);
 }
 
 function escapeHtml(str) {

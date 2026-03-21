@@ -120,10 +120,8 @@ export class XpsAdapter {
   }
 
   destroy() {
-    for (const url of this._imageCache.values()) {
-      if (typeof url === 'string' && url.startsWith('blob:')) {
-        URL.revokeObjectURL(url);
-      }
+    for (const img of this._imageCache.values()) {
+      if (img && img._blobUrl) URL.revokeObjectURL(img._blobUrl);
     }
     this._imageCache.clear();
     this.pages = [];
@@ -141,6 +139,7 @@ export class XpsAdapter {
       img.onerror = reject;
       img.src = url;
     });
+    img._blobUrl = url;
     this._imageCache.set(pageNum, img);
     return img;
   }

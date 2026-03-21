@@ -108,8 +108,8 @@ export class CbzAdapter {
    * Cleanup resources.
    */
   destroy() {
-    for (const [, url] of this._imageCache) {
-      if (typeof url === 'string') URL.revokeObjectURL(url);
+    for (const [, img] of this._imageCache) {
+      if (img && img._blobUrl) URL.revokeObjectURL(img._blobUrl);
     }
     this._imageCache.clear();
     this.pages = [];
@@ -118,7 +118,8 @@ export class CbzAdapter {
   /** @private */
   async _getImage(pageNum) {
     if (this._imageCache.has(pageNum)) {
-      return this._imageCache.get(pageNum);
+      const cached = this._imageCache.get(pageNum);
+      if (cached._blobUrl) return cached;
     }
 
     const page = this.pages[pageNum - 1];

@@ -61,6 +61,12 @@ export class ProgressiveLoader {
         const slice = file.slice(offset, end);
         const chunk = await slice.arrayBuffer();
 
+        // Validate chunk size matches expected length
+        const expectedLen = end - offset;
+        if (chunk.byteLength !== expectedLen) {
+          throw new Error(`Chunk size mismatch: expected ${expectedLen} bytes but got ${chunk.byteLength}`);
+        }
+
         // Copy directly into pre-allocated buffer (no intermediate array)
         combined.set(new Uint8Array(chunk), offset);
 

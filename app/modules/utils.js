@@ -53,5 +53,5 @@ export function downloadBlob(blob, filename) {
   a.href = url;
   a.download = filename;
   a.click();
-  URL.revokeObjectURL(url);
+  safeTimeout(() => URL.revokeObjectURL(url), 200);
 }
