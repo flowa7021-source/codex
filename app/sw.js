@@ -3,19 +3,14 @@
 const APP_CACHE = 'novareader-app-v1';
 const DOC_CACHE = 'novareader-docs-v1';
 
-// App shell resources to pre-cache on install
-const APP_SHELL = [
-  './',
-  './index.html',
-  './styles.css',
-  './app.js',
-  './manifest.json',
-];
+// App shell: cache index.html on install, other assets cached on first fetch
+// (Vite adds hashes to filenames, so we can't pre-cache them by name)
+const APP_SHELL = ['./', './index.html'];
 
 // ── Install: pre-cache app shell ────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(APP_CACHE).then((cache) => cache.addAll(APP_SHELL))
+    caches.open(APP_CACHE).then((cache) => cache.addAll(APP_SHELL).catch(() => {}))
   );
   self.skipWaiting();
 });

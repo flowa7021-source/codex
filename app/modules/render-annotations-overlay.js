@@ -81,6 +81,7 @@ export function addWatermarkToPage(text, options = {}) {
     angle = -45,
   } = options;
 
+  if (!els.annotationCanvas) return;
   const ctx = els.annotationCanvas.getContext('2d');
   if (!ctx) return;
   const w = els.annotationCanvas.width;

@@ -14,6 +14,8 @@ const SALT_BYTES = 16;
  * @returns {Promise<CryptoKey>}
  */
 export async function deriveKey(passphrase, salt) {
+  if (!passphrase) throw new Error('Passphrase is required');
+  if (!salt || salt.length !== 16) throw new Error('Salt must be 16 bytes');
   const encoder = new TextEncoder();
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
