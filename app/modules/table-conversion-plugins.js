@@ -234,7 +234,7 @@ export class FinancialTablePlugin extends TableConversionPlugin {
     if (!rows.length) return null;
 
     const converted = rows.map((row, ri) => {
-      const cells = (row.cells || []).map((cell, ci) => {
+      const cells = (row.cells || []).map((cell, _ci) => {
         const txt = normCell(cell);
         const isNumber = isNumericValue(txt) || isCurrencyValue(txt);
         const isSubtotal = SUBTOTAL_RE.test(txt);
@@ -393,12 +393,11 @@ export class TimetablePlugin extends TableConversionPlugin {
     // Check if header row has day names or time slots
     let dayCount = 0;
     let timeCount = 0;
-    let periodCount = 0;
 
     for (const h of headerCells) {
       if (DAY_RE.test(h)) dayCount++;
       if (TIME_RE.test(h)) timeCount++;
-      if (PERIOD_RE.test(h)) periodCount++;
+      if (PERIOD_RE.test(h)) timeCount++; // period patterns count toward time
     }
 
     // Also check first column for time slots
