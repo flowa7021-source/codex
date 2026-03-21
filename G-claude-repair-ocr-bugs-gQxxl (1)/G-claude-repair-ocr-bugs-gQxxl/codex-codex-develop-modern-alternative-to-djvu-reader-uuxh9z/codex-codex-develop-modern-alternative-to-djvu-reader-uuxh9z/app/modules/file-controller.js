@@ -253,7 +253,17 @@ const _openFileImpl = async function openFileImpl(file) {
     try {
       const DjVu = await ensureDjVuJs();
       const data = await progressiveLoader.loadFileProgressive(file);
-      const doc = new DjVu.Document(data);
+      // Wrap synchronous DjVu parsing in a macrotask so the UI can update
+      // before the potentially heavy Document constructor runs.
+      const doc = await new Promise((resolve, reject) => {
+        setTimeout(() => {
+          try {
+            resolve(new DjVu.Document(data));
+          } catch (err) {
+            reject(err);
+          }
+        }, 0);
+      });
       state.adapter = new _deps.DjVuNativeAdapter(doc, file.name);
       openedByNative = true;
       els.searchStatus.textContent = 'DjVu файл открыт встроенным runtime.';

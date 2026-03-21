@@ -1,6 +1,8 @@
 // ─── Context Menu System ────────────────────────────────────────────────────
 // Custom right-click context menus for the viewer, annotations, and thumbnails.
 
+import { addWord } from './ocr-user-dictionary.js';
+
 let menuEl = null;
 
 function ensureMenu() {
@@ -138,6 +140,27 @@ export function initContextMenu() {
 /** Build context items based on what was right-clicked */
 function buildContextItems(target) {
   const items = [];
+
+  // OCR text layer — right-click on a word span to correct it
+  const textLayerSpan = target.closest('#textLayerDiv > span');
+  if (textLayerSpan && textLayerSpan.textContent.trim()) {
+    const originalWord = textLayerSpan.textContent.trim();
+    items.push({
+      label: `Исправить «${originalWord.length > 20 ? originalWord.slice(0, 20) + '…' : originalWord}»`,
+      action: () => {
+        const corrected = prompt(
+          `Введите правильное написание для «${originalWord}»:`,
+          originalWord
+        );
+        if (corrected != null && corrected.trim() && corrected.trim() !== originalWord) {
+          addWord(originalWord, corrected.trim());
+          // Update the span in-place for immediate visual feedback
+          textLayerSpan.textContent = corrected.trim();
+        }
+      },
+    });
+    items.push({ separator: true });
+  }
 
   // Viewer canvas area
   if (target.closest('#canvasStack, .document-viewport')) {

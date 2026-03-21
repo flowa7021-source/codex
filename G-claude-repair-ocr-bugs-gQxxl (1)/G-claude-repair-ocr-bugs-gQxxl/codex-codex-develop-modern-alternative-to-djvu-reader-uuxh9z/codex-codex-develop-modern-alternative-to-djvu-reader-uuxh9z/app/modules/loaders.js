@@ -5,6 +5,12 @@ let djvuLib = null;
 let pdfLoadPromise = null;
 let djvuLoadPromise = null;
 
+/**
+ * Lazily load PDF.js and its worker. The worker is only fetched when the
+ * first PDF is actually opened (i.e. when this function is first called).
+ * Subsequent calls return the cached module immediately.
+ * @returns {Promise<object>} The loaded pdfjsLib module
+ */
 export async function ensurePdfJs() {
   if (pdfjsLib) return pdfjsLib;
   if (pdfLoadPromise) return pdfLoadPromise;
@@ -13,11 +19,19 @@ export async function ensurePdfJs() {
   const localWorkerUrl = new URL('../vendor/pdf.worker.min.mjs', import.meta.url).href;
 
   pdfLoadPromise = (async () => {
+    const t0 = performance.now();
     try {
       pdfjsLib = await import(localPdfUrl);
       if (pdfjsLib?.GlobalWorkerOptions) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = localWorkerUrl;
       }
+      const elapsed = Math.round(performance.now() - t0);
+      console.info(`[loaders] PDF.js worker init took ${elapsed}ms`);
+      try {
+        // Push timing to diagnostics if available (non-critical)
+        const { pushDiagnosticEvent } = await import('./diagnostics.js');
+        pushDiagnosticEvent('pdfjs.worker.init', { durationMs: elapsed });
+      } catch (_) { /* diagnostics not available */ }
       return pdfjsLib;
     } catch (err) {
       console.warn('[loaders] error:', err?.message);
@@ -32,6 +46,24 @@ export async function ensurePdfJs() {
 /** Get the loaded pdfjsLib reference (null if not yet loaded) */
 export function getPdfjsLib() {
   return pdfjsLib;
+}
+
+/**
+ * Preload the PDF.js runtime during browser idle time.
+ * Call this during application startup to warm up the PDF worker
+ * so it is ready when the user opens their first PDF.
+ * Uses `requestIdleCallback` with a fallback to `setTimeout`.
+ */
+export function preloadPdfRuntime() {
+  const scheduleIdle = typeof requestIdleCallback === 'function'
+    ? requestIdleCallback
+    : (cb) => setTimeout(cb, 200);
+
+  scheduleIdle(() => {
+    ensurePdfJs().catch((err) => {
+      console.warn('[loaders] PDF.js preload failed:', err?.message);
+    });
+  });
 }
 
 export async function ensureDjVuJs() {

@@ -194,6 +194,11 @@ function applyTheme(theme) {
   else if (theme === 'high-contrast') document.body.classList.add('high-contrast');
   else if (theme === 'auto') document.body.classList.add('theme-auto');
   // 'dark' is the default — no class needed
+
+  // Set data-theme attribute on <html> for CSS custom property theming
+  const effectiveTheme = (theme === 'light' || theme === 'sepia') ? 'light' : 'dark';
+  document.documentElement.dataset.theme = effectiveTheme;
+
   localStorage.setItem('novareader-theme', theme);
 }
 

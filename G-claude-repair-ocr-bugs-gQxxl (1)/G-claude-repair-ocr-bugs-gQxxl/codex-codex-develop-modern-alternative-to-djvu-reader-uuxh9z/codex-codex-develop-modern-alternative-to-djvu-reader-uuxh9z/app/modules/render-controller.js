@@ -17,6 +17,8 @@ import { loadOcrTextData } from './workspace-controller.js';
 import { setPageEdits, persistEdits } from './export-controller.js';
 import { blockEditor } from './pdf-advanced-edit.js';
 import { addSignatureToPdf } from './pdf-operations.js';
+import { renderConfidenceOverlay } from './ocr-confidence-map.js';
+import { shouldUseTileRendering, renderTiles, invalidateTiles } from './tile-renderer.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // Injected from app.js to avoid circular imports.
@@ -197,9 +199,17 @@ export async function renderCurrentPage() {
     canvasWrap.appendChild(skeleton);
   }
 
-  // ── Full render ──
+  // ── Full render (with tile-based fallback for very large pages) ──
   try {
-    await state.adapter.renderPage(page, els.canvas, { zoom, rotation });
+    // Check if tile rendering is needed for this page at the current zoom/dpr
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const previewViewport = await state.adapter.getPageViewport(page, zoom * dpr, rotation);
+    if (shouldUseTileRendering(previewViewport)) {
+      invalidateTiles();
+      await renderTiles(state.adapter, page, els.canvas, { zoom, rotation }, els.canvasWrap);
+    } else {
+      await state.adapter.renderPage(page, els.canvas, { zoom, rotation });
+    }
   } catch (err) {
     if (skeleton) skeleton.remove();
     if (err?.name === 'RenderingCancelledException' || err?.message?.includes('Rendering cancelled')) return;
@@ -496,6 +506,14 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
   }
 
   container.appendChild(fragment);
+
+  // ── Render confidence overlay if enabled ──
+  if (state.ocrConfidenceMode && sortedWords.length) {
+    const annotCanvas = els.annotationCanvas;
+    if (annotCanvas) {
+      renderConfidenceOverlay(sortedWords, annotCanvas, displayW, displayH);
+    }
+  }
 }
 
 // ─── Inline Text Editor (Acrobat-style) ────────────────────────────────────

@@ -376,8 +376,24 @@ export class DjVuNativeAdapter {
     this.fileName = fileName;
     this.type = 'djvu';
     this.mode = 'native';
-    this.pageSizes = Array.isArray(doc?.getPagesSizes?.()) ? doc.getPagesSizes() : [];
-    this.pageCount = Number(doc?.getPagesQuantity?.() || this.pageSizes.length || 1);
+    // Get page count first (cheap — reads DIRM header only)
+    this.pageCount = Number(doc?.getPagesQuantity?.() || 1);
+    // Defer expensive getPagesSizes() — it decompresses every page.
+    // We'll lazily populate sizes on first getPageViewport() call.
+    this._pageSizesLoaded = false;
+    this.pageSizes = [];
+  }
+
+  _ensurePageSizes() {
+    if (this._pageSizesLoaded) return;
+    try {
+      const sizes = this.doc?.getPagesSizes?.();
+      this.pageSizes = Array.isArray(sizes) ? sizes : [];
+    } catch (err) {
+      console.warn('[DjVuNativeAdapter] getPagesSizes failed:', err?.message);
+      this.pageSizes = [];
+    }
+    this._pageSizesLoaded = true;
   }
 
   getPageCount() {
@@ -385,6 +401,7 @@ export class DjVuNativeAdapter {
   }
 
   async getPageViewport(pageNumber, scale, rotation) {
+    this._ensurePageSizes();
     const size = this.pageSizes[pageNumber - 1] || {};
     const baseW = Number(size.width) > 0 ? Number(size.width) : 1200;
     const baseH = Number(size.height) > 0 ? Number(size.height) : 1600;
@@ -395,9 +412,26 @@ export class DjVuNativeAdapter {
   }
 
   async renderPage(pageNumber, canvas, { zoom, rotation }) {
-    const page = await this.doc.getPage(pageNumber);
-    const imageData = page.getImageData(true);
-    page.reset?.();
+    let page, imageData;
+    try {
+      page = await this.doc.getPage(pageNumber);
+      imageData = page.getImageData(true);
+      page.reset?.();
+    } catch (err) {
+      // If page decompression fails, render a fallback placeholder
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.ceil(1200 * dpr);
+      canvas.height = Math.ceil(1600 * dpr);
+      canvas.style.width = '1200px';
+      canvas.style.height = '1600px';
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#10141b';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ff8b8b';
+      ctx.font = '20px sans-serif';
+      ctx.fillText(`Ошибка рендера страницы ${pageNumber}: ${err?.message || 'unknown'}`, 40, 80);
+      return;
+    }
 
     const tmp = document.createElement('canvas');
     tmp.width = imageData.width;

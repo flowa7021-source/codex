@@ -381,9 +381,7 @@ export function constrainOcrSourceCanvasPixels(canvas, maxPixels = OCR_SOURCE_MA
   const scale = Math.sqrt(limitPx / totalPx);
   const width = Math.max(1, Math.floor(canvas.width * scale));
   const height = Math.max(1, Math.floor(canvas.height * scale));
-  const out = document.createElement('canvas');
-  out.width = width;
-  out.height = height;
+  const out = createOcrCanvas(width, height);
   const ctx = out.getContext('2d');
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
@@ -451,11 +449,11 @@ export async function buildOcrSourceCanvas(pageNumber) {
     });
   }
 
-  const canvas = document.createElement('canvas');
+  const canvas = createOcrCanvas(1, 1);
   // Use adaptive DPI: render a small probe first, analyze text density, then render at optimal zoom
   let adaptiveZoom = state.settings?.ocrQualityMode === 'accurate' ? 1.7 : 1.35;
   try {
-    const probeCanvas = document.createElement('canvas');
+    const probeCanvas = createOcrCanvas(1, 1);
     await state.adapter.renderPage(pageNumber, probeCanvas, { zoom: 1.0, rotation: state.rotation || 0 });
     const analysis = analyzeTextDensity(probeCanvas);
     adaptiveZoom = computeOcrZoom(probeCanvas.width, probeCanvas.height, analysis, OCR_SOURCE_MAX_PIXELS);
@@ -509,15 +507,12 @@ export function cropCanvasByRelativeRect(sourceCanvas, relativeRect) {
   const sy = Math.max(0, Math.floor(sourceCanvas.height * relativeRect.y));
   const sw = Math.max(1, Math.floor(sourceCanvas.width * relativeRect.w));
   const sh = Math.max(1, Math.floor(sourceCanvas.height * relativeRect.h));
-  const out = document.createElement('canvas');
-  out.width = sw;
-  out.height = sh;
+  const out = createOcrCanvas(sw, sh);
   out.getContext('2d').drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
   return out;
 }
 
 export function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean', invert = false, extraScale = 1) {
-  const canvas = document.createElement('canvas');
   const baseScale = getOcrScale() * Math.max(0.8, Math.min(1.8, extraScale));
   let targetWidth = Math.max(1, Math.floor(inputCanvas.width * baseScale));
   let targetHeight = Math.max(1, Math.floor(inputCanvas.height * baseScale));
@@ -531,8 +526,7 @@ export function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean
     targetHeight = Math.max(1, Math.floor(targetHeight * safeScale));
   }
 
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
+  const canvas = createOcrCanvas(targetWidth, targetHeight);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';

@@ -1,6 +1,8 @@
 // ─── OCR Post-Correction ────────────────────────────────────────────────────
 // Dictionary-based correction, n-gram analysis, paragraph structure recovery.
 
+import { applyUserDictionary } from './ocr-user-dictionary.js';
+
 const COMMON_OCR_SUBSTITUTIONS = [
   // Character-level confusions
   ['rn', 'm'], ['cl', 'd'], ['li', 'h'], ['vv', 'w'],
@@ -156,6 +158,9 @@ export function correctOcrText(text, dictionary, bigramFreqs = null, options = {
       });
     }
   }
+
+  // Apply user dictionary as the final correction step
+  corrected = applyUserDictionary(corrected);
 
   return { corrected, corrections };
 }

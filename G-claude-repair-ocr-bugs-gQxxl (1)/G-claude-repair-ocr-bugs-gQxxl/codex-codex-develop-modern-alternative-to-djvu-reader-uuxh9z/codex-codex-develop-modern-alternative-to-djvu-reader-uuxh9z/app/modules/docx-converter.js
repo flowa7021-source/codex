@@ -10,22 +10,57 @@ import {
   ShadingType, ExternalHyperlink,
 } from 'docx';
 
-import { extractStructuredContent } from './docx-structure-detector.js';
+import { extractStructuredContent, mapPdfFont, isMonospaceFont } from './docx-structure-detector.js';
 
 // Re-export structure detector functions for backwards compatibility
 export { extractStructuredContent, mapPdfFont, isBoldFont, isItalicFont, isMonospaceFont } from './docx-structure-detector.js';
+
+// ─── PDF→DOCX Font Mapping ──────────────────────────────────────────────────
+// Comprehensive mapping of common PDF font names to system/DOCX-safe fonts.
+// The canonical mapping lives in docx-structure-detector.js (mapPdfFont).
+// This constant provides a quick-reference subset used during TextRun creation.
+const PDF_TO_DOCX_FONT_MAP = {
+  'Helvetica': 'Arial',
+  'Helvetica-Bold': 'Arial',
+  'Helvetica-Oblique': 'Arial',
+  'Helvetica-BoldOblique': 'Arial',
+  'Times-Roman': 'Times New Roman',
+  'Times-Bold': 'Times New Roman',
+  'Times-Italic': 'Times New Roman',
+  'Times-BoldItalic': 'Times New Roman',
+  'Courier': 'Courier New',
+  'Courier-Bold': 'Courier New',
+  'Courier-Oblique': 'Courier New',
+  'Courier-BoldOblique': 'Courier New',
+  'Symbol': 'Symbol',
+  'ZapfDingbats': 'Wingdings',
+  'ArialMT': 'Arial',
+  'TimesNewRomanPSMT': 'Times New Roman',
+  'CourierNewPSMT': 'Courier New',
+  'Consolas': 'Consolas',
+};
 
 /**
  * Build a TextRun from a run object, with full formatting support.
  */
 function makeTextRun(run, opts = {}) {
+  // Map PDF font name to a DOCX-compatible system font
+  const rawFont = run.fontFamily || '';
+  const mappedFont = PDF_TO_DOCX_FONT_MAP[rawFont] || mapPdfFont(rawFont);
+  const mono = isMonospaceFont(rawFont);
+
   const props = {
     text: run.text,
     bold: opts.bold ?? run.bold,
     italics: opts.italic ?? run.italic,
-    font: run.fontFamily,
+    font: mappedFont,
     size: Math.round(Math.min(opts.maxSize || 72, Math.max(opts.minSize || 8, run.fontSize)) * 2),
   };
+
+  // Apply monospace-specific formatting: use Courier New and slightly smaller size
+  if (mono) {
+    props.font = 'Courier New';
+  }
   // Underline
   if (run.underline) {
     props.underline = { type: 'single' };
@@ -63,7 +98,8 @@ function makeRunsWithSpaces(runs, opts = {}) {
   for (let i = 0; i < runs.length; i++) {
     result.push(makeTextRun(runs[i], opts));
     if (i < runs.length - 1) {
-      result.push(new TextRun({ text: ' ', font: runs[i].fontFamily, size: Math.round(runs[i].fontSize * 2) }));
+      const spaceFont = PDF_TO_DOCX_FONT_MAP[runs[i].fontFamily] || mapPdfFont(runs[i].fontFamily || '');
+      result.push(new TextRun({ text: ' ', font: spaceFont, size: Math.round(runs[i].fontSize * 2) }));
     }
   }
   return result;
@@ -73,13 +109,14 @@ function makeRunsWithSpaces(runs, opts = {}) {
  * Build a hyperlink element for runs that have a url property.
  */
 function makeHyperlinkRun(run) {
+  const mappedFont = PDF_TO_DOCX_FONT_MAP[run.fontFamily] || mapPdfFont(run.fontFamily || '');
   return new ExternalHyperlink({
     children: [new TextRun({
       text: run.text,
       style: 'Hyperlink',
       color: '0563C1',
       underline: { type: 'single' },
-      font: run.fontFamily,
+      font: mappedFont,
       size: Math.round(run.fontSize * 2),
     })],
     link: run.url,
@@ -167,7 +204,8 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
                 paraChildren.push(makeTextRun(run));
               }
               if (i < block.runs.length - 1) {
-                paraChildren.push(new TextRun({ text: ' ', font: run.fontFamily, size: Math.round(run.fontSize * 2) }));
+                const spFont = PDF_TO_DOCX_FONT_MAP[run.fontFamily] || mapPdfFont(run.fontFamily || '');
+                paraChildren.push(new TextRun({ text: ' ', font: spFont, size: Math.round(run.fontSize * 2) }));
               }
             }
           }

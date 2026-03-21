@@ -1,5 +1,7 @@
 // ─── Performance Metrics, Worker Pool, Page Cache, Object URL Registry ──────
 
+import { reportBudgetViolation } from './perf-budgets.js';
+
 // ─── Phase 0: Performance Metrics Collector (p95) ──────────────────────────
 export const perfMetrics = {
   renderTimes: [],
@@ -14,6 +16,7 @@ export function recordPerfMetric(category, ms) {
   if (!arr) return;
   arr.push(ms);
   if (arr.length > perfMetrics.maxSamples) arr.shift();
+  reportBudgetViolation(category, ms);
 }
 
 export function computePercentile(arr, p) {
