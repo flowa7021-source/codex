@@ -288,6 +288,7 @@ export class SignaturePad {
   _initDrawCanvas() {
     if (!this._canvas) return;
     this._ctx = this._canvas.getContext('2d');
+    if (!this._ctx) return;
     this._ctx.lineCap   = 'round';
     this._ctx.lineJoin  = 'round';
     this._ctx.lineWidth = STROKE_WIDTH;
@@ -346,6 +347,7 @@ export class SignaturePad {
 
   _renderTypedPreview() {
     const ctx = this._typePreview.getContext('2d');
+    if (!ctx) return;
     ctx.clearRect(0, 0, PAD_WIDTH, PAD_HEIGHT);
 
     if (!this._typedName) return;
@@ -362,6 +364,7 @@ export class SignaturePad {
     if (!this._imageData) return;
 
     const ctx  = this._imagePreview.getContext('2d');
+    if (!ctx) return;
     const blob = new Blob([this._imageData]);
     const url  = URL.createObjectURL(blob);
     const img  = new Image();
@@ -391,7 +394,7 @@ export class SignaturePad {
     if (this._mode === 'image') {
       this._imageData = null;
       const ctx = this._imagePreview.getContext('2d');
-      ctx.clearRect(0, 0, PAD_WIDTH, PAD_HEIGHT);
+      if (ctx) ctx.clearRect(0, 0, PAD_WIDTH, PAD_HEIGHT);
     }
   }
 
@@ -434,6 +437,7 @@ export class SignaturePad {
  */
 function _trimCanvas(canvas) {
   const ctx  = canvas.getContext('2d');
+  if (!ctx) return canvas;
   const w    = canvas.width;
   const h    = canvas.height;
   const data = ctx.getImageData(0, 0, w, h).data;
@@ -470,6 +474,8 @@ function _trimCanvas(canvas) {
   const out = document.createElement('canvas');
   out.width  = trimW + pad * 2;
   out.height = trimH + pad * 2;
-  out.getContext('2d').drawImage(canvas, left, top, trimW, trimH, pad, pad, trimW, trimH);
+  const outCtx = out.getContext('2d');
+  if (!outCtx) return out;
+  outCtx.drawImage(canvas, left, top, trimW, trimH, pad, pad, trimW, trimH);
   return out;
 }

@@ -186,7 +186,9 @@ export class PresentationMode {
     display.width  = Math.round(canvas.width  * scale);
     display.height = Math.round(canvas.height * scale);
     display.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain';
-    display.getContext('2d').drawImage(canvas, 0, 0, display.width, display.height);
+    const displayCtx = display.getContext('2d');
+    if (!displayCtx) return;
+    displayCtx.drawImage(canvas, 0, 0, display.width, display.height);
 
     const transConfig = TRANSITIONS[transition] ?? TRANSITIONS.none;
 

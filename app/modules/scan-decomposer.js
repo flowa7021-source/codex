@@ -226,6 +226,7 @@ export async function decomposeScannedPage(pageImage, ocrResult, pageWidthPt, pa
   canvas.width  = imgEl.naturalWidth;
   canvas.height = imgEl.naturalHeight;
   const ctx = canvas.getContext('2d');
+  if (!ctx) return [];
   ctx.drawImage(imgEl, 0, 0);
 
   // Scale factors: OCR bboxes are in image pixels; we need them in both

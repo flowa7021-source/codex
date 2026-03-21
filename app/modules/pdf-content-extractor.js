@@ -457,6 +457,7 @@ async function processOperatorList(opList, pdfPage, viewport) {
           canvas.width = w;
           canvas.height = h;
           const ctx = canvas.getContext('2d');
+          if (!ctx) return null;
           const idata = ctx.createImageData(w, h);
 
           // Handle both RGB and RGBA data

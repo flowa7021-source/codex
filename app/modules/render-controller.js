@@ -432,6 +432,7 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
 
   const measureCanvas = document.createElement('canvas');
   const measureCtx = measureCanvas.getContext('2d');
+  if (!measureCtx) return;
 
   // Sort words into reading order
   const sortedWords = [...words].filter(w => w.text && w.bbox).sort((a, b) => {
@@ -913,6 +914,7 @@ export function addWatermarkToPage(text, options = {}) {
   } = options;
 
   const ctx = els.annotationCanvas.getContext('2d');
+  if (!ctx) return;
   const w = els.annotationCanvas.width;
   const h = els.annotationCanvas.height;
   const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -942,6 +944,7 @@ export function addStampToPage(stampType) {
 
   const stamp = stamps[stampType] || stamps.approved;
   const ctx = els.annotationCanvas.getContext('2d');
+  if (!ctx) return;
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const w = els.annotationCanvas.width;
 
@@ -982,6 +985,7 @@ export function openSignaturePad() {
   sigCanvas.style.cssText = 'border:1px solid #ccc;border-radius:4px;cursor:crosshair;display:block;background:white;';
 
   const sigCtx = sigCanvas.getContext('2d');
+  if (!sigCtx) return;
   sigCtx.lineWidth = 2;
   sigCtx.lineCap = 'round';
   sigCtx.lineJoin = 'round';

@@ -231,6 +231,7 @@ function cachePageResult(key, canvas) {
 
   try {
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     pageCache.set(key, { imageData, width: canvas.width, height: canvas.height });
   } catch (err) { console.warn('[render-pipeline] error:', err?.message); }
@@ -240,6 +241,7 @@ function blitToCanvas(canvas, cached) {
   canvas.width = cached.width;
   canvas.height = cached.height;
   const ctx = canvas.getContext('2d');
+  if (!ctx) return;
   ctx.putImageData(cached.imageData, 0, 0);
 }
 
@@ -251,5 +253,6 @@ function updateAnnotationCanvasSize(annotationCanvas, mainCanvas) {
   annotationCanvas.style.height = `${rect.height}px`;
 
   const ctx = annotationCanvas.getContext('2d');
+  if (!ctx) return;
   ctx.scale(DPR, DPR);
 }

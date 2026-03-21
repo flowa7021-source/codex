@@ -141,6 +141,7 @@ export function renderNupSheet(pageCanvases, perSheet, borders = false) {
   canvas.width = sheetWidth;
   canvas.height = sheetHeight;
   const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, sheetWidth, sheetHeight);
 

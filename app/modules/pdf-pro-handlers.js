@@ -356,6 +356,7 @@ export function initPdfProHandlers() {
               canvas.height = vp.height;
               canvas.style.cssText = 'max-width:100%;height:auto;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,0.15);';
               const ctx = canvas.getContext('2d');
+              if (!ctx) return canvas;
               ctx.fillStyle = '#fff';
               ctx.fillRect(0, 0, canvas.width, canvas.height);
               await page.render({ canvasContext: ctx, viewport: vp }).promise;

@@ -186,10 +186,25 @@ export function openSettingsModal() {
   if (typeof _deps.refreshOcrStorageInfo === 'function') _deps.refreshOcrStorageInfo();
 }
 
-export function closeSettingsModal() {
+export function closeSettingsModal(saved = false) {
   if (!els.settingsModal) return;
   els.settingsModal.classList.remove('open');
   els.settingsModal.setAttribute('aria-hidden', 'true');
+
+  // Remove zone highlight indicators
+  document.body.classList.remove('settings-modal-open');
+
+  // Tear down live-preview listeners
+  if (_previewAbort) { _previewAbort.abort(); _previewAbort = null; }
+
+  // If modal closed without saving, revert to snapshot
+  if (!saved && _settingsSnapshot?.settings) {
+    state.settings = _settingsSnapshot.settings;
+  }
+  _settingsSnapshot = null;
+
+  // Re-apply persisted settings and add smooth transition
+  if (typeof _deps.applyLayoutWithTransition === 'function') _deps.applyLayoutWithTransition();
   _deps.applyUiSizeSettings();
 }
 
@@ -260,9 +275,28 @@ export function saveSettingsFromModal() {
   });
 
   _deps.saveAppSettings();
+  if (typeof _deps.applyLayoutWithTransition === 'function') _deps.applyLayoutWithTransition();
   _deps.applyUiSizeSettings();
   applyAppLanguage();
   _deps.applyLayoutState();
   applySectionVisibilitySettings();
-  closeSettingsModal();
+  closeSettingsModal(true);
+}
+
+/**
+ * Reset all UI size settings to defaults and update the modal inputs accordingly.
+ */
+export function resetUiSizeToDefaults() {
+  if (!_deps.defaultSettings) return;
+  const defaults = _deps.defaultSettings();
+  if (els.cfgSidebarWidth) els.cfgSidebarWidth.value = String(defaults.uiSidebarWidth);
+  if (els.cfgToolbarScale) els.cfgToolbarScale.value = String(Math.round((defaults.uiToolbarScale || 1) * 100));
+  if (els.cfgTextMinHeight) els.cfgTextMinHeight.value = String(defaults.uiTextMinHeight);
+  if (els.cfgPageAreaHeight) els.cfgPageAreaHeight.value = String(defaults.uiPageAreaPx);
+  if (els.cfgTopToolbarHeight) els.cfgTopToolbarHeight.value = String(defaults.uiToolbarTopPx);
+  if (els.cfgBottomToolbarHeight) els.cfgBottomToolbarHeight.value = String(defaults.uiToolbarBottomPx);
+  if (els.cfgTextPanelHeight) els.cfgTextPanelHeight.value = String(defaults.uiTextPanelPx);
+  if (els.cfgAnnotationCanvasScale) els.cfgAnnotationCanvasScale.value = String(defaults.uiAnnotationCanvasScale);
+  // Immediately preview defaults
+  previewUiSizeFromModal();
 }

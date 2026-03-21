@@ -166,6 +166,7 @@ export class FontWidthProvider {
       this._measureCanvas = document.createElement('canvas');
       this._measureCtx = this._measureCanvas.getContext('2d');
     }
+    if (!this._measureCtx) return 0;
     this._measureCtx.font = `${fontSize}px "${fontFamily}"`;
     return this._measureCtx.measureText(text).width;
   }
@@ -392,6 +393,7 @@ function _getSharedCtx() {
   if (!_sharedCtx) {
     _sharedCanvas = document.createElement('canvas');
     _sharedCtx = _sharedCanvas.getContext('2d');
+    if (!_sharedCtx) return null;
   }
   return _sharedCtx;
 }
