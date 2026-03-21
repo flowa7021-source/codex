@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Safe Timers ────────────────────────────────────────────────────────────
 // Timer registry that tracks all setTimeout/setInterval calls and provides
 // bulk cleanup to prevent timer leaks on document close or page navigation.
@@ -20,10 +21,10 @@ const _intervals = new Map();
  */
 export function safeTimeout(fn, ms, opts) {
   const scope = opts?.scope || 'document';
-  const id = setTimeout(() => {
+  const id = /** @type {number} */ (/** @type {unknown} */ (setTimeout(() => {
     _timeouts.delete(id);
     fn();
-  }, ms);
+  }, ms)));
   _timeouts.set(id, scope);
   return id;
 }
@@ -37,7 +38,7 @@ export function safeTimeout(fn, ms, opts) {
  */
 export function safeInterval(fn, ms, opts) {
   const scope = opts?.scope || 'document';
-  const id = setInterval(fn, ms);
+  const id = /** @type {number} */ (/** @type {unknown} */ (setInterval(fn, ms)));
   _intervals.set(id, scope);
   return id;
 }

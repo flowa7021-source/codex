@@ -1,7 +1,13 @@
+// @ts-check
 // ─── Utility helpers ────────────────────────────────────────────────────────
 
 import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
+/**
+ * @param {Function} fn
+ * @param {number} ms
+ * @returns {(...args: any[]) => void}
+ */
 export function throttle(fn, ms) {
   let last = 0;
   let timer = null;
@@ -22,6 +28,11 @@ export function throttle(fn, ms) {
   };
 }
 
+/**
+ * @param {Function} fn
+ * @param {number} ms
+ * @returns {(...args: any[]) => void}
+ */
 export function debounce(fn, ms) {
   let timer = null;
   return function (...args) {
@@ -30,6 +41,10 @@ export function debounce(fn, ms) {
   };
 }
 
+/**
+ * @param {number} [timeoutMs]
+ * @returns {Promise<void>}
+ */
 export async function yieldToMainThread(timeoutMs = 20) {
   if (typeof window.requestIdleCallback === 'function') {
     await new Promise((resolve) => window.requestIdleCallback(() => resolve(), { timeout: timeoutMs }));
@@ -38,6 +53,10 @@ export async function yieldToMainThread(timeoutMs = 20) {
   await new Promise((resolve) => safeTimeout(resolve, 0));
 }
 
+/**
+ * @param {string} url
+ * @returns {Promise<HTMLImageElement>}
+ */
 export function loadImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -47,6 +66,10 @@ export function loadImage(url) {
   });
 }
 
+/**
+ * @param {Blob} blob
+ * @param {string} filename
+ */
 export function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

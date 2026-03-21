@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Event Bus ──────────────────────────────────────────────────────────────
 // Decoupled inter-module communication. Modules emit events; others subscribe.
 // This replaces direct function calls between unrelated modules.
@@ -5,7 +6,7 @@
 /** @type {EventTarget} */
 const _bus = new EventTarget();
 
-/** @type {Array<{event: string, wrapper: Function}>} */
+/** @type {Array<{event: string, wrapper: EventListener}>} */
 let _listeners = [];
 
 /**

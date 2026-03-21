@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Toast Notification System ──────────────────────────────────────────────
 // Types: success, error, warning, info, progress
 // Auto-dismiss, stacking, click-to-dismiss, progress bar
@@ -7,8 +8,10 @@ import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 const MAX_TOASTS = 5;
 const DEFAULT_DURATION = 4000;
 
+/** @type {HTMLElement | null} */
 let container = null;
 let toastIdCounter = 0;
+/** @type {Map<string|number, {el: HTMLElement, timer: number|null, type: string}>} */
 const activeToasts = new Map();
 
 const ICONS = {
@@ -62,7 +65,7 @@ function evictOldest() {
  * @param {number} [opts.duration=4000] - Auto-dismiss ms (0 = manual only)
  * @param {number} [opts.progress] - 0-100, shows progress bar
  * @param {string} [opts.id] - Custom ID to update existing toast
- * @returns {{ id: number, update: Function, dismiss: Function }}
+ * @returns {{ id: string|number, update: Function, dismiss: Function }}
  */
 export function toast(message, opts = {}) {
   const {
@@ -99,7 +102,7 @@ export function toast(message, opts = {}) {
 
   el.querySelector('.toast-close').addEventListener('click', () => removeToast(id));
   el.addEventListener('click', (e) => {
-    if (!e.target.closest('.toast-close')) removeToast(id);
+    if (!(/** @type {HTMLElement} */ (e.target)).closest('.toast-close')) removeToast(id);
   });
 
   container.appendChild(el);
@@ -128,9 +131,9 @@ function updateToast(id, message, opts = {}) {
       wrap.className = 'toast-progress';
       wrap.innerHTML = '<div class="toast-progress-bar"></div>';
       entry.el.appendChild(wrap);
-      bar = wrap.firstChild;
+      bar = /** @type {HTMLElement} */ (wrap.firstChild);
     }
-    bar.style.width = `${opts.progress}%`;
+    /** @type {HTMLElement} */ (bar).style.width = `${opts.progress}%`;
   }
 
   if (opts.type && opts.type !== entry.type) {
