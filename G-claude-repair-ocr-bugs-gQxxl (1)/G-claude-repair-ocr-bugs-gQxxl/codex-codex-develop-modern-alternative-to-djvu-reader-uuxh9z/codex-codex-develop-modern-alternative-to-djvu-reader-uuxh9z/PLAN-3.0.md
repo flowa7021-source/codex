@@ -1053,7 +1053,7 @@ class PdfCreator {
 
   // Создание PDF из HTML
   async createFromHtml(html) {
-    // Electron: использовать webContents.printToPDF()
+    // Tauri/Browser: использовать window.print() или pdf-lib
   }
 
   // Пустой PDF для аннотаций

@@ -47,4 +47,4 @@
 
 ## Запуск
 - `python3 dev_server.py` → `http://localhost:4173/app/`
-- Или через Electron: `npm start`
+- Или через Tauri: `npm run tauri:dev`

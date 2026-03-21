@@ -1,5 +1,5 @@
 // ─── Modal Prompt ────────────────────────────────────────────────────────────
-// Async replacement for window.prompt() that works in Electron sandboxed renderer.
+// Async replacement for window.prompt() that works in sandboxed WebView environments.
 // Returns a Promise<string|null>.
 
 let _overlayEl = null;

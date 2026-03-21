@@ -105,5 +105,5 @@
   - endpoint `GET /api/health` для проверок запуска/мониторинга.
 
 - Desktop runtime (без сервера):
-  - `electron/main.js` загружает `app/index.html` напрямую из файловой системы;
-  - сборка Windows `.exe` выполняется через `electron-builder` (`package.json`).
+  - `src-tauri/src/lib.rs` — Rust backend (Tauri 2), загружает `app/index.html` через WebView2;
+  - сборка Windows `.exe`/`.msi` выполняется через `tauri build` (NSIS + MSI installer).

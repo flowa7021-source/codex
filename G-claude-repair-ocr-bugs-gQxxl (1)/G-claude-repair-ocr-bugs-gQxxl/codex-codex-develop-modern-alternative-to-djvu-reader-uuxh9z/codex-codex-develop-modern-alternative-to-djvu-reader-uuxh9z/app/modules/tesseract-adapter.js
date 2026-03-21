@@ -67,8 +67,8 @@ const LANG_MAP = {
 
 /**
  * Check if Tesseract.js files are available locally.
- * Handles file:// protocol (Electron) where HEAD requests and fetch may behave
- * differently than HTTP.
+ * Handles custom protocols (Tauri, file://) where HEAD requests and fetch may
+ * behave differently than HTTP.
  * @returns {Promise<boolean>}
  */
 export async function isTesseractAvailable() {

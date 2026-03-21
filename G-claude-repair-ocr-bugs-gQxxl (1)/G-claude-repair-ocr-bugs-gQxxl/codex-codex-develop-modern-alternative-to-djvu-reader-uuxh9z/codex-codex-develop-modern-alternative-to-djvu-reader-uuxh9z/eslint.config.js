@@ -3,7 +3,7 @@
 
 export default [
   {
-    files: ['app/**/*.js', 'electron/**/*.js'],
+    files: ['app/**/*.js', 'src-tauri/**/*.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -61,7 +61,7 @@ export default [
         BroadcastChannel: 'readonly',
         WebAssembly: 'readonly',
         cancelAnimationFrame: 'readonly',
-        // Node.js globals (for electron/tests)
+        // Node.js globals (for build scripts/tests)
         process: 'readonly',
         __dirname: 'readonly',
         __filename: 'readonly',

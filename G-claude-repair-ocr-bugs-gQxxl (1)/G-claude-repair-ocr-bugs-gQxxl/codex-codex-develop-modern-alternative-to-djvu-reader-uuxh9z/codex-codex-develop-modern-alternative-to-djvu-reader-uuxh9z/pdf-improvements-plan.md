@@ -74,7 +74,7 @@
 ```bash
 npm install docx
 ```
-Размер: ~300KB (browser bundle). MIT лицензия. Работает в browser/Electron.
+Размер: ~300KB (browser bundle). MIT лицензия. Работает в browser/Tauri.
 
 ### 1.2 Новая архитектура конвертера
 
@@ -513,4 +513,4 @@ navigator.clipboard.write([
 npm install docx pdf-lib @pdf-lib/fontkit
 ```
 
-Все три библиотеки — MIT лицензия, работают в browser/Electron, не требуют серверной стороны.
+Все три библиотеки — MIT лицензия, работают в browser/Tauri, не требуют серверной стороны.
