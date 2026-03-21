@@ -88,6 +88,7 @@ import { highlightCurrentPage as highlightThumbPage } from './modules/thumbnail-
 import { convertCurrentToPdf } from './modules/convert-to-pdf.js';
 import { initUiBlocks } from './modules/ui-init-blocks.js';
 import { initPhase2Modules } from './modules/app-init-phase2.js';
+import { bootstrapAdvancedTools } from './modules/integration-wiring.js';
 import { initPageOrganizerUI } from './modules/page-organizer-ui.js';
 import { initMinimap, updateMinimap, showMinimap, hideMinimap, toggleMinimap } from './modules/minimap.js';
 import { initCommandPalette, showCommandPalette, hideCommandPalette, registerCommand } from './modules/command-palette.js';
@@ -1379,6 +1380,27 @@ window._toast = { toast, toastSuccess, toastError, toastWarning, toastInfo, toas
 window._viewModes = { setViewMode, getCurrentMode, VIEW_MODES };
 
 initPhase2Modules({ renderCurrentPage, goToPage });
+
+// ─── Advanced Tools Bootstrap (Phase 0–8 + Pro modules) ─────────────────
+window._advancedToolsHandle = null;
+// Re-bootstraps when a new PDF is loaded (called from file-controller)
+window._bootstrapAdvancedTools = () => {
+  if (window._advancedToolsHandle) window._advancedToolsHandle.destroy();
+  window._advancedToolsHandle = bootstrapAdvancedTools({
+    container:     els.canvas?.parentElement ?? document.body,
+    toolbar:       document.querySelector('.tool-bar, .ribbon-toolbar, #mainToolbar'),
+    pdfLibDoc:     state.pdfLibDoc ?? null,
+    pdfBytes:      state.pdfBytes ?? null,
+    getPageCanvas: () => els.canvas,
+    getPageNum:    () => state.currentPage ?? 1,
+    reloadPage:    () => renderCurrentPage(),
+    onPdfModified: (bytes) => {
+      state.pdfBytes = bytes;
+      reloadPdfFromBytes(bytes);
+    },
+    eventBus:      window._eventBus ?? null,
+  });
+};
 
 // ─── Tab Manager Integration ──────────────────────────────────────────────
 const tabBarEl = document.getElementById('tabBarTabs');
