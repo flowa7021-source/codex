@@ -139,8 +139,6 @@ export async function openFile(providerId, fileId) {
     try {
       const envelope = _parseEncryptedEnvelope(data);
       if (envelope) {
-        // Re-derive key using the salt stored in the envelope
-        const key = await deriveKey('', _encryptionSalt); // use current key directly
         data = await decrypt({ iv: envelope.iv, ciphertext: envelope.ciphertext }, _encryptionKey);
       }
     } catch (err) {
