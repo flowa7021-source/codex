@@ -356,6 +356,18 @@ export function isCommandPaletteVisible() {
   return _visible;
 }
 
+/**
+ * Cleanup function that clears debounce timer and resets state.
+ */
+export function cleanupCommandPalette() {
+  if (_debounceTimer !== null) {
+    clearSafeTimeout(_debounceTimer);
+    _debounceTimer = null;
+  }
+  _visible = false;
+  _selectedIndex = 0;
+}
+
 // ─── Command Registry ───────────────────────────────────────────────────────
 
 export function registerCommand(cmd) {

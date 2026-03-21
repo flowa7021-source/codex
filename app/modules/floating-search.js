@@ -144,6 +144,9 @@ export function createFloatingSearch(callbacks = {}) {
   }
 
   function hide() {
+    clearSafeTimeout(searchDebounce);
+    searchDebounce = null;
+    if (!document.body.contains(panel)) return;
     panel.classList.remove('visible');
     state.visible = false;
     if (callbacks.onClose) callbacks.onClose();

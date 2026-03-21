@@ -240,6 +240,7 @@ function setupTablistKeyboard() {
   document.querySelectorAll('[role="tablist"]').forEach(tablist => {
     tablist.addEventListener('keydown', (e) => {
       const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+      if (tabs.length === 0) return;
       const current = tabs.indexOf(document.activeElement);
       if (current === -1) return;
 
@@ -263,15 +264,14 @@ function setupTablistKeyboard() {
   });
 }
 
-/** Escape key closes open modals and returns focus */
+/** Escape key closes open modals and returns focus (event delegation) */
 function setupModalEscape() {
-  document.querySelectorAll('.modal[role="dialog"]').forEach(modal => {
-    modal.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        modal.setAttribute('aria-hidden', 'true');
-        if (modal.style) modal.style.display = 'none';
-        modal.classList.remove('open');
-      }
-    });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const modal = e.target.closest('.modal[role="dialog"]');
+    if (!modal) return;
+    modal.setAttribute('aria-hidden', 'true');
+    if (modal.style) modal.style.display = 'none';
+    modal.classList.remove('open');
   });
 }

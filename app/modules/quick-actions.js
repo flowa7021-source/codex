@@ -4,7 +4,6 @@
 import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
 let actionBar = null;
-const hideTimeout = null;
 
 /**
  * @typedef {object} QuickAction
@@ -30,9 +29,16 @@ const DEFAULT_ACTIONS = [
  * @param {QuickAction[]} [options.actions] - Custom actions
  * @param {Function} [options.onAction] - Global action handler (id, text) => void
  */
+/** AbortController for global listeners, allows cleanup */
+let _quickActionsAbort = null;
+
 export function initQuickActions(options) {
   const { container, actions = DEFAULT_ACTIONS, onAction } = options;
   if (!container) return;
+
+  // Abort previous global listeners if re-initialized
+  if (_quickActionsAbort) _quickActionsAbort.abort();
+  _quickActionsAbort = new AbortController();
 
   // Create action bar element
   actionBar = document.createElement('div');
@@ -82,6 +88,7 @@ export function initQuickActions(options) {
     // Delay to allow selection to finalize
     clearSafeTimeout(selectionCheckTimer);
     selectionCheckTimer = safeTimeout(() => {
+      if (!document.body.contains(container)) return;
       checkSelection(container);
     }, 200);
   });
@@ -98,7 +105,7 @@ export function initQuickActions(options) {
   // Hide on Escape
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') hideQuickActions();
-  });
+  }, { signal: _quickActionsAbort.signal });
 }
 
 /**
@@ -125,8 +132,6 @@ function checkSelection(container) {
  */
 function showQuickActions(selection) {
   if (!actionBar) return;
-
-  clearSafeTimeout(hideTimeout);
 
   const range = selection.getRangeAt(0);
   const rect = range.getBoundingClientRect();

@@ -40,9 +40,14 @@ export function loadAppSettings() {
   try {
     const raw = localStorage.getItem(appSettingsKey());
     const parsed = raw ? JSON.parse(raw) : {};
-    state.settings = { ...defaultSettings(), ...(parsed || {}) };
-    state.settings.sidebarSections = { ...defaultSettings().sidebarSections, ...(state.settings.sidebarSections || {}) };
-    state.settings.toolbarSections = { ...defaultSettings().toolbarSections, ...(state.settings.toolbarSections || {}) };
+    const defaults = defaultSettings();
+    state.settings = { ...defaults, ...(parsed || {}) };
+    // Deep merge all nested objects so saved keys are merged with defaults
+    for (const key of Object.keys(defaults)) {
+      if (defaults[key] !== null && typeof defaults[key] === 'object' && !Array.isArray(defaults[key])) {
+        state.settings[key] = { ...defaults[key], ...(state.settings[key] || {}) };
+      }
+    }
   } catch (err) {
     console.warn('[settings-controller storage] error:', err?.message);
     state.settings = defaultSettings();
