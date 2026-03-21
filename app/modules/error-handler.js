@@ -102,7 +102,33 @@ export function reportError(error, extra = {}) {
  */
 export function classifyError(error) {
   const msg = (typeof error === 'string' ? error : error?.message || '').toLowerCase();
+  const errorName = (error instanceof Error ? error.name : '').toLowerCase();
+  const errorCode = (error instanceof Error && error.code ? String(error.code) : '').toLowerCase();
 
+  // Check error.name and error.code first for more robust classification
+  if (errorName === 'rangeerror' && (msg.includes('allocation') || msg.includes('memory'))) {
+    return { code: ERROR_CODES.MEMORY, message: msg, severity: 'fatal', recoverable: true };
+  }
+  if (errorName === 'typeerror' && (msg.includes('fetch') || msg.includes('network'))) {
+    return { code: ERROR_CODES.NETWORK, message: msg, severity: 'error', recoverable: true };
+  }
+  if (errorName === 'timeouterror' || errorCode === 'etimedout' || errorCode === 'timeout') {
+    return { code: ERROR_CODES.TIMEOUT, message: msg, severity: 'error', recoverable: true };
+  }
+  if (errorName === 'quotaexceedederror' || errorCode === 'quota_exceeded') {
+    return { code: ERROR_CODES.STORAGE, message: msg, severity: 'warning', recoverable: true };
+  }
+  if (errorName === 'securityerror' || errorName === 'notallowederror' || errorCode === 'eacces') {
+    return { code: ERROR_CODES.PERMISSION, message: msg, severity: 'error', recoverable: false };
+  }
+  if (errorName === 'syntaxerror' && !msg.includes('unexpected token')) {
+    return { code: ERROR_CODES.FILE_PARSE, message: msg, severity: 'error', recoverable: false };
+  }
+  if (errorCode === 'abort' || errorName === 'aborterror') {
+    return { code: ERROR_CODES.NETWORK, message: msg, severity: 'error', recoverable: true };
+  }
+
+  // Fall back to message string matching
   if (msg.includes('out of memory') || msg.includes('allocation')) {
     return { code: ERROR_CODES.MEMORY, message: msg, severity: 'fatal', recoverable: true };
   }
@@ -192,7 +218,7 @@ export function restoreStateSnapshot(key) {
 export async function withRetry(fn, options = {}) {
   const { maxRetries = 3, delays = RETRY_DELAYS, onRetry } = options;
 
-  let lastError;
+  let lastError = new Error('All retry attempts failed');
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn(attempt);

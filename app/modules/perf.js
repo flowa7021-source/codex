@@ -22,6 +22,8 @@ export function recordPerfMetric(category, ms) {
 export function computePercentile(arr, p) {
   if (!arr.length) return 0;
   const sorted = [...arr].sort((a, b) => a - b);
+  // For p=0.95 with 100 items: ceil(100*0.95)-1 = 94, i.e. the 95th percentile (0-indexed).
+  // Clamped to valid index range [0, length-1] for edge cases (p=0 or tiny arrays).
   const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * p) - 1));
   return sorted[idx];
 }
@@ -46,7 +48,7 @@ export function getPerfSummary() {
 // ─── Phase 1: Web Worker Pool ──────────────────────────────────────────────
 export const workerPool = {
   workers: [],
-  maxWorkers: Math.min(4, (navigator.hardwareConcurrency || 2)),
+  maxWorkers: Math.max(1, Math.min(4, navigator.hardwareConcurrency || 2)),
   taskQueue: [],
   activeCount: 0,
 };
@@ -190,6 +192,8 @@ export function cacheRenderedPage(pageNum, canvas, zoom, rotation) {
     evictPageFromCache(pageNum);
   }
   const pixels = canvas.width * canvas.height;
+  // LRU eviction: Map preserves insertion order, and getCachedPage() re-inserts
+  // on access, so the first key is always the least-recently-used entry.
   while (pageRenderCache.entries.size >= pageRenderCache.maxEntries ||
          pageRenderCache.totalPixels + pixels > pageRenderCache.maxTotalPixels) {
     const oldest = pageRenderCache.entries.keys().next().value;

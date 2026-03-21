@@ -23,7 +23,11 @@ export function emit(event, detail) {
 export function on(event, handler) {
   const wrapper = (e) => handler(e.detail);
   _bus.addEventListener(event, wrapper);
-  return () => _bus.removeEventListener(event, wrapper);
+  _listeners.push({ event, wrapper });
+  return () => {
+    _bus.removeEventListener(event, wrapper);
+    _listeners = _listeners.filter(l => l.wrapper !== wrapper);
+  };
 }
 
 /**
@@ -34,6 +38,7 @@ export function on(event, handler) {
 export function once(event, handler) {
   const wrapper = (e) => handler(e.detail);
   _bus.addEventListener(event, wrapper, { once: true });
+  _listeners.push({ event, wrapper });
 }
 
 /**
