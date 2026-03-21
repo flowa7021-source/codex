@@ -50,6 +50,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'pdf-lib': ['pdf-lib', '@pdf-lib/fontkit'],
+          'pdfjs': ['pdfjs-dist'],
           'docx': ['docx'],
           'fflate': ['fflate'],
           'tesseract': ['tesseract.js'],
@@ -73,7 +74,7 @@ export default defineConfig({
 
   optimizeDeps: {
     include: ['pdf-lib', 'docx'],
-    exclude: ['tesseract.js'],
+    exclude: ['tesseract.js', 'pdfjs-dist'],
   },
 
   define: {

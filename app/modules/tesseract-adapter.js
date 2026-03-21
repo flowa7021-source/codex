@@ -2,6 +2,17 @@
 // High-quality OCR engine adapter. Runs Tesseract.js entirely offline using
 // bundled WASM core and local traineddata files (no network calls).
 //
+// Import strategy:
+//   - The Tesseract.js ESM entry point is loaded from the `tesseract.js` npm
+//     package (node_modules/tesseract.js/dist/tesseract.esm.min.js).
+//   - The web-worker script is loaded from `tesseract.js` npm dist as well.
+//   - WASM core files come from the `tesseract.js-core` npm package
+//     (dependency of tesseract.js, installed in node_modules).
+//   - Language traineddata files remain in app/vendor/tesseract/lang-data
+//     since they are project-specific offline bundles not published to npm.
+//   - Vendor copies of the JS/WASM files are kept as offline fallback but are
+//     no longer the primary import path.
+//
 // Supports both single-worker mode (for on-demand page OCR) and parallel
 // scheduler mode (for background multi-page scanning).
 //
@@ -37,10 +48,11 @@ function resolveVendorPath(relativePath) {
   }
 }
 
+// Worker and WASM core resolved from npm packages; lang-data stays in vendor.
 const PATHS = {
-  workerJs: resolveVendorPath('../vendor/tesseract/worker.min.js'),
-  coreSimdLstm: resolveVendorPath('../vendor/tesseract/tesseract-core-simd-lstm.wasm.js'),
-  coreLstm: resolveVendorPath('../vendor/tesseract/tesseract-core-lstm.wasm.js'),
+  workerJs: resolveVendorPath('../../node_modules/tesseract.js/dist/worker.min.js'),
+  coreSimdLstm: resolveVendorPath('../../node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js'),
+  coreLstm: resolveVendorPath('../../node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js'),
   langDataDir: resolveVendorPath('../vendor/tesseract/lang-data'),
 };
 
@@ -115,7 +127,8 @@ export async function isTesseractAvailable() {
 let _tesseractModule = null;
 async function loadTesseractModule() {
   if (_tesseractModule) return _tesseractModule;
-  const esmPath = resolveVendorPath('../vendor/tesseract/tesseract.esm.min.js');
+  // Load Tesseract.js ESM entry from the npm package (resolved by Vite).
+  const esmPath = resolveVendorPath('../../node_modules/tesseract.js/dist/tesseract.esm.min.js');
   const mod = await import(/* webpackIgnore: true */ esmPath);
   // The ESM bundle wraps the CommonJS module as a default export:
   //   export { tesseract_min as default }

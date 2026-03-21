@@ -1,4 +1,16 @@
 // ─── Library Loaders ────────────────────────────────────────────────────────
+//
+// Import strategy:
+//   - PDF.js: loaded from the `pdfjs-dist` npm package (node_modules). The
+//     worker is resolved via pdfjs-dist as well. Vendor files under
+//     app/vendor/pdf.*.mjs are kept as an offline fallback but are no longer
+//     the primary import path.
+//   - DjVu.js: loaded from app/vendor/djvu.js (script-tag injection). The
+//     `djvujs-dist` npm package ships only unbuilt source, so there is no
+//     viable npm import — we keep the vendor bundle.
+//   - Tesseract.js: loaded from the `tesseract.js` npm package via
+//     tesseract-adapter.js. WASM core and worker assets are resolved by
+//     Vite from node_modules/tesseract.js/dist/.
 
 import { safeTimeout } from './safe-timers.js';
 
@@ -17,15 +29,20 @@ export async function ensurePdfJs() {
   if (pdfjsLib) return pdfjsLib;
   if (pdfLoadPromise) return pdfLoadPromise;
 
-  const localPdfUrl = new URL('../vendor/pdf.min.mjs', import.meta.url).href;
-  const localWorkerUrl = new URL('../vendor/pdf.worker.min.mjs', import.meta.url).href;
+  // Worker URL resolved from the npm package (pdfjs-dist).
+  // Vite will bundle or serve this from node_modules.
+  const npmWorkerUrl = new URL(
+    '../../node_modules/pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url,
+  ).href;
 
   pdfLoadPromise = (async () => {
     const t0 = performance.now();
     try {
-      pdfjsLib = await import(localPdfUrl);
+      // Import PDF.js from the npm package instead of the vendor bundle.
+      pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
       if (pdfjsLib?.GlobalWorkerOptions) {
-        pdfjsLib.GlobalWorkerOptions.workerSrc = localWorkerUrl;
+        pdfjsLib.GlobalWorkerOptions.workerSrc = npmWorkerUrl;
       }
       const elapsed = Math.round(performance.now() - t0);
       console.info(`[loaders] PDF.js worker init took ${elapsed}ms`);
