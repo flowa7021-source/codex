@@ -9,6 +9,7 @@ import { yieldToMainThread } from './utils.js';
 import { getPerfSummary, pageRenderCache, objectUrlRegistry } from './perf.js';
 import { ensurePdfJs, ensureDjVuJs } from './loaders.js';
 import { isTesseractAvailable } from './tesseract-adapter.js';
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
 // ─── Ring Buffer Configuration ──────────────────────────────────────────────
 const LOG_STORAGE_KEY = 'novareader-activity-log';
@@ -51,7 +52,7 @@ function _loadPersistedLogs() {
 /** Persist log buffer to localStorage (debounced) */
 function _schedulePersist() {
   if (_persistTimer) return;
-  _persistTimer = setTimeout(() => {
+  _persistTimer = safeTimeout(() => {
     _persistTimer = null;
     try {
       localStorage.setItem(LOG_STORAGE_KEY, JSON.stringify(_logBuffer));
@@ -417,8 +418,8 @@ export function initLogViewer() {
   if (filterSearch) {
     let _searchTimer = null;
     filterSearch.addEventListener('input', () => {
-      clearTimeout(_searchTimer);
-      _searchTimer = setTimeout(renderLogViewer, 250);
+      clearSafeTimeout(_searchTimer);
+      _searchTimer = safeTimeout(renderLogViewer, 250);
     });
   }
 

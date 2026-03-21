@@ -1,24 +1,30 @@
 // ─── Safe Timers ────────────────────────────────────────────────────────────
 // Timer registry that tracks all setTimeout/setInterval calls and provides
 // bulk cleanup to prevent timer leaks on document close or page navigation.
+//
+// Scopes:
+//   'document' (default) — cleared on file open / document close
+//   'app'                — persists for the app lifetime, cleared only on full shutdown
 
-/** @type {Set<number>} Active timeout IDs */
-const _timeouts = new Set();
-/** @type {Set<number>} Active interval IDs */
-const _intervals = new Set();
+/** @type {Map<number, string>} timer ID → scope */
+const _timeouts = new Map();
+/** @type {Map<number, string>} timer ID → scope */
+const _intervals = new Map();
 
 /**
  * Create a tracked setTimeout. Automatically unregistered when it fires.
  * @param {Function} fn
  * @param {number} ms
+ * @param {{ scope?: 'document'|'app' }} [opts]
  * @returns {number} timer ID
  */
-export function safeTimeout(fn, ms) {
+export function safeTimeout(fn, ms, opts) {
+  const scope = opts?.scope || 'document';
   const id = setTimeout(() => {
     _timeouts.delete(id);
     fn();
   }, ms);
-  _timeouts.add(id);
+  _timeouts.set(id, scope);
   return id;
 }
 
@@ -26,11 +32,13 @@ export function safeTimeout(fn, ms) {
  * Create a tracked setInterval.
  * @param {Function} fn
  * @param {number} ms
+ * @param {{ scope?: 'document'|'app' }} [opts]
  * @returns {number} timer ID
  */
-export function safeInterval(fn, ms) {
+export function safeInterval(fn, ms, opts) {
+  const scope = opts?.scope || 'document';
   const id = setInterval(fn, ms);
-  _intervals.add(id);
+  _intervals.set(id, scope);
   return id;
 }
 
@@ -53,13 +61,24 @@ export function clearSafeInterval(id) {
 }
 
 /**
- * Clear ALL tracked timers. Call on document close / file open / cleanup.
+ * Clear tracked timers by scope.
+ * Default (no arg): clears 'document'-scoped timers (backward-compatible).
+ * Pass 'all' to clear everything including app-scoped timers.
+ * @param {'document'|'all'} [scope='document']
  */
-export function clearAllTimers() {
-  for (const id of _timeouts) clearTimeout(id);
-  _timeouts.clear();
-  for (const id of _intervals) clearInterval(id);
-  _intervals.clear();
+export function clearAllTimers(scope = 'document') {
+  for (const [id, s] of _timeouts) {
+    if (scope === 'all' || s === scope) {
+      clearTimeout(id);
+      _timeouts.delete(id);
+    }
+  }
+  for (const [id, s] of _intervals) {
+    if (scope === 'all' || s === scope) {
+      clearInterval(id);
+      _intervals.delete(id);
+    }
+  }
 }
 
 /**

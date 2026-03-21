@@ -1,6 +1,8 @@
 // ─── App Persistence ────────────────────────────────────────────────────────
 // Centralized state persistence: localStorage, session state, workspace bundles.
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 const STORAGE_PREFIX = 'nr3_';
 const MAX_RECENT_DOCS = 30;
 const VIEW_STATE_DEBOUNCE_MS = 500;
@@ -80,8 +82,8 @@ export function updateSetting(key, value) {
  */
 export function saveViewState(docName, state) {
   if (!docName) return;
-  clearTimeout(viewStateSaveTimer);
-  viewStateSaveTimer = setTimeout(() => {
+  clearSafeTimeout(viewStateSaveTimer);
+  viewStateSaveTimer = safeTimeout(() => {
     const viewStates = load('viewStates', {});
     viewStates[docName] = { ...state, savedAt: Date.now() };
 

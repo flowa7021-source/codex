@@ -1,6 +1,8 @@
 // ─── Batch Conversion System ────────────────────────────────────────────────
 // Multi-file conversion queue with progress tracking and ZIP output.
 
+import { safeTimeout } from './safe-timers.js';
+
 /**
  * @typedef {object} ConversionJob
  * @property {File} file
@@ -147,7 +149,7 @@ export class BatchConverter {
     a.href = url;
     a.download = zipFilename;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    safeTimeout(() => URL.revokeObjectURL(url), 5000);
   }
 }
 

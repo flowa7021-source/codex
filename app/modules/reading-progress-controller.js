@@ -5,6 +5,7 @@
 
 import { state, els } from './state.js';
 import { debounce } from './utils.js';
+import { safeInterval, clearSafeInterval } from './safe-timers.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
@@ -302,7 +303,7 @@ export function updateReadingTimeStatus() {
 
 export function stopReadingTimer(commit = true) {
   if (readingTimerId) {
-    clearInterval(readingTimerId);
+    clearSafeInterval(readingTimerId);
     readingTimerId = null;
   }
   if (state.readingStartedAt) {
@@ -320,7 +321,7 @@ export function startReadingTimer() {
 
   state.readingStartedAt = Date.now();
   if (!readingTimerId) {
-    readingTimerId = setInterval(updateReadingTimeStatus, 1000);
+    readingTimerId = safeInterval(updateReadingTimeStatus, 1000);
   }
   updateReadingTimeStatus();
 }

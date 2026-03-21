@@ -1,6 +1,8 @@
 // ─── Command Palette Module ─────────────────────────────────────────────────
 // VS Code-style Ctrl+K command palette for NovaReader 4.0
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 const STORAGE_KEY = 'novareader-recent-commands';
 const MAX_VISIBLE = 30;
 const MAX_RECENT = 10;
@@ -270,9 +272,9 @@ function executeCommand(cmd) {
 
 function onInput() {
   if (_debounceTimer !== null) {
-    clearTimeout(_debounceTimer);
+    clearSafeTimeout(_debounceTimer);
   }
-  _debounceTimer = setTimeout(() => {
+  _debounceTimer = safeTimeout(() => {
     _debounceTimer = null;
     const { input } = getElements();
     if (!input) return;
@@ -345,7 +347,7 @@ export function hideCommandPalette() {
   }
 
   if (_debounceTimer !== null) {
-    clearTimeout(_debounceTimer);
+    clearSafeTimeout(_debounceTimer);
     _debounceTimer = null;
   }
 }

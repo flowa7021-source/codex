@@ -23,6 +23,8 @@
  *   pres.start();
  */
 
+import { safeTimeout, clearSafeTimeout, safeInterval, clearSafeInterval } from './safe-timers.js';
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -201,7 +203,7 @@ export class PresentationMode {
         display.style.opacity = '1';
         old.style.transition = `opacity ${transConfig.duration}ms ease`;
         old.style.opacity    = '0';
-        setTimeout(() => old.remove(), transConfig.duration);
+        safeTimeout(() => old.remove(), transConfig.duration);
       } else if (transition === 'slide') {
         display.style.transform  = 'translateX(100%)';
         display.style.transition = `transform ${transConfig.duration}ms ease`;
@@ -210,7 +212,7 @@ export class PresentationMode {
         display.style.transform = 'translateX(0)';
         old.style.transition    = `transform ${transConfig.duration}ms ease`;
         old.style.transform     = 'translateX(-100%)';
-        setTimeout(() => old.remove(), transConfig.duration);
+        safeTimeout(() => old.remove(), transConfig.duration);
       }
     } else {
       this._slideContainer.innerHTML = '';
@@ -224,7 +226,7 @@ export class PresentationMode {
 
   _startAutoAdvance() {
     if (this._autoAdvance <= 0) return;
-    this._autoTimer = setInterval(() => {
+    this._autoTimer = safeInterval(() => {
       if (this._currentPage < this._totalPages) {
         this.goToPage(this._currentPage + 1);
       } else {
@@ -235,7 +237,7 @@ export class PresentationMode {
 
   _stopAutoAdvance() {
     if (this._autoTimer) {
-      clearInterval(this._autoTimer);
+      clearSafeInterval(this._autoTimer);
       this._autoTimer = null;
     }
   }
@@ -311,8 +313,8 @@ export class PresentationMode {
 
     // Show cursor briefly
     this._overlay.style.cursor = 'default';
-    clearTimeout(this._cursorTimer);
-    this._cursorTimer = setTimeout(() => {
+    clearSafeTimeout(this._cursorTimer);
+    this._cursorTimer = safeTimeout(() => {
       if (this._overlay) this._overlay.style.cursor = 'none';
     }, 2000);
   }

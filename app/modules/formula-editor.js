@@ -21,6 +21,7 @@
  */
 
 import { PDFDocument } from 'pdf-lib';
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
 // ---------------------------------------------------------------------------
 // Rendering backends
@@ -283,7 +284,7 @@ export class FormulaEditor {
       this._overlay.remove();
       this._overlay = null;
     }
-    clearTimeout(this._debounceTimer);
+    clearSafeTimeout(this._debounceTimer);
   }
 
   on(event, handler) {
@@ -397,8 +398,8 @@ export class FormulaEditor {
   }
 
   _schedulePreview() {
-    clearTimeout(this._debounceTimer);
-    this._debounceTimer = setTimeout(() => this._updatePreview(), 400);
+    clearSafeTimeout(this._debounceTimer);
+    this._debounceTimer = safeTimeout(() => this._updatePreview(), 400);
   }
 
   async _updatePreview() {
@@ -416,7 +417,7 @@ export class FormulaEditor {
       const url  = URL.createObjectURL(blob);
       this._previewEl.innerHTML = `<img src="${url}" width="${width}" height="${height}" style="max-width:100%" alt="formula">`;
       // Revoke after display
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      safeTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (err) {
       this._previewEl.textContent = `Ошибка: ${err.message}`;
     }

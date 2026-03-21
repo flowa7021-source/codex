@@ -1,6 +1,8 @@
 // ─── PDF Print Module ───────────────────────────────────────────────────────
 // Advanced print dialog: page ranges, N-up, booklet, scaling.
 
+import { safeTimeout } from './safe-timers.js';
+
 /**
  * @typedef {object} PrintOptions
  * @property {'all' | 'current' | 'range' | 'odd' | 'even'} pages
@@ -206,5 +208,5 @@ export function triggerPrint(canvases) {
   iframe.contentWindow.focus();
   iframe.contentWindow.print();
 
-  setTimeout(() => document.body.removeChild(iframe), 5000);
+  safeTimeout(() => document.body.removeChild(iframe), 5000);
 }

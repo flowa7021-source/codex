@@ -1,6 +1,8 @@
 // ─── Render Pipeline ────────────────────────────────────────────────────────
 // Unified page rendering with caching, pre-rendering, and overlay management.
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 /**
  * @typedef {object} RenderContext
  * @property {HTMLCanvasElement} canvas
@@ -100,8 +102,8 @@ export async function renderPage(options, ctx, callbacks = {}) {
  * @param {object} adapter
  */
 export function schedulePreRender(currentPage, pageCount, zoom, rotation, adapter) {
-  clearTimeout(preRenderTimer);
-  preRenderTimer = setTimeout(async () => {
+  clearSafeTimeout(preRenderTimer);
+  preRenderTimer = safeTimeout(async () => {
     const adjacentPages = [currentPage - 1, currentPage + 1]
       .filter(p => p >= 1 && p <= pageCount);
 

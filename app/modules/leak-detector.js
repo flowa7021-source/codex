@@ -78,11 +78,13 @@ function patchCreateElement() {
 
 /**
  * Install monkey-patches on common targets. Safe to call multiple times (no-op after first).
+ * Automatically activates when import.meta.env.DEV is true or localStorage 'novareader-dev-mode' is '1'.
  */
 export function installLeakDetector() {
   if (installed) return;
-  if (typeof localStorage === 'undefined') return;
-  if (localStorage.getItem('novareader-dev-mode') !== '1') return;
+  const isDev = (typeof import.meta !== 'undefined' && import.meta.env?.DEV) ||
+    (typeof localStorage !== 'undefined' && localStorage.getItem('novareader-dev-mode') === '1');
+  if (!isDev) return;
   installed = true;
 
   // Patch event listeners on common targets

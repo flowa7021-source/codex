@@ -19,6 +19,7 @@ import { loadOcrTextData, saveOcrTextData } from './workspace-controller.js';
 import { savePageOcrText, getPageOcrText } from './ocr-storage.js';
 import { toastSuccess } from './toast.js';
 import { AsyncLock } from './async-lock.js';
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
 // Re-export image processing functions for backwards compatibility
 export {
@@ -571,7 +572,7 @@ export async function runOcrOnRectNow(rect) {
   const taskStartedAt = performance.now();
   let hangWarnTimer = null;
   try {
-    hangWarnTimer = setTimeout(() => {
+    hangWarnTimer = safeTimeout(() => {
       if (taskId !== state.ocrTaskId) return;
       setOcrStatus('OCR: длительная обработка, ожидайте...');
       pushDiagnosticEvent('ocr.manual.hang-warning', { taskId, thresholdMs: OCR_HANG_WARN_MS, page: state.currentPage }, 'warn');
@@ -638,7 +639,7 @@ export async function runOcrOnRectNow(rect) {
     recordCrashEvent(errorType, message, 'ocr-manual');
     pushDiagnosticEvent('ocr.manual.error', { taskId, totalMs, page: state.currentPage, message, errorType }, 'error');
   } finally {
-    if (hangWarnTimer) clearTimeout(hangWarnTimer);
+    if (hangWarnTimer) clearSafeTimeout(hangWarnTimer);
   }
 }
 
@@ -706,7 +707,7 @@ export function cancelBackgroundOcrScan(reason = 'manual') {
   state.backgroundOcrToken = 0;
   state.backgroundOcrRunning = false;
   if (state.backgroundOcrTimer) {
-    clearTimeout(state.backgroundOcrTimer);
+    clearSafeTimeout(state.backgroundOcrTimer);
     state.backgroundOcrTimer = null;
   }
   setOcrStatus(`OCR: фоновое распознавание остановлено (${reason})`);
@@ -722,9 +723,9 @@ export function cancelAllOcrWork(reason = 'manual-stop') {
 export function scheduleBackgroundOcrScan(reason = 'default', delayMs = 600) {
   if (!state.settings?.backgroundOcr || !state.adapter) return;
   if (state.backgroundOcrTimer) {
-    clearTimeout(state.backgroundOcrTimer);
+    clearSafeTimeout(state.backgroundOcrTimer);
   }
-  state.backgroundOcrTimer = setTimeout(() => {
+  state.backgroundOcrTimer = safeTimeout(() => {
     state.backgroundOcrTimer = null;
     startBackgroundOcrScan(reason).catch(() => {
       setOcrStatus('OCR: ошибка фонового сканирования');

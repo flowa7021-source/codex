@@ -1,4 +1,5 @@
 // app-init-phase2.js — Phase 2+ module initialization, extracted from app.js
+import { safeInterval, safeTimeout } from './safe-timers.js';
 import { state, els } from './state.js';
 import { setViewMode } from './view-modes.js';
 import { extractTextForPage } from './ocr-controller.js';
@@ -96,7 +97,7 @@ export function initPhase2Modules(deps) {
   // Hook status bar into page changes
   const _origUpdatePageUI = typeof _updatePageUI === 'function' ? _updatePageUI : null;
   // Call updateStatusBar after page renders
-  setInterval(updateStatusBar, 2000);
+  safeInterval(updateStatusBar, 2000, { scope: 'app' });
   updateStatusBar();
 
   // ─── View Mode Dropdown Handler ──────────────────────────────────────────────
@@ -277,7 +278,7 @@ export function initPhase2Modules(deps) {
           const filename = (state.docName || 'document').replace(/\.[^.]+$/, '') + '.txt';
           downloadText(allText, filename);
           progress.update(100);
-          setTimeout(() => progress.dismiss(), 500);
+          safeTimeout(() => progress.dismiss(), 500);
           toastSuccess('\u0422\u0435\u043a\u0441\u0442 \u044d\u043a\u0441\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u043d');
         } catch (err) {
           progress.dismiss();

@@ -19,6 +19,7 @@ import { blockEditor } from './pdf-advanced-edit.js';
 import { addSignatureToPdf } from './pdf-operations.js';
 import { renderConfidenceOverlay } from './ocr-confidence-map.js';
 import { shouldUseTileRendering, renderTiles, invalidateTiles } from './tile-renderer.js';
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // Injected from app.js to avoid circular imports.
@@ -64,8 +65,8 @@ export function bumpRenderGeneration() { return ++_renderGeneration; }
 // ─── Pre-render bookkeeping ─────────────────────────────────────────────────
 
 export function _schedulePreRender(currentPage, zoom, rotation) {
-  clearTimeout(_preRenderTimer);
-  _preRenderTimer = setTimeout(() => {
+  clearSafeTimeout(_preRenderTimer);
+  _preRenderTimer = safeTimeout(() => {
     _preRenderAdjacent(currentPage, zoom, rotation);
   }, 150); // slight delay so the current page settles first
 }

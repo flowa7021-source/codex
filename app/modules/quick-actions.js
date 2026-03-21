@@ -1,6 +1,8 @@
 // ─── Quick Actions Bar ──────────────────────────────────────────────────────
 // Floating toolbar that appears on text selection (like Notion/Google Docs).
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 let actionBar = null;
 const hideTimeout = null;
 
@@ -71,8 +73,8 @@ export function initQuickActions(options) {
 
   container.addEventListener('mouseup', () => {
     // Delay to allow selection to finalize
-    clearTimeout(selectionCheckTimer);
-    selectionCheckTimer = setTimeout(() => {
+    clearSafeTimeout(selectionCheckTimer);
+    selectionCheckTimer = safeTimeout(() => {
       checkSelection(container);
     }, 200);
   });
@@ -117,7 +119,7 @@ function checkSelection(container) {
 function showQuickActions(selection) {
   if (!actionBar) return;
 
-  clearTimeout(hideTimeout);
+  clearSafeTimeout(hideTimeout);
 
   const range = selection.getRangeAt(0);
   const rect = range.getBoundingClientRect();

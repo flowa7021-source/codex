@@ -2,6 +2,8 @@
 // A VS Code-style minimap showing tiny page thumbnails in a vertical strip
 // on the right side of the document viewport.
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 const THUMB_WIDTH = 40;
 const _RENDER_SCALE = 0.06;
 const BUFFER_PAGES = 5;
@@ -257,8 +259,8 @@ function _buildTrack() {
  * Schedule (debounced) rendering of visible thumbnails.
  */
 function _scheduleRenderThumbs() {
-  if (_renderTimer) clearTimeout(_renderTimer);
-  _renderTimer = setTimeout(() => {
+  if (_renderTimer) clearSafeTimeout(_renderTimer);
+  _renderTimer = safeTimeout(() => {
     _renderVisibleThumbs();
   }, DEBOUNCE_RENDER_MS);
 }

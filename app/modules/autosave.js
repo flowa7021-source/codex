@@ -1,6 +1,8 @@
 // ─── Auto-save & Crash Recovery ─────────────────────────────────────────────
 // Periodic session snapshots to IndexedDB with recovery on unclean exit.
 
+import { safeInterval, safeTimeout, clearSafeInterval } from './safe-timers.js';
+
 const DB_NAME = 'novareader-autosave';
 const DB_VERSION = 1;
 const STORE_NAME = 'sessions';
@@ -260,7 +262,7 @@ async function _performSave() {
 
 function _startTimer() {
   _stopTimer();
-  _timerId = setInterval(() => {
+  _timerId = safeInterval(() => {
     _performSave().catch(err => {
       console.warn('[autosave] periodic save error:', err?.message);
     });
@@ -269,7 +271,7 @@ function _startTimer() {
 
 function _stopTimer() {
   if (_timerId !== null) {
-    clearInterval(_timerId);
+    clearSafeInterval(_timerId);
     _timerId = null;
   }
 }
@@ -499,7 +501,7 @@ export function applyRecoveredSnapshot(snapshot) {
 
   // Restore scroll position after a brief delay to let render complete
   if (snapshot.scrollPosition && els.canvasWrap) {
-    setTimeout(() => {
+    safeTimeout(() => {
       els.canvasWrap.scrollTop = snapshot.scrollPosition.top || 0;
       els.canvasWrap.scrollLeft = snapshot.scrollPosition.left || 0;
     }, 200);

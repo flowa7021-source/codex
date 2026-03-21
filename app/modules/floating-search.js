@@ -1,6 +1,8 @@
 // ─── Floating Search Panel ──────────────────────────────────────────────────
 // Ctrl+F style search panel with find, replace, navigation, and match highlighting.
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 /**
  * @typedef {object} SearchState
  * @property {string} query
@@ -149,8 +151,8 @@ export function createFloatingSearch(callbacks = {}) {
 
   // Event bindings
   searchInput.addEventListener('input', () => {
-    clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(doSearch, 150);
+    clearSafeTimeout(searchDebounce);
+    searchDebounce = safeTimeout(doSearch, 150);
   });
 
   searchInput.addEventListener('keydown', (e) => {

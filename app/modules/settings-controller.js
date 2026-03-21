@@ -6,6 +6,7 @@ import { SIDEBAR_SECTION_CONFIG, TOOLBAR_SECTION_CONFIG, OCR_MIN_DPI, CSS_BASE_D
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './state.js';
 import { toastError } from './toast.js';
 import { nrPrompt } from './modal-prompt.js';
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
 // ─── App Settings ───────────────────────────────────────────────────────────
 
@@ -230,9 +231,9 @@ export function saveNotes(noteKey, source = 'manual') {
 export function queueNotesAutosave(noteKey) {
   setNotesStatus('Есть несохранённые изменения...');
   if (notesAutosaveTimer) {
-    clearTimeout(notesAutosaveTimer);
+    clearSafeTimeout(notesAutosaveTimer);
   }
-  notesAutosaveTimer = setTimeout(() => {
+  notesAutosaveTimer = safeTimeout(() => {
     saveNotes(noteKey, 'auto');
     notesAutosaveTimer = null;
   }, 600);

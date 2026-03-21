@@ -1,6 +1,8 @@
 // ─── Memory Manager ─────────────────────────────────────────────────────────
 // ObjectURL lifecycle, canvas pooling, memory pressure monitoring.
 
+import { safeInterval, safeTimeout, clearSafeInterval, clearSafeTimeout } from './safe-timers.js';
+
 const CANVAS_POOL_MAX = 10;
 const URL_CLEANUP_INTERVAL = 30000;
 const MEMORY_WARNING_MB = 500;
@@ -21,8 +23,8 @@ let monitorTimer = null;
  */
 export function initMemoryManager() {
   // Periodic cleanup of stale URLs
-  if (cleanupTimer) clearInterval(cleanupTimer);
-  cleanupTimer = setInterval(cleanupStaleUrls, URL_CLEANUP_INTERVAL);
+  if (cleanupTimer) clearSafeInterval(cleanupTimer);
+  cleanupTimer = safeInterval(cleanupStaleUrls, URL_CLEANUP_INTERVAL, { scope: 'app' });
 
   // Memory pressure monitoring (if available)
   if (typeof performance !== 'undefined' && performance.measureUserAgentSpecificMemory) {
@@ -173,7 +175,7 @@ async function monitorMemory() {
   }
 
   // Check periodically — tracked so destroyMemoryManager() can stop it
-  monitorTimer = setTimeout(monitorMemory, 10000);
+  monitorTimer = safeTimeout(monitorMemory, 10000, { scope: 'app' });
 }
 
 /**
@@ -181,11 +183,11 @@ async function monitorMemory() {
  */
 export function destroyMemoryManager() {
   if (cleanupTimer) {
-    clearInterval(cleanupTimer);
+    clearSafeInterval(cleanupTimer);
     cleanupTimer = null;
   }
   if (monitorTimer) {
-    clearTimeout(monitorTimer);
+    clearSafeTimeout(monitorTimer);
     monitorTimer = null;
   }
   revokeAllUrls();

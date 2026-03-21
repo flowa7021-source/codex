@@ -1,5 +1,6 @@
 // notes-controller.js — Notes management for NovaReader
 import { state, els } from './state.js';
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
 function storageKey() {
   return `novareader-notes:${state.docName || 'global'}`;
@@ -38,7 +39,7 @@ export function saveNotesFromUI() {
 function updateNotesStatus(msg) {
   if (els.notesStatus) {
     els.notesStatus.textContent = msg;
-    setTimeout(() => { if (els.notesStatus) els.notesStatus.textContent = ''; }, 2000);
+    safeTimeout(() => { if (els.notesStatus) els.notesStatus.textContent = ''; }, 2000);
   }
 }
 
@@ -153,8 +154,8 @@ export function initNotesController() {
   if (els.notes) {
     let saveTimer = null;
     els.notes.addEventListener('input', () => {
-      clearTimeout(saveTimer);
-      saveTimer = setTimeout(saveNotesFromUI, 2000);
+      clearSafeTimeout(saveTimer);
+      saveTimer = safeTimeout(saveNotesFromUI, 2000);
     });
   }
 
