@@ -4,6 +4,9 @@
 
 import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
 
+// ─── Yield helper (keeps UI responsive during heavy loops) ──────────────────
+const yieldToUI = () => new Promise(r => setTimeout(r, 0));
+
 // ─── PDF Merge ──────────────────────────────────────────────────────────────
 // Merges multiple PDF files preserving text, fonts, images, forms, links.
 export async function mergePdfDocuments(files) {
@@ -11,6 +14,7 @@ export async function mergePdfDocuments(files) {
 
   for (const file of files) {
     const arrayBuffer = await file.arrayBuffer();
+    await yieldToUI();
     let sourcePdf;
     try {
       sourcePdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
@@ -21,6 +25,7 @@ export async function mergePdfDocuments(files) {
     const indices = sourcePdf.getPageIndices();
     const copiedPages = await mergedPdf.copyPages(sourcePdf, indices);
     copiedPages.forEach(page => mergedPdf.addPage(page));
+    await yieldToUI();
   }
 
   mergedPdf.setTitle('Merged Document');
@@ -41,6 +46,7 @@ export async function splitPdfDocument(pdfArrayBuffer, pageNumbers) {
   const indices = pageNumbers.map(n => n - 1).filter(i => i >= 0 && i < sourcePdf.getPageCount());
   if (!indices.length) return null;
 
+  await yieldToUI();
   const copiedPages = await newPdf.copyPages(sourcePdf, indices);
   copiedPages.forEach(page => newPdf.addPage(page));
 
@@ -65,6 +71,7 @@ export async function splitPdfIntoIndividual(pdfArrayBuffer) {
       pageNum: i + 1,
       blob: new Blob([bytes], { type: 'application/pdf' }),
     });
+    await yieldToUI();
   }
 
   return results;
@@ -280,6 +287,7 @@ export async function exportAnnotationsIntoPdf(pdfArrayBuffer, annotationStore, 
   for (const [pageNum, strokes] of annotationStore) {
     const page = pdfDoc.getPage(pageNum - 1);
     if (!page) continue;
+    await yieldToUI();
     const { width: pdfW, height: pdfH } = page.getSize();
     const scaleX = pdfW / (canvasSize?.width || pdfW);
     const scaleY = pdfH / (canvasSize?.height || pdfH);

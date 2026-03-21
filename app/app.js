@@ -38,6 +38,7 @@ import { setPassword, cleanMetadata, getSecurityInfo, sanitizePdf } from './modu
 import { correctOcrText, buildDictionary, recoverParagraphs, computeQualityScore } from './modules/ocr-post-correct.js';
 import { extractTextInReadingOrder, extractMultiPageText, downloadText } from './modules/text-extractor.js';
 import { WorkerPool, initOcrPool, getOcrPool, runInWorker } from './modules/worker-pool.js';
+import { showErrorFallback, showCriticalErrorScreen } from './modules/error-boundary-ui.js';
 import { openDatabase, cachePageRender, getCachedPageRender, clearDocumentCache, getStorageUsage, clearAllCache } from './modules/indexed-storage.js';
 import { reportError, saveStateSnapshot, restoreStateSnapshot, withRetry, getErrorLog } from './modules/error-handler.js';
 import { convertToPdfA, checkPdfACompliance } from './modules/pdf-a-converter.js';
@@ -151,6 +152,8 @@ function showUserError(context, errorType, message) {
   }
   // Also show a toast notification for visibility
   try { toastError(`${label}: ${message}`); } catch (err) { console.warn('[app] toast in error boundary failed:', err?.message); }
+  // Show error fallback banner for visibility
+  try { showErrorFallback(label, message); } catch (err) { console.warn('[app] error fallback banner failed:', err?.message); }
 }
 
 initCrashTelemetry();
@@ -1633,12 +1636,20 @@ window.addEventListener('unhandledrejection', (event) => {
   const msg = event.reason?.message || String(event.reason);
   pushDiagnosticEvent('unhandled-rejection', { message: msg }, 'error');
   if (typeof recordCrashEvent === 'function') recordCrashEvent('unhandled-rejection', msg, 'global');
+  // If the app hasn't finished initializing, show critical error screen
+  if (!state.initComplete) {
+    try { showCriticalErrorScreen(msg); } catch (_) { /* last resort */ }
+  }
 });
 
 window.addEventListener('error', (event) => {
   const msg = event.message || 'Unknown error';
   pushDiagnosticEvent('uncaught-error', { message: msg, filename: event.filename, line: event.lineno }, 'error');
   if (typeof recordCrashEvent === 'function') recordCrashEvent('uncaught-error', msg, 'global');
+  // If the app hasn't finished initializing, show critical error screen
+  if (!state.initComplete) {
+    try { showCriticalErrorScreen(msg); } catch (_) { /* last resort */ }
+  }
 });
 
 // ─── Expose Activity Log for E2E and debugging ──────────────────────────────
