@@ -1,160 +1,197 @@
 'use client'
 
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { User, Bell, Shield, Palette, Database } from 'lucide-react'
+import { User, Bell, Palette } from 'lucide-react'
 import { Button } from '@/app/components/ui/Button'
 import { Input } from '@/app/components/ui/Input'
 import { Avatar } from '@/app/components/ui/Avatar'
+import { toast } from 'sonner'
 
-const SETTINGS_SECTIONS = [
-  { icon: User, label: 'Профиль' },
-  { icon: Bell, label: 'Уведомления' },
-  { icon: Shield, label: 'Безопасность' },
-  { icon: Palette, label: 'Внешний вид' },
-  { icon: Database, label: 'Данные' },
+const NOTIFICATIONS = [
+  'Новые задачи назначены мне',
+  'Документы требуют согласования',
+  'Комментарии к моим документам',
+  'Просроченные задачи',
 ]
 
 export default function SettingsPage() {
+  const [name, setName] = useState('Крот')
+  const [email, setEmail] = useState('krot@nexus.ru')
+  const [position, setPosition] = useState('Оперативный командир')
+  const [notifications, setNotifications] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(NOTIFICATIONS.map(n => [n, true]))
+  )
+
+  const handleSave = () => {
+    toast.success('Профиль сохранён')
+  }
+
+  const toggleNotification = (label: string) => {
+    setNotifications(prev => ({ ...prev, [label]: !prev[label] }))
+  }
+
   return (
-    <div className="p-6 max-w-3xl space-y-5">
+    <div className="p-6 max-w-2xl space-y-5">
       <h1 className="font-mono font-bold" style={{ fontSize: 22, color: 'var(--color-text)' }}>
         Настройки
       </h1>
 
-      {/* Profile section */}
+      {/* Profile */}
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="rounded-lg overflow-hidden"
+        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+        className="rounded-xl overflow-hidden"
         style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
       >
         <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div className="flex items-center gap-2">
-            <User size={16} style={{ color: 'var(--color-accent)' }} />
-            <h2 className="font-mono font-semibold" style={{ fontSize: 13, color: 'var(--color-text)' }}>
-              Профиль
+            <User size={15} style={{ color: 'var(--color-accent)' }} />
+            <h2 className="font-mono font-semibold" style={{ fontSize: 12, color: 'var(--color-text)', letterSpacing: '0.05em' }}>
+              ПРОФИЛЬ
             </h2>
           </div>
         </div>
-        <div className="p-5 space-y-4">
+        <div className="p-5 space-y-5">
+          {/* Avatar row */}
           <div className="flex items-center gap-4">
-            <Avatar name="Салахутдинов М.М." size={56} />
+            <div className="relative">
+              <Avatar name={name || 'К'} size={64} />
+              <span
+                style={{
+                  position: 'absolute', bottom: 0, right: 0,
+                  width: 14, height: 14, borderRadius: '50%',
+                  background: 'var(--color-success)',
+                  border: '2px solid var(--color-surface)',
+                }}
+              />
+            </div>
             <div>
-              <p className="font-sans font-medium" style={{ fontSize: 15, color: 'var(--color-text)' }}>
-                Салахутдинов М.М.
-              </p>
-              <p className="font-sans" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>
-                Начальник УМиТ
-              </p>
+              <p className="font-sans font-semibold" style={{ fontSize: 18, color: 'var(--color-text)' }}>{name || '—'}</p>
+              <p className="font-sans mt-0.5" style={{ fontSize: 13, color: 'var(--color-text-muted)' }}>{position}</p>
+              <span
+                className="font-mono text-xs px-2 py-0.5 rounded-sm mt-1.5 inline-block"
+                style={{ fontSize: 10, background: 'var(--color-accent-dim)', color: 'var(--color-accent)' }}
+              >
+                Руководитель
+              </span>
             </div>
           </div>
+
+          {/* Fields */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="font-mono text-xs block mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                Имя
+              <label className="font-mono block mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.09em' }}>
+                ПОЗЫВНОЙ / ИМЯ
               </label>
-              <Input value="Мухаммад Маратович" onChange={() => {}} />
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div>
-              <label className="font-mono text-xs block mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                Фамилия
+              <label className="font-mono block mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.09em' }}>
+                EMAIL
               </label>
-              <Input value="Салахутдинов" onChange={() => {}} />
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
             </div>
-            <div>
-              <label className="font-mono text-xs block mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                Email
+            <div className="col-span-2">
+              <label className="font-mono block mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.09em' }}>
+                ДОЛЖНОСТЬ
               </label>
-              <Input value="salakhutdinov@umit.ru" type="email" onChange={() => {}} />
-            </div>
-            <div>
-              <label className="font-mono text-xs block mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                Должность
-              </label>
-              <Input value="Начальник УМиТ" onChange={() => {}} />
+              <Input value={position} onChange={(e) => setPosition(e.target.value)} />
             </div>
           </div>
+
           <div className="flex justify-end">
-            <Button variant="primary" size="md">Сохранить</Button>
+            <Button variant="primary" size="md" onClick={handleSave}>Сохранить</Button>
           </div>
         </div>
       </motion.div>
 
-      {/* Notifications section */}
+      {/* Notifications */}
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.08 }}
-        className="rounded-lg overflow-hidden"
+        className="rounded-xl overflow-hidden"
         style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
       >
         <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div className="flex items-center gap-2">
-            <Bell size={16} style={{ color: 'var(--color-accent)' }} />
-            <h2 className="font-mono font-semibold" style={{ fontSize: 13, color: 'var(--color-text)' }}>
-              Уведомления
+            <Bell size={15} style={{ color: 'var(--color-accent)' }} />
+            <h2 className="font-mono font-semibold" style={{ fontSize: 12, color: 'var(--color-text)', letterSpacing: '0.05em' }}>
+              УВЕДОМЛЕНИЯ
             </h2>
           </div>
         </div>
-        <div className="p-5 space-y-3">
-          {[
-            'Новые задачи назначены мне',
-            'Документы требуют согласования',
-            'Комментарии к моим документам',
-            'Просроченные задачи',
-          ].map((label) => (
-            <div key={label} className="flex items-center justify-between py-2">
-              <span className="font-sans" style={{ fontSize: 14, color: 'var(--color-text)' }}>
-                {label}
-              </span>
+        <div className="p-5 space-y-1">
+          {NOTIFICATIONS.map((label) => {
+            const active = notifications[label]
+            return (
               <div
-                className="w-10 h-5 rounded-full relative cursor-pointer transition-all"
-                style={{ background: 'var(--color-accent)' }}
+                key={label}
+                className="flex items-center justify-between py-3 px-3 rounded-lg cursor-pointer transition-all"
+                style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
+                onClick={() => toggleNotification(label)}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
               >
+                <span className="font-sans" style={{ fontSize: 14, color: 'var(--color-text)' }}>
+                  {label}
+                </span>
+                {/* Toggle */}
                 <div
-                  className="absolute right-1 top-1 w-3 h-3 rounded-full"
-                  style={{ background: '#0C0C0E' }}
-                />
+                  className="relative transition-all duration-300"
+                  style={{
+                    width: 40, height: 22, borderRadius: 11,
+                    background: active ? 'var(--color-accent)' : 'var(--color-border)',
+                  }}
+                >
+                  <div
+                    className="absolute top-1 transition-all duration-300"
+                    style={{
+                      width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                      left: active ? 23 : 3,
+                    }}
+                  />
+                </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </motion.div>
 
       {/* Appearance */}
       <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.16 }}
-        className="rounded-lg overflow-hidden"
+        className="rounded-xl overflow-hidden"
         style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}
       >
         <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <div className="flex items-center gap-2">
-            <Palette size={16} style={{ color: 'var(--color-accent)' }} />
-            <h2 className="font-mono font-semibold" style={{ fontSize: 13, color: 'var(--color-text)' }}>
-              Внешний вид
+            <Palette size={15} style={{ color: 'var(--color-accent)' }} />
+            <h2 className="font-mono font-semibold" style={{ fontSize: 12, color: 'var(--color-text)', letterSpacing: '0.05em' }}>
+              ВНЕШНИЙ ВИД
             </h2>
           </div>
         </div>
         <div className="p-5">
-          <p className="font-sans" style={{ fontSize: 14, color: 'var(--color-text-muted)' }}>
-            Тёмная тема активна. Светлая тема будет доступна в следующем обновлении.
-          </p>
-          <div className="flex gap-3 mt-4">
+          <div className="flex gap-3">
             <div
-              className="flex-1 h-20 rounded-lg border-2 flex items-center justify-center font-mono text-xs"
+              className="flex-1 h-20 rounded-xl border-2 flex flex-col items-center justify-center gap-1 cursor-pointer font-mono text-xs"
               style={{ background: '#0C0C0E', borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
             >
+              <span style={{ fontSize: 18 }}>◐</span>
               Тёмная ✓
             </div>
             <div
-              className="flex-1 h-20 rounded-lg border flex items-center justify-center font-mono text-xs"
-              style={{ background: '#F5F5F0', borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+              className="flex-1 h-20 rounded-xl flex flex-col items-center justify-center gap-1 cursor-not-allowed font-mono text-xs"
+              style={{ background: '#F5F5F0', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', opacity: 0.4 }}
             >
+              <span style={{ fontSize: 18 }}>○</span>
               Светлая
             </div>
           </div>
+          <p className="font-sans mt-3" style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+            Светлая тема будет доступна в следующем обновлении.
+          </p>
         </div>
       </motion.div>
     </div>
