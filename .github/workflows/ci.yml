@@ -1,0 +1,197 @@
+name: CI
+
+on:
+  push:
+    branches: ['*']
+    tags: ['v*']
+  pull_request:
+    branches: ['main']
+  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+
+jobs:
+  # ──────────────────────────────────────────────────────
+  # Job 1: Lint + Test + Vite Build (every push, ~2 min)
+  # ──────────────────────────────────────────────────────
+  quality:
+    name: Lint & Test & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Symlink to short path — avoids spaces/parens in the deep nested dir
+      - name: Create short path symlink
+        run: ln -s "$GITHUB_WORKSPACE/G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" /tmp/nr
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: cd /tmp/nr && npm ci
+
+      - name: ESLint (zero warnings)
+        run: cd /tmp/nr && npm run lint
+
+      - name: Tests
+        run: cd /tmp/nr && npm test
+
+      - name: Vite build
+        run: cd /tmp/nr && npm run build
+
+      - name: Verify build output
+        run: |
+          if [ ! -d /tmp/nr/dist ]; then
+            echo "ERROR: dist/ not created"
+            exit 1
+          fi
+          echo "Build OK: $(find /tmp/nr/dist -type f | wc -l) files"
+
+  # ──────────────────────────────────────────────────────
+  # Job 2: Rust check (every push, ~3 min with cache)
+  # ──────────────────────────────────────────────────────
+  rust:
+    name: Cargo Check & Clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create short path symlink
+        run: ln -s "$GITHUB_WORKSPACE/G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" /tmp/nr
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: /tmp/nr/src-tauri -> target
+
+      - name: Install Tauri system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Cargo check
+        run: cd /tmp/nr/src-tauri && cargo check
+
+      - name: Cargo clippy
+        run: cd /tmp/nr/src-tauri && cargo clippy -- -D warnings
+
+  # ──────────────────────────────────────────────────────
+  # Job 3: Build Windows installer (main + tags only)
+  # ──────────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows Installer
+    needs: [quality, rust]
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Windows: copy to short path (symlinks unreliable on Windows)
+      - name: Copy to short path
+        shell: pwsh
+        run: |
+          $src = Join-Path $env:GITHUB_WORKSPACE "G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z"
+          Copy-Item -Path $src -Destination C:\nr -Recurse -Force
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: C:\nr\src-tauri -> target
+          cache-on-failure: true
+
+      - name: Install npm dependencies
+        working-directory: C:\nr
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: C:\nr
+        run: npm run build
+
+      - name: Build Tauri installer
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: C:\nr
+          args: --target x86_64-pc-windows-msvc
+
+      - name: Verify installer
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path "C:\nr\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
+          if (-not $exe) { throw "NSIS installer not found!" }
+          $mb = [math]::Round($exe[0].Length / 1MB, 2)
+          Write-Host "Installer: $($exe[0].Name) — $mb MB"
+          if ($mb -lt 3 -or $mb -gt 50) { throw "Size $mb MB outside expected range" }
+
+      - name: Upload NSIS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaReader-Windows-x64-NSIS
+          path: C:\nr\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload MSI installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaReader-Windows-x64-MSI
+          path: C:\nr\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\*.msi
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Cleanup
+        if: always()
+        shell: pwsh
+        run: if (Test-Path C:\nr) { Remove-Item C:\nr -Recurse -Force -ErrorAction SilentlyContinue }
+
+  # ──────────────────────────────────────────────────────
+  # Job 4: Create GitHub Release (tags only)
+  # ──────────────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: NovaReader-Windows-x64-NSIS
+          path: ./assets/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: NovaReader-Windows-x64-MSI
+          path: ./assets/
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: ./assets/*
+          body: |
+            ## NovaReader ${{ github.ref_name }}
+
+            **Download `NovaReader_*_x64-setup.exe`** (recommended).
+            - Windows 10 (1803+) and Windows 11
+            - Auto-installs WebView2 if missing
+
+            Alternative: `.msi` for enterprise Group Policy deployment.

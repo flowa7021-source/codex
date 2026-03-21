@@ -1,0 +1,36 @@
+# NovaReader 2.0.0 — Product Backlog (приоритетный)
+
+## P0 — Блокеры стабильности и производительности
+- [x] Устранить UI-freeze при поиске/OCR/аннотациях (вынос тяжёлых задач в worker pool).
+- [x] Единый error boundary + recover flow для операций открытия/рендера/экспорта.
+- [x] Ввести perf budgets в CI (render p95, input latency, long tasks).
+- [x] Memory management: LRU кэш страниц/изображений + безопасное освобождение object URLs.
+
+## P0 — OCR 2.0
+- [x] Preprocessing pipeline: deskew, denoise, binarization, contrast normalization.
+- [x] OCR confidence scoring + пост-обработка для RU/EN.
+- [x] Batch OCR queue с отменой/приоритизацией/прогрессом.
+- [x] Поиск по OCR-индексу + экспорт OCR-текста с координатами.
+
+## P0 — PDF Pro (ядро)
+- [x] Текстовый editing layer (блочная модель + визуальное редактирование).
+- [x] Undo/redo и история правок по документу.
+- [x] Корректная запись исправлений в документ/рабочую область.
+- [x] PDF→DOCX converter v1: абзацы, стили, изображения, таблицы.
+
+## P1 — UX и функциональная целостность
+- [x] Унификация state-машины инструментов (аннотации/поиск/OCR/редактура).
+- [x] Устранение конфликтов горячих клавиш и фокуса.
+- [x] Адаптивность <16:9 и low-height экранов без наложений.
+- [ ] Стабильные настройки границ/зон с live-preview и persisted state.
+
+## P1 — Тестирование и качество
+- [ ] E2E regression-pack (Playwright) для 20+ ключевых пользовательских сценариев.
+- [ ] OCR corpus benchmark (качество + скорость).
+- [ ] PDF conversion benchmark suite (структура/таблицы/картинки).
+- [x] Crash telemetry dashboard + session health export.
+
+## P2 — Расширения 2.0.x
+- [x] Импорт обратно DOCX-правок (merge в workspace).
+- [ ] Плагины конвертации для сложных табличных шаблонов.
+- [ ] Дополнительные языковые профили OCR.

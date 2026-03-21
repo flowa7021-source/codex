@@ -1,0 +1,40 @@
+{
+  "name": "NovaReader",
+  "short_name": "NovaReader",
+  "description": "Modern document viewer for PDF, DJVU, EPUB, XPS and images with OCR, annotations, and conversion tools",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1b1b1f",
+  "theme_color": "#1b1b1f",
+  "orientation": "any",
+  "categories": ["productivity", "utilities"],
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "./index.html",
+      "accept": {
+        "application/pdf": [".pdf"],
+        "image/vnd.djvu": [".djvu", ".djv"],
+        "application/epub+zip": [".epub"],
+        "application/vnd.ms-xpsdocument": [".xps", ".oxps"],
+        "application/vnd.comicbook+zip": [".cbz"],
+        "image/jpeg": [".jpg", ".jpeg"],
+        "image/png": [".png"],
+        "image/webp": [".webp"],
+        "image/tiff": [".tiff", ".tif"]
+      }
+    }
+  ]
+}

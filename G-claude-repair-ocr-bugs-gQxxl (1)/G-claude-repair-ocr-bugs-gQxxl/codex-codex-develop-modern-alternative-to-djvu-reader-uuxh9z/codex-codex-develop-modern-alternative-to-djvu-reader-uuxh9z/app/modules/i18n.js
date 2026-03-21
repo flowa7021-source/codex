@@ -1,0 +1,719 @@
+// ─── Internationalization Module ─────────────────────────────────────────────
+
+const translations = {
+  ru: {
+    // Sidebar
+    'sidebar.open': 'Открыть',
+    'sidebar.recent': 'Недавние',
+    'sidebar.clearRecent': 'Очистить',
+    'sidebar.bookmarks': 'Закладки',
+    'sidebar.addBookmark': '+ Добавить',
+    'sidebar.clearBookmarks': 'Очистить',
+    'sidebar.exportJson': '↗ .json',
+    'sidebar.importJson': '↙ .json',
+    'sidebar.filterPlaceholder': 'Фильтр…',
+    'sidebar.outline': 'Оглавление',
+    'sidebar.previews': 'Превью',
+    'sidebar.progress': 'Прогресс',
+    'sidebar.goalPlaceholder': 'Цель (стр.)',
+    'sidebar.setGoal': 'Задать',
+    'sidebar.resetProgress': 'Сбросить прогресс',
+    'sidebar.resetTime': 'Сбросить время',
+    'sidebar.searchResults': 'Результаты поиска',
+    'sidebar.searchHistory': 'История поиска',
+    'sidebar.copy': 'Копировать',
+    'sidebar.stats': 'Статистика',
+    'sidebar.transitions': 'Переходы',
+    'sidebar.comments': 'Комментарии',
+    'sidebar.notes': 'Заметки',
+    'sidebar.noteTitlePlaceholder': 'Заголовок',
+    'sidebar.noteTagsPlaceholder': 'Теги',
+    'sidebar.noteTextPlaceholder': 'Заметки…',
+    'sidebar.save': 'Сохранить',
+    'sidebar.replace': 'Заменить',
+    'sidebar.append': 'Добавить',
+    'sidebar.workspace': 'Workspace',
+    'sidebar.export': '↗ Экспорт',
+    'sidebar.import': '↙ Импорт',
+    'sidebar.cloudCollab': 'Cloud & Collab',
+    'sidebar.push': '↑ Push',
+    'sidebar.pull': '↓ Pull',
+    'sidebar.collabOff': 'Collab: off',
+    'sidebar.collabOn': 'Collab: on',
+    'sidebar.send': 'Отправить',
+    'sidebar.settings': 'Настройки',
+    'sidebar.advancedOff': 'Расширенные: off',
+    'sidebar.advancedOn': 'Расширенные: on',
+    'sidebar.compactOff': 'Компакт: off',
+    'sidebar.compactOn': 'Компакт: on',
+    'sidebar.collapse': '▴ Свернуть',
+    'sidebar.expand': '▾ Развернуть',
+    'sidebar.standardHotkeys': 'Стандартные hotkeys',
+    'sidebar.diagnosticsExport': '↗ Диагностика',
+    'sidebar.clearDiag': 'Очистить диаг.',
+    'sidebar.selfCheck': 'Self-check',
+
+    // Toolbar
+    'toolbar.back': 'Назад',
+    'toolbar.forward': 'Вперёд',
+    'toolbar.prevPage': 'Предыдущая страница',
+    'toolbar.nextPage': 'Следующая страница',
+    'toolbar.goTo': 'Перейти',
+    'toolbar.zoomOut': 'Уменьшить',
+    'toolbar.zoomIn': 'Увеличить',
+    'toolbar.fitWidth': 'По ширине',
+    'toolbar.fitPage': 'По странице',
+    'toolbar.rotate': 'Повернуть',
+    'toolbar.theme': 'Тема',
+    'toolbar.fullscreen': 'Полный экран',
+    'toolbar.shortcuts': 'Горячие клавиши',
+    'toolbar.settingsBtn': 'Настройки',
+    'toolbar.sidebar': 'Сайдбар',
+    'toolbar.tools': 'Инструменты',
+    'toolbar.text': 'Текст',
+    'toolbar.search': 'Поиск',
+    'toolbar.annotations': 'Аннотации',
+
+    // Search
+    'search.placeholder': 'Поиск…',
+    'search.allDoc': 'Весь документ',
+    'search.currentPage': 'Текущая страница',
+    'search.find': 'Найти',
+
+    // Annotations
+    'annot.off': '✎ off',
+    'annot.on': '✎ on',
+    'annot.pen': 'Перо',
+    'annot.highlighter': 'Маркер',
+    'annot.eraser': 'Ластик',
+    'annot.comment': '💬',
+    'annot.rect': '▭',
+    'annot.arrow': '→',
+    'annot.line': '╱',
+    'annot.circle': '◯',
+    'annot.undo': 'Отмена',
+    'annot.clearPage': 'Очистить страницу',
+    'annot.exportSvg': 'SVG',
+    'annot.exportPdf': 'PDF',
+
+    // Utilities
+    'util.download': 'Скачать',
+    'util.print': 'Печать',
+
+    // Text tools
+    'text.extract': 'Текст',
+    'text.copy': '📋',
+    'text.edit': 'Ред.',
+    'text.ocr': 'OCR',
+    'text.region': 'Область',
+    'text.copyOcr': '📋 OCR',
+    'text.cancelBg': '⏹ Фон',
+    'text.health': 'Health',
+    'text.placeholder': 'Текст страницы',
+
+    // Canvas
+    'canvas.empty': 'Откройте PDF, DjVu, ePub или изображение',
+
+    // Settings modal
+    'settings.title': 'Настройки',
+    'settings.panels': 'Панели',
+    'settings.sectionVisibility': 'Видимость разделов',
+    'settings.dimensions': 'Размеры',
+    'settings.appearance': 'Оформление',
+    'settings.theme': 'Тема',
+    'settings.themeDark': 'Тёмная',
+    'settings.themeLight': 'Светлая',
+    'settings.language': 'Язык',
+    'settings.ocrLang': 'OCR',
+    'settings.ocrAuto': 'Auto',
+    'settings.ocrRus': 'Русский',
+    'settings.ocrEng': 'English',
+    'settings.ocrDeu': 'Deutsch',
+    'settings.ocrFra': 'Français',
+    'settings.ocrSpa': 'Español',
+    'settings.ocrIta': 'Italiano',
+    'settings.ocrPor': 'Português',
+    'settings.accuracy': 'Точность',
+    'settings.balanced': 'Баланс',
+    'settings.accurate': 'Точность',
+    'settings.cyrOnly': 'Кириллица: очищать латиницу',
+    'settings.hotkeys': 'Горячие клавиши',
+    'settings.saveHotkeys': 'Сохранить',
+    'settings.resetHotkeys': 'Сбросить',
+    'settings.autofix': 'Авто-фикс',
+    'settings.ocrRegion': 'OCR область',
+    'settings.bgOcr': 'Фоновое OCR при открытии',
+    'settings.saveBtn': 'Сохранить',
+
+    // PDF forms
+    'forms.fill': 'Заполнить формы',
+    'forms.export': 'Экспорт форм',
+    'forms.clear': 'Очистить формы',
+    'forms.noFields': 'Форма: нет полей в документе',
+    'forms.loaded': 'Форма: загружено {count} полей',
+    'forms.saved': 'Форма: данные сохранены',
+
+    // Conversion
+    'convert.table': 'Табл. плагин',
+    'convert.invoice': 'Счёт-фактура',
+    'convert.report': 'Отчёт',
+    'convert.custom': 'Своя таблица',
+
+    // Dimensions labels
+    'dim.sidebar': 'Сайдбар (px)',
+    'dim.toolbarScale': 'Масштаб панели (%)',
+    'dim.textMinHeight': 'Текст мин. (px)',
+    'dim.pageArea': 'Область (px)',
+    'dim.topToolbar': 'Верх (px)',
+    'dim.bottomToolbar': 'Низ (px)',
+    'dim.textPanel': 'Текст (px)',
+    'dim.annotCanvas': 'Аннот. холст (%)',
+
+    // Hotkey labels
+    'hk.next': 'Стр.→',
+    'hk.prev': 'Стр.←',
+    'hk.zoomIn': 'Zoom+',
+    'hk.zoomOut': 'Zoom−',
+    'hk.annotate': 'Аннот.',
+    'hk.search': 'Поиск',
+    'hk.ocr': 'OCR',
+    'hk.fitWidth': 'Ширина',
+    'hk.fitPage': 'Страница',
+
+    // OCR region
+    'ocr.minW': 'Мин. W (px)',
+    'ocr.minH': 'Мин. H (px)',
+    'ocr.selectRegion': 'OCR: выделите область на странице',
+    'ocr.noData': 'OCR: нет данных для экспорта индекса',
+    'ocr.exported': 'OCR индекс: экспортировано {count} страниц',
+    'ocr.textCopied': 'OCR: текст скопирован',
+    'ocr.copyFail': 'OCR: не удалось скопировать текст',
+    'ocr.undo': 'Отмена: страница {page}',
+    'ocr.redo': 'Повтор: страница {page}',
+
+    // Progressive loading
+    'progressive.loading': 'Загрузка: {percent}%',
+    'progressive.complete': 'Документ загружен полностью',
+    'progressive.streaming': 'Потоковая загрузка...',
+
+    // Unsupported
+    'unsupported.title': 'Формат пока не поддержан',
+    'unsupported.hint': 'Откройте поддерживаемый формат: PDF, DjVu, ePub или изображение.',
+
+    // View Modes
+    'viewmode.single': 'Одна страница',
+    'viewmode.twoUp': 'Две страницы',
+    'viewmode.book': 'Книжный разворот',
+    'viewmode.continuous': 'Непрерывная прокрутка',
+    'viewmode.presentation': 'Презентация',
+
+    // Themes
+    'theme.dark': 'Тёмная',
+    'theme.light': 'Светлая',
+    'theme.sepia': 'Сепия',
+    'theme.highContrast': 'Высокий контраст',
+    'theme.auto': 'Авто (системная)',
+
+    // Context Menu
+    'ctx.copy': 'Копировать текст',
+    'ctx.selectAll': 'Выделить всё',
+    'ctx.ocrArea': 'OCR этой области',
+    'ctx.zoomIn': 'Увеличить',
+    'ctx.zoomOut': 'Уменьшить',
+    'ctx.fitWidth': 'По ширине',
+    'ctx.fitPage': 'По странице',
+
+    // Export
+    'export.html': 'Экспорт HTML',
+    'export.htmlDone': 'Экспорт HTML завершён',
+  },
+
+  en: {
+    // Sidebar
+    'sidebar.open': 'Open',
+    'sidebar.recent': 'Recent',
+    'sidebar.clearRecent': 'Clear',
+    'sidebar.bookmarks': 'Bookmarks',
+    'sidebar.addBookmark': '+ Add',
+    'sidebar.clearBookmarks': 'Clear',
+    'sidebar.exportJson': '↗ .json',
+    'sidebar.importJson': '↙ .json',
+    'sidebar.filterPlaceholder': 'Filter…',
+    'sidebar.outline': 'Outline',
+    'sidebar.previews': 'Previews',
+    'sidebar.progress': 'Progress',
+    'sidebar.goalPlaceholder': 'Goal (page)',
+    'sidebar.setGoal': 'Set',
+    'sidebar.resetProgress': 'Reset progress',
+    'sidebar.resetTime': 'Reset time',
+    'sidebar.searchResults': 'Search results',
+    'sidebar.searchHistory': 'Search history',
+    'sidebar.copy': 'Copy',
+    'sidebar.stats': 'Statistics',
+    'sidebar.transitions': 'Transitions',
+    'sidebar.comments': 'Comments',
+    'sidebar.notes': 'Notes',
+    'sidebar.noteTitlePlaceholder': 'Title',
+    'sidebar.noteTagsPlaceholder': 'Tags',
+    'sidebar.noteTextPlaceholder': 'Notes…',
+    'sidebar.save': 'Save',
+    'sidebar.replace': 'Replace',
+    'sidebar.append': 'Append',
+    'sidebar.workspace': 'Workspace',
+    'sidebar.export': '↗ Export',
+    'sidebar.import': '↙ Import',
+    'sidebar.cloudCollab': 'Cloud & Collab',
+    'sidebar.push': '↑ Push',
+    'sidebar.pull': '↓ Pull',
+    'sidebar.collabOff': 'Collab: off',
+    'sidebar.collabOn': 'Collab: on',
+    'sidebar.send': 'Send',
+    'sidebar.settings': 'Settings',
+    'sidebar.advancedOff': 'Advanced: off',
+    'sidebar.advancedOn': 'Advanced: on',
+    'sidebar.compactOff': 'Compact: off',
+    'sidebar.compactOn': 'Compact: on',
+    'sidebar.collapse': '▴ Collapse',
+    'sidebar.expand': '▾ Expand',
+    'sidebar.standardHotkeys': 'Standard hotkeys',
+    'sidebar.diagnosticsExport': '↗ Diagnostics',
+    'sidebar.clearDiag': 'Clear diag.',
+    'sidebar.selfCheck': 'Self-check',
+
+    // Toolbar
+    'toolbar.back': 'Back',
+    'toolbar.forward': 'Forward',
+    'toolbar.prevPage': 'Previous page',
+    'toolbar.nextPage': 'Next page',
+    'toolbar.goTo': 'Go to',
+    'toolbar.zoomOut': 'Zoom out',
+    'toolbar.zoomIn': 'Zoom in',
+    'toolbar.fitWidth': 'Fit width',
+    'toolbar.fitPage': 'Fit page',
+    'toolbar.rotate': 'Rotate',
+    'toolbar.theme': 'Theme',
+    'toolbar.fullscreen': 'Fullscreen',
+    'toolbar.shortcuts': 'Shortcuts',
+    'toolbar.settingsBtn': 'Settings',
+    'toolbar.sidebar': 'Sidebar',
+    'toolbar.tools': 'Tools',
+    'toolbar.text': 'Text',
+    'toolbar.search': 'Search',
+    'toolbar.annotations': 'Annotations',
+
+    // Search
+    'search.placeholder': 'Search…',
+    'search.allDoc': 'Entire document',
+    'search.currentPage': 'Current page',
+    'search.find': 'Find',
+
+    // Annotations
+    'annot.off': '✎ off',
+    'annot.on': '✎ on',
+    'annot.pen': 'Pen',
+    'annot.highlighter': 'Highlighter',
+    'annot.eraser': 'Eraser',
+    'annot.comment': '💬',
+    'annot.rect': '▭',
+    'annot.arrow': '→',
+    'annot.line': '╱',
+    'annot.circle': '◯',
+    'annot.undo': 'Undo',
+    'annot.clearPage': 'Clear page',
+    'annot.exportSvg': 'SVG',
+    'annot.exportPdf': 'PDF',
+
+    // Utilities
+    'util.download': 'Download',
+    'util.print': 'Print',
+
+    // Text tools
+    'text.extract': 'Text',
+    'text.copy': '📋',
+    'text.edit': 'Edit',
+    'text.ocr': 'OCR',
+    'text.region': 'Region',
+    'text.copyOcr': '📋 OCR',
+    'text.cancelBg': '⏹ Bg',
+    'text.health': 'Health',
+    'text.placeholder': 'Page text',
+
+    // Canvas
+    'canvas.empty': 'Open a PDF, DjVu, ePub or image file',
+
+    // Settings modal
+    'settings.title': 'Settings',
+    'settings.panels': 'Panels',
+    'settings.sectionVisibility': 'Section visibility',
+    'settings.dimensions': 'Dimensions',
+    'settings.appearance': 'Appearance',
+    'settings.theme': 'Theme',
+    'settings.themeDark': 'Dark',
+    'settings.themeLight': 'Light',
+    'settings.language': 'Language',
+    'settings.ocrLang': 'OCR',
+    'settings.ocrAuto': 'Auto',
+    'settings.ocrRus': 'Russian',
+    'settings.ocrEng': 'English',
+    'settings.ocrDeu': 'German',
+    'settings.ocrFra': 'French',
+    'settings.ocrSpa': 'Spanish',
+    'settings.ocrIta': 'Italian',
+    'settings.ocrPor': 'Portuguese',
+    'settings.accuracy': 'Accuracy',
+    'settings.balanced': 'Balanced',
+    'settings.accurate': 'Accurate',
+    'settings.cyrOnly': 'Cyrillic: clean Latin chars',
+    'settings.hotkeys': 'Hotkeys',
+    'settings.saveHotkeys': 'Save',
+    'settings.resetHotkeys': 'Reset',
+    'settings.autofix': 'Auto-fix',
+    'settings.ocrRegion': 'OCR region',
+    'settings.bgOcr': 'Background OCR on open',
+    'settings.saveBtn': 'Save',
+
+    // PDF forms
+    'forms.fill': 'Fill forms',
+    'forms.export': 'Export forms',
+    'forms.clear': 'Clear forms',
+    'forms.noFields': 'Form: no fields in document',
+    'forms.loaded': 'Form: loaded {count} fields',
+    'forms.saved': 'Form: data saved',
+
+    // Conversion
+    'convert.table': 'Table plugin',
+    'convert.invoice': 'Invoice',
+    'convert.report': 'Report',
+    'convert.custom': 'Custom table',
+
+    // Dimensions labels
+    'dim.sidebar': 'Sidebar (px)',
+    'dim.toolbarScale': 'Toolbar scale (%)',
+    'dim.textMinHeight': 'Text min. (px)',
+    'dim.pageArea': 'Page area (px)',
+    'dim.topToolbar': 'Top (px)',
+    'dim.bottomToolbar': 'Bottom (px)',
+    'dim.textPanel': 'Text (px)',
+    'dim.annotCanvas': 'Annot. canvas (%)',
+
+    // Hotkey labels
+    'hk.next': 'Page→',
+    'hk.prev': 'Page←',
+    'hk.zoomIn': 'Zoom+',
+    'hk.zoomOut': 'Zoom−',
+    'hk.annotate': 'Annot.',
+    'hk.search': 'Search',
+    'hk.ocr': 'OCR',
+    'hk.fitWidth': 'Width',
+    'hk.fitPage': 'Page',
+
+    // OCR region
+    'ocr.minW': 'Min. W (px)',
+    'ocr.minH': 'Min. H (px)',
+    'ocr.selectRegion': 'OCR: select a region on the page',
+    'ocr.noData': 'OCR: no data for index export',
+    'ocr.exported': 'OCR index: exported {count} pages',
+    'ocr.textCopied': 'OCR: text copied',
+    'ocr.copyFail': 'OCR: failed to copy text',
+    'ocr.undo': 'Undo: page {page}',
+    'ocr.redo': 'Redo: page {page}',
+
+    // Progressive loading
+    'progressive.loading': 'Loading: {percent}%',
+    'progressive.complete': 'Document fully loaded',
+    'progressive.streaming': 'Streaming load...',
+
+    // Unsupported
+    'unsupported.title': 'Format not yet supported',
+    'unsupported.hint': 'Open a supported format: PDF, DjVu, ePub or image.',
+
+    // View Modes
+    'viewmode.single': 'Single Page',
+    'viewmode.twoUp': 'Two Pages',
+    'viewmode.book': 'Book Spread',
+    'viewmode.continuous': 'Continuous Scroll',
+    'viewmode.presentation': 'Presentation',
+
+    // Themes
+    'theme.dark': 'Dark',
+    'theme.light': 'Light',
+    'theme.sepia': 'Sepia',
+    'theme.highContrast': 'High Contrast',
+    'theme.auto': 'Auto (System)',
+
+    // Context Menu
+    'ctx.copy': 'Copy Text',
+    'ctx.selectAll': 'Select All',
+    'ctx.ocrArea': 'OCR This Area',
+    'ctx.zoomIn': 'Zoom In',
+    'ctx.zoomOut': 'Zoom Out',
+    'ctx.fitWidth': 'Fit Width',
+    'ctx.fitPage': 'Fit Page',
+
+    // Export
+    'export.html': 'Export HTML',
+    'export.htmlDone': 'HTML export complete',
+  },
+
+  de: {
+    'sidebar.open': 'Öffnen',
+    'sidebar.recent': 'Zuletzt',
+    'sidebar.bookmarks': 'Lesezeichen',
+    'sidebar.outline': 'Gliederung',
+    'sidebar.previews': 'Vorschau',
+    'sidebar.progress': 'Fortschritt',
+    'sidebar.searchResults': 'Suchergebnisse',
+    'sidebar.copy': 'Kopieren',
+    'sidebar.stats': 'Statistik',
+    'sidebar.comments': 'Kommentare',
+    'sidebar.notes': 'Notizen',
+    'toolbar.annotate': 'Anmerkungen',
+    'toolbar.ocr': 'Texterkennung',
+    'toolbar.search': 'Suche',
+    'toolbar.theme': 'Thema',
+    'toolbar.save': 'Speichern',
+    'toolbar.print': 'Drucken',
+    'toolbar.zoomIn': 'Vergrößern',
+    'toolbar.zoomOut': 'Verkleinern',
+    'viewmode.single': 'Einzelseite',
+    'viewmode.twoUp': 'Zwei Seiten',
+    'viewmode.book': 'Buchansicht',
+    'viewmode.continuous': 'Fortlaufend',
+    'viewmode.presentation': 'Präsentation',
+    'theme.dark': 'Dunkel',
+    'theme.light': 'Hell',
+    'theme.sepia': 'Sepia',
+    'theme.highContrast': 'Hoher Kontrast',
+    'theme.auto': 'Auto (System)',
+    'ctx.copy': 'Text kopieren',
+    'ctx.selectAll': 'Alles auswählen',
+    'ctx.ocrArea': 'Bereich erkennen',
+    'ctx.zoomIn': 'Vergrößern',
+    'ctx.zoomOut': 'Verkleinern',
+    'export.html': 'HTML exportieren',
+    'export.htmlDone': 'HTML-Export abgeschlossen',
+  },
+
+  fr: {
+    'sidebar.open': 'Ouvrir',
+    'sidebar.recent': 'Récents',
+    'sidebar.bookmarks': 'Signets',
+    'sidebar.outline': 'Plan',
+    'sidebar.previews': 'Aperçus',
+    'sidebar.progress': 'Progression',
+    'sidebar.searchResults': 'Résultats de recherche',
+    'sidebar.copy': 'Copier',
+    'sidebar.stats': 'Statistiques',
+    'sidebar.comments': 'Commentaires',
+    'sidebar.notes': 'Notes',
+    'toolbar.annotate': 'Annotations',
+    'toolbar.ocr': 'Reconnaissance',
+    'toolbar.search': 'Recherche',
+    'toolbar.theme': 'Thème',
+    'toolbar.save': 'Enregistrer',
+    'toolbar.print': 'Imprimer',
+    'toolbar.zoomIn': 'Agrandir',
+    'toolbar.zoomOut': 'Réduire',
+    'viewmode.single': 'Page unique',
+    'viewmode.twoUp': 'Deux pages',
+    'viewmode.book': 'Livre',
+    'viewmode.continuous': 'Défilement continu',
+    'viewmode.presentation': 'Présentation',
+    'theme.dark': 'Sombre',
+    'theme.light': 'Clair',
+    'theme.sepia': 'Sépia',
+    'theme.highContrast': 'Contraste élevé',
+    'theme.auto': 'Auto (Système)',
+    'ctx.copy': 'Copier le texte',
+    'ctx.selectAll': 'Tout sélectionner',
+    'ctx.ocrArea': 'OCR cette zone',
+    'export.html': 'Exporter en HTML',
+    'export.htmlDone': 'Export HTML terminé',
+  },
+
+  es: {
+    'sidebar.open': 'Abrir',
+    'sidebar.recent': 'Recientes',
+    'sidebar.bookmarks': 'Marcadores',
+    'sidebar.outline': 'Esquema',
+    'sidebar.previews': 'Vistas previas',
+    'sidebar.progress': 'Progreso',
+    'sidebar.searchResults': 'Resultados de búsqueda',
+    'sidebar.copy': 'Copiar',
+    'sidebar.stats': 'Estadísticas',
+    'sidebar.comments': 'Comentarios',
+    'sidebar.notes': 'Notas',
+    'toolbar.annotate': 'Anotaciones',
+    'toolbar.ocr': 'Reconocimiento',
+    'toolbar.search': 'Buscar',
+    'toolbar.theme': 'Tema',
+    'toolbar.save': 'Guardar',
+    'toolbar.print': 'Imprimir',
+    'viewmode.single': 'Página única',
+    'viewmode.twoUp': 'Dos páginas',
+    'viewmode.book': 'Vista de libro',
+    'viewmode.continuous': 'Desplazamiento continuo',
+    'viewmode.presentation': 'Presentación',
+    'theme.dark': 'Oscuro',
+    'theme.light': 'Claro',
+    'theme.sepia': 'Sepia',
+    'theme.highContrast': 'Alto contraste',
+    'theme.auto': 'Auto (Sistema)',
+    'export.html': 'Exportar HTML',
+    'export.htmlDone': 'Exportación HTML completada',
+  },
+
+  zh: {
+    'sidebar.open': '打开',
+    'sidebar.recent': '最近',
+    'sidebar.bookmarks': '书签',
+    'sidebar.outline': '目录',
+    'sidebar.previews': '预览',
+    'sidebar.progress': '进度',
+    'sidebar.searchResults': '搜索结果',
+    'sidebar.copy': '复制',
+    'sidebar.stats': '统计',
+    'sidebar.comments': '评论',
+    'sidebar.notes': '笔记',
+    'toolbar.annotate': '注释',
+    'toolbar.ocr': '文字识别',
+    'toolbar.search': '搜索',
+    'toolbar.theme': '主题',
+    'toolbar.save': '保存',
+    'toolbar.print': '打印',
+    'viewmode.single': '单页',
+    'viewmode.twoUp': '双页',
+    'viewmode.book': '书籍',
+    'viewmode.continuous': '连续滚动',
+    'viewmode.presentation': '演示',
+    'theme.dark': '深色',
+    'theme.light': '浅色',
+    'theme.sepia': '护眼',
+    'theme.highContrast': '高对比',
+    'theme.auto': '自动（系统）',
+    'export.html': '导出HTML',
+    'export.htmlDone': 'HTML导出完成',
+  },
+
+  ja: {
+    'sidebar.open': '開く',
+    'sidebar.recent': '最近',
+    'sidebar.bookmarks': 'ブックマーク',
+    'sidebar.outline': '目次',
+    'sidebar.previews': 'プレビュー',
+    'sidebar.progress': '進捗',
+    'sidebar.searchResults': '検索結果',
+    'sidebar.copy': 'コピー',
+    'sidebar.stats': '統計',
+    'sidebar.comments': 'コメント',
+    'sidebar.notes': 'メモ',
+    'toolbar.annotate': '注釈',
+    'toolbar.ocr': 'テキスト認識',
+    'toolbar.search': '検索',
+    'toolbar.theme': 'テーマ',
+    'toolbar.save': '保存',
+    'toolbar.print': '印刷',
+    'viewmode.single': '単一ページ',
+    'viewmode.twoUp': '2ページ',
+    'viewmode.book': '見開き',
+    'viewmode.continuous': '連続スクロール',
+    'viewmode.presentation': 'プレゼン',
+    'theme.dark': 'ダーク',
+    'theme.light': 'ライト',
+    'theme.sepia': 'セピア',
+    'theme.highContrast': 'ハイコントラスト',
+    'theme.auto': '自動（システム）',
+    'export.html': 'HTMLエクスポート',
+    'export.htmlDone': 'HTMLエクスポート完了',
+  },
+
+  ar: {
+    'sidebar.open': 'فتح',
+    'sidebar.recent': 'الأخيرة',
+    'sidebar.bookmarks': 'إشارات مرجعية',
+    'sidebar.outline': 'المخطط',
+    'sidebar.previews': 'معاينة',
+    'sidebar.progress': 'التقدم',
+    'sidebar.searchResults': 'نتائج البحث',
+    'sidebar.copy': 'نسخ',
+    'sidebar.stats': 'إحصائيات',
+    'sidebar.comments': 'تعليقات',
+    'sidebar.notes': 'ملاحظات',
+    'toolbar.annotate': 'تعليقات توضيحية',
+    'toolbar.ocr': 'التعرف على النص',
+    'toolbar.search': 'بحث',
+    'toolbar.theme': 'سمة',
+    'toolbar.save': 'حفظ',
+    'toolbar.print': 'طباعة',
+    'viewmode.single': 'صفحة واحدة',
+    'viewmode.twoUp': 'صفحتان',
+    'viewmode.book': 'عرض الكتاب',
+    'viewmode.continuous': 'تمرير مستمر',
+    'viewmode.presentation': 'عرض تقديمي',
+    'theme.dark': 'داكن',
+    'theme.light': 'فاتح',
+    'theme.sepia': 'بني داكن',
+    'theme.highContrast': 'تباين عالي',
+    'theme.auto': 'تلقائي (النظام)',
+    'export.html': 'تصدير HTML',
+    'export.htmlDone': 'اكتمل تصدير HTML',
+  },
+};
+
+let currentLang = 'ru';
+
+export function setLanguage(lang) {
+  if (translations[lang]) {
+    currentLang = lang;
+    localStorage.setItem('novareader-ui-lang', lang);
+    // RTL support for Arabic
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.lang = lang;
+  }
+}
+
+export function getLanguage() {
+  return currentLang;
+}
+
+export function loadLanguage() {
+  const saved = localStorage.getItem('novareader-ui-lang');
+  if (saved && translations[saved]) {
+    currentLang = saved;
+  }
+  return currentLang;
+}
+
+export function t(key, params = {}) {
+  const dict = translations[currentLang] || translations.ru;
+  let text = dict[key] || translations.ru[key] || key;
+  for (const [k, v] of Object.entries(params)) {
+    text = text.replace(`{${k}}`, String(v));
+  }
+  return text;
+}
+
+export function applyI18nToDOM() {
+  const lang = currentLang;
+
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    const key = el.getAttribute('data-i18n');
+    if (key) el.textContent = t(key);
+  });
+
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-title');
+    if (key) el.title = t(key);
+  });
+
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (key) el.placeholder = t(key);
+  });
+
+  document.documentElement.lang = lang === 'en' ? 'en' : 'ru';
+}
+
+export function getAvailableLanguages() {
+  return Object.keys(translations);
+}
