@@ -22,33 +22,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Symlink to short path — avoids spaces/parens in the deep nested dir
-      - name: Create short path symlink
-        run: ln -s "$GITHUB_WORKSPACE/G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" /tmp/nr
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies
-        run: cd /tmp/nr && npm ci
+        run: npm ci
 
       - name: ESLint (zero warnings)
-        run: cd /tmp/nr && npm run lint
+        run: npm run lint
 
       - name: Tests
-        run: cd /tmp/nr && npm test
+        run: npm test
 
       - name: Vite build
-        run: cd /tmp/nr && npm run build
+        run: npm run build
 
       - name: Verify build output
         run: |
-          if [ ! -d /tmp/nr/dist ]; then
+          if [ ! -d dist ]; then
             echo "ERROR: dist/ not created"
             exit 1
           fi
-          echo "Build OK: $(find /tmp/nr/dist -type f | wc -l) files"
+          echo "Build OK: $(find dist -type f | wc -l) files"
 
   # ──────────────────────────────────────────────────────
   # Job 2: Rust check (every push, ~3 min with cache)
@@ -59,16 +55,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create short path symlink
-        run: ln -s "$GITHUB_WORKSPACE/G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" /tmp/nr
-
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: /tmp/nr/src-tauri -> target
-          # Bust cache when tauri config changes (build script reads it)
-          key: tauri-${{ hashFiles('G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/src-tauri/tauri.conf.json') }}
+          workspaces: src-tauri -> target
+          key: tauri-${{ hashFiles('src-tauri/tauri.conf.json') }}
 
       - name: Install Tauri system dependencies
         run: |
@@ -76,13 +68,13 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Clean stale build scripts
-        run: rm -rf /tmp/nr/src-tauri/target/debug/build/novareader-*
+        run: rm -rf src-tauri/target/debug/build/novareader-*
 
       - name: Cargo check
-        run: cd /tmp/nr/src-tauri && cargo check
+        run: cd src-tauri && cargo check
 
       - name: Cargo clippy
-        run: cd /tmp/nr/src-tauri && cargo clippy -- -D warnings
+        run: cd src-tauri && cargo clippy -- -D warnings
 
   # ──────────────────────────────────────────────────────
   # Job 3: Build Windows installer (main + tags only)
@@ -97,13 +89,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Windows: copy to short path (symlinks unreliable on Windows)
-      - name: Copy to short path
-        shell: pwsh
-        run: |
-          $src = Join-Path $env:GITHUB_WORKSPACE "G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z"
-          Copy-Item -Path $src -Destination C:\nr -Recurse -Force
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -114,16 +99,14 @@ jobs:
 
       - uses: swatinem/rust-cache@v2
         with:
-          workspaces: C:\nr\src-tauri -> target
+          workspaces: src-tauri -> target
           cache-on-failure: true
-          key: tauri-win-${{ hashFiles('G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/src-tauri/tauri.conf.json') }}
+          key: tauri-win-${{ hashFiles('src-tauri/tauri.conf.json') }}
 
       - name: Install npm dependencies
-        working-directory: C:\nr
         run: npm ci
 
       - name: Build frontend
-        working-directory: C:\nr
         run: npm run build
 
       - name: Build Tauri installer
@@ -131,13 +114,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: C:\nr
           args: --target x86_64-pc-windows-msvc
 
       - name: Verify installer
         shell: pwsh
         run: |
-          $exe = Get-ChildItem -Path "C:\nr\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
+          $exe = Get-ChildItem -Path "src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
           if (-not $exe) { throw "NSIS installer not found!" }
           $mb = [math]::Round($exe[0].Length / 1MB, 2)
           Write-Host "Installer: $($exe[0].Name) — $mb MB"
@@ -147,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NovaReader-Windows-x64-NSIS
-          path: C:\nr\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\*.exe
+          path: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\*.exe
           if-no-files-found: error
           retention-days: 30
 
@@ -155,14 +137,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: NovaReader-Windows-x64-MSI
-          path: C:\nr\src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\*.msi
+          path: src-tauri\target\x86_64-pc-windows-msvc\release\bundle\msi\*.msi
           if-no-files-found: warn
           retention-days: 30
-
-      - name: Cleanup
-        if: always()
-        shell: pwsh
-        run: if (Test-Path C:\nr) { Remove-Item C:\nr -Recurse -Force -ErrorAction SilentlyContinue }
 
   # ──────────────────────────────────────────────────────
   # Job 4: Create GitHub Release (tags only)
