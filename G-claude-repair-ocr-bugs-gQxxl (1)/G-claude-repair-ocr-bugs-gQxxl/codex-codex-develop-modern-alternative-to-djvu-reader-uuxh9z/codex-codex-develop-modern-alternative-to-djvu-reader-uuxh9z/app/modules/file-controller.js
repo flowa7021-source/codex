@@ -14,6 +14,7 @@ import { clearAllTimers } from './safe-timers.js';
 import { toastInfo } from './toast.js';
 import { announce } from './a11y.js';
 import { resetTesseractAvailability } from './tesseract-adapter.js';
+import { bumpRenderGeneration } from './render-controller.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
@@ -195,6 +196,10 @@ export function saveCurrentPdfAs() {
 const _openFileImpl = async function openFileImpl(file) {
   const openStartedAt = performance.now();
   pushDiagnosticEvent('file.open.start', { name: file?.name || 'unknown', size: Number(file?.size) || 0 });
+  // Cancel any in-flight render on the main canvas to prevent
+  // "Cannot use the same canvas during multiple render() operations" cascade
+  if (state.adapter?.cancelMainRender) state.adapter.cancelMainRender();
+  bumpRenderGeneration();
   revokeCurrentObjectUrl();
   clearPageRenderCache();
   revokeAllTrackedUrls();

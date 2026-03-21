@@ -7,6 +7,7 @@
 
 import { els } from './state.js';
 import { loadImage } from './utils.js';
+import { pushDiagnosticEvent } from './diagnostics.js';
 
 export class PDFAdapter {
   static TEXT_CACHE_MAX = 30;
@@ -16,6 +17,13 @@ export class PDFAdapter {
     this.pageTextCache = new Map();
     this.pageTextPromises = new Map();
     this._currentRenderTask = null;
+  }
+
+  cancelMainRender() {
+    if (this._currentRenderTask) {
+      try { this._currentRenderTask.cancel(); } catch (_) { /* already finished */ }
+      this._currentRenderTask = null;
+    }
   }
 
   _evictTextCache() {
@@ -72,6 +80,14 @@ export class PDFAdapter {
     if (isMainCanvas) this._currentRenderTask = renderTask;
     try {
       await renderTask.promise;
+    } catch (err) {
+      if (err?.name === 'RenderingCancelledException') return;
+      const msg = String(err?.message || err || '');
+      if (/unknown pattern/i.test(msg)) {
+        pushDiagnosticEvent('pdf.render.pattern-warning', { page: pageNumber, message: msg });
+        return;
+      }
+      throw err;
     } finally {
       if (isMainCanvas && this._currentRenderTask === renderTask) {
         this._currentRenderTask = null;

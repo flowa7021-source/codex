@@ -52,6 +52,13 @@ let _activeInlineEditor = null;
 /** Pre-render timer handle */
 let _preRenderTimer = 0;
 
+/** Render generation counter — incremented on each renderCurrentPage call.
+ *  Used to discard stale renders when a newer render has started. */
+let _renderGeneration = 0;
+
+/** Increment and return the render generation (also used by file-controller). */
+export function bumpRenderGeneration() { return ++_renderGeneration; }
+
 // ─── Pre-render bookkeeping ─────────────────────────────────────────────────
 
 export function _schedulePreRender(currentPage, zoom, rotation) {
@@ -145,6 +152,7 @@ export function _updatePageUI(renderMs) {
 
 export async function renderCurrentPage() {
   if (!state.adapter) return;
+  const generation = ++_renderGeneration;
   const renderStartedAt = performance.now();
   const page = state.currentPage;
   const zoom = state.zoom;
@@ -195,11 +203,16 @@ export async function renderCurrentPage() {
   } catch (err) {
     if (skeleton) skeleton.remove();
     if (err?.name === 'RenderingCancelledException' || err?.message?.includes('Rendering cancelled')) return;
+    const msg = String(err?.message || err || '');
+    if (/cannot use the same canvas/i.test(msg)) return;
     throw err;
   }
 
   // ── Remove skeleton after render ──
   if (skeleton) skeleton.remove();
+
+  // Discard stale render if a newer renderCurrentPage call has started
+  if (generation !== _renderGeneration) return;
 
   _updateAnnotationCanvas();
   _updatePageUI(Math.round(performance.now() - renderStartedAt));
