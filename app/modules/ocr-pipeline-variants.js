@@ -32,6 +32,7 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   if (!canvas || !canvas.width || !canvas.height) {
     return { text: '', words: [], confidence: 0, lang: '', preprocessMs: 0, ocrMs: 0 };
   }
+  try { performance.mark('ocr-start'); } catch (_e) { /* Performance API unavailable */ }
   const startedAt = performance.now();
   const fast = !!options.fast;
   const preferredSkew = Number(options.preferredSkew || 0);
@@ -146,6 +147,10 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
     variants = pickVariantsByBudget(variants, variantBudget);
   }
   const preprocessMs = Math.round(performance.now() - preprocessStart);
+  try {
+    performance.mark('ocr-preprocess-done');
+    performance.measure('ocr-preprocess', 'ocr-start', 'ocr-preprocess-done');
+  } catch (_e) { /* Performance API unavailable */ }
 
   const recognizeStart = performance.now();
   // Helper to free all variant canvases -- called in finally to prevent leaks on early exit
@@ -236,6 +241,10 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
     }
   }
   const recognizeMs = Math.round(performance.now() - recognizeStart);
+  try {
+    performance.mark('ocr-recognize-done');
+    performance.measure('ocr-recognize', 'ocr-preprocess-done', 'ocr-recognize-done');
+  } catch (_e) { /* Performance API unavailable */ }
   if (taskCancelled) return best;
   pushDiagnosticEvent('ocr.pipeline.profile', {
     fast,
@@ -268,6 +277,11 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
       }
     } catch (err) { console.warn('[app] non-critical:', err?.message); }
   }
+
+  try {
+    performance.mark('ocr-end');
+    performance.measure('ocr-total', 'ocr-start', 'ocr-end');
+  } catch (_e) { /* Performance API unavailable */ }
 
   return best;
 }

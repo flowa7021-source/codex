@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Tooltip System ─────────────────────────────────────────────────────────
 // Visual tooltips with shortcut hints, replacing browser-default title tooltips.
 

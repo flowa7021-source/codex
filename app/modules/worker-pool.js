@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Worker Pool ────────────────────────────────────────────────────────────
 // Manages a pool of Web Workers for parallel OCR and PDF processing tasks.
 
@@ -11,6 +12,7 @@ import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
  * @property {Function} resolve
  * @property {Function} reject
  * @property {number} priority
+ * @property {Transferable[]} [transfer]
  * @property {number} createdAt
  */
 

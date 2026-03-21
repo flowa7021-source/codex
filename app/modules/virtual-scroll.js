@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Virtual Scroll ─────────────────────────────────────────────────────────
 // Virtualized rendering for continuous scroll mode. Only renders visible pages.
 

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Modal Prompt ────────────────────────────────────────────────────────────
 // Async replacement for window.prompt() that works in sandboxed WebView environments.
 // Returns a Promise<string|null>.

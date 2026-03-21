@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Language Support Module ─────────────────────────────────────────────
 // Post-correction dictionaries and scoring for DE, FR, ES, IT, PT languages
 

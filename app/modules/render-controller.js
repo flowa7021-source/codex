@@ -196,6 +196,8 @@ export function _updatePageUI(renderMs) {
 export async function renderCurrentPage() {
   if (!state.adapter) return;
 
+  try { performance.mark('render-page-start'); } catch (_e) { /* Performance API unavailable */ }
+
   // Clean up inline editor from previous page
   const activeEditor = getActiveInlineEditor();
   if (activeEditor) {
@@ -234,6 +236,10 @@ export async function renderCurrentPage() {
     _updateAnnotationCanvas();
     _updatePageUI(Math.round(performance.now() - renderStartedAt));
     _schedulePreRender(page, zoom, rotation);
+    try {
+      performance.mark('render-page-end');
+      performance.measure('render-page', 'render-page-start', 'render-page-end');
+    } catch (_e) { /* Performance API unavailable */ }
     return;
   }
 
@@ -290,4 +296,9 @@ export async function renderCurrentPage() {
 
   // Render text layer after page render (non-blocking)
   renderTextLayer(page, zoom, rotation).catch((err) => { console.warn('[render-controller] error:', err?.message); });
+
+  try {
+    performance.mark('render-page-end');
+    performance.measure('render-page', 'render-page-start', 'render-page-end');
+  } catch (_e) { /* Performance API unavailable */ }
 }

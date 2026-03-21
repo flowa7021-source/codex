@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Icon System (Lucide-inspired SVG icons) ────────────────────────────────
 // Provides clean, consistent SVG icon strings for use throughout the UI.
 // Each icon is a 16x16 SVG with stroke-based design for crisp rendering.

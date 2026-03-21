@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Structured Logger ──────────────────────────────────────────────────────
 // Centralized logging with levels, tags, and integration with diagnostics.
 // Replaces ad-hoc console.log/warn/error throughout the codebase.

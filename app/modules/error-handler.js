@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Unified Error Handler ──────────────────────────────────────────────────
 // Centralized error handling with recovery strategies and state preservation.
 
@@ -103,7 +104,7 @@ export function reportError(error, extra = {}) {
 export function classifyError(error) {
   const msg = (typeof error === 'string' ? error : error?.message || '').toLowerCase();
   const errorName = (error instanceof Error ? error.name : '').toLowerCase();
-  const errorCode = (error instanceof Error && error.code ? String(error.code) : '').toLowerCase();
+  const errorCode = (error instanceof Error && /** @type {any} */ (error).code ? String(/** @type {any} */ (error).code) : '').toLowerCase();
 
   // Check error.name and error.code first for more robust classification
   if (errorName === 'rangeerror' && (msg.includes('allocation') || msg.includes('memory'))) {

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Async Lock ─────────────────────────────────────────────────────────────
 // Mutex for protecting async state transitions from race conditions.
 // Used primarily by OCR background scan to prevent concurrent mutations.

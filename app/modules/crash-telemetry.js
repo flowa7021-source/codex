@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Crash Telemetry ────────────────────────────────────────────────────────
 // Session health monitoring, crash counting, error streaks, and health reports.
 // Extracted from app.js Phase 5 as part of Q1.1 decomposition.

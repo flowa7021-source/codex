@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Progressive Loading Module ──────────────────────────────────────────────
 // Handles streaming/chunked loading for large files (>500MB)
 // Optimized for minimal peak memory via adaptive chunk sizes and

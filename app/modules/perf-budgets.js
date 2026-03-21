@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Performance Budgets ─────────────────────────────────────────────────────
 // Defines performance budget constants and helpers for checking/reporting
 // budget violations through the diagnostics system.

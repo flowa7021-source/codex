@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Drag & Drop Improvements ───────────────────────────────────────────────
 // Page reorder, file merge, annotation drag, drop zone UI.
 
@@ -193,7 +194,7 @@ function initThumbnailReorder(container, reorderPages) {
   });
 
   // Store observer reference for cleanup
-  container._thumbnailReorderObserver = observer;
+  /** @type {any} */ (container)._thumbnailReorderObserver = observer;
 }
 
 /**
@@ -201,9 +202,10 @@ function initThumbnailReorder(container, reorderPages) {
  * @param {HTMLElement} container - The same thumbnail grid passed to initDragDrop
  */
 export function destroyThumbnailReorder(container) {
-  if (container?._thumbnailReorderObserver) {
-    container._thumbnailReorderObserver.disconnect();
-    container._thumbnailReorderObserver = null;
+  const c = /** @type {any} */ (container);
+  if (c?._thumbnailReorderObserver) {
+    c._thumbnailReorderObserver.disconnect();
+    c._thumbnailReorderObserver = null;
   }
 }
 
