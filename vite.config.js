@@ -40,7 +40,8 @@ export default defineConfig({
       ? 'chrome105'
       : 'safari14',
     minify: !process.env.TAURI_ENV_DEBUG ? 'esbuild' : false,
-    sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    // Hidden source maps in production for crash diagnostics (not exposed to users)
+    sourcemap: process.env.TAURI_ENV_DEBUG ? true : 'hidden',
 
     rollupOptions: {
       input: resolve(__dirname, 'app/index.html'),
@@ -48,8 +49,10 @@ export default defineConfig({
       external: ['katex'],
       output: {
         manualChunks: {
-          'pdf-lib': ['pdf-lib'],
+          'pdf-lib': ['pdf-lib', '@pdf-lib/fontkit'],
           'docx': ['docx'],
+          'fflate': ['fflate'],
+          'tesseract': ['tesseract.js'],
         },
         assetFileNames: 'assets/[name]-[hash][extname]',
         chunkFileNames: 'chunks/[name]-[hash].js',
@@ -57,7 +60,7 @@ export default defineConfig({
       },
     },
 
-    chunkSizeWarningLimit: 800,
+    chunkSizeWarningLimit: 600,
   },
 
   resolve: {
