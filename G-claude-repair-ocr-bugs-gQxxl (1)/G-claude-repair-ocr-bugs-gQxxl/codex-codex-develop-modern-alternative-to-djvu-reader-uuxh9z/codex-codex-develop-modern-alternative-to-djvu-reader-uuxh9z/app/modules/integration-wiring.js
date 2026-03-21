@@ -99,7 +99,21 @@ async function _initPermissions(ctx) {
     if (!ctx.pdfBytes) return null;
     const secInfo  = await getSecurityInfo(ctx.pdfBytes);
     const enforcer = new PermissionEnforcer(secInfo);
-    if (ctx.toolbar) enforcer.enforceUI(ctx.toolbar);
+    if (ctx.toolbar) {
+      // Wrap HTMLElement toolbar with the interface enforceUI expects
+      enforcer.enforceUI({
+        disable(id) {
+          const el = ctx.toolbar.querySelector(`#${id}, [data-tool="${id}"]`);
+          if (el) { el.disabled = true; el.style.opacity = '0.4'; el.style.pointerEvents = 'none'; }
+        },
+        showNotice(msg) {
+          const notice = document.createElement('span');
+          notice.textContent = msg;
+          notice.style.cssText = 'font-size:11px;color:#f44;margin-left:8px';
+          ctx.toolbar.appendChild(notice);
+        },
+      });
+    }
     return enforcer;
   } catch (_e) {
     return null;  // unencrypted PDF — no restrictions
