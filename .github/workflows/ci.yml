@@ -67,11 +67,16 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: /tmp/nr/src-tauri -> target
+          # Bust cache when tauri config changes (build script reads it)
+          key: tauri-${{ hashFiles('G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/src-tauri/tauri.conf.json') }}
 
       - name: Install Tauri system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Clean stale build scripts
+        run: rm -rf /tmp/nr/src-tauri/target/debug/build/novareader-*
 
       - name: Cargo check
         run: cd /tmp/nr/src-tauri && cargo check
@@ -111,6 +116,7 @@ jobs:
         with:
           workspaces: C:\nr\src-tauri -> target
           cache-on-failure: true
+          key: tauri-win-${{ hashFiles('G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/src-tauri/tauri.conf.json') }}
 
       - name: Install npm dependencies
         working-directory: C:\nr
