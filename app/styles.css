@@ -1109,8 +1109,7 @@ input:focus, select:focus, textarea:focus {
 
 /* Layout toggle compat */
 .viewer-area.toolsbar-hidden .toolbar-bottom { display: none; }
-.viewer-area.texttools-hidden .text-tools,
-.viewer-area.texttools-hidden #canvasResizeHandle { display: none; }
+.viewer-area.texttools-hidden .text-tools { display: none; }
 
 /* Resize handle compat */
 .resize-handle { display: none; }
@@ -3370,46 +3369,51 @@ body.high-contrast .minimap-viewport {
 }
 
 /* Resize handle base styles */
-#sidebarResizeHandle,
-#canvasResizeHandle {
-  position: relative;
+.resize-handle-sidebar,
+.resize-handle-canvas {
   z-index: 15;
   user-select: none;
   touch-action: none;
+  background: transparent;
+  transition: background var(--transition-fast);
 }
 
-#sidebarResizeHandle {
-  position: absolute;
-  right: -4px;
-  top: 0;
-  width: 8px;
-  height: 100%;
+/* Sidebar resize handle — vertical strip between left panel and viewport */
+.resize-handle-sidebar {
+  grid-row: 2 / -1;
+  grid-column: 1 / 2;
+  width: 6px;
   cursor: col-resize;
-  background: transparent;
-  transition: background var(--transition-fast);
+  justify-self: end;
+  position: relative;
+  z-index: 25;
+  margin-left: -3px;
+  margin-right: -3px;
 }
-#sidebarResizeHandle:hover,
-#sidebarResizeHandle.active {
-  background: color-mix(in srgb, var(--accent) 25%, transparent);
+.resize-handle-sidebar:hover,
+.resize-handle-sidebar.active {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-#canvasResizeHandle {
+/* Canvas resize handle — horizontal strip below the page area */
+.resize-handle-canvas {
   width: 100%;
-  height: 8px;
+  height: 6px;
   cursor: row-resize;
-  background: transparent;
-  transition: background var(--transition-fast);
   flex-shrink: 0;
 }
-#canvasResizeHandle:hover,
-#canvasResizeHandle.active {
-  background: color-mix(in srgb, var(--accent) 25%, transparent);
+.resize-handle-canvas:hover,
+.resize-handle-canvas.active {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
+/* Hide sidebar handle when sidebar is hidden */
+.app-shell.sidebar-hidden .resize-handle-sidebar { display: none; }
+
 /* Resize zone indicators — highlight zones when settings modal open */
-body.settings-modal-open #sidebarResizeHandle,
-body.settings-modal-open #canvasResizeHandle {
-  background: color-mix(in srgb, var(--accent) 15%, transparent);
+body.settings-modal-open .resize-handle-sidebar,
+body.settings-modal-open .resize-handle-canvas {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 body.settings-modal-open .left-panel {
   outline: 2px dashed color-mix(in srgb, var(--accent) 30%, transparent);
