@@ -129,8 +129,13 @@ let _settingsSnapshot = null;
 /** Abort controller for live-preview event listeners */
 let _previewAbort = null;
 
+/** Previously focused element before modal opened */
+let _previousFocus = null;
+
 export function openSettingsModal() {
   if (!els.settingsModal) return;
+
+  _previousFocus = document.activeElement;
 
   // Snapshot current state for revert on close without save
   _settingsSnapshot = {
@@ -202,6 +207,10 @@ export function closeSettingsModal(saved = false) {
     state.settings = _settingsSnapshot.settings;
   }
   _settingsSnapshot = null;
+
+  // Restore focus to previously focused element
+  if (_previousFocus?.focus) _previousFocus.focus();
+  _previousFocus = null;
 
   // Re-apply persisted settings and add smooth transition
   if (typeof _deps.applyLayoutWithTransition === 'function') _deps.applyLayoutWithTransition();

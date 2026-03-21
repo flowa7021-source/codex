@@ -62,6 +62,9 @@ let _renderGeneration = 0;
 /** Increment and return the render generation (also used by file-controller). */
 export function bumpRenderGeneration() { return ++_renderGeneration; }
 
+/** Return the current render generation (used by tile-renderer to detect stale renders). */
+export function getRenderGeneration() { return _renderGeneration; }
+
 // ─── Pre-render bookkeeping ─────────────────────────────────────────────────
 
 export function _schedulePreRender(currentPage, zoom, rotation) {

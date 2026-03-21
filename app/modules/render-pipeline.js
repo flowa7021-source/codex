@@ -130,7 +130,8 @@ export function invalidateCache(pages) {
     return;
   }
   for (const [key] of pageCache) {
-    const pageNum = parseInt(key.split('_')[0]);
+    const pageNum = parseInt(key.split('_')[0], 10);
+    if (Number.isNaN(pageNum)) continue;
     if (pages.includes(pageNum)) {
       pageCache.delete(key);
     }
@@ -234,7 +235,7 @@ function cachePageResult(key, canvas) {
     if (!ctx) return;
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     pageCache.set(key, { imageData, width: canvas.width, height: canvas.height });
-  } catch (err) { console.warn('[render-pipeline] error:', err?.message); }
+  } catch (err) { console.warn('[render-pipeline] cache failed:', err?.message); }
 }
 
 function blitToCanvas(canvas, cached) {
