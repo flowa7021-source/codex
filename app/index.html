@@ -411,6 +411,9 @@
         </div>
       </aside>
 
+      <!-- Sidebar resize handle (drag to resize left panel) -->
+      <div id="sidebarResizeHandle" class="resize-handle-sidebar" title="Перетащите для изменения ширины панели"></div>
+
       <!-- ═══════════════════════════════════════════════════════
            ROW 2, COL 2: Document Viewport
            ═══════════════════════════════════════════════════════ -->
@@ -445,6 +448,9 @@
             <div id="minimapViewport" class="minimap-viewport"></div>
           </div>
         </section>
+
+        <!-- Canvas resize handle (drag to resize page area height) -->
+        <div id="canvasResizeHandle" class="resize-handle-canvas" title="Перетащите для изменения высоты области просмотра"></div>
 
         <!-- Continuous Scroll container (hidden by default) -->
         <section class="continuous-scroll-wrap" id="continuousScrollWrap" style="display:none;">
@@ -758,8 +764,7 @@
       <button id="toggleAnnotTools"></button>
       <button id="toggleTextToolsInline"></button>
       <div id="textToolsSection"></div>
-      <div id="sidebarResizeHandle"></div>
-      <div id="canvasResizeHandle"></div>
+      <!-- sidebarResizeHandle and canvasResizeHandle moved to their proper layout positions -->
       <button id="importDjvuDataQuick"></button>
     </div>
 
