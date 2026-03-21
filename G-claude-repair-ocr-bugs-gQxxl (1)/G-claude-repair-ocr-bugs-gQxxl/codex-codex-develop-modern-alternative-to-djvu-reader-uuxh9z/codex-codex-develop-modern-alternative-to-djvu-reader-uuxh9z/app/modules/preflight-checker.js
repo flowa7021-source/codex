@@ -161,26 +161,17 @@ async function _checkImageResolution(pdfJsDoc, targetDpi) {
   const ops  = await page.getOperatorList();
 
   let imageCount = 0;
-  const lowResCount = 0;
   const imageOps = [85, 86, 87, 88, 82]; // paintImageXObject, etc.
 
   for (let i = 0; i < ops.fnArray.length; i++) {
     if (imageOps.includes(ops.fnArray[i])) {
       imageCount++;
-      // Can't easily get pixel dimensions from op list alone
-      // Use a heuristic: if images exist, warn about verifying DPI
     }
   }
 
   if (imageCount === 0) {
     return _check('image-dpi', 'Image Resolution', 'images', 'info',
       'No images detected on first page.');
-  }
-
-  if (lowResCount > 0) {
-    return _check('image-dpi', 'Image Resolution', 'images', 'fail',
-      `${lowResCount} image(s) below ${targetDpi} DPI.`,
-      'Replace low-resolution images with higher quality versions.');
   }
 
   return _check('image-dpi', 'Image Resolution', 'images', 'warn',
@@ -193,7 +184,7 @@ async function _checkColorSpaces(pdfJsDoc) {
   const page = await pdfJsDoc.getPage(1);
   const ops  = await page.getOperatorList();
 
-  const _csOps = [94, 95, 96, 97, 98, 99]; // setStroke/FillRGBColor, Gray, CMYK
+  // OPS: 94/95 = setStroke/FillRGBColor, 96/97 = Gray, 98/99 = CMYK
   let hasRgb  = false;
   let hasCmyk = false;
   let hasGray = false;

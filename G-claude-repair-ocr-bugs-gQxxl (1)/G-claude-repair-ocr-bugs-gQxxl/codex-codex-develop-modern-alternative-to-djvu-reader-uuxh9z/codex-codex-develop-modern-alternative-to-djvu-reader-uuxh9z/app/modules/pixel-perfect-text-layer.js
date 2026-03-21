@@ -341,7 +341,7 @@ export class PixelPerfectTextLayer {
   /** Position span precisely at the PDF baseline. */
   _positionSpan(span, item, metrics) {
     const vp = this.viewport;
-    const [a, b, c, d, e, f] = item.transform;
+    const [a, b, c, _d, e, f] = item.transform;
 
     // Convert PDF transform to viewport coordinates
     const pt = vp.convertToViewportPoint(e, f);

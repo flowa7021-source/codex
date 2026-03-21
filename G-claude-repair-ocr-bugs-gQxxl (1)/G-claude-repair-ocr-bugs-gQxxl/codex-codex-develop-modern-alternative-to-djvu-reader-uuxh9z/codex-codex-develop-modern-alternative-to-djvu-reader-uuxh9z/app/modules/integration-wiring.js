@@ -31,7 +31,7 @@
 
 import { ToolMode, toolStateMachine } from './tool-modes.js';
 import { DocumentModel }              from './page-model.js';
-import { PermissionEnforcer }          from './pdf-security.js';
+import { PermissionEnforcer, getSecurityInfo } from './pdf-security.js';
 // EraseTool is activated via tool-modes.js deps, not directly imported here
 import { InlineTextEditor }            from './inline-text-editor.js';
 import { ClipboardController }         from './cross-format-paste.js';
@@ -67,7 +67,8 @@ export function bootstrapAdvancedTools(ctx) {
   handles.docModel = new DocumentModel();
 
   // 2. Permission enforcer (reads Encrypt dict from raw bytes)
-  handles.permEnforcer = _initPermissions(ctx);
+  // Async — resolves in background; non-blocking
+  _initPermissions(ctx).then(enforcer => { handles.permEnforcer = enforcer; });
 
   // 3. Toolbar buttons
   _addToolbarButtons(ctx, handles);
@@ -93,9 +94,11 @@ export function bootstrapAdvancedTools(ctx) {
 // Permissions
 // ---------------------------------------------------------------------------
 
-function _initPermissions(ctx) {
+async function _initPermissions(ctx) {
   try {
-    const enforcer = new PermissionEnforcer(ctx.pdfBytes);
+    if (!ctx.pdfBytes) return null;
+    const secInfo  = await getSecurityInfo(ctx.pdfBytes);
+    const enforcer = new PermissionEnforcer(secInfo);
     if (ctx.toolbar) enforcer.enforceUI(ctx.toolbar);
     return enforcer;
   } catch (_e) {
@@ -416,7 +419,7 @@ function _initInlineEditor(ctx, handles) {
     if (!handles.docModel || !handles.docModel.pages) return;
 
     const pageNum   = ctx.getPageNum();
-    const pageModel = handles.docModel.pages[pageNum - 1];
+    const pageModel = handles.docModel.pages.get(pageNum);
     if (!pageModel) return;
 
     const rect   = container.getBoundingClientRect();

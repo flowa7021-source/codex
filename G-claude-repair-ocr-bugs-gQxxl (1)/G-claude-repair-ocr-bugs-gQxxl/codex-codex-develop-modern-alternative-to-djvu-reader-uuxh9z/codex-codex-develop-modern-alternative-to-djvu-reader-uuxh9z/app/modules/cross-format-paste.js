@@ -30,7 +30,6 @@ const CLIPBOARD_HTML_TYPE   = 'text/html';
 const CLIPBOARD_PLAIN_TYPE  = 'text/plain';
 
 const DEFAULT_PASTE_FONT_SIZE = 12;   // pt
-const _DEFAULT_PASTE_FONT     = 'Helvetica';
 
 // ---------------------------------------------------------------------------
 // Copy helpers

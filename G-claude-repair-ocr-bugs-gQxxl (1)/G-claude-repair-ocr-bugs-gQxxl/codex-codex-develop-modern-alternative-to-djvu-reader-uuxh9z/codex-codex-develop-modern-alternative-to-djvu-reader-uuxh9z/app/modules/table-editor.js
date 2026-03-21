@@ -363,7 +363,7 @@ export class TableEditor {
     // Sync all input values to this._rows before returning
     if (this._grid) {
       const inputs = Array.from(this._grid.querySelectorAll('input'));
-      const colCount = this._colCount();
+      const _colCount = this._colCount();
       for (const input of inputs) {
         const ri = parseInt(input.getAttribute('data-row'), 10);
         const ci = parseInt(input.getAttribute('data-col'), 10);
