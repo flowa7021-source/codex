@@ -90,6 +90,7 @@ export class PresentationMode {
 
   stop() {
     this._stopAutoAdvance();
+    clearSafeTimeout(this._cursorTimer);
     document.removeEventListener('keydown', this._onKeyDown);
 
     if (document.fullscreenElement) {

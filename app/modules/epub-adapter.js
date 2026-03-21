@@ -325,4 +325,11 @@ export class EpubAdapter {
     if (Number.isInteger(n) && n >= 1 && n <= this.pageCount) return n;
     return null;
   }
+
+  destroy() {
+    for (const url of this._fontUrls) {
+      URL.revokeObjectURL(url);
+    }
+    this._fontUrls = [];
+  }
 }

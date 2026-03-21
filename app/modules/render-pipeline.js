@@ -50,7 +50,7 @@ export async function renderPage(options, ctx, callbacks = {}) {
     throw new Error('Invalid render options');
   }
 
-  const cacheKey = `${page}_${zoom}_${rotation}`;
+  const cacheKey = `${page}_${zoom}_${rotation}_${DPR}`;
 
   // Check cache
   if (useCache && pageCache.has(cacheKey)) {
@@ -108,7 +108,7 @@ export function schedulePreRender(currentPage, pageCount, zoom, rotation, adapte
       .filter(p => p >= 1 && p <= pageCount);
 
     for (const page of adjacentPages) {
-      const cacheKey = `${page}_${zoom}_${rotation}`;
+      const cacheKey = `${page}_${zoom}_${rotation}_${DPR}`;
       if (pageCache.has(cacheKey)) continue;
 
       try {
@@ -207,7 +207,7 @@ export async function renderPageProgressive(options, ctx, callbacks = {}) {
           callbacks.onHighRes(page, { renderMs: Math.round(performance.now() - start) });
         }
         // Cache the high-res result
-        const cacheKey = `${page}_${zoom}_${rotation}`;
+        const cacheKey = `${page}_${zoom}_${rotation}_${realDPR}`;
         cachePageResult(cacheKey, ctx.canvas);
       })
       .catch(err => {

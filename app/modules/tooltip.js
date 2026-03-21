@@ -11,6 +11,7 @@ let tooltipEl = null;
 let showTimer = null;
 let hideTimer = null;
 let currentTarget = null;
+let _abortController = null;
 
 function ensureTooltipEl() {
   if (tooltipEl && document.body.contains(tooltipEl)) return tooltipEl;
@@ -114,11 +115,16 @@ function onScroll() {
  * Automatically handles all elements with `title` or `data-tooltip` attributes.
  */
 export function initTooltips() {
-  document.addEventListener('pointerenter', onPointerEnter, true);
-  document.addEventListener('pointerleave', onPointerLeave, true);
-  document.addEventListener('pointerdown', () => { clearSafeTimeout(showTimer); hideTooltip(); }, true);
-  document.addEventListener('scroll', onScroll, true);
-  document.addEventListener('keydown', () => { clearSafeTimeout(showTimer); hideTooltip(); }, true);
+  // Clean up previous listeners if re-initialized
+  if (_abortController) _abortController.abort();
+  _abortController = new AbortController();
+  const signal = _abortController.signal;
+
+  document.addEventListener('pointerenter', onPointerEnter, { capture: true, signal });
+  document.addEventListener('pointerleave', onPointerLeave, { capture: true, signal });
+  document.addEventListener('pointerdown', () => { clearSafeTimeout(showTimer); hideTooltip(); }, { capture: true, signal });
+  document.addEventListener('scroll', onScroll, { capture: true, signal });
+  document.addEventListener('keydown', () => { clearSafeTimeout(showTimer); hideTooltip(); }, { capture: true, signal });
 
   // Convert existing title attributes on interactive elements
   document.querySelectorAll('[title]').forEach(el => {
@@ -127,6 +133,21 @@ export function initTooltips() {
       el.removeAttribute('title');
     }
   });
+}
+
+/** Tear down the tooltip system and remove all listeners. */
+export function destroyTooltips() {
+  if (_abortController) {
+    _abortController.abort();
+    _abortController = null;
+  }
+  clearSafeTimeout(showTimer);
+  clearSafeTimeout(hideTimer);
+  if (tooltipEl) {
+    tooltipEl.remove();
+    tooltipEl = null;
+  }
+  currentTarget = null;
 }
 
 function escapeHtml(str) {

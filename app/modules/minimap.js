@@ -34,6 +34,9 @@ let _dragStartScroll = 0;
 /** Debounce timer for thumbnail rendering */
 let _renderTimer = null;
 
+/** AbortController for document-level event listeners */
+let _abortController = null;
+
 /** Cached page dimensions: Map<pageNumber, { width, height }> */
 const _pageDims = new Map();
 
@@ -112,18 +115,41 @@ export function toggleMinimap() {
 function _attachEvents() {
   if (!_container || !_viewport) return;
 
+  _abortController = new AbortController();
+  const signal = _abortController.signal;
+
   // Click on track to jump to page
-  _track.addEventListener('click', _onTrackClick);
+  _track.addEventListener('click', _onTrackClick, { signal });
 
   // Drag viewport indicator
-  _viewport.addEventListener('mousedown', _onViewportMouseDown);
-  document.addEventListener('mousemove', _onMouseMove);
-  document.addEventListener('mouseup', _onMouseUp);
+  _viewport.addEventListener('mousedown', _onViewportMouseDown, { signal });
+  document.addEventListener('mousemove', _onMouseMove, { signal });
+  document.addEventListener('mouseup', _onMouseUp, { signal });
 
   // Touch support for viewport drag
-  _viewport.addEventListener('touchstart', _onViewportTouchStart, { passive: false });
-  document.addEventListener('touchmove', _onTouchMove, { passive: false });
-  document.addEventListener('touchend', _onTouchEnd);
+  _viewport.addEventListener('touchstart', _onViewportTouchStart, { passive: false, signal });
+  document.addEventListener('touchmove', _onTouchMove, { passive: false, signal });
+  document.addEventListener('touchend', _onTouchEnd, { signal });
+}
+
+/** Remove all minimap event listeners. */
+export function destroyMinimap() {
+  if (_abortController) {
+    _abortController.abort();
+    _abortController = null;
+  }
+  if (_renderTimer) {
+    clearSafeTimeout(_renderTimer);
+    _renderTimer = null;
+  }
+  if (_rafId) {
+    cancelAnimationFrame(_rafId);
+    _rafId = 0;
+  }
+  _thumbCache.clear();
+  _pageDims.clear();
+  _visible = false;
+  _deps = null;
 }
 
 function _onTrackClick(e) {
