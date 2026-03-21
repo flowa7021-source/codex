@@ -63,8 +63,7 @@ async function applyInPlace(blob, statusMsg) {
 export function initPdfProHandlers() {
 
   // ── PDF Redaction ──
-  if (document.getElementById('pdfRedact')) {
-    document.getElementById('pdfRedact').addEventListener('click', async () => {
+  { const _el = document.getElementById('pdfRedact'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
 
@@ -147,8 +146,7 @@ export function initPdfProHandlers() {
   }
 
   // ── PDF Optimize ──
-  if (document.getElementById('pdfOptimize')) {
-    document.getElementById('pdfOptimize').addEventListener('click', async () => {
+  { const _el = document.getElementById('pdfOptimize'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
 
@@ -165,8 +163,7 @@ export function initPdfProHandlers() {
   }
 
   // ── PDF Flatten ──
-  if (document.getElementById('pdfFlatten')) {
-    document.getElementById('pdfFlatten').addEventListener('click', async () => {
+  { const _el = document.getElementById('pdfFlatten'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
 
@@ -183,8 +180,7 @@ export function initPdfProHandlers() {
   }
 
   // ── Accessibility Check ──
-  if (document.getElementById('pdfAccessibility')) {
-    document.getElementById('pdfAccessibility').addEventListener('click', async () => {
+  { const _el = document.getElementById('pdfAccessibility'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
 
@@ -222,8 +218,7 @@ export function initPdfProHandlers() {
   }
 
   // ── PDF Compare (side-by-side like MS Word) ──
-  if (document.getElementById('pdfCompare')) {
-    document.getElementById('pdfCompare').addEventListener('click', async () => {
+  { const _el = document.getElementById('pdfCompare'); if (_el) _el.addEventListener('click', async () => {
       if (!state.adapter || state.adapter.type !== 'pdf') {
         _deps.setOcrStatus('Откройте PDF-файл для сравнения');
         return;
@@ -416,8 +411,7 @@ export function initPdfProHandlers() {
   }
 
   // ── Header/Footer ──
-  if (document.getElementById('pdfHeaderFooter')) {
-    document.getElementById('pdfHeaderFooter').addEventListener('click', async () => {
+  { const _el = document.getElementById('pdfHeaderFooter'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
 
@@ -445,8 +439,7 @@ export function initPdfProHandlers() {
   }
 
   // ── Bates Numbering ──
-  if (document.getElementById('pdfBatesNumber')) {
-    document.getElementById('pdfBatesNumber').addEventListener('click', async () => {
+  { const _el = document.getElementById('pdfBatesNumber'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
 
@@ -473,8 +466,7 @@ export function initPdfProHandlers() {
   }
 
   // ── Page Organizer Buttons ──
-  if (document.getElementById('orgRotateCW')) {
-    document.getElementById('orgRotateCW').addEventListener('click', async () => {
+  { const _el = document.getElementById('orgRotateCW'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
       try {
@@ -490,8 +482,7 @@ export function initPdfProHandlers() {
     });
   }
 
-  if (document.getElementById('orgRotateCCW')) {
-    document.getElementById('orgRotateCCW').addEventListener('click', async () => {
+  { const _el = document.getElementById('orgRotateCCW'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
       try {
@@ -507,8 +498,7 @@ export function initPdfProHandlers() {
     });
   }
 
-  if (document.getElementById('orgDelete')) {
-    document.getElementById('orgDelete').addEventListener('click', async () => {
+  { const _el = document.getElementById('orgDelete'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
       if (state.pageCount <= 1) {
@@ -537,8 +527,7 @@ export function initPdfProHandlers() {
     });
   }
 
-  if (document.getElementById('orgExtract')) {
-    document.getElementById('orgExtract').addEventListener('click', async () => {
+  { const _el = document.getElementById('orgExtract'); if (_el) _el.addEventListener('click', async () => {
       const file = requirePdfFile();
       if (!file) return;
       const rangeStr = await _deps.nrPrompt(`Извлечь страницы (напр. "1-3" или "2,5,7").\nТекущая: ${state.currentPage}, Всего: ${state.pageCount}`, String(state.currentPage));
@@ -569,8 +558,7 @@ export function initPdfProHandlers() {
     });
   }
 
-  if (document.getElementById('orgInsertPages')) {
-    document.getElementById('orgInsertPages').addEventListener('change', async (e) => {
+  { const _el = document.getElementById('orgInsertPages'); if (_el) _el.addEventListener('change', async (e) => {
       const file = requirePdfFile();
       if (!file) return;
       const insertFile = e.target.files?.[0];
