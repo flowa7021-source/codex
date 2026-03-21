@@ -503,6 +503,24 @@ function createMainWindow() {
     mainWindow?.focus()
   })
 
+  mainWindow.on('enter-full-screen', () => {
+    mainWindow?.webContents.send('window:fullscreen-changed', true)
+  })
+  mainWindow.on('leave-full-screen', () => {
+    mainWindow?.webContents.send('window:fullscreen-changed', false)
+  })
+
+  // F11 → toggle fullscreen
+  mainWindow.webContents.on('before-input-event', (_event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F11') {
+      mainWindow?.setFullScreen(!mainWindow.isFullScreen())
+    }
+    // Escape exits fullscreen
+    if (input.type === 'keyDown' && input.key === 'Escape' && mainWindow?.isFullScreen()) {
+      mainWindow.setFullScreen(false)
+    }
+  })
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith('app://')) {
       shell.openExternal(url)
@@ -520,6 +538,13 @@ ipcMain.on('window:maximize', () => {
   mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize()
 })
 ipcMain.on('window:close', () => mainWindow?.close())
+
+ipcMain.on('window:fullscreen', () => {
+  if (!mainWindow) return
+  mainWindow.setFullScreen(!mainWindow.isFullScreen())
+})
+
+ipcMain.handle('window:is-fullscreen', () => mainWindow?.isFullScreen() ?? false)
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(() => {

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Bell, ChevronDown, User, Settings, LogOut, Search } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Bell, ChevronDown, Settings, LogOut, Search, Maximize2, Minimize2 } from 'lucide-react'
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useCommandPaletteStore } from '@/app/stores/command-palette'
 import { useNotificationsStore } from '@/app/stores/notifications'
@@ -10,6 +10,7 @@ import { Avatar } from '@/app/components/ui/Avatar'
 
 export function TopBar() {
   const [now, setNow] = useState(new Date())
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const { setOpen } = useCommandPaletteStore()
   const { notifications, unreadCount, markAllRead } = useNotificationsStore()
 
@@ -17,6 +18,21 @@ export function TopBar() {
     const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
+
+  useEffect(() => {
+    const api = (window as any).electronAPI
+    if (!api) return
+    // Sync initial state
+    api.isFullscreen?.().then((v: boolean) => setIsFullscreen(v))
+    // Subscribe to changes
+    const unsubscribe = api.onFullscreenChange?.((v: boolean) => setIsFullscreen(v))
+    return () => unsubscribe?.()
+  }, [])
+
+  function handleFullscreen() {
+    const api = (window as any).electronAPI
+    api?.toggleFullscreen?.()
+  }
 
   return (
     <header
@@ -84,6 +100,24 @@ export function TopBar() {
         >
           {formatTime(now)}
         </span>
+
+        {/* Fullscreen toggle */}
+        <button
+          onClick={handleFullscreen}
+          title={isFullscreen ? 'Выйти из полноэкранного режима (F11)' : 'Полноэкранный режим (F11)'}
+          className="p-1.5 rounded-md transition-all duration-200"
+          style={{ color: 'var(--color-text-secondary)' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--color-surface-hover)'
+            e.currentTarget.style.color = 'var(--color-text)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.color = 'var(--color-text-secondary)'
+          }}
+        >
+          {isFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+        </button>
 
         {/* Notifications */}
         <DropdownMenu.Root>
