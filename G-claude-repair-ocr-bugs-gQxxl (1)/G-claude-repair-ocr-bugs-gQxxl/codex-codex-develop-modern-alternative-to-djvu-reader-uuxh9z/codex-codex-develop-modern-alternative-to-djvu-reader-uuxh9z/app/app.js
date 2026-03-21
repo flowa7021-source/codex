@@ -1,3 +1,7 @@
+// ─── Platform Detection (must be first) ─────────────────────────────────────
+import { initPlatform } from './modules/platform.js';
+initPlatform().catch(() => {});   // non-blocking; fallback to browser mode
+
 // ─── Module Imports ─────────────────────────────────────────────────────────
 import { debounce } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';

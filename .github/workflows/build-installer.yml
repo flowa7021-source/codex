@@ -1,0 +1,159 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: ['main']
+    tags: ['v*']
+  pull_request:
+    branches: ['main']
+  workflow_dispatch:
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUST_BACKTRACE: short
+  PROJECT_DIR: G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z
+
+jobs:
+  # ──────────────────────────────────────────────
+  # Job 1: Quality gate (fast, Linux)
+  # ──────────────────────────────────────────────
+  quality-gate:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd "$PROJECT_DIR" && npm ci
+      - run: cd "$PROJECT_DIR" && npm run lint
+      - run: cd "$PROJECT_DIR" && npm test
+
+  # ──────────────────────────────────────────────
+  # Job 2: Build Windows installer
+  # ──────────────────────────────────────────────
+  build-windows-installer:
+    name: Build Windows x64 Installer
+    needs: quality-gate
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust dependency cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "${{ env.PROJECT_DIR }}/src-tauri -> target"
+          cache-on-failure: true
+
+      - name: Install npm dependencies
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npm ci
+
+      - name: Build frontend (Vite)
+        working-directory: ${{ env.PROJECT_DIR }}
+        run: npm run build
+
+      - name: Build Tauri installer
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ${{ env.PROJECT_DIR }}
+          args: --target x86_64-pc-windows-msvc
+
+      - name: Verify installer artifacts
+        shell: pwsh
+        run: |
+          $nsisPath = Get-ChildItem -Path "${{ env.PROJECT_DIR }}/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue
+          if (-not $nsisPath) {
+            Write-Error "NSIS installer not found!"
+            exit 1
+          }
+          $sizeMB = [math]::Round($nsisPath[0].Length / 1MB, 2)
+          Write-Host "NSIS installer: $($nsisPath[0].Name) — $sizeMB MB"
+          if ($sizeMB -lt 3 -or $sizeMB -gt 50) {
+            Write-Error "Installer size $sizeMB MB is outside expected range (3-50 MB)!"
+            exit 1
+          }
+          Write-Host "Installer size OK: $sizeMB MB"
+
+      - name: Upload NSIS installer (.exe)
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaReader-Windows-x64-NSIS
+          path: ${{ env.PROJECT_DIR }}/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload MSI installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaReader-Windows-x64-MSI
+          path: ${{ env.PROJECT_DIR }}/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/msi/*.msi
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ──────────────────────────────────────────────
+  # Job 3: Create GitHub Release (only on tag push)
+  # ──────────────────────────────────────────────
+  create-release:
+    name: Create GitHub Release
+    needs: build-windows-installer
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download NSIS installer
+        uses: actions/download-artifact@v4
+        with:
+          name: NovaReader-Windows-x64-NSIS
+          path: ./release-assets/
+
+      - name: Download MSI installer
+        uses: actions/download-artifact@v4
+        with:
+          name: NovaReader-Windows-x64-MSI
+          path: ./release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            ./release-assets/*.exe
+            ./release-assets/*.msi
+          body: |
+            ## NovaReader ${{ github.ref_name }}
+
+            ### Installation (Windows)
+
+            **Recommended**: Download `NovaReader_*_x64-setup.exe` (NSIS installer).
+            - Supports Windows 10 (1803+) and Windows 11
+            - Automatically installs WebView2 if missing
+            - Creates desktop and Start Menu shortcuts
+
+            **Alternative**: `NovaReader_*_x64_en-US.msi` for enterprise deployment.
+
+            ### System Requirements
+            - Windows 10 version 1803 (April 2018 Update) or newer
+            - Windows 11 (any version)
+            - 4 GB RAM (8 GB recommended for large documents)
+            - 50 MB free disk space
