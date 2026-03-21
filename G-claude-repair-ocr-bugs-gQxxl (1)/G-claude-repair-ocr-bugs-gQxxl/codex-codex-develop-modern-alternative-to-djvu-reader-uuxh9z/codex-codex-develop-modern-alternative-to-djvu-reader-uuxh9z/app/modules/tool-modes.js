@@ -9,6 +9,8 @@ const _deps = {
   renderAnnotations: () => {},
   updateOverlayInteractionState: () => {},
   setOcrStatus: () => {},
+  activateEraseOverlay: () => {},
+  deactivateEraseOverlay: () => {},
 };
 
 export function initToolModeDeps(deps) {
@@ -21,6 +23,7 @@ export const ToolMode = {
   OCR_REGION: 'ocr-region',
   TEXT_EDIT: 'text-edit',
   SEARCH: 'search',
+  ERASE: 'erase',
 };
 
 export const toolStateMachine = {
@@ -38,11 +41,13 @@ export const toolStateMachine = {
     if (oldMode === ToolMode.OCR_REGION) deactivateOcrRegionMode();
     if (oldMode === ToolMode.TEXT_EDIT) deactivateTextEditMode();
     if (oldMode === ToolMode.SEARCH) deactivateSearchMode();
+    if (oldMode === ToolMode.ERASE) deactivateEraseMode();
 
     if (newMode === ToolMode.ANNOTATE) activateAnnotateMode();
     if (newMode === ToolMode.OCR_REGION) activateOcrRegionMode();
     if (newMode === ToolMode.TEXT_EDIT) activateTextEditMode();
     if (newMode === ToolMode.SEARCH) activateSearchMode();
+    if (newMode === ToolMode.ERASE) activateEraseMode();
 
     pushDiagnosticEvent('tool.transition', { from: oldMode, to: newMode });
     for (const fn of this.listeners) fn(newMode, oldMode);
@@ -114,4 +119,21 @@ export function deactivateSearchMode() {
 
 export function activateSearchMode() {
   if (els.searchInput) els.searchInput.focus();
+}
+
+export function deactivateEraseMode() {
+  state.eraseMode = false;
+  const btn = document.getElementById('eraseTool');
+  if (btn) btn.classList.remove('active');
+  _deps.deactivateEraseOverlay();
+  _deps.updateOverlayInteractionState();
+}
+
+export function activateEraseMode() {
+  state.eraseMode = true;
+  const btn = document.getElementById('eraseTool');
+  if (btn) btn.classList.add('active');
+  _deps.activateEraseOverlay();
+  _deps.updateOverlayInteractionState();
+  pushDiagnosticEvent('erase.activated', {});
 }
