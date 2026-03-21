@@ -199,6 +199,7 @@ export function saveCurrentPdfAs() {
 // ─── Open File ──────────────────────────────────────────────────────────────
 
 const _openFileImpl = async function openFileImpl(file) {
+  try { performance.mark('file-open-start'); } catch (_e) { /* Performance API unavailable */ }
   const openStartedAt = performance.now();
   pushDiagnosticEvent('file.open.start', { name: file?.name || 'unknown', size: Number(file?.size) || 0 });
   // Cancel any in-flight render on the main canvas to prevent
@@ -320,6 +321,11 @@ const _openFileImpl = async function openFileImpl(file) {
     state.adapter = new _deps.UnsupportedAdapter(file.name);
   }
 
+  try {
+    performance.mark('file-loaded');
+    performance.measure('file-load', 'file-open-start', 'file-loaded');
+  } catch (_e) { /* Performance API unavailable */ }
+
   state.pageCount = state.adapter.getPageCount();
 
   // Auto-load PDF forms if adapter is PDF
@@ -365,6 +371,10 @@ const _openFileImpl = async function openFileImpl(file) {
   await _deps.renderOutline();
   await _deps.renderPagePreviews();
   await _deps.renderCurrentPage();
+  try {
+    performance.mark('file-parsed');
+    performance.measure('file-parse', 'file-loaded', 'file-parsed');
+  } catch (_e) { /* Performance API unavailable */ }
   pushDiagnosticEvent('file.open.finish', { name: state.docName, ms: Math.round(performance.now() - openStartedAt), pages: state.pageCount });
   _deps.estimatePageSkewAngle(state.currentPage);
   if (state.settings?.backgroundOcr) {
@@ -385,6 +395,11 @@ const _openFileImpl = async function openFileImpl(file) {
   if (typeof window._bootstrapAdvancedTools === 'function') {
     try { window._bootstrapAdvancedTools(); } catch (err) { console.warn('[advanced-tools] bootstrap failed:', err?.message); }
   }
+
+  try {
+    performance.mark('file-open-end');
+    performance.measure('file-open', 'file-open-start', 'file-open-end');
+  } catch (_e) { /* Performance API unavailable */ }
 };
 
 export const openFile = (() => {
