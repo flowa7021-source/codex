@@ -1,5 +1,8 @@
 // ─── CBZ/CBR Adapter ────────────────────────────────────────────────────────
 // Support for comic book archive formats (CBZ = ZIP, CBR = info only).
+// Uses fflate (via zip-utils) for proper DEFLATE + Store ZIP support.
+
+import { extractZip } from './zip-utils.js';
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
 
@@ -9,50 +12,16 @@ const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'];
  * @returns {Promise<{pages: Array<{name: string, blob: Blob, index: number}>, metadata: object}>}
  */
 export async function parseCbz(data) {
-  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  const zipEntries = extractZip(data);
 
-  // Find ZIP entries using local file headers
-  const entries = [];
-  let offset = 0;
+  // Filter to image files and sort naturally
+  const imageEntries = Object.entries(zipEntries)
+    .filter(([name]) => isImageFile(name))
+    .sort(([a], [b]) => naturalSort(a, b));
 
-  while (offset < bytes.length - 4) {
-    // Local file header signature: 0x04034b50
-    if (bytes[offset] === 0x50 && bytes[offset + 1] === 0x4b &&
-        bytes[offset + 2] === 0x03 && bytes[offset + 3] === 0x04) {
-
-      const view = new DataView(bytes.buffer, bytes.byteOffset + offset);
-      const compMethod = view.getUint16(8, true);
-      const compSize = view.getUint32(18, true);
-      const uncompSize = view.getUint32(22, true);
-      const nameLen = view.getUint16(26, true);
-      const extraLen = view.getUint16(28, true);
-
-      const nameBytes = bytes.slice(offset + 30, offset + 30 + nameLen);
-      const name = new TextDecoder().decode(nameBytes);
-
-      const dataStart = offset + 30 + nameLen + extraLen;
-      const fileData = bytes.slice(dataStart, dataStart + compSize);
-
-      if (compMethod === 0 && isImageFile(name)) { // Store method only
-        entries.push({
-          name,
-          data: fileData,
-          size: uncompSize,
-        });
-      }
-
-      offset = dataStart + compSize;
-    } else {
-      offset++;
-    }
-  }
-
-  // Sort by filename (natural sort for page ordering)
-  entries.sort((a, b) => naturalSort(a.name, b.name));
-
-  const pages = entries.map((entry, index) => ({
-    name: entry.name,
-    blob: new Blob([entry.data], { type: getMimeType(entry.name) }),
+  const pages = imageEntries.map(([name, bytes], index) => ({
+    name,
+    blob: new Blob([bytes], { type: getMimeType(name) }),
     index,
   }));
 

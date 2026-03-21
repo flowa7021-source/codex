@@ -1,68 +1,9 @@
 // ─── ePub Adapter ────────────────────────────────────────────────────────────
 // Lightweight ePub reader: parses OEBPS/OPF container, extracts XHTML chapters,
 // renders them as styled text on canvas.
+// Uses fflate (via zip-utils) for proper DEFLATE + Store ZIP support.
 
-
-function extractFileFromZip(bytes, targetName) {
-  const decoder = new TextDecoder('utf-8');
-  let pos = 0;
-  while (pos < bytes.length - 4) {
-    if (bytes[pos] === 0x50 && bytes[pos + 1] === 0x4B && bytes[pos + 2] === 0x03 && bytes[pos + 3] === 0x04) {
-      const nameLen = bytes[pos + 26] | (bytes[pos + 27] << 8);
-      const extraLen = bytes[pos + 28] | (bytes[pos + 29] << 8);
-      const compSize = (bytes[pos + 18] | (bytes[pos + 19] << 8) | (bytes[pos + 20] << 16) | (bytes[pos + 21] << 24)) >>> 0;
-      const name = decoder.decode(bytes.slice(pos + 30, pos + 30 + nameLen));
-      const dataStart = pos + 30 + nameLen + extraLen;
-      if (name === targetName || name.endsWith('/' + targetName)) {
-        return decoder.decode(bytes.slice(dataStart, dataStart + compSize));
-      }
-      pos = dataStart + compSize;
-    } else {
-      pos++;
-    }
-  }
-  return null;
-}
-
-function extractBinaryFromZip(bytes, targetName) {
-  let pos = 0;
-  while (pos < bytes.length - 4) {
-    if (bytes[pos] === 0x50 && bytes[pos + 1] === 0x4B && bytes[pos + 2] === 0x03 && bytes[pos + 3] === 0x04) {
-      const nameLen = bytes[pos + 26] | (bytes[pos + 27] << 8);
-      const extraLen = bytes[pos + 28] | (bytes[pos + 29] << 8);
-      const compSize = (bytes[pos + 18] | (bytes[pos + 19] << 8) | (bytes[pos + 20] << 16) | (bytes[pos + 21] << 24)) >>> 0;
-      const decoder = new TextDecoder('utf-8');
-      const name = decoder.decode(bytes.slice(pos + 30, pos + 30 + nameLen));
-      const dataStart = pos + 30 + nameLen + extraLen;
-      if (name === targetName || name.endsWith('/' + targetName)) {
-        return bytes.slice(dataStart, dataStart + compSize);
-      }
-      pos = dataStart + compSize;
-    } else {
-      pos++;
-    }
-  }
-  return null;
-}
-
-function _listZipEntries(bytes) {
-  const entries = [];
-  const decoder = new TextDecoder('utf-8');
-  let pos = 0;
-  while (pos < bytes.length - 4) {
-    if (bytes[pos] === 0x50 && bytes[pos + 1] === 0x4B && bytes[pos + 2] === 0x03 && bytes[pos + 3] === 0x04) {
-      const nameLen = bytes[pos + 26] | (bytes[pos + 27] << 8);
-      const extraLen = bytes[pos + 28] | (bytes[pos + 29] << 8);
-      const compSize = (bytes[pos + 18] | (bytes[pos + 19] << 8) | (bytes[pos + 20] << 16) | (bytes[pos + 21] << 24)) >>> 0;
-      const name = decoder.decode(bytes.slice(pos + 30, pos + 30 + nameLen));
-      entries.push(name);
-      pos = pos + 30 + nameLen + extraLen + compSize;
-    } else {
-      pos++;
-    }
-  }
-  return entries;
-}
+import { extractZip, extractTextFile, extractBinaryFile } from './zip-utils.js';
 
 function parseContainer(containerXml) {
   const match = containerXml.match(/full-path="([^"]+)"/);
@@ -126,25 +67,24 @@ function extractChapterTitle(html) {
 }
 
 /** Extract CSS content referenced in the EPUB */
-function extractCssFromEpub(bytes, opfXml, basePath) {
+function extractCssFromEpub(zipEntries, opfXml, basePath) {
   const cssFiles = [];
   const cssMatches = opfXml.matchAll(/<item\s[^>]*?href="([^"]*\.css)"[^>]*/gi);
   for (const m of cssMatches) {
     const href = basePath + m[1];
-    const content = extractFileFromZip(bytes, href);
+    const content = extractTextFile(zipEntries, href);
     if (content) cssFiles.push({ href, content });
   }
-  // Also extract inline <style> from chapter HTML
   return cssFiles;
 }
 
 /** Extract embedded fonts from the EPUB */
-function extractFontsFromEpub(bytes, opfXml, basePath) {
+function extractFontsFromEpub(zipEntries, opfXml, basePath) {
   const fonts = [];
   const fontMatches = opfXml.matchAll(/<item\s[^>]*?href="([^"]*\.(ttf|otf|woff|woff2))"[^>]*/gi);
   for (const m of fontMatches) {
     const href = basePath + m[1];
-    const data = extractBinaryFromZip(bytes, href);
+    const data = extractBinaryFile(zipEntries, href);
     if (data) {
       const ext = m[2].toLowerCase();
       const mimeTypes = { ttf: 'font/ttf', otf: 'font/otf', woff: 'font/woff', woff2: 'font/woff2' };
@@ -156,14 +96,15 @@ function extractFontsFromEpub(bytes, opfXml, basePath) {
 
 export async function parseEpub(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
+  const zipEntries = extractZip(bytes);
 
-  const containerXml = extractFileFromZip(bytes, 'META-INF/container.xml');
+  const containerXml = extractTextFile(zipEntries, 'META-INF/container.xml');
   if (!containerXml) throw new Error('Invalid ePub: missing container.xml');
 
   const opfPath = parseContainer(containerXml);
   if (!opfPath) throw new Error('Invalid ePub: missing rootfile path');
 
-  const opfXml = extractFileFromZip(bytes, opfPath);
+  const opfXml = extractTextFile(zipEntries, opfPath);
   if (!opfXml) throw new Error('Invalid ePub: missing OPF file');
 
   const basePath = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
@@ -171,26 +112,25 @@ export async function parseEpub(arrayBuffer) {
 
   const chapters = [];
   for (const item of spine) {
-    const content = extractFileFromZip(bytes, item.href);
+    const content = extractTextFile(zipEntries, item.href);
     if (content) {
       const title = extractChapterTitle(content);
       const text = stripHtmlTags(content);
-      // Preserve raw HTML for CSS rendering
       chapters.push({ title: title || `Chapter ${chapters.length + 1}`, text, html: content, href: item.href });
     }
   }
 
   let toc = [];
   if (tocHref) {
-    const tocXml = extractFileFromZip(bytes, tocHref);
+    const tocXml = extractTextFile(zipEntries, tocHref);
     if (tocXml) {
       toc = parseToc(tocXml);
     }
   }
 
   // Extract CSS and fonts
-  const css = extractCssFromEpub(bytes, opfXml, basePath);
-  const fonts = extractFontsFromEpub(bytes, opfXml, basePath);
+  const css = extractCssFromEpub(zipEntries, opfXml, basePath);
+  const fonts = extractFontsFromEpub(zipEntries, opfXml, basePath);
 
   return { chapters, toc, bytes, css, fonts };
 }
