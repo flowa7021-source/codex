@@ -41,13 +41,10 @@ const languageProfiles = {
     commonWords: ['der', 'die', 'und', 'in', 'den', 'von', 'zu', 'das', 'mit', 'sich', 'des', 'auf', 'für', 'ist', 'im', 'dem', 'nicht', 'ein', 'eine', 'als', 'auch', 'es', 'an', 'werden', 'aus', 'er', 'hat', 'dass', 'sie', 'nach'],
     fixes: [
       [/\brn/g, 'm'],
-      [/ii/g, 'ü'],
       [/oe/g, 'ö'],
       [/ae/g, 'ä'],
-      [/Ii/g, 'Ü'],
       [/\bfiir\b/g, 'für'],
       [/\bDaf3\b/g, 'Daß'],
-      [/13/g, 'ß'],
     ],
   },
   fra: {
@@ -71,7 +68,6 @@ const languageProfiles = {
     commonWords: ['de', 'la', 'que', 'el', 'en', 'y', 'a', 'los', 'del', 'se', 'las', 'por', 'un', 'para', 'con', 'no', 'una', 'su', 'al', 'lo', 'como', 'más', 'pero', 'sus', 'le', 'ya', 'o', 'fue', 'este', 'ha'],
     fixes: [
       [/\brn/g, 'm'],
-      [/ii/g, 'ñ'],
       [/\b;/g, '¡'],
       [/\b\?$/g, '¿'],
     ],
@@ -145,7 +141,6 @@ const languageProfiles = {
     commonWords: ['bir', 'bu', 've', 'de', 'için', 'ile', 'da', 'olan', 'olarak', 'en', 'gibi', 'daha', 'çok', 'var', 'sonra', 'ne', 'kadar', 'üzerinde', 'ancak', 'yıl', 'ise', 'tarafından', 'ya', 'her', 'den', 'ama', 'bunu', 'arasında', 'önce', 'büyük'],
     fixes: [
       [/\brn/g, 'm'],
-      [/I/g, 'İ'],
     ],
   },
   pol: {
@@ -154,7 +149,6 @@ const languageProfiles = {
     commonWords: ['i', 'w', 'na', 'nie', 'z', 'się', 'do', 'to', 'że', 'jest', 'jak', 'ale', 'co', 'o', 'tak', 'za', 'od', 'już', 'po', 'by', 'ze', 'czy', 'tylko', 'jego', 'jej', 'ich', 'gdy', 'ten', 'może', 'tego'],
     fixes: [
       [/\brn/g, 'm'],
-      [/l\b/g, 'ł'],
     ],
   },
   ces: {
@@ -208,8 +202,6 @@ const languageProfiles = {
     commonWords: ['och', 'i', 'att', 'det', 'som', 'en', 'på', 'är', 'av', 'för', 'med', 'har', 'den', 'till', 'inte', 'om', 'ett', 'men', 'var', 'jag', 'de', 'så', 'han', 'vi', 'kan', 'ska', 'från', 'sin', 'hade', 'hon', 'här', 'vid', 'nu', 'eller', 'bara', 'efter', 'alla', 'under', 'sig', 'ut', 'hur', 'mot', 'upp', 'två', 'då', 'mycket', 'bli', 'år', 'där', 'blev'],
     fixes: [
       [/\brn/g, 'm'],
-      [/a\b/g, 'å'],
-      [/ii/g, 'ö'],
     ],
   },
   nor: {
@@ -228,8 +220,6 @@ const languageProfiles = {
     commonWords: ['ja', 'on', 'ei', 'se', 'että', 'oli', 'hän', 'kun', 'niin', 'ovat', 'mutta', 'tai', 'ne', 'jo', 'olla', 'vain', 'ole', 'myös', 'kuin', 'sitä', 'he', 'sen', 'tämä', 'nyt', 'yli', 'tässä', 'siitä', 'mutta', 'miten', 'sitten', 'vielä', 'minä', 'sinä', 'me', 'te', 'kanssa', 'itse', 'kaikki', 'eri', 'joka', 'mitä', 'ennen', 'hyvä', 'saada', 'tulla', 'tehdä', 'ottaa', 'antaa', 'pitää', 'nähdä'],
     fixes: [
       [/\brn/g, 'm'],
-      [/ii/g, 'ä'],
-      [/oe/g, 'ö'],
     ],
   },
   ell: {
@@ -253,7 +243,6 @@ const languageProfiles = {
     commonWords: ['và', 'của', 'là', 'có', 'được', 'trong', 'cho', 'không', 'một', 'này', 'với', 'các', 'để', 'đã', 'từ', 'người', 'những', 'hay', 'khi', 'về', 'tại', 'do', 'còn', 'đến', 'ra', 'theo', 'hoặc', 'như', 'nhưng', 'vào', 'lại', 'nào', 'sẽ', 'đó', 'năm', 'trên', 'cũng', 'rất', 'phải', 'thì', 'đây', 'ở', 'sau', 'bị', 'nên', 'qua', 'nhiều', 'vẫn', 'mà', 'bằng'],
     fixes: [
       [/\brn/g, 'm'],
-      [/d\b/g, 'đ'],
     ],
   },
   tha: {
