@@ -20,7 +20,7 @@
       }
     }
     </script>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles/index.css" />
   </head>
   <body>
     <!-- Skip navigation for accessibility -->
@@ -469,58 +469,58 @@
         <!-- Panel: Annotations -->
         <div class="rp-panel" data-rp-panel="annotations">
           <div class="rp-section">
-            <h3 class="rp-section-title">Рисование</h3>
+            <h3 class="rp-section-title" data-i18n="annot.drawing">Рисование</h3>
             <div class="rp-tool-grid">
-              <button id="annotateToggle" class="rp-tool-btn tb-toggle" title="Включить рисование"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 11.5l8-8 2 2-8 8-3 1z"/></svg> Рисование</button>
+              <button id="annotateToggle" class="rp-tool-btn tb-toggle" title="Включить рисование"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 11.5l8-8 2 2-8 8-3 1z"/></svg> <span data-i18n="annot.drawing">Рисование</span></button>
             </div>
             <div class="rp-controls">
-              <label class="rp-label">Инструмент
+              <label class="rp-label"><span data-i18n="annot.tool">Инструмент</span>
                 <select id="drawTool" class="rp-select">
-                  <option value="pen">Перо</option>
-                  <option value="highlighter">Маркер</option>
-                  <option value="eraser">Ластик</option>
-                  <option value="comment">💬 Комментарий</option>
-                  <option value="rect">▭ Прямоугольник</option>
-                  <option value="arrow">→ Стрелка</option>
-                  <option value="line">╱ Линия</option>
-                  <option value="circle">◯ Круг</option>
-                  <option value="text-highlight">🖍 Выделение текста</option>
-                  <option value="text-underline">⎁ Подчёркивание</option>
-                  <option value="text-strikethrough">⊟ Зачёркивание</option>
-                  <option value="text-squiggly">〰 Волнистая линия</option>
-                  <option value="sticky-note">📌 Заметка</option>
-                  <option value="text-box">🄰 Текстовый блок</option>
+                  <option value="pen" data-i18n="annot.pen">Перо</option>
+                  <option value="highlighter" data-i18n="annot.highlighter">Маркер</option>
+                  <option value="eraser" data-i18n="annot.eraser">Ластик</option>
+                  <option value="comment" data-i18n="annot.commentTool">💬 Комментарий</option>
+                  <option value="rect" data-i18n="annot.rectangle">▭ Прямоугольник</option>
+                  <option value="arrow" data-i18n="annot.arrowTool">→ Стрелка</option>
+                  <option value="line" data-i18n="annot.lineTool">╱ Линия</option>
+                  <option value="circle" data-i18n="annot.circleTool">◯ Круг</option>
+                  <option value="text-highlight" data-i18n="annot.textHighlight">🖍 Выделение текста</option>
+                  <option value="text-underline" data-i18n="annot.textUnderline">⎁ Подчёркивание</option>
+                  <option value="text-strikethrough" data-i18n="annot.textStrikethrough">⊟ Зачёркивание</option>
+                  <option value="text-squiggly" data-i18n="annot.textSquiggly">〰 Волнистая линия</option>
+                  <option value="sticky-note" data-i18n="annot.stickyNote">📌 Заметка</option>
+                  <option value="text-box" data-i18n="annot.textBox">🄰 Текстовый блок</option>
                 </select>
               </label>
-              <label class="rp-label">Цвет
+              <label class="rp-label"><span data-i18n="annot.color">Цвет</span>
                 <input id="drawColor" type="color" value="#ffd84d" class="rp-color" aria-label="Цвет кисти" />
               </label>
-              <label class="rp-label">Толщина
+              <label class="rp-label"><span data-i18n="annot.thickness">Толщина</span>
                 <input id="drawSize" type="range" min="2" max="24" value="6" class="rp-range" aria-label="Размер кисти" />
               </label>
             </div>
           </div>
           <div class="rp-section">
-            <h3 class="rp-section-title">Действия</h3>
+            <h3 class="rp-section-title" data-i18n="annot.actions">Действия</h3>
             <div class="rp-actions">
-              <button id="undoStroke" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h5a3 3 0 110 6H7"/><path d="M4 7l3-3M4 7l3 3"/></svg> Отмена</button>
-              <button id="clearStrokes" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h10"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M5 4l.5 9a1 1 0 001 1h3a1 1 0 001-1L11 4"/></svg> Очистить</button>
+              <button id="undoStroke" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h5a3 3 0 110 6H7"/><path d="M4 7l3-3M4 7l3 3"/></svg> <span data-i18n="annot.undo">Отмена</span></button>
+              <button id="clearStrokes" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h10"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M5 4l.5 9a1 1 0 001 1h3a1 1 0 001-1L11 4"/></svg> <span data-i18n="annot.clearPage">Очистить</span></button>
             </div>
           </div>
           <div class="rp-section">
-            <h3 class="rp-section-title">Экспорт / Импорт</h3>
+            <h3 class="rp-section-title" data-i18n="annot.exportImport">Экспорт / Импорт</h3>
             <div class="rp-actions">
               <button id="exportAnnotated" class="btn-xs">PNG</button>
               <button id="exportAnnSvg" class="btn-xs">SVG</button>
               <button id="exportAnnPdf" class="btn-xs">PDF</button>
-              <button id="exportAnnJson" class="btn-xs">JSON стр.</button>
-              <button id="exportAnnBundle" class="btn-xs">JSON док.</button>
+              <button id="exportAnnJson" class="btn-xs" data-i18n="annot.jsonPage">JSON стр.</button>
+              <button id="exportAnnBundle" class="btn-xs" data-i18n="annot.jsonDoc">JSON док.</button>
             </div>
             <div class="rp-actions">
-              <label class="btn-xs file-inline">↙ Импорт стр.
+              <label class="btn-xs file-inline"><span data-i18n="annot.importPage">↙ Импорт стр.</span>
                 <input id="importAnnJson" type="file" accept="application/json,.json" />
               </label>
-              <label class="btn-xs file-inline">↙ Импорт док.
+              <label class="btn-xs file-inline"><span data-i18n="annot.importDoc">↙ Импорт док.</span>
                 <input id="importAnnBundle" type="file" accept="application/json,.json" />
               </label>
             </div>
@@ -531,74 +531,74 @@
         <!-- Panel: Text/OCR -->
         <div class="rp-panel" data-rp-panel="text-ocr">
           <div class="rp-section">
-            <h3 class="rp-section-title">Текст страницы</h3>
+            <h3 class="rp-section-title" data-i18n="text.pageText">Текст страницы</h3>
             <div class="rp-actions">
-              <button id="refreshText" class="btn-xs">Извлечь</button>
-              <button id="copyText" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 011-1h7"/></svg> Копировать</button>
-              <button id="toggleTextEdit" class="btn-xs tb-toggle">Редактирование</button>
+              <button id="refreshText" class="btn-xs" data-i18n="text.extract">Извлечь</button>
+              <button id="copyText" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 011-1h7"/></svg> <span data-i18n="text.copyBtn">Копировать</span></button>
+              <button id="toggleTextEdit" class="btn-xs tb-toggle" data-i18n="text.editing">Редактирование</button>
             </div>
             <div class="rp-actions">
-              <button id="saveTextEdits" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2h8l3 3v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M5 2v4h5V2"/><path d="M5 14v-4h6v4"/></svg> Сохранить</button>
+              <button id="saveTextEdits" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 2h8l3 3v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M5 2v4h5V2"/><path d="M5 14v-4h6v4"/></svg> <span data-i18n="text.save">Сохранить</span></button>
               <button id="undoTextEdit" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h5a3 3 0 110 6H7"/><path d="M4 7l3-3M4 7l3 3"/></svg></button>
               <button id="redoTextEdit" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7H7a3 3 0 100 6h2"/><path d="M12 7l-3-3M12 7l-3 3"/></svg></button>
             </div>
-            <textarea id="pageText" readonly placeholder="Текст страницы…" class="rp-textarea"></textarea>
+            <textarea id="pageText" readonly placeholder="Текст страницы…" class="rp-textarea" data-i18n-placeholder="text.placeholder"></textarea>
           </div>
           <div class="rp-section">
-            <h3 class="rp-section-title">OCR Распознавание</h3>
+            <h3 class="rp-section-title" data-i18n="ocr.recognition">OCR Распознавание</h3>
             <div class="rp-actions">
-              <button id="ocrCurrentPage" class="btn-xs btn-accent">OCR страницы</button>
-              <button id="ocrRegionMode" class="btn-xs tb-toggle">Область</button>
+              <button id="ocrCurrentPage" class="btn-xs btn-accent" data-i18n="ocr.ocrPage">OCR страницы</button>
+              <button id="ocrRegionMode" class="btn-xs tb-toggle" data-i18n="text.region">Область</button>
               <button id="copyOcrText" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 011-1h7"/></svg> OCR</button>
             </div>
             <div class="rp-actions">
-              <button id="cancelBackgroundOcr" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg> Остановить</button>
-              <button id="toggleOcrConfidence" class="btn-xs tb-toggle">Качество</button>
+              <button id="cancelBackgroundOcr" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg> <span data-i18n="ocr.stop">Остановить</span></button>
+              <button id="toggleOcrConfidence" class="btn-xs tb-toggle" data-i18n="ocr.quality">Качество</button>
             </div>
             <p id="ocrStatus" class="status-line" aria-live="polite"></p>
           </div>
           <div class="rp-section">
-            <h3 class="rp-section-title">Пакетное OCR</h3>
+            <h3 class="rp-section-title" data-i18n="ocr.batchOcr">Пакетное OCR</h3>
             <div class="rp-actions">
-              <button id="batchOcrAll" class="btn-xs btn-accent">OCR всего документа</button>
-              <button id="batchOcrCancel" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg> Отмена</button>
+              <button id="batchOcrAll" class="btn-xs btn-accent" data-i18n="ocr.ocrFullDoc">OCR всего документа</button>
+              <button id="batchOcrCancel" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1.5"/></svg> <span data-i18n="ocr.cancel">Отмена</span></button>
             </div>
             <div class="rp-actions">
               <button id="createSearchablePdf" class="btn-xs">Searchable PDF</button>
-              <button id="detectScanned" class="btn-xs">Определить скан</button>
+              <button id="detectScanned" class="btn-xs" data-i18n="ocr.detectScan">Определить скан</button>
             </div>
             <progress id="batchOcrProgress" value="0" max="100" style="width:100%; height:6px; margin-top:4px; display:none;"></progress>
             <p id="batchOcrStatus" class="status-line" aria-live="polite"></p>
           </div>
           <div class="rp-section">
-            <h3 class="rp-section-title">Экспорт</h3>
+            <h3 class="rp-section-title" data-i18n="text.exportTitle">Экспорт</h3>
             <div class="rp-actions">
               <button id="exportText" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h5l4 4v7a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M9 2v4h4"/></svg> .txt</button>
               <button id="exportWord" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h5l4 4v7a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M9 2v4h4"/><path d="M6 8h4M6 10h3"/></svg> .docx</button>
               <button id="exportHtml" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M2 8h12"/><path d="M8 2c2 2 3 4 3 6s-1 4-3 6c-2-2-3-4-3-6s1-4 3-6"/></svg> .html</button>
               <button id="exportOcrIndex" class="btn-xs">OCR index</button>
-              <button id="exportPlainText" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 011-1h7"/></svg> Текст (умный)</button>
+              <button id="exportPlainText" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="8" height="9" rx="1"/><path d="M3 11V3a1 1 0 011-1h7"/></svg> <span data-i18n="text.smartText">Текст (умный)</span></button>
               <button id="exportHealthReport" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 14S2 10 2 6a3 3 0 016-1 3 3 0 016 1c0 4-6 8-6 8z"/><path d="M4 8h2l1-2 2 4 1-2h2"/></svg> Health</button>
             </div>
-            <label class="btn-xs file-inline">↙ Импорт .docx
+            <label class="btn-xs file-inline"><span data-i18n="text.importDocx">↙ Импорт .docx</span>
               <input id="importDocx" type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
             </label>
           </div>
 
           <!-- PDF Text Edit -->
           <div class="rp-section">
-            <h3 class="rp-section-title">Редактирование текста</h3>
+            <h3 class="rp-section-title" data-i18n="text.textEditing">Редактирование текста</h3>
             <div class="rp-actions">
-              <button id="pdfFindReplace" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4"/><path d="M11 11l3 3"/></svg> Найти/Заменить</button>
+              <button id="pdfFindReplace" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7" cy="7" r="4"/><path d="M11 11l3 3"/></svg> <span data-i18n="text.findReplace">Найти/Заменить</span></button>
             </div>
           </div>
 
           <!-- PDF Security -->
           <div class="rp-section">
-            <h3 class="rp-section-title">Безопасность PDF</h3>
+            <h3 class="rp-section-title" data-i18n="security.title">Безопасность PDF</h3>
             <div class="rp-actions">
-              <button id="cleanMetadata" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3l6 6-4 4H5l-2-2 4-4"/><path d="M10 6l-4 4"/></svg> Очистить метаданные</button>
-              <button id="sanitizePdf" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2l6 2v4c0 4-3 6-6 8-3-2-6-4-6-8V4z"/></svg> Санитизировать</button>
+              <button id="cleanMetadata" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3l6 6-4 4H5l-2-2 4-4"/><path d="M10 6l-4 4"/></svg> <span data-i18n="security.cleanMeta">Очистить метаданные</span></button>
+              <button id="sanitizePdf" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2l6 2v4c0 4-3 6-6 8-3-2-6-4-6-8V4z"/></svg> <span data-i18n="security.sanitize">Санитизировать</span></button>
               <button id="exportPdfA" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h5l4 4v7a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M9 2v4h4"/></svg> PDF/A</button>
             </div>
           </div>
@@ -607,16 +607,16 @@
         <!-- Panel: Forms -->
         <div class="rp-panel" data-rp-panel="forms">
           <div class="rp-section">
-            <h3 class="rp-section-title">PDF Формы</h3>
+            <h3 class="rp-section-title" data-i18n="forms.pdfForms">PDF Формы</h3>
             <div class="rp-actions">
-              <button id="pdfFormFill" class="btn-xs btn-accent">Заполнить формы</button>
+              <button id="pdfFormFill" class="btn-xs btn-accent" data-i18n="forms.fill">Заполнить формы</button>
             </div>
             <div class="rp-actions">
-              <button id="pdfFormExport" class="btn-xs">Экспорт данных</button>
-              <label class="btn-xs file-inline">Импорт данных
+              <button id="pdfFormExport" class="btn-xs" data-i18n="forms.exportData">Экспорт данных</button>
+              <label class="btn-xs file-inline"><span data-i18n="forms.importData">Импорт данных</span>
                 <input id="pdfFormImport" type="file" accept="application/json,.json" />
               </label>
-              <button id="pdfFormClear" class="btn-xs">Очистить</button>
+              <button id="pdfFormClear" class="btn-xs" data-i18n="forms.clear">Очистить</button>
             </div>
           </div>
         </div>
@@ -624,58 +624,58 @@
         <!-- Panel: Tools -->
         <div class="rp-panel" data-rp-panel="tools">
           <div class="rp-section">
-            <h3 class="rp-section-title">Редактор блоков</h3>
+            <h3 class="rp-section-title" data-i18n="tools.blockEditor">Редактор блоков</h3>
             <div class="rp-actions">
-              <button id="pdfBlockEdit" class="btn-xs tb-toggle btn-accent">Редактор блоков</button>
-              <label class="btn-xs file-inline"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5"/><circle cx="6" cy="6" r="1.5"/><path d="M14 10l-3-3-7 7"/></svg> Вставить
+              <button id="pdfBlockEdit" class="btn-xs tb-toggle btn-accent" data-i18n="tools.blockEditor">Редактор блоков</button>
+              <label class="btn-xs file-inline"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="1.5"/><circle cx="6" cy="6" r="1.5"/><path d="M14 10l-3-3-7 7"/></svg> <span data-i18n="tools.insert">Вставить</span>
                 <input id="insertImageInput" type="file" accept="image/png,image/jpeg,image/gif,image/svg+xml,image/webp" />
               </label>
             </div>
           </div>
           <div class="rp-section">
-            <h3 class="rp-section-title">Штампы и подписи</h3>
+            <h3 class="rp-section-title" data-i18n="tools.stampsSignatures">Штампы и подписи</h3>
             <div class="rp-actions">
-              <button id="addWatermark" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2C5.5 6 3 8.5 3 10.5a5 5 0 0010 0C13 8.5 10.5 6 8 2z"/></svg> Водяной знак</button>
-              <button id="addStamp" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13h8"/><path d="M6 13V9h4v4"/><path d="M5 9h6a3 3 0 00-6 0z"/></svg> Штамп</button>
-              <button id="addSignature" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l2-8 6 6-8 2z"/><path d="M11 5l2-2"/></svg> Подпись</button>
+              <button id="addWatermark" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2C5.5 6 3 8.5 3 10.5a5 5 0 0010 0C13 8.5 10.5 6 8 2z"/></svg> <span data-i18n="tools.watermark">Водяной знак</span></button>
+              <button id="addStamp" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13h8"/><path d="M6 13V9h4v4"/><path d="M5 9h6a3 3 0 00-6 0z"/></svg> <span data-i18n="tools.stamp">Штамп</span></button>
+              <button id="addSignature" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13l2-8 6 6-8 2z"/><path d="M11 5l2-2"/></svg> <span data-i18n="tools.signature">Подпись</span></button>
             </div>
           </div>
           <div class="rp-section">
-            <h3 class="rp-section-title">Документ</h3>
+            <h3 class="rp-section-title" data-i18n="tools.document">Документ</h3>
             <div class="rp-actions">
-              <button id="openPageOrganizer" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="1" width="5" height="6" rx="1"/><rect x="8" y="1" width="5" height="6" rx="1"/><rect x="1" y="9" width="5" height="6" rx="1"/><rect x="8" y="9" width="5" height="6" rx="1"/></svg> Организатор страниц</button>
-              <button id="mergePages" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h3l5 4-5 4H4"/><path d="M12 8H8"/></svg> Объединить PDF</button>
-              <button id="splitPages" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="5" cy="11" r="2"/><path d="M13 3L6.6 6.4M6.6 9.6L13 13"/></svg> Разделить PDF</button>
+              <button id="openPageOrganizer" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="1" width="5" height="6" rx="1"/><rect x="8" y="1" width="5" height="6" rx="1"/><rect x="1" y="9" width="5" height="6" rx="1"/><rect x="8" y="9" width="5" height="6" rx="1"/></svg> <span data-i18n="tools.pageOrganizer">Организатор страниц</span></button>
+              <button id="mergePages" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h3l5 4-5 4H4"/><path d="M12 8H8"/></svg> <span data-i18n="tools.mergePdf">Объединить PDF</span></button>
+              <button id="splitPages" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="5" r="2"/><circle cx="5" cy="11" r="2"/><path d="M13 3L6.6 6.4M6.6 9.6L13 13"/></svg> <span data-i18n="tools.splitPdf">Разделить PDF</span></button>
             </div>
             <div class="rp-actions">
-              <button id="addBookmarkToolbar" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h8v12l-4-3-4 3z"/></svg> Закладка</button>
-              <button id="downloadFile" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h10"/><path d="M8 3v7"/><path d="M5 7l3 3 3-3"/></svg> Скачать</button>
-              <button id="printPage" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6V2h8v4"/><rect x="2" y="6" width="12" height="6" rx="1"/><path d="M4 12v2h8v-2"/></svg> Печать</button>
-            </div>
-          </div>
-          <div class="rp-section">
-            <h3 class="rp-section-title">Конвертация</h3>
-            <div class="rp-actions">
-              <button id="convertToPdfBtn" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h5l4 4v7a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M9 2v4h4"/></svg> В PDF</button>
-              <button id="conversionInvoice" class="btn-xs stub-hidden">Счёт</button>
-              <button id="conversionReport" class="btn-xs stub-hidden">Отчёт</button>
-              <button id="conversionTable" class="btn-xs stub-hidden">Таблица</button>
+              <button id="addBookmarkToolbar" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h8v12l-4-3-4 3z"/></svg> <span data-i18n="tools.bookmark">Закладка</span></button>
+              <button id="downloadFile" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h10"/><path d="M8 3v7"/><path d="M5 7l3 3 3-3"/></svg> <span data-i18n="util.download">Скачать</span></button>
+              <button id="printPage" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6V2h8v4"/><rect x="2" y="6" width="12" height="6" rx="1"/><path d="M4 12v2h8v-2"/></svg> <span data-i18n="util.print">Печать</span></button>
             </div>
           </div>
           <div class="rp-section">
-            <h3 class="rp-section-title">Pro-инструменты</h3>
+            <h3 class="rp-section-title" data-i18n="tools.conversion">Конвертация</h3>
             <div class="rp-actions">
-              <button id="pdfRedact" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="7" width="8" height="7" rx="1.5"/><path d="M6 7V5a2 2 0 014 0v2"/></svg> Редакция ПД</button>
-              <button id="pdfOptimize" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5l6-3 6 3v6l-6 3-6-3z"/><path d="M2 5l6 3 6-3"/><path d="M8 14V8"/></svg> Оптимизировать</button>
-              <button id="pdfFlatten" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8l6-4 6 4-6 4z"/><path d="M2 11l6 4 6-4"/></svg> Выровнять</button>
+              <button id="convertToPdfBtn" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h5l4 4v7a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M9 2v4h4"/></svg> <span data-i18n="tools.toPdf">В PDF</span></button>
+              <button id="conversionInvoice" class="btn-xs stub-hidden" data-i18n="convert.invoice">Счёт</button>
+              <button id="conversionReport" class="btn-xs stub-hidden" data-i18n="convert.report">Отчёт</button>
+              <button id="conversionTable" class="btn-xs stub-hidden" data-i18n="convert.table">Таблица</button>
+            </div>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title" data-i18n="tools.proTools">Pro-инструменты</h3>
+            <div class="rp-actions">
+              <button id="pdfRedact" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="7" width="8" height="7" rx="1.5"/><path d="M6 7V5a2 2 0 014 0v2"/></svg> <span data-i18n="tools.redact">Редакция ПД</span></button>
+              <button id="pdfOptimize" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5l6-3 6 3v6l-6 3-6-3z"/><path d="M2 5l6 3 6-3"/><path d="M8 14V8"/></svg> <span data-i18n="tools.optimize">Оптимизировать</span></button>
+              <button id="pdfFlatten" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 8l6-4 6 4-6 4z"/><path d="M2 11l6 4 6-4"/></svg> <span data-i18n="tools.flatten">Выровнять</span></button>
             </div>
             <div class="rp-actions">
-              <button id="pdfAccessibility" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="3" r="1.5"/><path d="M4 7l4 1 4-1"/><path d="M6 14l2-6 2 6"/></svg> Доступность</button>
-              <button id="pdfCompare" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="5" height="12" rx="1"/><rect x="9" y="2" width="5" height="12" rx="1"/><path d="M4 6h1M11 6h1M4 10h1M11 10h1"/></svg> Сравнить</button>
-              <button id="pdfHeaderFooter" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="12" height="3" rx="1"/><rect x="2" y="7" width="12" height="2" rx="0.5"/><rect x="2" y="11" width="12" height="3" rx="1"/></svg> Колонтитулы</button>
+              <button id="pdfAccessibility" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="3" r="1.5"/><path d="M4 7l4 1 4-1"/><path d="M6 14l2-6 2 6"/></svg> <span data-i18n="tools.accessibility">Доступность</span></button>
+              <button id="pdfCompare" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="5" height="12" rx="1"/><rect x="9" y="2" width="5" height="12" rx="1"/><path d="M4 6h1M11 6h1M4 10h1M11 10h1"/></svg> <span data-i18n="tools.compare">Сравнить</span></button>
+              <button id="pdfHeaderFooter" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="12" height="3" rx="1"/><rect x="2" y="7" width="12" height="2" rx="0.5"/><rect x="2" y="11" width="12" height="3" rx="1"/></svg> <span data-i18n="tools.headerFooter">Колонтитулы</span></button>
             </div>
             <div class="rp-actions">
-              <button id="pdfBatesNumber" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 1v14M10 1v14M1 5h14M1 11h14"/></svg> Нумерация Бейтса</button>
+              <button id="pdfBatesNumber" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 1v14M10 1v14M1 5h14M1 11h14"/></svg> <span data-i18n="tools.batesNumber">Нумерация Бейтса</span></button>
             </div>
           </div>
         </div>
@@ -683,26 +683,26 @@
         <!-- Panel: Page Organizer -->
         <div class="rp-panel" data-rp-panel="organize">
           <div class="rp-section">
-            <h3 class="rp-section-title">Организация страниц</h3>
+            <h3 class="rp-section-title" data-i18n="organize.title">Организация страниц</h3>
             <div class="rp-actions">
-              <button id="orgRotateCW" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><path d="M13 7a5 5 0 10-1 3"/><path d="M14 4l-2 3h3" fill="currentColor"/></svg> Повернуть</button>
-              <button id="orgRotateCCW" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><path d="M3 7a5 5 0 111 3"/><path d="M2 4l2 3H1" fill="currentColor"/></svg> Против ЧС</button>
-              <button id="orgDelete" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h10"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M5 4l.5 9a1 1 0 001 1h3a1 1 0 001-1L11 4"/></svg> Удалить</button>
+              <button id="orgRotateCW" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><path d="M13 7a5 5 0 10-1 3"/><path d="M14 4l-2 3h3" fill="currentColor"/></svg> <span data-i18n="organize.rotate">Повернуть</span></button>
+              <button id="orgRotateCCW" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" aria-hidden="true"><path d="M3 7a5 5 0 111 3"/><path d="M2 4l2 3H1" fill="currentColor"/></svg> <span data-i18n="organize.rotateCCW">Против ЧС</span></button>
+              <button id="orgDelete" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 4h10"/><path d="M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1"/><path d="M5 4l.5 9a1 1 0 001 1h3a1 1 0 001-1L11 4"/></svg> <span data-i18n="organize.delete">Удалить</span></button>
             </div>
             <div class="rp-actions">
-              <button id="orgExtract" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h10"/><path d="M8 10V3"/><path d="M5 6l3-3 3 3"/></svg> Извлечь</button>
-              <label class="btn-xs file-inline"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h10"/><path d="M8 3v7"/><path d="M5 7l3 3 3-3"/></svg> Вставить
+              <button id="orgExtract" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h10"/><path d="M8 10V3"/><path d="M5 6l3-3 3 3"/></svg> <span data-i18n="organize.extract">Извлечь</span></button>
+              <label class="btn-xs file-inline"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 13h10"/><path d="M8 3v7"/><path d="M5 7l3 3 3-3"/></svg> <span data-i18n="organize.insertPages">Вставить</span>
                 <input id="orgInsertPages" type="file" accept=".pdf" />
               </label>
             </div>
-            <p class="status-line muted">Перетаскивайте миниатюры для переупорядочивания</p>
+            <p class="status-line muted" data-i18n="organize.dragHint">Перетаскивайте миниатюры для переупорядочивания</p>
           </div>
         </div>
 
         <!-- Panel: Search results detail -->
         <div class="rp-panel" data-rp-panel="search">
           <div class="rp-section">
-            <h3 class="rp-section-title">Результаты поиска</h3>
+            <h3 class="rp-section-title" data-i18n="sidebar.searchResults">Результаты поиска</h3>
             <div id="searchResultsRightPanel"></div>
           </div>
         </div>
@@ -771,29 +771,29 @@
     <div id="settingsModal" class="modal" aria-hidden="true" role="dialog" aria-label="Настройки NovaReader">
       <div class="modal-card">
         <div class="modal-head">
-          <h3>Настройки NovaReader</h3>
+          <h3 data-i18n="settings.title">Настройки NovaReader</h3>
           <button id="closeSettingsModal" class="btn-close" aria-label="Закрыть настройки">✕</button>
         </div>
 
         <nav class="modal-tabs" role="tablist" aria-label="Разделы настроек">
-          <button class="active" data-modal-tab="general" role="tab" aria-selected="true">Общие</button>
-          <button data-modal-tab="appearance" role="tab" aria-selected="false">Внешний вид</button>
+          <button class="active" data-modal-tab="general" role="tab" aria-selected="true" data-i18n="settings.general">Общие</button>
+          <button data-modal-tab="appearance" role="tab" aria-selected="false" data-i18n="settings.appearanceTab">Внешний вид</button>
           <button data-modal-tab="ocr" role="tab" aria-selected="false">OCR</button>
-          <button data-modal-tab="hotkeys" role="tab" aria-selected="false">Клавиши</button>
-          <button data-modal-tab="advanced" role="tab" aria-selected="false">Продвинутые</button>
+          <button data-modal-tab="hotkeys" role="tab" aria-selected="false" data-i18n="settings.hotkeysTab">Клавиши</button>
+          <button data-modal-tab="advanced" role="tab" aria-selected="false" data-i18n="settings.advancedTab">Продвинутые</button>
         </nav>
 
         <div class="modal-body">
           <div class="modal-tab-panel active" data-modal-panel="general" role="tabpanel" aria-label="Общие настройки">
             <section>
-              <h4>Панели</h4>
-              <label class="checkbox-row"><input id="cfgShowSidebar" type="checkbox" checked /> <span>Левая панель</span></label>
-              <label class="checkbox-row"><input id="cfgShowSearch" type="checkbox" checked /> <span>Поиск</span></label>
-              <label class="checkbox-row"><input id="cfgShowAnnot" type="checkbox" checked /> <span>Аннотации</span></label>
-              <label class="checkbox-row"><input id="cfgShowText" type="checkbox" checked /> <span>Текст / OCR</span></label>
+              <h4 data-i18n="settings.panels">Панели</h4>
+              <label class="checkbox-row"><input id="cfgShowSidebar" type="checkbox" checked /> <span data-i18n="settings.leftPanel">Левая панель</span></label>
+              <label class="checkbox-row"><input id="cfgShowSearch" type="checkbox" checked /> <span data-i18n="settings.searchPanel">Поиск</span></label>
+              <label class="checkbox-row"><input id="cfgShowAnnot" type="checkbox" checked /> <span data-i18n="settings.annotPanel">Аннотации</span></label>
+              <label class="checkbox-row"><input id="cfgShowText" type="checkbox" checked /> <span data-i18n="settings.textOcrPanel">Текст / OCR</span></label>
             </section>
             <section>
-              <h4>Видимость разделов</h4>
+              <h4 data-i18n="settings.sectionVisibility">Видимость разделов</h4>
               <div id="cfgSidebarSections" class="settings-grid"></div>
               <div id="cfgToolbarSections" class="settings-grid"></div>
             </section>
@@ -801,28 +801,28 @@
 
           <div class="modal-tab-panel" data-modal-panel="appearance" role="tabpanel" aria-label="Внешний вид">
             <section>
-              <h4>Оформление</h4>
+              <h4 data-i18n="settings.appearance">Оформление</h4>
               <div class="settings-grid">
-                <label>Тема <select id="cfgTheme"><option value="dark">Тёмная</option><option value="light">Светлая</option><option value="sepia">Сепия</option><option value="high-contrast">Высокий контраст</option><option value="auto">Авто (системная)</option></select></label>
-                <label>Язык <select id="cfgAppLang"><option value="ru">Русский</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="zh">中文</option><option value="ja">日本語</option><option value="ar">العربية</option></select></label>
+                <label><span data-i18n="settings.theme">Тема</span> <select id="cfgTheme"><option value="dark" data-i18n="settings.themeDark">Тёмная</option><option value="light" data-i18n="settings.themeLight">Светлая</option><option value="sepia" data-i18n="theme.sepia">Сепия</option><option value="high-contrast" data-i18n="theme.highContrast">Высокий контраст</option><option value="auto" data-i18n="theme.auto">Авто (системная)</option></select></label>
+                <label><span data-i18n="settings.language">Язык</span> <select id="cfgAppLang"><option value="ru">Русский</option><option value="en">English</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="es">Español</option><option value="zh">中文</option><option value="ja">日本語</option><option value="ar">العربية</option></select></label>
               </div>
             </section>
             <section>
-              <h4>Размеры</h4>
+              <h4 data-i18n="settings.dimensions">Размеры</h4>
               <div class="settings-grid">
-                <label>Левая панель (px) <input id="cfgSidebarWidth" type="number" min="160" max="400" value="260" /></label>
-                <label>Масштаб панели (%) <input id="cfgToolbarScale" type="number" min="10" max="100" value="100" /></label>
-                <label>Текст мин. (px) <input id="cfgTextMinHeight" type="number" min="24" max="180" value="50" /></label>
-                <label>Текст панель (px) <input id="cfgTextPanelHeight" type="number" min="72" max="400" value="140" /></label>
+                <label><span data-i18n="dim.sidebar">Левая панель (px)</span> <input id="cfgSidebarWidth" type="number" min="160" max="400" value="260" /></label>
+                <label><span data-i18n="dim.toolbarScale">Масштаб панели (%)</span> <input id="cfgToolbarScale" type="number" min="10" max="100" value="100" /></label>
+                <label><span data-i18n="dim.textMinHeight">Текст мин. (px)</span> <input id="cfgTextMinHeight" type="number" min="24" max="180" value="50" /></label>
+                <label><span data-i18n="dim.textPanel">Текст панель (px)</span> <input id="cfgTextPanelHeight" type="number" min="72" max="400" value="140" /></label>
               </div>
             </section>
           </div>
 
           <div class="modal-tab-panel" data-modal-panel="ocr" role="tabpanel" aria-label="Настройки OCR">
             <section>
-              <h4>Распознавание текста</h4>
+              <h4 data-i18n="settings.ocrTitle">Распознавание текста</h4>
               <div class="settings-grid">
-                <label>Язык OCR
+                <label><span data-i18n="settings.ocrLang">Язык OCR</span>
                   <select id="cfgOcrLang">
                     <option value="auto">Auto</option><option value="rus">Русский</option><option value="eng">English</option>
                     <option value="deu">Deutsch</option><option value="fra">Français</option><option value="spa">Español</option>
@@ -833,27 +833,27 @@
                     <option value="tur">Türkçe</option><option value="pol">Polski</option><option value="ces">Čeština</option>
                   </select>
                 </label>
-                <label>Точность
-                  <select id="cfgOcrQualityMode"><option value="balanced">Баланс</option><option value="accurate">Точность</option></select>
+                <label><span data-i18n="settings.accuracy">Точность</span>
+                  <select id="cfgOcrQualityMode"><option value="balanced" data-i18n="settings.balanced">Баланс</option><option value="accurate" data-i18n="settings.accurate">Точность</option></select>
                 </label>
               </div>
-              <label class="checkbox-row"><input id="cfgOcrCyrillicOnly" type="checkbox" checked /> <span>Кириллица: очищать латиницу</span></label>
+              <label class="checkbox-row"><input id="cfgOcrCyrillicOnly" type="checkbox" checked /> <span data-i18n="settings.cyrOnly">Кириллица: очищать латиницу</span></label>
             </section>
             <section>
-              <h4>Область OCR</h4>
-              <label class="checkbox-row"><input id="cfgBackgroundOcr" type="checkbox" /> <span>Фоновое OCR при открытии</span></label>
+              <h4 data-i18n="settings.ocrRegion">Область OCR</h4>
+              <label class="checkbox-row"><input id="cfgBackgroundOcr" type="checkbox" /> <span data-i18n="settings.bgOcr">Фоновое OCR при открытии</span></label>
               <div class="settings-grid">
-                <label>Мин. ширина (px) <input id="cfgOcrMinW" type="number" min="8" value="24" /></label>
-                <label>Мин. высота (px) <input id="cfgOcrMinH" type="number" min="8" value="24" /></label>
+                <label><span data-i18n="ocr.minW">Мин. ширина (px)</span> <input id="cfgOcrMinW" type="number" min="8" value="24" /></label>
+                <label><span data-i18n="ocr.minH">Мин. высота (px)</span> <input id="cfgOcrMinH" type="number" min="8" value="24" /></label>
               </div>
             </section>
             <section>
-              <h4>OCR хранилище</h4>
+              <h4 data-i18n="ocr.storage">OCR хранилище</h4>
               <p id="ocrStorageInfo" class="status-line"></p>
               <div class="section-actions">
-                <button id="refreshOcrStorage" class="btn-ghost btn-xs">Обновить</button>
-                <button id="clearCurrentOcrData" class="btn-ghost btn-xs">Очистить текущий</button>
-                <button id="clearAllOcrData" class="btn-ghost btn-xs">Очистить всё</button>
+                <button id="refreshOcrStorage" class="btn-ghost btn-xs" data-i18n="ocr.refresh">Обновить</button>
+                <button id="clearCurrentOcrData" class="btn-ghost btn-xs" data-i18n="ocr.clearCurrent">Очистить текущий</button>
+                <button id="clearAllOcrData" class="btn-ghost btn-xs" data-i18n="ocr.clearAll">Очистить всё</button>
               </div>
               <ul id="ocrDocumentsList" class="ocr-docs-list"></ul>
             </section>
@@ -861,22 +861,22 @@
 
           <div class="modal-tab-panel" data-modal-panel="hotkeys" role="tabpanel" aria-label="Горячие клавиши">
             <section>
-              <h4>Горячие клавиши</h4>
+              <h4 data-i18n="settings.hotkeys">Горячие клавиши</h4>
               <div class="shortcut-grid settings-hotkeys">
-                <label>Стр.→ <input id="hkNext" type="text" maxlength="32" value="pagedown" /><small id="hkNextHint" class="hotkey-hint"></small></label>
-                <label>Стр.← <input id="hkPrev" type="text" maxlength="32" value="pageup" /><small id="hkPrevHint" class="hotkey-hint"></small></label>
+                <label><span data-i18n="hk.next">Стр.→</span> <input id="hkNext" type="text" maxlength="32" value="pagedown" /><small id="hkNextHint" class="hotkey-hint"></small></label>
+                <label><span data-i18n="hk.prev">Стр.←</span> <input id="hkPrev" type="text" maxlength="32" value="pageup" /><small id="hkPrevHint" class="hotkey-hint"></small></label>
                 <label>Zoom+ <input id="hkZoomIn" type="text" maxlength="32" value="ctrl+=" /><small id="hkZoomInHint" class="hotkey-hint"></small></label>
                 <label>Zoom− <input id="hkZoomOut" type="text" maxlength="32" value="ctrl+-" /><small id="hkZoomOutHint" class="hotkey-hint"></small></label>
-                <label>Аннот. <input id="hkAnnotate" type="text" maxlength="32" value="ctrl+shift+a" /><small id="hkAnnotateHint" class="hotkey-hint"></small></label>
-                <label>Поиск <input id="hkSearchFocus" type="text" maxlength="32" value="ctrl+f" /><small id="hkSearchFocusHint" class="hotkey-hint"></small></label>
+                <label><span data-i18n="hk.annotate">Аннот.</span> <input id="hkAnnotate" type="text" maxlength="32" value="ctrl+shift+a" /><small id="hkAnnotateHint" class="hotkey-hint"></small></label>
+                <label><span data-i18n="hk.search">Поиск</span> <input id="hkSearchFocus" type="text" maxlength="32" value="ctrl+f" /><small id="hkSearchFocusHint" class="hotkey-hint"></small></label>
                 <label>OCR <input id="hkOcrPage" type="text" maxlength="32" value="ctrl+shift+o" /><small id="hkOcrPageHint" class="hotkey-hint"></small></label>
-                <label>Ширина <input id="hkFitWidth" type="text" maxlength="32" value="ctrl+9" /><small id="hkFitWidthHint" class="hotkey-hint"></small></label>
-                <label>Страница <input id="hkFitPage" type="text" maxlength="32" value="ctrl+0" /><small id="hkFitPageHint" class="hotkey-hint"></small></label>
+                <label><span data-i18n="hk.fitWidth">Ширина</span> <input id="hkFitWidth" type="text" maxlength="32" value="ctrl+9" /><small id="hkFitWidthHint" class="hotkey-hint"></small></label>
+                <label><span data-i18n="hk.fitPage">Страница</span> <input id="hkFitPage" type="text" maxlength="32" value="ctrl+0" /><small id="hkFitPageHint" class="hotkey-hint"></small></label>
               </div>
               <div class="section-actions">
-                <button id="saveHotkeys" class="btn-accent btn-xs">Сохранить</button>
-                <button id="resetHotkeys" class="btn-ghost btn-xs">Сбросить</button>
-                <button id="autoFixHotkeys" class="btn-ghost btn-xs">Авто-фикс</button>
+                <button id="saveHotkeys" class="btn-accent btn-xs" data-i18n="settings.saveHotkeys">Сохранить</button>
+                <button id="resetHotkeys" class="btn-ghost btn-xs" data-i18n="settings.resetHotkeys">Сбросить</button>
+                <button id="autoFixHotkeys" class="btn-ghost btn-xs" data-i18n="settings.autofix">Авто-фикс</button>
                 <span id="hotkeysStatus" class="status-inline"></span>
               </div>
             </section>
@@ -884,20 +884,20 @@
 
           <div class="modal-tab-panel" data-modal-panel="advanced" role="tabpanel" aria-label="Продвинутые настройки">
             <section>
-              <h4>Продвинутые размеры</h4>
+              <h4 data-i18n="settings.advancedDimensions">Продвинутые размеры</h4>
               <div class="settings-grid">
-                <label>Область просмотра (px) <input id="cfgPageAreaHeight" type="number" min="520" max="2600" value="860" /></label>
-                <label>Верх. панель (px) <input id="cfgTopToolbarHeight" type="number" min="28" max="72" value="40" /></label>
-                <label>Ниж. панель (px) <input id="cfgBottomToolbarHeight" type="number" min="48" max="220" value="86" /></label>
-                <label>Аннот. холст (%) <input id="cfgAnnotationCanvasScale" type="number" min="50" max="100" value="90" /></label>
+                <label><span data-i18n="dim.pageArea">Область просмотра (px)</span> <input id="cfgPageAreaHeight" type="number" min="520" max="2600" value="860" /></label>
+                <label><span data-i18n="dim.topToolbar">Верх. панель (px)</span> <input id="cfgTopToolbarHeight" type="number" min="28" max="72" value="40" /></label>
+                <label><span data-i18n="dim.bottomToolbar">Ниж. панель (px)</span> <input id="cfgBottomToolbarHeight" type="number" min="48" max="220" value="86" /></label>
+                <label><span data-i18n="dim.annotCanvas">Аннот. холст (%)</span> <input id="cfgAnnotationCanvasScale" type="number" min="50" max="100" value="90" /></label>
               </div>
             </section>
           </div>
         </div>
 
         <div class="modal-actions">
-          <button id="resetUiSizeDefaults" class="btn-reset-defaults">Сбросить размеры</button>
-          <button id="saveSettingsModal" class="btn-accent">Сохранить настройки</button>
+          <button id="resetUiSizeDefaults" class="btn-reset-defaults" data-i18n="settings.resetDimensions">Сбросить размеры</button>
+          <button id="saveSettingsModal" class="btn-accent" data-i18n="settings.saveBtn">Сохранить настройки</button>
         </div>
       </div>
     </div>
@@ -906,16 +906,16 @@
     <div id="printModal" class="modal" aria-hidden="true" role="dialog" aria-label="Печать документа">
       <div class="modal-card modal-card-sm">
         <div class="modal-head">
-          <h3>Печать документа</h3>
+          <h3 data-i18n="print.title">Печать документа</h3>
           <button id="closePrintModal" class="btn-close" aria-label="Закрыть печать">✕</button>
         </div>
         <div class="modal-body">
           <section>
-            <h4>Диапазон страниц</h4>
+            <h4 data-i18n="print.pageRange">Диапазон страниц</h4>
             <div class="print-range-group">
-              <label class="radio-row"><input type="radio" name="printRange" value="all" checked /> Все страницы</label>
-              <label class="radio-row"><input type="radio" name="printRange" value="current" /> Текущая страница</label>
-              <label class="radio-row"><input type="radio" name="printRange" value="custom" /> Диапазон:</label>
+              <label class="radio-row"><input type="radio" name="printRange" value="all" checked /> <span data-i18n="print.allPages">Все страницы</span></label>
+              <label class="radio-row"><input type="radio" name="printRange" value="current" /> <span data-i18n="print.currentPage">Текущая страница</span></label>
+              <label class="radio-row"><input type="radio" name="printRange" value="custom" /> <span data-i18n="print.range">Диапазон:</span></label>
               <input id="printCustomRange" type="text" placeholder="1-3, 5, 7-10" class="print-range-input" disabled />
             </div>
           </section>

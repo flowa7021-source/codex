@@ -1,0 +1,325 @@
+/* ═══════════════════════════════════════════════════
+   LEFT PANEL (Column 1)
+   ═══════════════════════════════════════════════════ */
+.left-panel {
+  position: relative;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Left panel tab bar */
+.lp-tabs {
+  display: flex;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.lp-tabs button, .sidebar-tabs button {
+  flex: 1;
+  padding: 8px 2px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 2px solid transparent;
+  min-height: 36px;
+}
+.lp-tabs button:hover, .sidebar-tabs button:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.lp-tabs button.active, .sidebar-tabs button.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-bottom-color: var(--accent);
+}
+.lp-tabs button svg, .sidebar-tabs button svg {
+  width: 18px;
+  height: 18px;
+}
+/* Hide old text tab labels */
+.sidebar-tabs .tab-icon, .sidebar-tabs .tab-label { display: none; }
+
+/* Sidebar panels */
+.sidebar-panel {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+.sidebar-panel.active { display: flex; }
+
+.sidebar-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+  flex-shrink: 0;
+}
+.sidebar-header h1 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.ver-badge {
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* File open button */
+.file-open-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border: 1px solid var(--accent-2);
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel-2));
+  color: var(--accent);
+  border-radius: var(--radius);
+  transition: all 0.12s;
+  flex-shrink: 0;
+}
+.file-open-btn:hover {
+  background: color-mix(in srgb, var(--accent) 20%, var(--panel-2));
+}
+.file-open-btn input { display: none; }
+.file-open-btn .icon { font-size: 1rem; }
+
+/* Sidebar sections */
+.sidebar-panel > section {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.sidebar-panel h2, .sidebar h2 {
+  margin: 0 0 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Thumbnails grid — 2 columns like Acrobat */
+.thumbnail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.preview-btn {
+  width: 100%;
+  display: grid;
+  gap: 2px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  padding: 2px;
+  transition: border-color 0.12s;
+}
+.preview-btn:hover { border-color: var(--border); }
+.preview-btn.active { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(79,156,255,0.2); }
+.preview-btn canvas {
+  width: 100%;
+  border-radius: 3px;
+  background: #fff;
+}
+.preview-label {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Collapsible sections */
+.sidebar-panel > section > h2.section-toggle,
+.sidebar > section > h2.section-toggle {
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sidebar-panel > section > h2.section-toggle:hover,
+.sidebar > section > h2.section-toggle:hover { color: var(--accent); }
+.sidebar-panel > section.collapsed > *:not(h2),
+.sidebar > section.collapsed > *:not(h2) { display: none; }
+.sidebar-panel > section.collapsed > h2.section-toggle::after,
+.sidebar > section.collapsed > h2.section-toggle::after { content: '▸'; color: var(--muted); font-size: 0.72rem; }
+.sidebar-panel > section:not(.collapsed) > h2.section-toggle::after,
+.sidebar > section:not(.collapsed) > h2.section-toggle::after { content: '▾'; color: var(--muted); font-size: 0.72rem; }
+
+body.sidebar-compact .sidebar-panel { padding: 4px; gap: 3px; }
+body.sidebar-compact .sidebar-panel > section { padding: 4px; }
+
+/* Lists in sidebar */
+.sidebar ul { list-style: none; margin: 0; padding: 0; }
+#pagePreviewList { display: grid; gap: 6px; }
+
+/* ── Status lines ── */
+.status-line {
+  margin: 2px 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  line-height: 1.3;
+  min-height: 0;
+}
+.status-line:empty { display: none; }
+
+.status-inline {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.status-inline:empty { display: none; }
+
+/* ── Section action rows ── */
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  align-items: center;
+}
+
+/* ═══════════════════════════════════════════════════
+   NOTES
+   ═══════════════════════════════════════════════════ */
+#notesTitle, #notesTags { margin-bottom: 4px; }
+#notes { min-height: 80px; margin-bottom: 4px; font-size: 0.82rem; }
+
+/* ═══════════════════════════════════════════════════
+   LIST ITEMS
+   ═══════════════════════════════════════════════════ */
+.comment-item, .search-item, .recent-item, .bookmark-item, .outline-item {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--panel-3) 60%, transparent);
+  margin-bottom: 3px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 0.1s;
+}
+.comment-item:hover, .search-item:hover, .recent-item:hover,
+.bookmark-item:hover, .outline-item:hover {
+  border-color: var(--accent);
+}
+
+/* Status indicators */
+#annStats, #hotkeysStatus, #workspaceStatus, #bookmarksStatus, #docInfo { color: var(--muted); font-size: 0.78rem; }
+#annStats:empty, #docInfo:empty { display: none; }
+#hotkeysStatus.error, #workspaceStatus.error, #bookmarksStatus.error { color: var(--danger); }
+#hotkeysStatus.success, #workspaceStatus.success, #bookmarksStatus.success { color: var(--success); }
+#ocrStatus { color: var(--muted); font-size: 0.78rem; margin-top: 2px; flex-shrink: 0; }
+#ocrStatus:empty { display: none; }
+
+/* ═══════════════════════════════════════════════════
+   OCR CONFIDENCE
+   ═══════════════════════════════════════════════════ */
+.ocr-confidence-high { color: var(--success); }
+.ocr-confidence-medium { color: var(--accent); }
+.ocr-confidence-low { color: var(--warn); }
+.ocr-confidence-very-low { color: var(--danger); }
+
+.ocr-docs-list { list-style: none; padding: 0; margin: 4px 0; max-height: 140px; overflow-y: auto; font-size: 0.82em; }
+.ocr-docs-list li { display: flex; justify-content: space-between; align-items: center; padding: 3px 6px; border-bottom: 1px solid var(--border); }
+.ocr-docs-list li button { margin-left: 8px; flex-shrink: 0; }
+
+/* Session health */
+.session-health-good { color: var(--success); }
+.session-health-degraded { color: var(--warn); }
+.session-health-critical { color: var(--danger); }
+
+/* ═══════════════════════════════════════════════════
+   Thumbnail Grid (enhanced)
+   ═══════════════════════════════════════════════════ */
+.thumbnail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+  padding: 8px;
+}
+.thumbnail-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+.thumbnail-cell:hover { border-color: var(--accent); }
+.thumbnail-canvas { width: 100%; height: auto; border-radius: 2px; }
+.thumbnail-label { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+
+/* ─── Hover effects for thumbnails ──────────────────────────────────────── */
+.thumbnail-cell {
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.thumbnail-cell:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.thumbnail-cell.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+/* ─── Tab bar animations ────────────────────────────────────────────────── */
+.tab-item {
+  transition: background 0.15s, padding 0.15s;
+}
+.tab-item:hover {
+  background: var(--hover-bg, rgba(255,255,255,0.08));
+}
+.tab-close:hover {
+  background: rgba(255,50,50,0.3);
+  border-radius: 50%;
+}
+
+/* ═══════════════════════════════════════════════════
+   Storage Usage Indicator
+   ═══════════════════════════════════════════════════ */
+.storage-bar {
+  height: 6px;
+  background: var(--panel-2);
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 4px 0;
+}
+.storage-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.storage-info {
+  font-size: 0.7rem;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+}

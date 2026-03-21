@@ -1,0 +1,78 @@
+/* ═══════════════════════════════════════════════════
+   Resize zones — smooth transitions & visual feedback
+   ═══════════════════════════════════════════════════ */
+
+/* Resize handle base styles */
+.resize-handle-sidebar,
+.resize-handle-canvas {
+  z-index: 15;
+  user-select: none;
+  touch-action: none;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+
+/* Sidebar resize handle — vertical strip at the right edge of the left panel */
+.resize-handle-sidebar {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 25;
+}
+.resize-handle-sidebar:hover,
+.resize-handle-sidebar.active {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Canvas resize handle — horizontal strip below the page area */
+.resize-handle-canvas {
+  width: 100%;
+  height: 6px;
+  cursor: row-resize;
+  flex-shrink: 0;
+}
+.resize-handle-canvas:hover,
+.resize-handle-canvas.active {
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* Hide sidebar handle when sidebar is hidden */
+.app-shell.sidebar-hidden .resize-handle-sidebar { display: none; }
+
+/* Resize zone indicators — highlight zones when settings modal open */
+body.settings-modal-open .resize-handle-sidebar,
+body.settings-modal-open .resize-handle-canvas {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+body.settings-modal-open .left-panel {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 30%, transparent);
+  outline-offset: -2px;
+}
+body.settings-modal-open .canvas-wrap {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 30%, transparent);
+  outline-offset: -2px;
+}
+
+/* Drag resize pixel-value tooltip */
+.resize-tooltip {
+  position: fixed;
+  z-index: 10001;
+  pointer-events: none;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-3);
+  color: var(--text);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  border: 1px solid var(--border);
+  box-shadow: var(--elevation-2);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.resize-tooltip.visible {
+  opacity: 1;
+}
