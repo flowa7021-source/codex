@@ -1,6 +1,9 @@
 // ─── Cloud Integration ──────────────────────────────────────────────────────
 // Pluggable cloud storage: Google Drive, OneDrive, Dropbox.
 // Each provider implements a common interface for open/save/list operations.
+// Supports optional E2E encryption via sync-encryption.js.
+
+import { deriveKey, encrypt, decrypt, generateSalt } from './sync-encryption.js';
 
 /** @type {'stub'|'partial'|'ready'} Module readiness status */
 export const MODULE_STATUS = 'stub';
@@ -43,6 +46,29 @@ const _SUPPORTED_MIME_TYPES = [
 const providers = new Map();
 /** @type {Set<Function>} */
 const statusListeners = new Set();
+
+// ─── E2E Encryption State ────────────────────────────────────────────────
+/** @type {CryptoKey|null} */
+let _encryptionKey = null;
+/** @type {Uint8Array|null} */
+let _encryptionSalt = null;
+
+/**
+ * Set (or clear) the encryption passphrase for cloud sync.
+ * When set, all uploads are encrypted and downloads are decrypted automatically.
+ * Pass null/empty string to disable encryption.
+ * @param {string|null} passphrase
+ * @returns {Promise<void>}
+ */
+export async function setEncryptionPassphrase(passphrase) {
+  if (!passphrase) {
+    _encryptionKey = null;
+    _encryptionSalt = null;
+    return;
+  }
+  _encryptionSalt = generateSalt();
+  _encryptionKey = await deriveKey(passphrase, _encryptionSalt);
+}
 
 /**
  * Register a cloud provider.
@@ -106,8 +132,57 @@ export async function listFiles(providerId, folder, query) {
 export async function openFile(providerId, fileId) {
   const provider = providers.get(providerId);
   if (!provider) throw new Error(`Unknown provider: ${providerId}`);
-  const data = await provider.downloadFile(fileId);
+  let data = await provider.downloadFile(fileId);
+
+  // Decrypt if encryption is active and data looks encrypted (has envelope header)
+  if (_encryptionKey && data) {
+    try {
+      const envelope = _parseEncryptedEnvelope(data);
+      if (envelope) {
+        // Re-derive key using the salt stored in the envelope
+        const key = await deriveKey('', _encryptionSalt); // use current key directly
+        data = await decrypt({ iv: envelope.iv, ciphertext: envelope.ciphertext }, _encryptionKey);
+      }
+    } catch (err) {
+      console.warn('[cloud-integration] decryption failed, returning raw data:', err?.message);
+    }
+  }
+
   return { data, file: { id: fileId, provider: providerId } };
+}
+
+/**
+ * Parse an encrypted envelope from downloaded data.
+ * Envelope format: 4-byte magic "NRSE" + 16-byte salt + 12-byte IV + ciphertext
+ * @param {ArrayBuffer} data
+ * @returns {{ salt: Uint8Array, iv: Uint8Array, ciphertext: Uint8Array }|null}
+ */
+function _parseEncryptedEnvelope(data) {
+  const bytes = new Uint8Array(data instanceof ArrayBuffer ? data : data.buffer || data);
+  if (bytes.length < 32) return null;
+  // Check magic header "NRSE" (NovaReader Sync Encrypted)
+  if (bytes[0] !== 0x4E || bytes[1] !== 0x52 || bytes[2] !== 0x53 || bytes[3] !== 0x45) return null;
+  const salt = bytes.slice(4, 20);
+  const iv = bytes.slice(20, 32);
+  const ciphertext = bytes.slice(32);
+  return { salt, iv, ciphertext };
+}
+
+/**
+ * Build an encrypted envelope for upload.
+ * @param {Uint8Array} salt
+ * @param {Uint8Array} iv
+ * @param {Uint8Array} ciphertext
+ * @returns {Uint8Array}
+ */
+function _buildEncryptedEnvelope(salt, iv, ciphertext) {
+  const magic = new Uint8Array([0x4E, 0x52, 0x53, 0x45]); // "NRSE"
+  const envelope = new Uint8Array(4 + salt.length + iv.length + ciphertext.length);
+  envelope.set(magic, 0);
+  envelope.set(salt, 4);
+  envelope.set(iv, 20);
+  envelope.set(ciphertext, 32);
+  return envelope;
 }
 
 /**
@@ -122,7 +197,20 @@ export async function openFile(providerId, fileId) {
 export async function saveFile(providerId, name, data, mimeType = 'application/pdf', folderId) {
   const provider = providers.get(providerId);
   if (!provider) throw new Error(`Unknown provider: ${providerId}`);
-  return provider.uploadFile(name, data, mimeType, folderId);
+
+  let uploadData = data;
+  // Encrypt before upload if encryption key is set
+  if (_encryptionKey && _encryptionSalt && data) {
+    try {
+      const plainBytes = data instanceof ArrayBuffer ? new Uint8Array(data) : new Uint8Array(data);
+      const { iv, ciphertext } = await encrypt(plainBytes, _encryptionKey);
+      uploadData = _buildEncryptedEnvelope(_encryptionSalt, iv, ciphertext);
+    } catch (err) {
+      console.warn('[cloud-integration] encryption failed, uploading unencrypted:', err?.message);
+    }
+  }
+
+  return provider.uploadFile(name, uploadData, mimeType, folderId);
 }
 
 /**
