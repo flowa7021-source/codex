@@ -2,9 +2,9 @@
  * @module integration-wiring
  * @description Phase 7 — Integration layer.
  *
- * Wires all Phase 0–8 modules into the NovaReader app lifecycle:
- *   • Registers new toolbar buttons (Erase, Smart Crop, Table Editor,
- *     Formula, Visual Diff, Batch OCR)
+ * Wires all Phase 0–8 + professional modules into the NovaReader app lifecycle:
+ *   • Registers toolbar buttons (Erase, Crop, Table, Formula, Diff, Batch OCR,
+ *     Watermark, Sign, Bates, Redact, Bookmarks, Measure, A11y, Reading, Diff Text)
  *   • Initialises the PageModel for each loaded page
  *   • Hooks the PixelPerfectTextLayer into the render pipeline
  *   • Activates the ClipboardController for cross-format paste
@@ -40,6 +40,15 @@ import { TableEditor, detectTableRegions } from './table-editor.js';
 import { FormulaEditor, insertFormulaIntoPdf } from './formula-editor.js';
 import { VisualDiff }                  from './visual-diff.js';
 import { BatchOcrEditor, generateBatchReport } from './batch-ocr-editor.js';
+import { WatermarkEditor, addTextWatermark, addImageWatermark } from './pdf-watermark.js';
+import { SignaturePad, insertSignatureIntoPdf } from './signature-pad.js';
+import { BatesEditor, applyBatesNumbering, applyPageStamp, applyConfidentialityLabel } from './bates-numbering.js';
+import { RedactionEditor }                     from './text-redact.js';
+import { OutlineEditor }                       from './outline-editor.js';
+import { MeasurementOverlay }                  from './measurement-tools.js';
+import { AccessibilityPanel }                  from './pdf-accessibility-checker.js';
+import { ReadingMode }                         from './reading-mode.js';
+import { DiffViewer, diffPdfPages }            from './word-level-diff.js';
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -210,6 +219,170 @@ function _addToolbarButtons(ctx, handles) {
     console.log(report);
   });
   toolbar.appendChild(batchBtn);
+
+  // ── Professional tools separator ──
+  toolbar.appendChild(_makeSeparator());
+
+  // Watermark
+  toolbar.appendChild(_makeButton('watermarkTool', 'Watermark', () => {
+    const editor = new WatermarkEditor(ctx.container, {
+      onApply: async (opts) => {
+        let blob;
+        if (opts.mode === 'text') {
+          blob = await addTextWatermark(ctx.pdfBytes, opts.text, opts);
+        } else {
+          blob = await addImageWatermark(ctx.pdfBytes, opts.imageBytes, opts);
+        }
+        ctx.onPdfModified(new Uint8Array(await blob.arrayBuffer()));
+      },
+      onCancel: () => {},
+    });
+    editor.open();
+    handles._watermarkEditor = editor;
+  }));
+
+  // Signature
+  toolbar.appendChild(_makeButton('signatureTool', 'Sign', () => {
+    const pad = new SignaturePad(ctx.container, {
+      onInsert: async (sigData) => {
+        const blob = await insertSignatureIntoPdf(ctx.pdfBytes, ctx.getPageNum(), sigData);
+        ctx.onPdfModified(new Uint8Array(await blob.arrayBuffer()));
+      },
+      onCancel: () => {},
+    });
+    pad.open();
+    handles._signaturePad = pad;
+  }));
+
+  // Bates Numbering
+  toolbar.appendChild(_makeButton('batesTool', 'Bates', () => {
+    const editor = new BatesEditor(ctx.container, {
+      onApply: async (opts) => {
+        let blob;
+        if (opts.mode === 'bates') {
+          blob = await applyBatesNumbering(ctx.pdfBytes, opts);
+        } else if (opts.mode === 'stamp') {
+          blob = await applyPageStamp(ctx.pdfBytes, opts.text, opts);
+        } else {
+          blob = await applyConfidentialityLabel(ctx.pdfBytes, opts.level, opts);
+        }
+        ctx.onPdfModified(new Uint8Array(await blob.arrayBuffer()));
+      },
+      onCancel: () => {},
+    });
+    editor.open();
+    handles._batesEditor = editor;
+  }));
+
+  // Redaction
+  toolbar.appendChild(_makeButton('redactTool', 'Redact', () => {
+    const editor = new RedactionEditor(ctx.container, {
+      getPdfBytes: () => ctx.pdfBytes,
+      onApply: (result) => {
+        if (result.blob) {
+          result.blob.arrayBuffer().then(buf => ctx.onPdfModified(new Uint8Array(buf)));
+        }
+      },
+      onCancel: () => {},
+    });
+    editor.open();
+    handles._redactionEditor = editor;
+  }));
+
+  // Outline / Bookmarks
+  toolbar.appendChild(_makeButton('outlineTool', 'Bookmarks', () => {
+    const editor = new OutlineEditor(ctx.container, {
+      getPdfBytes: () => ctx.pdfBytes,
+      onApply: (blob) => {
+        blob.arrayBuffer().then(buf => ctx.onPdfModified(new Uint8Array(buf)));
+      },
+      onNavigate: (pageNum) => {
+        ctx.eventBus?.dispatchEvent?.(new CustomEvent('go-to-page', { detail: { pageNum } }));
+      },
+      onCancel: () => {},
+    });
+    editor.open();
+    handles._outlineEditor = editor;
+  }));
+
+  // Measurement
+  toolbar.appendChild(_makeButton('measureTool', 'Measure', () => {
+    if (handles._measureOverlay) {
+      handles._measureOverlay.destroy();
+      handles._measureOverlay = null;
+      return;
+    }
+    const page = ctx.pdfLibDoc.getPages()[ctx.getPageNum() - 1];
+    const { width, height } = page.getSize();
+    handles._measureOverlay = new MeasurementOverlay(ctx.container, {
+      zoom: 1.0,
+      unit: 'mm',
+      pageWidthPt: width,
+      pageHeightPt: height,
+    });
+    handles._measureOverlay.setTool('distance');
+  }));
+
+  // Accessibility Check
+  toolbar.appendChild(_makeButton('a11yTool', 'A11y', () => {
+    const panel = new AccessibilityPanel(ctx.container, {
+      getPdfBytes: () => ctx.pdfBytes,
+      onClose: () => {},
+    });
+    panel.open();
+    handles._a11yPanel = panel;
+  }));
+
+  // Reading Mode
+  toolbar.appendChild(_makeButton('readingModeTool', 'Read', () => {
+    const reader = new ReadingMode({
+      getPageText: async (pageNum) => {
+        const { getDocument } = await import('pdfjs-dist/build/pdf.mjs');
+        const doc = await getDocument({ data: ctx.pdfBytes.slice() }).promise;
+        const page = await doc.getPage(pageNum);
+        const content = await page.getTextContent();
+        doc.destroy();
+        return content.items.map(i => i.str).join(' ');
+      },
+      getTotalPages: () => ctx.pdfLibDoc.getPageCount(),
+      getCurrentPage: () => ctx.getPageNum(),
+      onExit: () => {},
+    });
+    reader.enter();
+    handles._readingMode = reader;
+  }));
+
+  // Word-level Text Diff
+  toolbar.appendChild(_makeButton('textDiffTool', 'Text Diff', () => {
+    // Open file picker for comparison PDF
+    const input = document.createElement('input');
+    input.type   = 'file';
+    input.accept = '.pdf';
+    input.addEventListener('change', async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const otherBytes = new Uint8Array(await file.arrayBuffer());
+      const result = await diffPdfPages(ctx.pdfBytes, otherBytes, {
+        pageA: ctx.getPageNum(),
+        pageB: 1,
+        granularity: 'word',
+      });
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.9);overflow:auto;padding:24px';
+      document.body.appendChild(overlay);
+      const viewer = new DiffViewer(overlay);
+      viewer.show(result);
+      const onKey = (e) => {
+        if (e.key === 'Escape') {
+          viewer.close();
+          overlay.remove();
+          document.removeEventListener('keydown', onKey);
+        }
+      };
+      document.addEventListener('keydown', onKey);
+    });
+    input.click();
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -298,6 +471,14 @@ function _destroyAll(handles) {
   handles._tableEditor?.close();
   handles._formulaEditor?.close?.();
   handles._visualDiff?.destroy();
+  handles._watermarkEditor?.close();
+  handles._signaturePad?.close();
+  handles._batesEditor?.close();
+  handles._redactionEditor?.close();
+  handles._outlineEditor?.close();
+  handles._measureOverlay?.destroy();
+  handles._a11yPanel?.close();
+  handles._readingMode?.exit();
   handles._teardownPageChange?.();
 }
 
