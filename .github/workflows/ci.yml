@@ -17,7 +17,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: cd "$PROJECT_DIR" && npm ci
+      - run: cd "$PROJECT_DIR" && npm install --no-audit --no-fund
       - run: cd "$PROJECT_DIR" && npm run lint
       - run: cd "$PROJECT_DIR" && npm test
 
@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: cd "$PROJECT_DIR" && npm ci
+      - run: cd "$PROJECT_DIR" && npm install --no-audit --no-fund
       - run: cd "$PROJECT_DIR" && npm run build
       - name: Verify build output
         run: |

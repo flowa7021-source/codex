@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: cd "$PROJECT_DIR" && npm ci
+      - run: cd "$PROJECT_DIR" && npm install --no-audit --no-fund
       - run: cd "$PROJECT_DIR" && npm run lint
       - run: cd "$PROJECT_DIR" && npm test
 
@@ -59,7 +59,7 @@ jobs:
 
       - name: Install npm dependencies
         working-directory: ${{ env.PROJECT_DIR }}
-        run: npm ci
+        run: npm install --no-audit --no-fund
 
       - name: Build frontend (Vite)
         working-directory: ${{ env.PROJECT_DIR }}
