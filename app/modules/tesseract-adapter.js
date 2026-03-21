@@ -10,8 +10,6 @@
 //     (dependency of tesseract.js, installed in node_modules).
 //   - Language traineddata files remain in app/vendor/tesseract/lang-data
 //     since they are project-specific offline bundles not published to npm.
-//   - Vendor copies of the JS/WASM files are kept as offline fallback but are
-//     no longer the primary import path.
 //
 // Supports both single-worker mode (for on-demand page OCR) and parallel
 // scheduler mode (for background multi-page scanning).
@@ -121,7 +119,7 @@ export async function isTesseractAvailable() {
 }
 
 /**
- * Dynamically import Tesseract.js ESM module from vendor.
+ * Dynamically import Tesseract.js ESM module from npm package.
  * Module is cached after first successful load.
  */
 let _tesseractModule = null;
@@ -213,7 +211,7 @@ async function _configureWorker(worker) {
 
 /**
  * Initialize Tesseract worker with a specific language.
- * All resources loaded from local vendor/ — no network calls.
+ * All resources loaded locally — no network calls.
  * @param {string} lang - language code (rus, eng, deu, fra, spa, ita, por, auto)
  * @returns {Promise<boolean>} true if initialized successfully
  */

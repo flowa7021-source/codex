@@ -577,10 +577,10 @@ export function exportDiagnostics() {
 
 export async function verifyBundledAssets() {
   const assets = [
-    { key: 'pdfRuntime', url: new URL('../vendor/pdf.min.mjs', import.meta.url).href },
-    { key: 'pdfWorker', url: new URL('../vendor/pdf.worker.min.mjs', import.meta.url).href },
+    { key: 'pdfRuntime', url: new URL('../../node_modules/pdfjs-dist/build/pdf.mjs', import.meta.url).href },
+    { key: 'pdfWorker', url: new URL('../../node_modules/pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href },
     { key: 'djvuRuntime', url: new URL('../vendor/djvu.js', import.meta.url).href },
-    { key: 'ocrRuntime', url: new URL('../vendor/tesseract/tesseract.esm.min.js', import.meta.url).href },
+    { key: 'ocrRuntime', url: new URL('../../node_modules/tesseract.js/dist/tesseract.esm.min.js', import.meta.url).href },
   ];
 
   const report = {};

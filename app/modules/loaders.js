@@ -2,9 +2,7 @@
 //
 // Import strategy:
 //   - PDF.js: loaded from the `pdfjs-dist` npm package (node_modules). The
-//     worker is resolved via pdfjs-dist as well. Vendor files under
-//     app/vendor/pdf.*.mjs are kept as an offline fallback but are no longer
-//     the primary import path.
+//     worker is resolved via pdfjs-dist as well.
 //   - DjVu.js: loaded from app/vendor/djvu.js (script-tag injection). The
 //     `djvujs-dist` npm package ships only unbuilt source, so there is no
 //     viable npm import — we keep the vendor bundle.
@@ -39,7 +37,7 @@ export async function ensurePdfJs() {
   pdfLoadPromise = (async () => {
     const t0 = performance.now();
     try {
-      // Import PDF.js from the npm package instead of the vendor bundle.
+      // Import PDF.js from the npm package.
       pdfjsLib = await import('pdfjs-dist/build/pdf.mjs');
       if (pdfjsLib?.GlobalWorkerOptions) {
         pdfjsLib.GlobalWorkerOptions.workerSrc = npmWorkerUrl;
