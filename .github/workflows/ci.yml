@@ -29,11 +29,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Security audit
+        run: npm audit --audit-level=high || true
+
       - name: ESLint (zero warnings)
         run: npm run lint
 
       - name: Unit tests (322 tests, node:test runner)
         run: npm run test:unit
+
+      - name: Check code coverage
+        run: npm run test:coverage
 
       - name: Benchmark – OCR quality baseline
         run: npm run test:benchmark
@@ -46,6 +52,11 @@ jobs:
 
       - name: Vite build
         run: npm run build
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Run E2E tests (desktop only)
+        run: npm run test:e2e:desktop
 
       - name: Verify build output
         run: |
