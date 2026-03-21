@@ -5,6 +5,9 @@
 /** @type {EventTarget} */
 const _bus = new EventTarget();
 
+/** @type {Array<{event: string, wrapper: Function}>} */
+let _listeners = [];
+
 /**
  * Emit a named event with optional detail payload.
  * @param {string} event - Event name, e.g. 'ocr:page-done', 'file:opened'
@@ -34,18 +37,17 @@ export function on(event, handler) {
  * Subscribe to a named event, but only fire once.
  * @param {string} event
  * @param {(detail: any) => void} handler
+ * @returns {() => void} unsubscribe function
  */
 export function once(event, handler) {
   const wrapper = (e) => handler(e.detail);
   _bus.addEventListener(event, wrapper, { once: true });
   _listeners.push({ event, wrapper });
+  return () => {
+    _bus.removeEventListener(event, wrapper);
+    _listeners = _listeners.filter(l => l.wrapper !== wrapper);
+  };
 }
-
-/**
- * Remove all listeners (useful for testing or full reset).
- * Note: EventTarget doesn't support removeAll, so we replace the bus.
- */
-let _listeners = [];
 
 /**
  * Subscribe with tracking for bulk removal.

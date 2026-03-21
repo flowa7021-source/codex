@@ -3,8 +3,6 @@
 // Optimized for minimal peak memory via adaptive chunk sizes and
 // single-allocation ArrayBuffer assembly.
 
-import { safeTimeout } from './safe-timers.js';
-
 export class ProgressiveLoader {
   constructor() {
     this.abortController = null;

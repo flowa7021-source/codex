@@ -9,7 +9,10 @@
 // tile rendering is appropriate.
 
 import { pushDiagnosticEvent } from './diagnostics.js';
-import { getRenderGeneration } from './render-controller.js';
+
+// Render generation is injected to avoid circular dependency with render-controller
+let _getRenderGeneration = () => 0;
+export function setRenderGenerationGetter(fn) { _getRenderGeneration = fn; }
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -264,7 +267,7 @@ async function _renderSingleTile(adapter, page, zoom, rotation, col, row, tileSi
   const th = Math.min(tileSize, fullH - ty);
 
   // Capture the render generation before the async work
-  const genBefore = getRenderGeneration();
+  const genBefore = _getRenderGeneration();
 
   // Render the full page to a temporary canvas
   const tmpCanvas = document.createElement('canvas');
@@ -272,7 +275,7 @@ async function _renderSingleTile(adapter, page, zoom, rotation, col, row, tileSi
     await adapter.renderPage(page, tmpCanvas, { zoom, rotation });
 
     // If a newer render started while we were waiting, discard this stale tile
-    if (getRenderGeneration() !== genBefore) return null;
+    if (_getRenderGeneration() !== genBefore) return null;
 
     // Extract the tile region
     const tileCanvas = (typeof OffscreenCanvas !== 'undefined')

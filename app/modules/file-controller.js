@@ -10,7 +10,7 @@ import { pushDiagnosticEvent } from './diagnostics.js';
 import { parseEpub, EpubAdapter } from './epub-adapter.js';
 import { progressiveLoader } from './progressive-loader.js';
 import { formManager } from './pdf-forms.js';
-import { safeTimeout, clearAllTimers } from './safe-timers.js';
+import { clearAllTimers } from './safe-timers.js';
 import { toastInfo } from './toast.js';
 import { announce } from './a11y.js';
 import { resetTesseractAvailability } from './tesseract-adapter.js';

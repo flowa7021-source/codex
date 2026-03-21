@@ -18,7 +18,7 @@ import { setPageEdits, persistEdits } from './export-controller.js';
 import { blockEditor } from './pdf-advanced-edit.js';
 import { addSignatureToPdf } from './pdf-operations.js';
 import { renderConfidenceOverlay } from './ocr-confidence-map.js';
-import { shouldUseTileRendering, renderTiles, invalidateTiles } from './tile-renderer.js';
+import { shouldUseTileRendering, renderTiles, invalidateTiles, setRenderGenerationGetter } from './tile-renderer.js';
 import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
@@ -64,6 +64,9 @@ export function bumpRenderGeneration() { return ++_renderGeneration; }
 
 /** Return the current render generation (used by tile-renderer to detect stale renders). */
 export function getRenderGeneration() { return _renderGeneration; }
+
+// Wire generation getter to tile-renderer (avoids circular import)
+setRenderGenerationGetter(getRenderGeneration);
 
 // ─── Pre-render bookkeeping ─────────────────────────────────────────────────
 
