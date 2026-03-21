@@ -191,6 +191,8 @@ export async function renderCurrentPage() {
   let skeleton = null;
   const canvasWrap = els.canvasWrap;
   if (canvasWrap) {
+    // Remove any leftover skeleton from a previous render
+    canvasWrap.querySelector('.page-skeleton')?.remove();
     skeleton = document.createElement('div');
     skeleton.className = 'page-skeleton';
     skeleton.style.position = 'absolute';

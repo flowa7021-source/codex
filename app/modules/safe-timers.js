@@ -67,13 +67,13 @@ export function clearSafeInterval(id) {
  * @param {'document'|'all'} [scope='document']
  */
 export function clearAllTimers(scope = 'document') {
-  for (const [id, s] of _timeouts) {
+  for (const [id, s] of [..._timeouts]) {
     if (scope === 'all' || s === scope) {
       clearTimeout(id);
       _timeouts.delete(id);
     }
   }
-  for (const [id, s] of _intervals) {
+  for (const [id, s] of [..._intervals]) {
     if (scope === 'all' || s === scope) {
       clearInterval(id);
       _intervals.delete(id);

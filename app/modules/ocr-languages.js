@@ -95,7 +95,6 @@ const languageProfiles = {
       [/\bcao\b/g, 'ção'],
       [/cao\b/g, 'ção'],
       [/\bnao\b/gi, 'não'],
-      [/\be\b(?=[a-z])/g, 'é'],
     ],
   },
   // ─── New languages (Phase 3.2) ──────────────────────────────────────────

@@ -74,13 +74,13 @@ export function generateCandidates(word) {
   const lower = word.toLowerCase();
 
   for (const [from, to] of COMMON_OCR_SUBSTITUTIONS) {
-    // Forward substitution
+    // Forward substitution (replaceAll to catch every occurrence)
     if (lower.includes(from)) {
-      candidates.add(lower.replace(from, to));
+      candidates.add(lower.replaceAll(from, to));
     }
-    // Reverse substitution
+    // Reverse substitution (replaceAll to catch every occurrence)
     if (lower.includes(to)) {
-      candidates.add(lower.replace(to, from));
+      candidates.add(lower.replaceAll(to, from));
     }
   }
 

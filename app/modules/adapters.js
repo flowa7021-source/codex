@@ -64,6 +64,10 @@ export class PDFAdapter {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Cancel any in-flight render on the main canvas. This is intentional for
+    // single-canvas design: only one render task should target the primary
+    // canvas at a time. Off-screen canvases (e.g. pre-render, thumbnails) are
+    // not tracked here, so they won't interfere with the main render.
     const isMainCanvas = canvas === els?.canvas;
     if (isMainCanvas && this._currentRenderTask) {
       try { this._currentRenderTask.cancel(); } catch (err) { console.warn('[adapters] error:', err?.message); }

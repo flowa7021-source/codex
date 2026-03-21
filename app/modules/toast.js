@@ -33,18 +33,18 @@ function ensureContainer() {
 function removeToast(id) {
   const entry = activeToasts.get(id);
   if (!entry) return;
+  // Delete from map immediately to prevent double-removal: both the
+  // animationend listener and the fallback timeout check activeToasts
+  // before touching the DOM, so whichever fires second will no-op.
+  activeToasts.delete(id);
   clearSafeTimeout(entry.timer);
   entry.el.classList.add('toast-exit');
   entry.el.addEventListener('animationend', () => {
     entry.el.remove();
-    activeToasts.delete(id);
   }, { once: true });
-  // Fallback: remove after 300ms even if animationend doesn't fire
+  // Fallback: remove after 350ms even if animationend doesn't fire
   safeTimeout(() => {
-    if (activeToasts.has(id)) {
-      entry.el.remove();
-      activeToasts.delete(id);
-    }
+    entry.el.remove();
   }, 350);
 }
 

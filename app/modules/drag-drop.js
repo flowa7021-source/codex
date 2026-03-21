@@ -191,6 +191,20 @@ function initThumbnailReorder(container, reorderPages) {
   container.querySelectorAll('.thumbnail-cell').forEach(cell => {
     cell.draggable = true;
   });
+
+  // Store observer reference for cleanup
+  container._thumbnailReorderObserver = observer;
+}
+
+/**
+ * Disconnect the thumbnail reorder MutationObserver.
+ * @param {HTMLElement} container - The same thumbnail grid passed to initDragDrop
+ */
+export function destroyThumbnailReorder(container) {
+  if (container?._thumbnailReorderObserver) {
+    container._thumbnailReorderObserver.disconnect();
+    container._thumbnailReorderObserver = null;
+  }
 }
 
 /**
