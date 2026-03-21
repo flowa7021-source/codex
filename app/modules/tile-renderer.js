@@ -9,6 +9,7 @@
 // tile rendering is appropriate.
 
 import { pushDiagnosticEvent } from './diagnostics.js';
+import { getRenderGeneration } from './render-controller.js';
 
 // ─── Configuration ──────────────────────────────────────────────────────────
 
@@ -262,26 +263,34 @@ async function _renderSingleTile(adapter, page, zoom, rotation, col, row, tileSi
   const tw = Math.min(tileSize, fullW - tx);
   const th = Math.min(tileSize, fullH - ty);
 
+  // Capture the render generation before the async work
+  const genBefore = getRenderGeneration();
+
   // Render the full page to a temporary canvas
   const tmpCanvas = document.createElement('canvas');
-  await adapter.renderPage(page, tmpCanvas, { zoom, rotation });
+  try {
+    await adapter.renderPage(page, tmpCanvas, { zoom, rotation });
 
-  // Extract the tile region
-  const tileCanvas = (typeof OffscreenCanvas !== 'undefined')
-    ? new OffscreenCanvas(tw, th)
-    : document.createElement('canvas');
-  if (!(tileCanvas instanceof OffscreenCanvas)) {
-    tileCanvas.width = tw;
-    tileCanvas.height = th;
+    // If a newer render started while we were waiting, discard this stale tile
+    if (getRenderGeneration() !== genBefore) return null;
+
+    // Extract the tile region
+    const tileCanvas = (typeof OffscreenCanvas !== 'undefined')
+      ? new OffscreenCanvas(tw, th)
+      : document.createElement('canvas');
+    if (!(tileCanvas instanceof OffscreenCanvas)) {
+      tileCanvas.width = tw;
+      tileCanvas.height = th;
+    }
+
+    const tileCtx = tileCanvas.getContext('2d');
+    if (!tileCtx) return null;
+    tileCtx.drawImage(tmpCanvas, tx, ty, tw, th, 0, 0, tw, th);
+
+    return tileCanvas;
+  } finally {
+    // Free the temporary full-page canvas even if an error occurred
+    tmpCanvas.width = 0;
+    tmpCanvas.height = 0;
   }
-
-  const tileCtx = tileCanvas.getContext('2d');
-  if (!tileCtx) return null;
-  tileCtx.drawImage(tmpCanvas, tx, ty, tw, th, 0, 0, tw, th);
-
-  // Free the temporary full-page canvas
-  tmpCanvas.width = 0;
-  tmpCanvas.height = 0;
-
-  return tileCanvas;
 }

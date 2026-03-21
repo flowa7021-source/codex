@@ -122,15 +122,15 @@ export function _updateAnnotationCanvas() {
   // Re-apply drawing-enabled class after canvas resize to preserve pointer events
   const drawingActive = !!(state.drawEnabled || state.ocrRegionMode);
   els.annotationCanvas.classList.toggle('drawing-enabled', drawingActive);
-  _deps.renderAnnotations();
+  _deps.renderAnnotations?.();
 }
 
 export function _updatePageUI(renderMs) {
   els.pageStatus.textContent = `${state.currentPage} / ${state.pageCount}`;
   els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
   els.pageInput.value = String(state.currentPage);
-  _deps.capturePageHistoryOnRender();
-  _deps.saveViewState();
+  _deps.capturePageHistoryOnRender?.();
+  _deps.saveViewState?.();
   // Update status bar
   if (els.sbPage) els.sbPage.textContent = `Стр. ${state.currentPage} / ${state.pageCount}`;
   if (els.sbZoom) els.sbZoom.textContent = `${Math.round(state.zoom * 100)}%`;
@@ -143,9 +143,9 @@ export function _updatePageUI(renderMs) {
     recordSuccessfulOperation();
   }
   requestAnimationFrame(() => {
-    _deps.renderCommentList();
-    _deps.trackVisitedPage(renderedPage);
-    _deps.renderReadingProgress();
+    _deps.renderCommentList?.();
+    _deps.trackVisitedPage?.(renderedPage);
+    _deps.renderReadingProgress?.();
     pushDiagnosticEvent('page.render', {
       page: renderedPage,
       zoom: Number(state.zoom.toFixed(2)),
@@ -158,6 +158,19 @@ export function _updatePageUI(renderMs) {
 
 export async function renderCurrentPage() {
   if (!state.adapter) return;
+
+  // Clean up inline editor from previous page
+  if (_activeInlineEditor) {
+    _activeInlineEditor.remove();
+    _activeInlineEditor = null;
+  }
+
+  // Cancel any in-progress text layer render
+  if (_activeTextLayer) {
+    try { _activeTextLayer.cancel(); } catch (_e) { /* already cancelled */ }
+    _activeTextLayer = null;
+  }
+
   const generation = ++_renderGeneration;
   const renderStartedAt = performance.now();
   const page = state.currentPage;
@@ -901,7 +914,7 @@ export function handleImageInsertion(file) {
 
       blockEditor.addImageBlock(state.currentPage, x, y, dataUrl, w, h);
       blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
-      _deps.setOcrStatus('Изображение вставлено. Перемещайте и масштабируйте в режиме "Блоки".');
+      _deps.setOcrStatus?.('Изображение вставлено. Перемещайте и масштабируйте в режиме "Блоки".');
     };
     img.src = dataUrl;
   };
@@ -1040,12 +1053,12 @@ export function openSignaturePad() {
     const canvasH = parseFloat(els.canvas.style.height) || 600;
     blockEditor.addImageBlock(state.currentPage, canvasW * 0.5, canvasH * 0.75, dataUrl, 200, 100);
     blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
-    _deps.setOcrStatus('Подпись вставлена на canvas');
+    _deps.setOcrStatus?.('Подпись вставлена на canvas');
 
     // Also embed into actual PDF via pdf-lib
     if (state.adapter?.type === 'pdf' && state.file) {
       try {
-        _deps.setOcrStatus('Встраивание подписи в PDF...');
+        _deps.setOcrStatus?.('Встраивание подписи в PDF...');
         const pngBlob = await (await fetch(dataUrl)).blob();
         const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
         const arrayBuffer = await state.file.arrayBuffer();
@@ -1062,9 +1075,9 @@ export function openSignaturePad() {
         a.download = `${state.docName || 'document'}-signed.pdf`;
         a.click();
         URL.revokeObjectURL(url);
-        _deps.setOcrStatus('Подпись встроена в PDF и сохранена');
+        _deps.setOcrStatus?.('Подпись встроена в PDF и сохранена');
       } catch (err) {
-        _deps.setOcrStatus(`Подпись на canvas (PDF ошибка: ${err?.message || 'неизвестная'})`);
+        _deps.setOcrStatus?.(`Подпись на canvas (PDF ошибка: ${err?.message || 'неизвестная'})`);
       }
     }
     modal.remove();
