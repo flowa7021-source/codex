@@ -17,6 +17,8 @@
     "test:e2e:mobile": "npx playwright test --config tests/e2e/playwright.config.js --project=mobile",
     "test:unit": "node --import ./tests/unit/setup-dom.js --test tests/unit/*.test.js",
     "test:benchmark": "node tests/benchmarks/ocr-quality-baseline.js",
+    "test:benchmark:ocr": "node tests/benchmarks/ocr-corpus-benchmark.js",
+    "test:benchmark:pdf": "node tests/benchmarks/pdf-conversion-benchmark.js",
     "test:soak": "node tests/nightly-soak.js",
     "test:soak:long": "SOAK_DURATION_MIN=60 node tests/nightly-soak.js",
     "lint": "eslint app/ --max-warnings 0",
