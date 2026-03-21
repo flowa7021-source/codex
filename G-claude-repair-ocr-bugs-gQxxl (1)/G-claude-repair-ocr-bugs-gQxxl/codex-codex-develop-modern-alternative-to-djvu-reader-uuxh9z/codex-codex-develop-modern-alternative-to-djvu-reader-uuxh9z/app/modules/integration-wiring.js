@@ -156,7 +156,8 @@ function _addToolbarButtons(ctx, handles) {
     const regions = detectTableRegions(canvas);
     if (regions.length === 0) return;
 
-    const page     = ctx.pdfLibDoc.getPages()[ctx.getPageNum() - 1];
+    const page = ctx.pdfLibDoc.getPages()[ctx.getPageNum() - 1];
+    if (!page) return;
     const { width, height } = page.getSize();
 
     const editor = new TableEditor(ctx.container, ctx.pdfLibDoc, width, height, 1.0);
@@ -171,7 +172,8 @@ function _addToolbarButtons(ctx, handles) {
 
   // Formula Editor
   const formulaBtn = _makeButton('formulaEditorTool', 'Formula', () => {
-    const page     = ctx.pdfLibDoc.getPages()[ctx.getPageNum() - 1];
+    const page = ctx.pdfLibDoc.getPages()[ctx.getPageNum() - 1];
+    if (!page) return;
     const { width, height } = page.getSize();
 
     const editor = new FormulaEditor(ctx.container, width, height, 1.0);
@@ -307,7 +309,7 @@ function _addToolbarButtons(ctx, handles) {
   }));
 
   // Outline / Bookmarks
-  toolbar.appendChild(_makeButton('outlineTool', 'Bookmarks', () => {
+  toolbar.appendChild(_makeButton('outlineTool', 'Bookmarks', async () => {
     const editor = new OutlineEditor(ctx.container, {
       getPdfBytes: () => ctx.pdfBytes,
       onApply: (blob) => {
@@ -318,7 +320,7 @@ function _addToolbarButtons(ctx, handles) {
       },
       onCancel: () => {},
     });
-    editor.open();
+    await editor.open();
     handles._outlineEditor = editor;
   }));
 
@@ -330,6 +332,7 @@ function _addToolbarButtons(ctx, handles) {
       return;
     }
     const page = ctx.pdfLibDoc.getPages()[ctx.getPageNum() - 1];
+    if (!page) return;
     const { width, height } = page.getSize();
     handles._measureOverlay = new MeasurementOverlay(ctx.container, {
       zoom: 1.0,
@@ -341,12 +344,12 @@ function _addToolbarButtons(ctx, handles) {
   }));
 
   // Accessibility Check
-  toolbar.appendChild(_makeButton('a11yTool', 'A11y', () => {
+  toolbar.appendChild(_makeButton('a11yTool', 'A11y', async () => {
     const panel = new AccessibilityPanel(ctx.container, {
       getPdfBytes: () => ctx.pdfBytes,
       onClose: () => {},
     });
-    panel.open();
+    await panel.open();
     handles._a11yPanel = panel;
   }));
 
@@ -443,7 +446,8 @@ function _initInlineEditor(ctx, handles) {
     const hit = pageModel.objectAtPoint({ x: clickX, y: clickY });
     if (!hit || hit.type !== 'text') return;
 
-    const page     = ctx.pdfLibDoc.getPages()[pageNum - 1];
+    const page = ctx.pdfLibDoc.getPages()[pageNum - 1];
+    if (!page) return;
     const { width, height } = page.getSize();
 
     const editor = new InlineTextEditor(container, pageModel, {
