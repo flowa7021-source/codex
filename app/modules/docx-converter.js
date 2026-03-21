@@ -3,12 +3,16 @@
 // Structure detection (fonts, columns, headings, images, blocks) is in
 // docx-structure-detector.js.
 
-import {
-  Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  ImageRun, HeadingLevel, AlignmentType, BorderStyle, WidthType,
-  Header, Footer, PageNumber,
-  ShadingType, ExternalHyperlink,
-} from 'docx';
+// Heavy 'docx' library is loaded lazily on first use to reduce initial bundle size.
+// The cached module reference is populated by _loadDocx().
+let _docx = null;
+
+async function _loadDocx() {
+  if (!_docx) {
+    _docx = await import('docx');
+  }
+  return _docx;
+}
 
 import { extractStructuredContent, mapPdfFont, isMonospaceFont } from './docx-structure-detector.js';
 
@@ -85,7 +89,7 @@ function makeTextRun(run, opts = {}) {
   if (run.characterSpacing && run.characterSpacing !== 0) {
     props.characterSpacing = Math.round(run.characterSpacing * 20);
   }
-  return new TextRun(props);
+  return new _docx.TextRun(props);
 }
 
 /**
@@ -99,7 +103,7 @@ function makeRunsWithSpaces(runs, opts = {}) {
     result.push(makeTextRun(runs[i], opts));
     if (i < runs.length - 1) {
       const spaceFont = PDF_TO_DOCX_FONT_MAP[runs[i].fontFamily] || mapPdfFont(runs[i].fontFamily || '');
-      result.push(new TextRun({ text: ' ', font: spaceFont, size: Math.round(runs[i].fontSize * 2) }));
+      result.push(new _docx.TextRun({ text: ' ', font: spaceFont, size: Math.round(runs[i].fontSize * 2) }));
     }
   }
   return result;
@@ -110,8 +114,8 @@ function makeRunsWithSpaces(runs, opts = {}) {
  */
 function makeHyperlinkRun(run) {
   const mappedFont = PDF_TO_DOCX_FONT_MAP[run.fontFamily] || mapPdfFont(run.fontFamily || '');
-  return new ExternalHyperlink({
-    children: [new TextRun({
+  return new _docx.ExternalHyperlink({
+    children: [new _docx.TextRun({
       text: run.text,
       style: 'Hyperlink',
       color: '0563C1',
@@ -146,8 +150,8 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
       if (capturePageImage) {
         const imgData = await capturePageImage(pageNum);
         if (imgData) {
-          children.push(new Paragraph({
-            children: [new ImageRun({
+          children.push(new _docx.Paragraph({
+            children: [new _docx.ImageRun({
               data: imgData,
               transformation: { width: 595, height: 842 },
               type: 'png',
@@ -173,16 +177,16 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
       for (const block of blocks) {
         if (block.type === 'columnBreak') {
           // Visual separator between columns — just add spacing
-          children.push(new Paragraph({ spacing: { before: 80 } }));
+          children.push(new _docx.Paragraph({ spacing: { before: 80 } }));
           continue;
         }
 
         if (block.type === 'heading') {
-          const headingPara = new Paragraph({
+          const headingPara = new _docx.Paragraph({
             heading: block.level,
             children: makeRunsWithSpaces(block.runs, { bold: true, minSize: 20, maxSize: 56 }),
             spacing: { before: 240, after: 120 },
-            alignment: block.alignment || AlignmentType.LEFT,
+            alignment: block.alignment || _docx.AlignmentType.LEFT,
           });
           headingPara._blockY = block.y ?? Infinity;
           children.push(headingPara);
@@ -205,16 +209,16 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
               }
               if (i < block.runs.length - 1) {
                 const spFont = PDF_TO_DOCX_FONT_MAP[run.fontFamily] || mapPdfFont(run.fontFamily || '');
-                paraChildren.push(new TextRun({ text: ' ', font: spFont, size: Math.round(run.fontSize * 2) }));
+                paraChildren.push(new _docx.TextRun({ text: ' ', font: spFont, size: Math.round(run.fontSize * 2) }));
               }
             }
           }
 
-          const para = new Paragraph({
+          const para = new _docx.Paragraph({
             children: paraChildren,
             indent: block.indent > 0 ? { left: block.indent * 720 } : undefined,
             spacing,
-            alignment: block.alignment || AlignmentType.LEFT,
+            alignment: block.alignment || _docx.AlignmentType.LEFT,
           });
           para._blockY = block.y ?? Infinity;
           children.push(para);
@@ -222,16 +226,16 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
           children.push(buildDocxTable(block));
         } else if (block.type === 'list') {
           const listRef = block.bullet ? 'bullet-list' : 'numbered-list';
-          children.push(new Paragraph({
+          children.push(new _docx.Paragraph({
             children: block.runs
               ? makeRunsWithSpaces(block.runs, { minSize: 8, maxSize: 28 })
-              : [new TextRun(block.text)],
+              : [new _docx.TextRun(block.text)],
             numbering: { reference: listRef, level: block.level || 0 },
             spacing: { after: 40 },
           }));
         } else if (block.type === 'footnote') {
           // Footnote separator + smaller text at the bottom
-          footnoteChildren.push(new Paragraph({
+          footnoteChildren.push(new _docx.Paragraph({
             children: makeRunsWithSpaces(block.runs, { maxSize: 18 }),
             spacing: { before: 40, after: 20 },
             indent: { left: 360, hanging: 360 },
@@ -243,13 +247,13 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
       // Track image insertion points by Y coordinate
       if (content.images && content.images.length && mode !== 'images-only') {
         for (const img of content.images) {
-          const imgParagraph = new Paragraph({
-            children: [new ImageRun({
+          const imgParagraph = new _docx.Paragraph({
+            children: [new _docx.ImageRun({
               data: img.data,
               transformation: { width: Math.min(img.width, 500), height: Math.min(img.height, 700) },
               type: 'png',
             })],
-            alignment: AlignmentType.CENTER,
+            alignment: _docx.AlignmentType.CENTER,
             spacing: { before: 100, after: 100 },
           });
           // Insert at approximate Y position if available
@@ -271,8 +275,8 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
       // Append footnotes at the end of the page content
       if (footnoteChildren.length) {
         // Add a visual separator before footnotes
-        children.push(new Paragraph({
-          children: [new TextRun({ text: '───────────────────────', font: 'Arial', size: 16, color: '999999' })],
+        children.push(new _docx.Paragraph({
+          children: [new _docx.TextRun({ text: '───────────────────────', font: 'Arial', size: 16, color: '999999' })],
           spacing: { before: 200, after: 40 },
         }));
         children.push(...footnoteChildren);
@@ -282,14 +286,14 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
       if (mode === 'text+images' && capturePageImage) {
         const imgData = await capturePageImage(pageNum);
         if (imgData) {
-          children.push(new Paragraph({ spacing: { before: 200 } }));
-          children.push(new Paragraph({
-            children: [new ImageRun({
+          children.push(new _docx.Paragraph({ spacing: { before: 200 } }));
+          children.push(new _docx.Paragraph({
+            children: [new _docx.ImageRun({
               data: imgData,
               transformation: { width: 500, height: 700 },
               type: 'png',
             })],
-            alignment: AlignmentType.CENTER,
+            alignment: _docx.AlignmentType.CENTER,
           }));
         }
       }
@@ -318,7 +322,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
 
     // Empty page fallback
     if (!children.length) {
-      children.push(new Paragraph({ text: '' }));
+      children.push(new _docx.Paragraph({ text: '' }));
     }
 
     const sectionProperties = children._sectionProperties || {
@@ -331,23 +335,23 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
     sections.push({
       properties: sectionProperties,
       headers: includeHeader ? {
-        default: new Header({
-          children: [new Paragraph({
-            children: [new TextRun({ text: title || 'NovaReader', font: 'Arial', size: 16, color: '999999' })],
-            alignment: AlignmentType.RIGHT,
+        default: new _docx.Header({
+          children: [new _docx.Paragraph({
+            children: [new _docx.TextRun({ text: title || 'NovaReader', font: 'Arial', size: 16, color: '999999' })],
+            alignment: _docx.AlignmentType.RIGHT,
           })],
         }),
       } : undefined,
       footers: includeFooter ? {
-        default: new Footer({
-          children: [new Paragraph({
+        default: new _docx.Footer({
+          children: [new _docx.Paragraph({
             children: [
-              new TextRun({ text: 'Стр. ', font: 'Arial', size: 16, color: '999999' }),
-              new TextRun({ children: [PageNumber.CURRENT], font: 'Arial', size: 16, color: '999999' }),
-              new TextRun({ text: ' из ', font: 'Arial', size: 16, color: '999999' }),
-              new TextRun({ children: [PageNumber.TOTAL_PAGES], font: 'Arial', size: 16, color: '999999' }),
+              new _docx.TextRun({ text: 'Стр. ', font: 'Arial', size: 16, color: '999999' }),
+              new _docx.TextRun({ children: [PageNumber.CURRENT], font: 'Arial', size: 16, color: '999999' }),
+              new _docx.TextRun({ text: ' из ', font: 'Arial', size: 16, color: '999999' }),
+              new _docx.TextRun({ children: [PageNumber.TOTAL_PAGES], font: 'Arial', size: 16, color: '999999' }),
             ],
-            alignment: AlignmentType.CENTER,
+            alignment: _docx.AlignmentType.CENTER,
           })],
         }),
       } : undefined,
@@ -355,7 +359,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
     });
   }
 
-  const doc = new Document({
+  const doc = new _docx.Document({
     title: title || 'NovaReader Export',
     creator: 'NovaReader',
     description: `Converted from PDF: ${title || 'unknown'}`,
@@ -387,22 +391,22 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
         {
           reference: 'bullet-list',
           levels: [
-            { level: 0, format: 'bullet', text: '\u2022', alignment: AlignmentType.LEFT,
+            { level: 0, format: 'bullet', text: '\u2022', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 720, hanging: 360 } } } },
-            { level: 1, format: 'bullet', text: '\u25CB', alignment: AlignmentType.LEFT,
+            { level: 1, format: 'bullet', text: '\u25CB', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 1440, hanging: 360 } } } },
-            { level: 2, format: 'bullet', text: '\u25AA', alignment: AlignmentType.LEFT,
+            { level: 2, format: 'bullet', text: '\u25AA', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 2160, hanging: 360 } } } },
           ],
         },
         {
           reference: 'numbered-list',
           levels: [
-            { level: 0, format: 'decimal', text: '%1.', alignment: AlignmentType.LEFT,
+            { level: 0, format: 'decimal', text: '%1.', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 720, hanging: 360 } } } },
-            { level: 1, format: 'lowerLetter', text: '%2)', alignment: AlignmentType.LEFT,
+            { level: 1, format: 'lowerLetter', text: '%2)', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 1440, hanging: 360 } } } },
-            { level: 2, format: 'lowerRoman', text: '%3.', alignment: AlignmentType.LEFT,
+            { level: 2, format: 'lowerRoman', text: '%3.', alignment: _docx.AlignmentType.LEFT,
               style: { paragraph: { indent: { left: 2160, hanging: 360 } } } },
           ],
         },
@@ -427,10 +431,10 @@ function buildDocxTable(block) {
 
       const children = cellRuns && cellRuns.length
         ? cellRuns.map(r => makeTextRun(r, { minSize: 8, maxSize: 28 }))
-        : [new TextRun({ text: cellText || '', font: 'Arial', size: 20, bold: rowIdx === 0 })];
+        : [new _docx.TextRun({ text: cellText || '', font: 'Arial', size: 20, bold: rowIdx === 0 })];
 
-      cells.push(new TableCell({
-        children: [new Paragraph({ children })],
+      cells.push(new _docx.TableCell({
+        children: [new _docx.Paragraph({ children })],
         width: { size: colWidth, type: WidthType.DXA },
         shading: rowIdx === 0 ? { type: ShadingType.CLEAR, fill: 'E8E8E8' } : undefined,
         borders: {
@@ -441,10 +445,10 @@ function buildDocxTable(block) {
         },
       }));
     }
-    return new TableRow({ children: cells });
+    return new _docx.TableRow({ children: cells });
   });
 
-  return new Table({
+  return new _docx.Table({
     rows: tableRows,
     width: { size: 9000, type: WidthType.DXA },
   });
@@ -599,7 +603,7 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
           blocks.push({
             type: 'paragraph', text: tc.text,
             runs: [{ text: tc.text, bold: false, italic: false, fontFamily: 'Arial', fontSize: avgH }],
-            indent: 0, paragraphBreak: false, fontSize: avgH, alignment: AlignmentType.LEFT,
+            indent: 0, paragraphBreak: false, fontSize: avgH, alignment: _docx.AlignmentType.LEFT,
           });
         }
       }
@@ -635,7 +639,7 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
           blocks.push({
             type: 'paragraph', text: tc.text,
             runs: [{ text: tc.text, bold: false, italic: false, fontFamily: 'Arial', fontSize: avgH }],
-            indent: 0, paragraphBreak: false, fontSize: avgH, alignment: AlignmentType.LEFT,
+            indent: 0, paragraphBreak: false, fontSize: avgH, alignment: _docx.AlignmentType.LEFT,
           });
         }
       }
@@ -650,7 +654,7 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
 
     if ((sizeRatio > 1.4 && isShort) || (isSemantic && isShort) || (isCaps && isBoldLine && isShort)) {
       let level;
-      if (sizeRatio > 1.8) level = HeadingLevel.HEADING_1;
+      if (sizeRatio > 1.8) level = _docx.HeadingLevel.HEADING_1;
       else if (sizeRatio > 1.4 || isSemantic) level = HeadingLevel.HEADING_2;
       else level = HeadingLevel.HEADING_3;
 
@@ -659,7 +663,7 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
         level,
         text: lineText,
         runs: buildLineRuns(),
-        alignment: AlignmentType.LEFT,
+        alignment: _docx.AlignmentType.LEFT,
       });
     } else {
       // Check for list (extended patterns: dashes, en-dashes, em-dashes)
@@ -700,7 +704,7 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
             indent,
             paragraphBreak: isParagraphBreak,
             fontSize: avgH,
-            alignment: AlignmentType.LEFT,
+            alignment: _docx.AlignmentType.LEFT,
           });
         }
       }
@@ -723,7 +727,7 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
     blocks.push({
       type: 'paragraph', text: tc.text,
       runs: [{ text: tc.text, bold: false, italic: false, fontFamily: 'Arial', fontSize: medianH }],
-      indent: 0, paragraphBreak: false, fontSize: medianH, alignment: AlignmentType.LEFT,
+      indent: 0, paragraphBreak: false, fontSize: medianH, alignment: _docx.AlignmentType.LEFT,
     });
   }
 

@@ -21,9 +21,11 @@
     "test:benchmark:pdf": "node tests/benchmarks/pdf-conversion-benchmark.js",
     "test:soak": "node tests/nightly-soak.js",
     "test:soak:long": "SOAK_DURATION_MIN=60 node tests/nightly-soak.js",
+    "check:bundle": "node scripts/check-bundle-size.js",
     "lint": "eslint app/ --max-warnings 0",
     "lint:fix": "eslint app/ --fix",
-    "test": "npm run test:benchmark"
+    "test": "npm run test:benchmark",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
@@ -44,6 +46,8 @@
     "eslint": "^9.39.4",
     "pdfjs-dist": "^4.4.168",
     "tesseract.js": "^5.1.1",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0",
     "vite": "^6.4.1"
   },
   "engines": {
