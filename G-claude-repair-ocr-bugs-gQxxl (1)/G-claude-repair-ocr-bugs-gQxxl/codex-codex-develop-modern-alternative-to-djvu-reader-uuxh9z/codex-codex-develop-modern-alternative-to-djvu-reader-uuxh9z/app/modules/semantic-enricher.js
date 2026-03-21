@@ -282,7 +282,7 @@ function leftIndent(region) {
 /**
  * Return the Y coordinate of the bottom edge of a region.
  */
-function regionBottom(region) {
+function _regionBottom(region) {
   if (region.bbox) {
     // bbox may be {x,y,w,h} or [x,y,w,h]
     if (Array.isArray(region.bbox)) return region.bbox[1] + (region.bbox[3] || 0);

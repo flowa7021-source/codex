@@ -1,5 +1,9 @@
 name: CI
 on: [push, pull_request]
+
+env:
+  PROJECT_DIR: G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -7,8 +11,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: cd "G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" && npm ci
-      - run: cd "G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" && npx eslint app/ --max-warnings 0
+      - run: cd "$PROJECT_DIR" && npm ci
+      - run: cd "$PROJECT_DIR" && npx eslint app/ --max-warnings 0
 
   test:
     runs-on: ubuntu-latest
@@ -16,8 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: cd "G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" && npm ci
-      - run: cd "G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" && npm test
+      - run: cd "$PROJECT_DIR" && npm ci
+      - run: cd "$PROJECT_DIR" && npm test
 
   bundle-size:
     runs-on: ubuntu-latest
@@ -25,5 +29,19 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: cd "G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" && npm ci
-      - run: cd "G-claude-repair-ocr-bugs-gQxxl (1)/G-claude-repair-ocr-bugs-gQxxl/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z/codex-codex-develop-modern-alternative-to-djvu-reader-uuxh9z" && npx vite build 2>&1 | tail -20
+      - run: cd "$PROJECT_DIR" && npm ci
+      - name: Build with Vite
+        run: |
+          cd "$PROJECT_DIR"
+          npx vite build 2>&1
+          echo "Build exit code: $?"
+      - name: Report bundle size
+        run: |
+          cd "$PROJECT_DIR"
+          if [ -d dist-vite ]; then
+            echo "=== Bundle Size ==="
+            du -sh dist-vite/
+            find dist-vite -name '*.js' -exec du -sh {} + | sort -rh | head -10
+          else
+            echo "Warning: dist-vite directory not created"
+          fi

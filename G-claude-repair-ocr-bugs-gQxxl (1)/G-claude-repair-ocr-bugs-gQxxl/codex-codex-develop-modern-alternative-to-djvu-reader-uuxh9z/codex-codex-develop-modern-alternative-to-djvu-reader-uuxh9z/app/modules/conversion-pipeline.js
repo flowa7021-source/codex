@@ -20,10 +20,10 @@
  */
 
 import { extractPageContent } from './pdf-content-extractor.js';
-import { analyzeLayout, analyzeMultiPageLayout } from './layout-analyzer.js';
+import { analyzeMultiPageLayout } from './layout-analyzer.js';
 import { enrichSemantics } from './semantic-enricher.js';
 import { buildDocxDocument } from './docx-builder.js';
-import { validateConversion, computeTextCER } from './conversion-qa.js';
+import { computeTextCER } from './conversion-qa.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -36,7 +36,7 @@ export const PIPELINE_VERSION = '2.0.0';
  * Human-readable names for each pipeline stage, used in progress callbacks.
  * @private
  */
-const STAGE_LABELS = {
+const _STAGE_LABELS = {
   extract: 'Content Extraction',
   layout: 'Layout Analysis',
   semantic: 'Semantic Enrichment',

@@ -47,13 +47,16 @@ export default defineConfig({
       // Map importmap entries to node_modules for Vite resolution
       'pdf-lib': resolve(__dirname, 'node_modules/pdf-lib/dist/pdf-lib.esm.js'),
       'docx': resolve(__dirname, 'node_modules/docx/dist/index.mjs'),
+      // pdfjs-dist and tesseract.js are loaded at runtime via dynamic imports
+      // but Vite needs to resolve them during build
+      'pdfjs-dist/build/pdf.mjs': resolve(__dirname, 'node_modules/pdfjs-dist/build/pdf.mjs'),
     },
   },
 
   // Optimize dependencies for faster dev server startup
   optimizeDeps: {
     include: ['pdf-lib', 'docx'],
-    exclude: ['electron'],
+    exclude: ['electron', 'tesseract.js'],
   },
 
   server: {

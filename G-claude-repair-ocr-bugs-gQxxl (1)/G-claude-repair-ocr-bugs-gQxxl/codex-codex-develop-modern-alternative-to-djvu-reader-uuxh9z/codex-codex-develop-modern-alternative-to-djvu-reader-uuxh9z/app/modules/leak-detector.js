@@ -97,7 +97,7 @@ export function installLeakDetector() {
   // Patch canvas allocation tracking
   patchCreateElement();
 
-  // eslint-disable-next-line no-console
+
   console.info('[LeakDetector] installed — call getLeakReport() to inspect');
 }
 

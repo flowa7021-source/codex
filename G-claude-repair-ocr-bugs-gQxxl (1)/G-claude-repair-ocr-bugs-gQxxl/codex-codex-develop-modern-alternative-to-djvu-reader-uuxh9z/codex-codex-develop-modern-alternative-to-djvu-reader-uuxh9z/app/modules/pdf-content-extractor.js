@@ -70,7 +70,7 @@ function cmykToHex(c, m, y, k) {
 /** Strip subset prefix (e.g. "BCDFEE+ArialMT" → "ArialMT") and style suffixes. */
 export function normalizeFontName(pdfName) {
   if (!pdfName) return 'Arial';
-  let name = pdfName.replace(/^[A-Z]{6}\+/, '');
+  const name = pdfName.replace(/^[A-Z]{6}\+/, '');
   // Try alias map first (before stripping suffixes)
   if (FONT_ALIAS[name]) return FONT_ALIAS[name];
   // Strip style suffixes

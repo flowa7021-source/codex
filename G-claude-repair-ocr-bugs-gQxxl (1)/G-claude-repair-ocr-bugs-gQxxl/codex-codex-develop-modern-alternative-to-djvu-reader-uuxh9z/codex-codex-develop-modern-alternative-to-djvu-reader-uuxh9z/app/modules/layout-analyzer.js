@@ -137,7 +137,7 @@ function detectMargins(lines, pageWidth, pageHeight) {
 
 // ─── 3. Column Detection ─────────────────────────────────────────────────────
 
-function detectColumns(textRuns, pageWidth, pageHeight) {
+function detectColumns(textRuns, pageWidth, _pageHeight) {
   if (!textRuns || textRuns.length < 10) {
     return [{ left: 0, right: pageWidth, gap: 0 }];
   }
@@ -254,9 +254,9 @@ function detectBulletOrNumber(line) {
 function finalizeParagraph(para, column, margins) {
   if (!para.lines.length) return;
 
-  const allRuns = para.lines.flatMap(l => l.runs);
+  const _allRuns = para.lines.flatMap(l => l.runs);
   const firstLine = para.lines[0];
-  const lastLine = para.lines[para.lines.length - 1];
+  const _lastLine = para.lines[para.lines.length - 1];
 
   // Spacing
   para.spaceBefore = 0;
@@ -454,7 +454,7 @@ function detectMergedCells(cells, hLines, vLines, tolerance) {
       while (c + colSpan < cells[r].length) {
         const nextCell = cells[r][c + colSpan];
         if (nextCell._mergedInto) break;
-        const borderX = cell.x + cell.width * colSpan / cell.colSpan;
+        const _borderX = cell.x + cell.width * colSpan / cell.colSpan;
         const hasVLine = vLines.some(v =>
           Math.abs((v.x1 + v.x2) / 2 - (cell.x + colSpan * cell.width)) < tolerance &&
           v.y1 <= cell.y + tolerance && v.y2 >= cell.y + cell.height - tolerance

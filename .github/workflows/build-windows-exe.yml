@@ -29,6 +29,10 @@ jobs:
         shell: pwsh
         run: |
           $src = Join-Path $env:GITHUB_WORKSPACE $env:SOURCE_PROJECT_DIR
+          if (-not (Test-Path $src)) {
+            Write-Error "Source directory not found: $src"
+            exit 1
+          }
           Copy-Item -Path $src -Destination $env:SHORT_PATH -Recurse -Force
           Write-Host "Copied to $env:SHORT_PATH"
           Get-ChildItem $env:SHORT_PATH | Format-Table Name
@@ -37,8 +41,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: ${{ env.SOURCE_PROJECT_DIR }}/package-lock.json
 
       - name: Install dependencies (skip postinstall scripts)
         env:
