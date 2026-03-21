@@ -275,6 +275,7 @@ body {
    LEFT PANEL (Column 1)
    ═══════════════════════════════════════════════════ */
 .left-panel {
+  position: relative;
   background: var(--panel);
   border-right: 1px solid var(--border);
   overflow: hidden;
@@ -3378,17 +3379,15 @@ body.high-contrast .minimap-viewport {
   transition: background var(--transition-fast);
 }
 
-/* Sidebar resize handle — vertical strip between left panel and viewport */
+/* Sidebar resize handle — vertical strip at the right edge of the left panel */
 .resize-handle-sidebar {
-  grid-row: 2 / -1;
-  grid-column: 1 / 2;
+  position: absolute;
+  right: -3px;
+  top: 0;
   width: 6px;
+  height: 100%;
   cursor: col-resize;
-  justify-self: end;
-  position: relative;
   z-index: 25;
-  margin-left: -3px;
-  margin-right: -3px;
 }
 .resize-handle-sidebar:hover,
 .resize-handle-sidebar.active {
