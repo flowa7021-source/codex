@@ -57,19 +57,25 @@ function initContinuousScroll(deps) {
 
     // Use IntersectionObserver for lazy rendering
     if (scrollObserver) { scrollObserver.disconnect(); scrollObserver = null; }
-    scrollObserver = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          const pageNum = parseInt(entry.target.dataset.pageNum, 10);
-          if (!renderedPages.has(pageNum)) {
-            renderedPages.add(pageNum);
-            renderScrollPage(pageNum, entry.target);
+    try {
+      scrollObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const pageNum = parseInt(entry.target.dataset.pageNum, 10);
+            if (!renderedPages.has(pageNum)) {
+              renderedPages.add(pageNum);
+              renderScrollPage(pageNum, entry.target);
+            }
           }
         }
-      }
-    }, { rootMargin: '200px 0px' });
+      }, { rootMargin: '200px 0px' });
 
-    scrollContainer.querySelectorAll('canvas[data-page-num]').forEach(c => scrollObserver.observe(c));
+      scrollContainer.querySelectorAll('canvas[data-page-num]').forEach(c => scrollObserver.observe(c));
+    } catch (obsErr) {
+      console.warn('[ui-init-blocks] IntersectionObserver error:', obsErr?.message);
+      if (scrollObserver) { scrollObserver.disconnect(); scrollObserver = null; }
+      return;
+    }
 
     // Scroll to current page
     const target = document.getElementById(`cs-page-${state.currentPage || 1}`);
@@ -485,10 +491,17 @@ function initPrintDialog(deps) {
       printWindow.document.write('</style></head><body>');
 
       const scale = dpi / 72;
-      for (const pageNum of pages) {
-        const canvas = document.createElement('canvas');
-        await state.adapter.renderPage(pageNum, canvas, { zoom: scale, rotation: 0 });
-        printWindow.document.body.appendChild(canvas);
+      try {
+        for (const pageNum of pages) {
+          const canvas = document.createElement('canvas');
+          await state.adapter.renderPage(pageNum, canvas, { zoom: scale, rotation: 0 });
+          printWindow.document.body.appendChild(canvas);
+        }
+      } catch (renderErr) {
+        console.warn('[ui-init-blocks] print render error:', renderErr?.message);
+        try { printWindow.close(); } catch (_e) { /* ignore */ }
+        setOcrStatus(`Ошибка рендеринга при печати: ${renderErr?.message || 'неизвестная'}`);
+        return;
       }
 
       printWindow.document.write('</body></html>');

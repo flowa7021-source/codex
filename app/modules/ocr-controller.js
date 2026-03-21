@@ -246,12 +246,13 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   } else if (!fast) {
     const probe = variants[Math.min(2, variants.length - 1)];
     const probeCtx = probe.getContext('2d');
-    if (!probeCtx) continue;
-    const probeImg = probeCtx.getImageData(0, 0, probe.width, probe.height);
-    const skew = estimateSkewAngleFromBinary(probeImg);
-    skewProbeDeg = Number(skew.toFixed(2));
-    if (Math.abs(skew) >= 0.35) {
-      skewToApply = skew;
+    if (probeCtx) {
+      const probeImg = probeCtx.getImageData(0, 0, probe.width, probe.height);
+      const skew = estimateSkewAngleFromBinary(probeImg);
+      skewProbeDeg = Number(skew.toFixed(2));
+      if (Math.abs(skew) >= 0.35) {
+        skewToApply = skew;
+      }
     }
   }
   if (Math.abs(skewToApply) >= 0.35) {
@@ -354,6 +355,9 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   // Normalize word bboxes to [0,1] relative coordinates so they are
   // independent of the OCR source canvas resolution. The text layer
   // renderer multiplies these by display dimensions for correct placement.
+  if (bestVariantW <= 0 || bestVariantH <= 0) {
+    bestWords = [];
+  }
   if (bestWords.length > 0 && bestVariantW > 0 && bestVariantH > 0) {
     for (const w of bestWords) {
       if (w.bbox) {

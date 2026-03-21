@@ -77,11 +77,13 @@ export class PresentationMode {
     this._overlay.addEventListener('mousemove', this._onMouseMove);
     this._overlay.addEventListener('click', this._onClick);
 
-    // Request fullscreen
-    try {
-      await this._overlay.requestFullscreen?.();
-    } catch (_e) {
-      // Fullscreen not available — continue windowed
+    // Request fullscreen (only if not already in fullscreen)
+    if (!document.fullscreenElement && this._overlay.requestFullscreen) {
+      try {
+        await this._overlay.requestFullscreen();
+      } catch (_e) {
+        // Fullscreen not available — continue windowed
+      }
     }
 
     await this._showPage(this._currentPage, 'none');
@@ -206,7 +208,7 @@ export class PresentationMode {
         display.style.opacity = '1';
         old.style.transition = `opacity ${transConfig.duration}ms ease`;
         old.style.opacity    = '0';
-        safeTimeout(() => old.remove(), transConfig.duration);
+        safeTimeout(() => { old.width = 0; old.height = 0; old.remove(); }, transConfig.duration);
       } else if (transition === 'slide') {
         display.style.transform  = 'translateX(100%)';
         display.style.transition = `transform ${transConfig.duration}ms ease`;
@@ -215,7 +217,7 @@ export class PresentationMode {
         display.style.transform = 'translateX(0)';
         old.style.transition    = `transform ${transConfig.duration}ms ease`;
         old.style.transform     = 'translateX(-100%)';
-        safeTimeout(() => old.remove(), transConfig.duration);
+        safeTimeout(() => { old.width = 0; old.height = 0; old.remove(); }, transConfig.duration);
       }
     } else {
       this._slideContainer.innerHTML = '';

@@ -62,10 +62,14 @@ export class VirtualScroll {
     this.container.addEventListener('scroll', this._scrollHandler, { passive: true });
 
     // Resize observer
-    this._resizeObserver = new ResizeObserver(() => {
-      this._onScroll();
-    });
-    this._resizeObserver.observe(this.container);
+    try {
+      this._resizeObserver = new ResizeObserver(() => {
+        this._onScroll();
+      });
+      this._resizeObserver.observe(this.container);
+    } catch (err) {
+      console.warn('[virtual-scroll] ResizeObserver not available:', err?.message);
+    }
 
     // Initial render
     this._onScroll();
@@ -80,7 +84,7 @@ export class VirtualScroll {
   }
 
   _totalHeight() {
-    return this.offsets[this.pageCount] || 0;
+    return this.offsets[Math.min(this.pageCount, this.offsets.length - 1)] || 0;
   }
 
   _onScroll() {

@@ -138,7 +138,7 @@ export async function ocrWithCharBoxes(canvas, opts = {}) {
   const charBoxes = [];
   const words     = [];
 
-  const scaleBack = 1 / upscaleFactor; // convert upscaled coords back to original
+  const scaleBack = upscaleFactor > 0 ? 1 / upscaleFactor : 1; // convert upscaled coords back to original
 
   for (const block of (result.data.blocks || [])) {
     for (const para of (block.paragraphs || [])) {
@@ -177,9 +177,9 @@ export async function ocrWithCharBoxes(canvas, opts = {}) {
             confidence: word.confidence || 0,
             chars:      wordChars,
             fontAttributes: {
-              isBold:   word.fontAttributes?.is_bold   || false,
-              isItalic: word.fontAttributes?.is_italic || false,
-              fontName: word.fontAttributes?.font_name || '',
+              isBold:   (word.fontAttributes && word.fontAttributes.is_bold)   || false,
+              isItalic: (word.fontAttributes && word.fontAttributes.is_italic) || false,
+              fontName: (word.fontAttributes && word.fontAttributes.font_name) || 'unknown',
             },
           });
         }

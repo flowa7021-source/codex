@@ -159,8 +159,11 @@ export function createModuleLogger(module) {
 // ─── Console.warn Interception ──────────────────────────────────────────────
 const _originalConsoleWarn = console.warn;
 const _originalConsoleError = console.error;
+let _consoleIntercepted = false;
 
 function _interceptConsole() {
+  if (_consoleIntercepted) return;
+  _consoleIntercepted = true;
   console.warn = function interceptedWarn(...args) {
     _originalConsoleWarn.apply(console, args);
     const message = args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
@@ -306,8 +309,8 @@ export function renderLogViewer() {
   };
   const entries = getFilteredLogs(filters);
 
-  // Populate module dropdown dynamically
-  if (filterModule && filterModule.childElementCount <= 1) {
+  // Populate module dropdown dynamically (only once per element)
+  if (filterModule && !filterModule.dataset.initialized && filterModule.childElementCount <= 1) {
     const modules = [...new Set(_logBuffer.map((e) => e.module))].sort();
     for (const mod of modules) {
       const opt = document.createElement('option');
@@ -315,6 +318,7 @@ export function renderLogViewer() {
       opt.textContent = mod;
       filterModule.appendChild(opt);
     }
+    filterModule.dataset.initialized = 'true';
   }
 
   list.innerHTML = '';

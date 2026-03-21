@@ -534,6 +534,7 @@ export function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean
 
   const canvas = createOcrCanvas(targetWidth, targetHeight);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return canvas;
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   ctx.drawImage(inputCanvas, 0, 0, canvas.width, canvas.height);

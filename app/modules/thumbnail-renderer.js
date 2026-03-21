@@ -11,6 +11,12 @@ let observer = null;
 let currentDocName = null;
 
 export function invalidateThumbnailCache() {
+  for (const canvas of thumbCache.values()) {
+    if (canvas) {
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+  }
   thumbCache.clear();
   currentDocName = null;
 }
@@ -77,7 +83,8 @@ export async function renderPagePreviews() {
       if (entry.isIntersecting) {
         const page = Number(entry.target.dataset.page);
         if (page > 0) {
-          renderThumb(page, entry.target.querySelector('canvas'));
+          const el = entry.target.querySelector('canvas');
+          if (el) renderThumb(page, el);
           // Pre-render adjacent pages
           for (let delta = 1; delta <= PRELOAD_MARGIN; delta++) {
             const prev = page - delta;
