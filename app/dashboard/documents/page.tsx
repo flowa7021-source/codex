@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Search, ChevronUp, ChevronDown, X } from 'lucide-react'
+import { Plus, Search, ChevronUp, ChevronDown, X, Paperclip } from 'lucide-react'
 import { Button } from '@/app/components/ui/Button'
 import { Input } from '@/app/components/ui/Input'
 import { Select } from '@/app/components/ui/Select'
@@ -173,6 +173,19 @@ function PriorityCell({ value, onChange }: { value: Priority; onChange: (p: Prio
 }
 
 // ─── New document modal ───────────────────────────────────────────────────────
+interface AttachmentState {
+  name: string
+  type: string
+  size: number
+  data: string // base64
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} Б`
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} КБ`
+  return `${(bytes / 1048576).toFixed(1)} МБ`
+}
+
 function NewDocModal({ onClose, onCreate }: { onClose: () => void; onCreate: (d: Document) => void }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -180,8 +193,35 @@ function NewDocModal({ onClose, onCreate }: { onClose: () => void; onCreate: (d:
   const [status, setStatus] = useState<DocumentStatus>('DRAFT')
   const [categoryId, setCategoryId] = useState('')
   const [dueDate, setDueDate] = useState('')
+  const [attachment, setAttachment] = useState<AttachmentState | null>(null)
+  const [dragOver, setDragOver] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
 
-  const selectedCategory = MOCK_CATEGORIES.find(c => c.id === categoryId)
+  const readFile = useCallback((file: File) => {
+    if (file.size > 20 * 1024 * 1024) {
+      alert('Максимальный размер файла — 20 МБ')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const data = (e.target?.result as string).split(',')[1] ?? ''
+      setAttachment({ name: file.name, type: file.type, size: file.size, data })
+    }
+    reader.readAsDataURL(file)
+  }, [])
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) readFile(file)
+    e.target.value = ''
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) readFile(file)
+  }
 
   const handleCreate = () => {
     if (!title.trim()) return
@@ -202,6 +242,11 @@ function NewDocModal({ onClose, onCreate }: { onClose: () => void; onCreate: (d:
       createdAt: new Date(),
       updatedAt: new Date(),
       dueDate: dueDate ? new Date(dueDate) : undefined,
+      attachmentName: attachment?.name ?? null,
+      attachmentData: attachment?.data ?? null,
+      attachmentSize: attachment?.size ?? null,
+      attachmentType: attachment?.type ?? null,
+      comments: [],
     }
     onCreate(doc)
     onClose()
@@ -217,7 +262,7 @@ function NewDocModal({ onClose, onCreate }: { onClose: () => void; onCreate: (d:
       <motion.div
         initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.96, opacity: 0 }}
         transition={{ duration: 0.18 }}
-        className="rounded-xl p-6 w-[560px]"
+        className="rounded-xl p-6 w-[560px] max-h-[90vh] overflow-y-auto"
         style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', boxShadow: 'var(--shadow-lg)' }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -303,12 +348,64 @@ function NewDocModal({ onClose, onCreate }: { onClose: () => void; onCreate: (d:
               </select>
             </div>
           </div>
+
+          {/* File attachment */}
+          <div>
+            <label className="font-mono text-xs block mb-1.5" style={{ color: 'var(--color-text-muted)', letterSpacing: '0.08em' }}>
+              ФАЙЛ
+            </label>
+            {attachment ? (
+              <div
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                style={{ background: 'var(--color-elevated)', border: '1px solid var(--color-accent)', borderStyle: 'solid' }}
+              >
+                <div style={{ color: 'var(--color-accent)', flexShrink: 0 }}>
+                  <Paperclip size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-sans truncate" style={{ fontSize: 13, color: 'var(--color-text)' }}>{attachment.name}</p>
+                  <p className="font-mono" style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>{formatFileSize(attachment.size)}</p>
+                </div>
+                <button
+                  onClick={() => setAttachment(null)}
+                  className="p-1 rounded transition-all"
+                  style={{ color: 'var(--color-text-muted)' }}
+                  onMouseEnter={e => (e.currentTarget.style.color = 'var(--color-danger)')}
+                  onMouseLeave={e => (e.currentTarget.style.color = 'var(--color-text-muted)')}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ) : (
+              <div
+                className="rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1.5 cursor-pointer transition-all duration-200"
+                style={{
+                  height: 72,
+                  borderColor: dragOver ? 'var(--color-accent)' : 'var(--color-border)',
+                  background: dragOver ? 'var(--color-accent-dim)' : 'var(--color-elevated)',
+                }}
+                onClick={() => fileRef.current?.click()}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+              >
+                <div style={{ color: dragOver ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
+                  <Paperclip size={18} />
+                </div>
+                <p className="font-mono" style={{ fontSize: 11, color: dragOver ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
+                  Перетащите файл или <span style={{ color: 'var(--color-accent)' }}>выберите</span>
+                </p>
+                <p className="font-mono" style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>до 20 МБ</p>
+              </div>
+            )}
+            <input ref={fileRef} type="file" className="hidden" onChange={handleFilePick} />
+          </div>
         </div>
 
         <div className="flex gap-2 mt-6">
           <Button variant="secondary" size="md" onClick={onClose} className="flex-1">Отмена</Button>
           <Button variant="primary" size="md" onClick={handleCreate} className="flex-1" disabled={!title.trim()}>
-            Создать документ
+            {attachment ? '📎 Создать с файлом' : 'Создать документ'}
           </Button>
         </div>
       </motion.div>
@@ -352,6 +449,12 @@ export default function DocumentsPage() {
   const handleDelete = (docId: string) => {
     updateDocs(documents.filter(d => d.id !== docId))
     setSelectedDoc(null)
+  }
+
+  const handleUpdate = (doc: Document) => {
+    const next = documents.map(d => d.id === doc.id ? doc : d)
+    updateDocs(next)
+    setSelectedDoc(doc)
   }
 
   const filtered = useMemo(() => {
@@ -572,6 +675,7 @@ export default function DocumentsPage() {
         onClose={() => setSelectedDoc(null)}
         onStatusChange={handleStatusChange}
         onDelete={handleDelete}
+        onUpdate={handleUpdate}
       />
 
       {/* New document modal */}

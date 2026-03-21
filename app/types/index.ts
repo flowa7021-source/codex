@@ -28,6 +28,10 @@ export interface Document {
   version: number
   filePath?: string | null
   fileSize?: number | null
+  attachmentName?: string | null
+  attachmentData?: string | null
+  attachmentSize?: number | null
+  attachmentType?: string | null
   authorId: string
   author: User
   categoryId?: string | null

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { User, Bell, Palette } from 'lucide-react'
 import { Button } from '@/app/components/ui/Button'
@@ -15,21 +15,64 @@ const NOTIFICATIONS = [
   'Просроченные задачи',
 ]
 
+const SETTINGS_KEY = 'nexus-settings'
+
+interface Settings {
+  name: string
+  email: string
+  position: string
+  notifications: Record<string, boolean>
+}
+
+function loadSettings(): Settings {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (raw) return JSON.parse(raw)
+  } catch {}
+  return {
+    name: 'Крот',
+    email: 'krot@nexus.ru',
+    position: 'Оперативный командир',
+    notifications: Object.fromEntries(NOTIFICATIONS.map(n => [n, true])),
+  }
+}
+
+function saveSettings(s: Settings) {
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)) } catch {}
+}
+
 export default function SettingsPage() {
   const [name, setName] = useState('Крот')
   const [email, setEmail] = useState('krot@nexus.ru')
   const [position, setPosition] = useState('Оперативный командир')
-  const [notifications, setNotifications] = useState<Record<string, boolean>>(() =>
+  const [notifications, setNotifications] = useState<Record<string, boolean>>(
     Object.fromEntries(NOTIFICATIONS.map(n => [n, true]))
   )
+  const [dirty, setDirty] = useState(false)
+
+  useEffect(() => {
+    const s = loadSettings()
+    setName(s.name)
+    setEmail(s.email)
+    setPosition(s.position)
+    setNotifications(s.notifications)
+  }, [])
 
   const handleSave = () => {
+    saveSettings({ name, email, position, notifications })
+    setDirty(false)
     toast.success('Профиль сохранён')
   }
 
   const toggleNotification = (label: string) => {
-    setNotifications(prev => ({ ...prev, [label]: !prev[label] }))
+    const next = { ...notifications, [label]: !notifications[label] }
+    setNotifications(next)
+    saveSettings({ name, email, position, notifications: next })
   }
+
+  const handleNameChange = (v: string) => { setName(v); setDirty(true) }
+  const handleEmailChange = (v: string) => { setEmail(v); setDirty(true) }
+  const handlePositionChange = (v: string) => { setPosition(v); setDirty(true) }
 
   return (
     <div className="p-6 max-w-2xl space-y-5">
@@ -83,24 +126,31 @@ export default function SettingsPage() {
               <label className="font-mono block mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.09em' }}>
                 ПОЗЫВНОЙ / ИМЯ
               </label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Input value={name} onChange={(e) => handleNameChange(e.target.value)} />
             </div>
             <div>
               <label className="font-mono block mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.09em' }}>
                 EMAIL
               </label>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" />
+              <Input value={email} onChange={(e) => handleEmailChange(e.target.value)} type="email" />
             </div>
             <div className="col-span-2">
               <label className="font-mono block mb-1.5" style={{ fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.09em' }}>
                 ДОЛЖНОСТЬ
               </label>
-              <Input value={position} onChange={(e) => setPosition(e.target.value)} />
+              <Input value={position} onChange={(e) => handlePositionChange(e.target.value)} />
             </div>
           </div>
 
-          <div className="flex justify-end">
-            <Button variant="primary" size="md" onClick={handleSave}>Сохранить</Button>
+          <div className="flex items-center justify-between">
+            {dirty && (
+              <span className="font-mono" style={{ fontSize: 11, color: 'var(--color-warning)' }}>
+                Есть несохранённые изменения
+              </span>
+            )}
+            <div className="ml-auto">
+              <Button variant="primary" size="md" onClick={handleSave} disabled={!dirty}>Сохранить</Button>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -118,6 +168,9 @@ export default function SettingsPage() {
             <h2 className="font-mono font-semibold" style={{ fontSize: 12, color: 'var(--color-text)', letterSpacing: '0.05em' }}>
               УВЕДОМЛЕНИЯ
             </h2>
+            <span className="font-mono ml-auto" style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
+              Автосохранение
+            </span>
           </div>
         </div>
         <div className="p-5 space-y-1">
@@ -137,7 +190,7 @@ export default function SettingsPage() {
                 </span>
                 {/* Toggle */}
                 <div
-                  className="relative transition-all duration-300"
+                  className="relative transition-all duration-300 flex-shrink-0"
                   style={{
                     width: 40, height: 22, borderRadius: 11,
                     background: active ? 'var(--color-accent)' : 'var(--color-border)',
@@ -183,7 +236,7 @@ export default function SettingsPage() {
             </div>
             <div
               className="flex-1 h-20 rounded-xl flex flex-col items-center justify-center gap-1 cursor-not-allowed font-mono text-xs"
-              style={{ background: '#F5F5F0', border: '1px solid var(--color-border)', color: 'var(--color-text-muted)', opacity: 0.4 }}
+              style={{ background: '#F5F5F0', border: '1px solid var(--color-border)', color: '#999', opacity: 0.4 }}
             >
               <span style={{ fontSize: 18 }}>○</span>
               Светлая
