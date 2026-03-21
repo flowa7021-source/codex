@@ -24,7 +24,7 @@
   </head>
   <body>
     <!-- Skip navigation for accessibility -->
-    <a href="#viewerCanvas" class="skip-nav">Перейти к документу</a>
+    <a href="#viewerCanvas" class="skip-nav" data-i18n="nav.skipToDoc">Перейти к документу</a>
     <div class="app-shell">
       <!-- ═══════════════════════════════════════════════════════
            ROW 1: Command Bar (unified compact toolbar)
@@ -80,12 +80,12 @@
               <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="9" y="2" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="2" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/><rect x="9" y="9" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1" fill="none"/></svg>
             </button>
             <div class="dropdown-menu" role="menu">
-              <button class="dropdown-item active" data-view-mode="single" role="menuitem">Одна страница</button>
-              <button class="dropdown-item" data-view-mode="two-up" role="menuitem">Две страницы</button>
-              <button class="dropdown-item" data-view-mode="book" role="menuitem">Книжный разворот</button>
-              <button class="dropdown-item" data-view-mode="continuous" role="menuitem">Непрерывная прокрутка</button>
+              <button class="dropdown-item active" data-view-mode="single" role="menuitem" data-i18n="viewmode.single">Одна страница</button>
+              <button class="dropdown-item" data-view-mode="two-up" role="menuitem" data-i18n="viewmode.twoUp">Две страницы</button>
+              <button class="dropdown-item" data-view-mode="book" role="menuitem" data-i18n="viewmode.book">Книжный разворот</button>
+              <button class="dropdown-item" data-view-mode="continuous" role="menuitem" data-i18n="viewmode.continuous">Непрерывная прокрутка</button>
               <div class="dropdown-sep"></div>
-              <button class="dropdown-item" data-view-mode="presentation" role="menuitem">Презентация</button>
+              <button class="dropdown-item" data-view-mode="presentation" role="menuitem" data-i18n="viewmode.presentation">Презентация</button>
             </div>
           </div>
         </div>
@@ -179,20 +179,20 @@
           </div>
 
           <label class="file-open-btn">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4v9a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3H3a1 1 0 00-1 1z"/></svg> Открыть файл
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4v9a1 1 0 001 1h10a1 1 0 001-1V6a1 1 0 00-1-1H8L6.5 3H3a1 1 0 00-1 1z"/></svg> <span data-i18n="sidebar.openFile">Открыть файл</span>
             <input id="fileInput" type="file" accept=".pdf,.djvu,.epub,.xps,.oxps,.cbz,.png,.jpg,.jpeg,.webp,.gif,.bmp" aria-label="Открыть файл" />
           </label>
 
           <section data-sidebar-section="previews" class="lp-thumbnails-section">
-            <h2 class="section-toggle">Страницы</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.pages">Страницы</h2>
             <ul id="pagePreviewList" class="thumbnail-grid"></ul>
           </section>
 
           <section data-sidebar-section="recent">
-            <h2 class="section-toggle">Недавние</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.recent">Недавние</h2>
             <ul id="recentList"></ul>
             <div class="section-actions">
-              <button id="clearRecent" class="btn-ghost btn-xs">Очистить</button>
+              <button id="clearRecent" class="btn-ghost btn-xs" data-i18n="sidebar.clearRecent">Очистить</button>
             </div>
           </section>
         </div>
@@ -200,19 +200,19 @@
         <!-- Tab: Bookmarks -->
         <div class="sidebar-panel" data-sidebar-panel="bookmarks-tab" role="tabpanel" aria-label="Закладки">
           <section data-sidebar-section="bookmarks">
-            <h2 class="section-toggle">Закладки</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.bookmarks">Закладки</h2>
             <ul id="bookmarkList"></ul>
             <div class="section-actions">
-              <button id="addBookmark" class="btn-accent btn-xs">+ Добавить</button>
+              <button id="addBookmark" class="btn-accent btn-xs" data-i18n="sidebar.addBookmark">+ Добавить</button>
               <div class="dropdown">
-                <button class="btn-ghost btn-xs dropdown-trigger">⋮ Ещё</button>
+                <button class="btn-ghost btn-xs dropdown-trigger" data-i18n="sidebar.more">⋮ Ещё</button>
                 <div class="dropdown-menu">
-                  <button id="exportBookmarks">Экспорт .json</button>
-                  <label class="file-inline">Импорт .json
+                  <button id="exportBookmarks" data-i18n="sidebar.exportJsonFile">Экспорт .json</button>
+                  <label class="file-inline"><span data-i18n="sidebar.importJsonFile">Импорт .json</span>
                     <input id="importBookmarks" type="file" accept="application/json,.json" />
                   </label>
                   <div class="dropdown-sep"></div>
-                  <button id="clearBookmarks">Очистить все</button>
+                  <button id="clearBookmarks" data-i18n="sidebar.clearAll">Очистить все</button>
                 </div>
               </div>
             </div>
@@ -227,7 +227,7 @@
         <!-- Tab: Outline -->
         <div class="sidebar-panel" data-sidebar-panel="outline-tab" role="tabpanel" aria-label="Оглавление">
           <section data-sidebar-section="outline">
-            <h2 class="section-toggle">Оглавление</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.outline">Оглавление</h2>
             <ul id="outlineList"></ul>
           </section>
         </div>
@@ -235,41 +235,41 @@
         <!-- Tab: Notes -->
         <div class="sidebar-panel" data-sidebar-panel="notes" role="tabpanel" aria-label="Заметки">
           <section data-sidebar-section="notes">
-            <h2>Заметки</h2>
-            <input id="notesTitle" type="text" placeholder="Заголовок" class="input-compact" aria-label="Заголовок заметки" />
-            <input id="notesTags" type="text" placeholder="Теги (через запятую)" class="input-compact" aria-label="Теги заметки" />
-            <textarea id="notes" placeholder="Заметки к документу…" rows="6"></textarea>
+            <h2 data-i18n="sidebar.notes">Заметки</h2>
+            <input id="notesTitle" type="text" placeholder="Заголовок" class="input-compact" aria-label="Заголовок заметки" data-i18n-placeholder="sidebar.noteTitlePlaceholder" />
+            <input id="notesTags" type="text" placeholder="Теги (через запятую)" class="input-compact" aria-label="Теги заметки" data-i18n-placeholder="sidebar.noteTagsPlaceholder" />
+            <textarea id="notes" placeholder="Заметки к документу…" rows="6" data-i18n-placeholder="sidebar.noteTextPlaceholder"></textarea>
             <p id="notesStatus" class="status-line"></p>
             <div class="section-actions">
-              <button id="saveNotes" class="btn-accent btn-xs">Сохранить</button>
-              <button id="insertTimestamp" class="btn-ghost btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l2 2"/></svg> Время</button>
+              <button id="saveNotes" class="btn-accent btn-xs" data-i18n="sidebar.save">Сохранить</button>
+              <button id="insertTimestamp" class="btn-ghost btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4v4l2 2"/></svg> <span data-i18n="sidebar.timestamp">Время</span></button>
               <div class="dropdown">
-                <button class="btn-ghost btn-xs dropdown-trigger">Экспорт ▾</button>
+                <button class="btn-ghost btn-xs dropdown-trigger" data-i18n="sidebar.exportMenu">Экспорт ▾</button>
                 <div class="dropdown-menu">
-                  <button id="exportNotes">Экспорт .txt</button>
-                  <button id="exportNotesMd">Экспорт .md</button>
-                  <button id="exportNotesJson">Экспорт .json</button>
+                  <button id="exportNotes" data-i18n="sidebar.exportTxt">Экспорт .txt</button>
+                  <button id="exportNotesMd" data-i18n="sidebar.exportMd">Экспорт .md</button>
+                  <button id="exportNotesJson" data-i18n="sidebar.exportJsonNotes">Экспорт .json</button>
                 </div>
               </div>
               <div class="dropdown">
-                <button class="btn-ghost btn-xs dropdown-trigger">Импорт ▾</button>
+                <button class="btn-ghost btn-xs dropdown-trigger" data-i18n="sidebar.importMenu">Импорт ▾</button>
                 <div class="dropdown-menu">
-                  <label class="file-inline">Импорт .json
+                  <label class="file-inline"><span data-i18n="sidebar.importJsonFile">Импорт .json</span>
                     <input id="importNotesJson" type="file" accept="application/json,.json" />
                   </label>
                   <select id="notesImportMode" class="select-compact" style="margin: 4px 14px; width: auto;">
-                    <option value="replace">Заменить</option>
-                    <option value="append">Добавить</option>
+                    <option value="replace" data-i18n="sidebar.replace">Заменить</option>
+                    <option value="append" data-i18n="sidebar.append">Добавить</option>
                   </select>
                 </div>
               </div>
             </div>
           </section>
           <section>
-            <h2>Workspace</h2>
+            <h2 data-i18n="sidebar.workspace">Workspace</h2>
             <div class="section-actions">
-              <button id="exportWorkspace" class="btn-ghost btn-xs">Экспорт</button>
-              <label class="btn-ghost btn-xs file-inline">Импорт
+              <button id="exportWorkspace" class="btn-ghost btn-xs" data-i18n="sidebar.export">Экспорт</button>
+              <label class="btn-ghost btn-xs file-inline"><span data-i18n="sidebar.import">Импорт</span>
                 <input id="importWorkspace" type="file" accept="application/json,.json" />
               </label>
             </div>
@@ -280,41 +280,41 @@
         <!-- Tab: Analytics -->
         <div class="sidebar-panel" data-sidebar-panel="analytics" role="tabpanel" aria-label="Аналитика">
           <section data-sidebar-section="progress">
-            <h2 class="section-toggle">Прогресс чтения</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.readingProgress">Прогресс чтения</h2>
             <p id="progressStatus" class="status-line"></p>
             <p id="readingTimeStatus" class="status-line"></p>
             <p id="etaStatus" class="status-line"></p>
             <div class="section-actions">
-              <input id="readingGoalPage" type="number" min="1" placeholder="Цель (стр.)" class="input-compact input-narrow" aria-label="Цель чтения (страница)" />
-              <button id="saveReadingGoal" class="btn-ghost btn-xs">Задать</button>
+              <input id="readingGoalPage" type="number" min="1" placeholder="Цель (стр.)" class="input-compact input-narrow" aria-label="Цель чтения (страница)" data-i18n-placeholder="sidebar.goalPlaceholder" />
+              <button id="saveReadingGoal" class="btn-ghost btn-xs" data-i18n="sidebar.setGoal">Задать</button>
               <button id="clearReadingGoal" class="btn-ghost btn-xs">✕</button>
             </div>
             <p id="readingGoalStatus" class="status-line"></p>
             <div class="section-actions">
-              <button id="resetProgress" class="btn-ghost btn-xs">Сбросить прогресс</button>
-              <button id="resetReadingTime" class="btn-ghost btn-xs">Сбросить время</button>
+              <button id="resetProgress" class="btn-ghost btn-xs" data-i18n="sidebar.resetProgress">Сбросить прогресс</button>
+              <button id="resetReadingTime" class="btn-ghost btn-xs" data-i18n="sidebar.resetTime">Сбросить время</button>
             </div>
           </section>
           <section data-sidebar-section="searchResults" class="advanced-section">
-            <h2 class="section-toggle">Результаты поиска</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.searchResults">Результаты поиска</h2>
             <ul id="searchResultsList"></ul>
             <div class="section-actions">
-              <button id="clearSearchResults" class="btn-ghost btn-xs">Очистить</button>
+              <button id="clearSearchResults" class="btn-ghost btn-xs" data-i18n="sidebar.clear">Очистить</button>
               <div class="dropdown">
-                <button class="btn-ghost btn-xs dropdown-trigger">Экспорт ▾</button>
+                <button class="btn-ghost btn-xs dropdown-trigger" data-i18n="sidebar.exportMenu">Экспорт ▾</button>
                 <div class="dropdown-menu">
-                  <button id="exportSearchResults">Экспорт .json</button>
-                  <button id="exportSearchResultsCsv">Экспорт .csv</button>
-                  <button id="exportSearchSummaryTxt">Экспорт summary</button>
+                  <button id="exportSearchResults" data-i18n="sidebar.exportJsonSearch">Экспорт .json</button>
+                  <button id="exportSearchResultsCsv" data-i18n="sidebar.exportCsv">Экспорт .csv</button>
+                  <button id="exportSearchSummaryTxt" data-i18n="sidebar.exportSummary">Экспорт summary</button>
                 </div>
               </div>
               <div class="dropdown">
-                <button class="btn-ghost btn-xs dropdown-trigger">Импорт ▾</button>
+                <button class="btn-ghost btn-xs dropdown-trigger" data-i18n="sidebar.importMenu">Импорт ▾</button>
                 <div class="dropdown-menu">
-                  <label class="file-inline">Импорт .json
+                  <label class="file-inline"><span data-i18n="sidebar.importJsonFile">Импорт .json</span>
                     <input id="importSearchResultsJson" type="file" accept=".json,application/json" />
                   </label>
-                  <label class="file-inline">Импорт .csv
+                  <label class="file-inline"><span data-i18n="sidebar.importCsv">Импорт .csv</span>
                     <input id="importSearchResultsCsv" type="file" accept=".csv,text/csv" />
                   </label>
                   <label class="file-inline">DjVu data
@@ -322,43 +322,43 @@
                   </label>
                 </div>
               </div>
-              <button id="copySearchResults" class="btn-ghost btn-xs">Копировать</button>
+              <button id="copySearchResults" class="btn-ghost btn-xs" data-i18n="sidebar.copy">Копировать</button>
             </div>
           </section>
           <section data-sidebar-section="searchHistory" class="advanced-section">
-            <h2 class="section-toggle">История поиска</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.searchHistory">История поиска</h2>
             <ul id="searchHistoryList"></ul>
             <div class="section-actions">
-              <button id="clearSearchHistory" class="btn-ghost btn-xs">Очистить</button>
+              <button id="clearSearchHistory" class="btn-ghost btn-xs" data-i18n="sidebar.clear">Очистить</button>
               <div class="dropdown">
-                <button class="btn-ghost btn-xs dropdown-trigger">Экспорт ▾</button>
+                <button class="btn-ghost btn-xs dropdown-trigger" data-i18n="sidebar.exportMenu">Экспорт ▾</button>
                 <div class="dropdown-menu">
-                  <button id="exportSearchHistory">Экспорт .json</button>
-                  <button id="exportSearchHistoryTxt">Экспорт .txt</button>
+                  <button id="exportSearchHistory" data-i18n="sidebar.exportJsonSearch">Экспорт .json</button>
+                  <button id="exportSearchHistoryTxt" data-i18n="sidebar.exportTxt">Экспорт .txt</button>
                 </div>
               </div>
-              <button id="copySearchHistory" class="btn-ghost btn-xs">Копировать</button>
-              <label class="btn-ghost btn-xs file-inline">Импорт .json
+              <button id="copySearchHistory" class="btn-ghost btn-xs" data-i18n="sidebar.copy">Копировать</button>
+              <label class="btn-ghost btn-xs file-inline"><span data-i18n="sidebar.importJsonFile">Импорт .json</span>
                 <input id="importSearchHistoryJson" type="file" accept=".json,application/json" />
               </label>
             </div>
           </section>
           <section class="advanced-section">
-            <h2 class="section-toggle">Статистика</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.stats">Статистика</h2>
             <p id="docStats" class="status-line"></p>
           </section>
           <section class="advanced-section">
-            <h2 class="section-toggle">Переходы</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.transitions">Переходы</h2>
             <ul id="visitTrailList"></ul>
             <div class="section-actions">
-              <button id="clearVisitTrail" class="btn-ghost btn-xs">Очистить</button>
+              <button id="clearVisitTrail" class="btn-ghost btn-xs" data-i18n="sidebar.clear">Очистить</button>
             </div>
           </section>
           <section class="advanced-section">
-            <h2 class="section-toggle">Комментарии</h2>
+            <h2 class="section-toggle" data-i18n="sidebar.comments">Комментарии</h2>
             <ul id="commentList"></ul>
             <div class="section-actions">
-              <button id="clearComments" class="btn-ghost btn-xs">Очистить</button>
+              <button id="clearComments" class="btn-ghost btn-xs" data-i18n="sidebar.clear">Очистить</button>
             </div>
           </section>
         </div>
@@ -366,23 +366,23 @@
         <!-- Tab: Settings -->
         <div class="sidebar-panel" data-sidebar-panel="settings" role="tabpanel" aria-label="Настройки">
           <section id="settingsSection">
-            <h2>Настройки</h2>
+            <h2 data-i18n="sidebar.settings">Настройки</h2>
             <div class="section-actions">
-              <button id="toggleAdvancedPanels" class="btn-ghost btn-xs">Расширенные: off</button>
-              <button id="toggleSidebarCompact" class="btn-ghost btn-xs">Компакт: off</button>
+              <button id="toggleAdvancedPanels" class="btn-ghost btn-xs" data-i18n="sidebar.advancedOff">Расширенные: off</button>
+              <button id="toggleSidebarCompact" class="btn-ghost btn-xs" data-i18n="sidebar.compactOff">Компакт: off</button>
             </div>
             <div class="section-actions">
-              <button id="collapseSidebarSections" class="btn-ghost btn-xs">▴ Свернуть всё</button>
-              <button id="expandSidebarSections" class="btn-ghost btn-xs">▾ Развернуть всё</button>
+              <button id="collapseSidebarSections" class="btn-ghost btn-xs" data-i18n="sidebar.collapse">▴ Свернуть всё</button>
+              <button id="expandSidebarSections" class="btn-ghost btn-xs" data-i18n="sidebar.expand">▾ Развернуть всё</button>
             </div>
             <div class="section-actions">
-              <button id="openSettingsModal" class="btn-accent btn-xs">Открыть настройки</button>
+              <button id="openSettingsModal" class="btn-accent btn-xs" data-i18n="sidebar.openSettings">Открыть настройки</button>
             </div>
             <p id="settingsStatus" class="status-line"></p>
           </section>
           <section>
-            <h2>Cloud &amp; Collab</h2>
-            <label class="btn-ghost btn-xs file-inline">Импорт OCR .json
+            <h2 data-i18n="sidebar.cloudCollab">Cloud &amp; Collab</h2>
+            <label class="btn-ghost btn-xs file-inline"><span data-i18n="sidebar.importOcrJson">Импорт OCR .json</span>
               <input id="importOcrJson" type="file" accept="application/json,.json" />
             </label>
             <div class="section-actions stub-hidden">
@@ -392,18 +392,18 @@
             <div class="section-actions stub-hidden">
               <button id="pushCloudSync" class="btn-ghost btn-xs">↑ Push</button>
               <button id="pullCloudSync" class="btn-ghost btn-xs">↓ Pull</button>
-              <button id="toggleCollab" class="btn-ghost btn-xs">Collab: off</button>
-              <button id="broadcastCollab" class="btn-ghost btn-xs">Отправить</button>
+              <button id="toggleCollab" class="btn-ghost btn-xs" data-i18n="sidebar.collabOff">Collab: off</button>
+              <button id="broadcastCollab" class="btn-ghost btn-xs" data-i18n="sidebar.send">Отправить</button>
             </div>
             <p id="stage4Status" class="status-line"></p>
           </section>
           <section>
-            <h2>Диагностика</h2>
+            <h2 data-i18n="sidebar.diagnostics">Диагностика</h2>
             <div class="section-actions">
-              <button id="applyCommonHotkeys" class="btn-ghost btn-xs">Стандартные hotkeys</button>
-              <button id="exportDiagnostics" class="btn-ghost btn-xs">Экспорт</button>
-              <button id="clearDiagnostics" class="btn-ghost btn-xs">Очистить</button>
-              <button id="runRuntimeSelfCheck" class="btn-ghost btn-xs">Self-check</button>
+              <button id="applyCommonHotkeys" class="btn-ghost btn-xs" data-i18n="sidebar.standardHotkeys">Стандартные hotkeys</button>
+              <button id="exportDiagnostics" class="btn-ghost btn-xs" data-i18n="sidebar.diagnosticsExport">Экспорт</button>
+              <button id="clearDiagnostics" class="btn-ghost btn-xs" data-i18n="sidebar.clearDiag">Очистить</button>
+              <button id="runRuntimeSelfCheck" class="btn-ghost btn-xs" data-i18n="sidebar.selfCheck">Self-check</button>
             </div>
             <p id="diagnosticsStatus" class="status-line"></p>
             <p id="runtimeCheckStatus" class="status-line"></p>
@@ -420,10 +420,10 @@
         <!-- Floating Search Bar (Ctrl+F) -->
         <div class="search-floating" id="searchFloating" role="search" aria-label="Поиск в документе">
           <svg class="search-floating-icon" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.3" fill="none"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          <input id="searchInput" type="text" placeholder="Поиск в документе…" class="search-floating-input" aria-label="Поиск в документе" />
+          <input id="searchInput" type="text" placeholder="Поиск в документе…" class="search-floating-input" aria-label="Поиск в документе" data-i18n-placeholder="search.placeholder" />
           <select id="searchScope" class="search-floating-scope" aria-label="Область поиска">
-            <option value="all">Весь документ</option>
-            <option value="current">Текущая стр.</option>
+            <option value="all" data-i18n="search.allDoc">Весь документ</option>
+            <option value="current" data-i18n="search.currentPage">Текущая стр.</option>
           </select>
           <button id="searchBtn" class="cb-btn" title="Найти" aria-label="Найти"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 8h8M4 8l3-3M4 8l3 3"/></svg></button>
           <button id="searchPrev" class="cb-btn" title="Предыдущий" aria-label="Предыдущий результат"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10l4-4 4 4"/></svg></button>
@@ -441,7 +441,7 @@
             <div id="pdfAnnotationLayer" class="annotationLayer"></div>
             <canvas id="annotationCanvas"></canvas>
           </div>
-          <p id="emptyState" class="empty-msg">Откройте PDF, DjVu, ePub или изображение для просмотра</p>
+          <p id="emptyState" class="empty-msg" data-i18n="canvas.empty">Откройте PDF, DjVu, ePub или изображение для просмотра</p>
           <div id="minimapContainer" class="minimap-container" style="display:none">
             <div id="minimapTrack" class="minimap-track"></div>
             <div id="minimapViewport" class="minimap-viewport"></div>
@@ -462,7 +462,7 @@
            ═══════════════════════════════════════════════════════ -->
       <aside class="right-panel" id="rightPanel" aria-label="Панель инструментов">
         <div class="rp-header">
-          <span class="rp-title" id="rpTitle">Инструменты</span>
+          <span class="rp-title" id="rpTitle" data-i18n="toolbar.tools">Инструменты</span>
           <button class="rp-close cb-btn" id="closeRightPanel" title="Закрыть панель" aria-label="Закрыть панель инструментов"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
         </div>
 
@@ -1061,5 +1061,10 @@
     </div>
 
     <script type="module" src="./app.js"></script>
+    <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    }
+    </script>
   </body>
 </html>
