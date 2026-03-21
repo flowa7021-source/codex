@@ -36,8 +36,18 @@ function characterErrorRate(groundTruth, ocrResult) {
 }
 
 function wordErrorRate(groundTruth, ocrResult) {
-  const gtWords = (groundTruth || '').trim().split(/\s+/).filter(Boolean);
-  const ocrWords = (ocrResult || '').trim().split(/\s+/).filter(Boolean);
+  const gt = (groundTruth || '').trim();
+  const ocr = (ocrResult || '').trim();
+  // For CJK text (Chinese, Japanese, Korean) that lacks space-delimited words,
+  // segment into individual characters for a meaningful WER.
+  const isCjkDominated = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF]/.test(gt) &&
+    gt.split(/\s+/).filter(Boolean).length <= 3;
+  const gtWords = isCjkDominated
+    ? [...gt].filter(c => c.trim())
+    : gt.split(/\s+/).filter(Boolean);
+  const ocrWords = isCjkDominated
+    ? [...ocr].filter(c => c.trim())
+    : ocr.split(/\s+/).filter(Boolean);
   if (!gtWords.length) return ocrWords.length ? 1 : 0;
   const dist = levenshtein(gtWords, ocrWords);
   return dist / gtWords.length;
@@ -55,20 +65,19 @@ function simulateOcr(text, lang, errorRate = 0.02) {
       // Simulate common OCR errors per script family
       const code = chars[i].codePointAt(0);
       if (code >= 0x0400 && code <= 0x04FF) {
-        // Cyrillic confusions
+        // Cyrillic confusions (substitution)
         const confusions = { 'о': '0', 'е': 'с', 'з': '3', 'п': 'н', 'ш': 'щ', 'т': 'г' };
         result.push(confusions[chars[i]] || chars[i]);
-      } else if (code >= 0x4E00 && code <= 0x9FFF) {
-        // CJK — skip char (deletion error)
-        continue;
+      } else if ((code >= 0x4E00 && code <= 0x9FFF) || (code >= 0x3040 && code <= 0x30FF)) {
+        // CJK / Kana — substitute with a visually similar character (not deletion)
+        const offset = (code % 3 === 0) ? 1 : -1;
+        result.push(String.fromCodePoint(code + offset));
       } else if (code >= 0x0600 && code <= 0x06FF) {
-        // Arabic — swap with neighbor
-        result.push(chars[i]);
-        if (i + 1 < chars.length) { result.push(chars[i + 1]); i++; }
+        // Arabic — substitute with nearby codepoint
+        result.push(String.fromCodePoint(Math.max(0x0600, code + 1)));
       } else if (code >= 0x0900 && code <= 0x097F) {
-        // Devanagari — duplicate
-        result.push(chars[i]);
-        result.push(chars[i]);
+        // Devanagari — substitute with nearby codepoint
+        result.push(String.fromCodePoint(Math.max(0x0900, code + 1)));
       } else {
         // Latin — common confusions
         const latinConf = { 'l': '1', 'O': '0', 'I': 'l', 'rn': 'm', 'S': '5' };
