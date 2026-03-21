@@ -347,9 +347,9 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
           children: [new _docx.Paragraph({
             children: [
               new _docx.TextRun({ text: 'Стр. ', font: 'Arial', size: 16, color: '999999' }),
-              new _docx.TextRun({ children: [PageNumber.CURRENT], font: 'Arial', size: 16, color: '999999' }),
+              new _docx.TextRun({ children: [_docx.PageNumber.CURRENT], font: 'Arial', size: 16, color: '999999' }),
               new _docx.TextRun({ text: ' из ', font: 'Arial', size: 16, color: '999999' }),
-              new _docx.TextRun({ children: [PageNumber.TOTAL_PAGES], font: 'Arial', size: 16, color: '999999' }),
+              new _docx.TextRun({ children: [_docx.PageNumber.TOTAL_PAGES], font: 'Arial', size: 16, color: '999999' }),
             ],
             alignment: _docx.AlignmentType.CENTER,
           })],
@@ -655,8 +655,8 @@ function buildBlocksFromOcrWords(words, ocrLanguage) {
     if ((sizeRatio > 1.4 && isShort) || (isSemantic && isShort) || (isCaps && isBoldLine && isShort)) {
       let level;
       if (sizeRatio > 1.8) level = _docx.HeadingLevel.HEADING_1;
-      else if (sizeRatio > 1.4 || isSemantic) level = HeadingLevel.HEADING_2;
-      else level = HeadingLevel.HEADING_3;
+      else if (sizeRatio > 1.4 || isSemantic) level = _docx.HeadingLevel.HEADING_2;
+      else level = _docx.HeadingLevel.HEADING_3;
 
       blocks.push({
         type: 'heading',
