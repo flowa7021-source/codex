@@ -196,7 +196,7 @@ export function TopBar() {
               onMouseEnter={(e) => e.currentTarget.style.background = 'var(--color-surface-hover)'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
             >
-              <Avatar name="Салахутдинов М.М." size={32} />
+              <Avatar name="Крот" size={32} />
               <ChevronDown size={14} style={{ color: 'var(--color-text-muted)' }} />
             </button>
           </DropdownMenu.Trigger>
@@ -213,10 +213,10 @@ export function TopBar() {
             >
               <div className="px-3 py-2">
                 <div className="font-sans text-xs font-semibold" style={{ color: 'var(--color-text)' }}>
-                  Салахутдинов М.М.
+                  Крот
                 </div>
                 <div className="font-sans text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                  Начальник УМиТ
+                  Оперативный командир
                 </div>
               </div>
               <div style={{ height: 1, background: 'var(--color-border)', margin: '4px 0' }} />
