@@ -1,5 +1,7 @@
 // ─── Utility helpers ────────────────────────────────────────────────────────
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 export function throttle(fn, ms) {
   let last = 0;
   let timer = null;
@@ -7,11 +9,11 @@ export function throttle(fn, ms) {
     const now = performance.now();
     const remaining = ms - (now - last);
     if (remaining <= 0) {
-      if (timer) { clearTimeout(timer); timer = null; }
+      if (timer) { clearSafeTimeout(timer); timer = null; }
       last = now;
       fn.apply(this, args);
     } else if (!timer) {
-      timer = setTimeout(() => {
+      timer = safeTimeout(() => {
         last = performance.now();
         timer = null;
         fn.apply(this, args);
@@ -23,8 +25,8 @@ export function throttle(fn, ms) {
 export function debounce(fn, ms) {
   let timer = null;
   return function (...args) {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => { timer = null; fn.apply(this, args); }, ms);
+    if (timer) clearSafeTimeout(timer);
+    timer = safeTimeout(() => { timer = null; fn.apply(this, args); }, ms);
   };
 }
 
@@ -33,7 +35,7 @@ export async function yieldToMainThread(timeoutMs = 20) {
     await new Promise((resolve) => window.requestIdleCallback(() => resolve(), { timeout: timeoutMs }));
     return;
   }
-  await new Promise((resolve) => setTimeout(resolve, 0));
+  await new Promise((resolve) => safeTimeout(resolve, 0));
 }
 
 export function loadImage(url) {

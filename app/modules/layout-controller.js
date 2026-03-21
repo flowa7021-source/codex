@@ -4,6 +4,7 @@
 
 import { state, els } from './state.js';
 import { throttle, debounce } from './utils.js';
+import { safeTimeout } from './safe-timers.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 const _deps = {
@@ -98,8 +99,8 @@ export function updateSearchToolbarRows() {
   if (typeof window.requestAnimationFrame === 'function') {
     window.requestAnimationFrame(() => {
       apply();
-      setTimeout(apply, 80);
-      setTimeout(apply, 220);
+      safeTimeout(apply, 80);
+      safeTimeout(apply, 220);
     });
     return;
   }
@@ -310,7 +311,7 @@ export function setupAnnotationEvents() {
           document.removeEventListener('mousedown', removePopup);
         }
       };
-      setTimeout(() => document.addEventListener('mousedown', removePopup), 50);
+      safeTimeout(() => document.addEventListener('mousedown', removePopup), 50);
     });
   }
 }

@@ -1,5 +1,7 @@
 // ─── Library Loaders ────────────────────────────────────────────────────────
 
+import { safeTimeout } from './safe-timers.js';
+
 let pdfjsLib = null;
 let djvuLib = null;
 let pdfLoadPromise = null;
@@ -57,7 +59,7 @@ export function getPdfjsLib() {
 export function preloadPdfRuntime() {
   const scheduleIdle = typeof requestIdleCallback === 'function'
     ? requestIdleCallback
-    : (cb) => setTimeout(cb, 200);
+    : (cb) => safeTimeout(cb, 200);
 
   scheduleIdle(() => {
     ensurePdfJs().catch((err) => {

@@ -1,6 +1,8 @@
 // ─── Virtual Scroll ─────────────────────────────────────────────────────────
 // Virtualized rendering for continuous scroll mode. Only renders visible pages.
 
+import { safeTimeout } from './safe-timers.js';
+
 /**
  * @typedef {object} VirtualScrollOptions
  * @property {HTMLElement} container - Scrollable container
@@ -227,7 +229,7 @@ function throttle(fn, ms) {
       last = now;
       fn.apply(this, args);
     } else if (!timer) {
-      timer = setTimeout(() => {
+      timer = safeTimeout(() => {
         last = Date.now();
         timer = null;
         fn.apply(this, args);

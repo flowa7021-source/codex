@@ -4,6 +4,8 @@
 // Print Dialog, Shortcuts Reference, Right Panel + Floating Search
 // ═══════════════════════════════════════════════════════════════════════════════
 
+import { safeTimeout } from './safe-timers.js';
+
 // ── Continuous Scroll Mode ──────────────────────────────────────────────────
 function initContinuousScroll(deps) {
   const { state } = deps;
@@ -484,7 +486,7 @@ function initPrintDialog(deps) {
       printWindow.document.write('</body></html>');
       printWindow.document.close();
 
-      setTimeout(() => {
+      safeTimeout(() => {
         printWindow.print();
         setOcrStatus(`Печать: ${pages.length} стр. отправлено`);
       }, 500);
@@ -628,7 +630,7 @@ function initNovaReader3UI(/* deps not needed */) {
     searchFloating.classList.toggle('open', show);
     if (show) {
       const input = searchFloating.querySelector('#searchInput');
-      if (input) setTimeout(() => input.focus(), 50);
+      if (input) safeTimeout(() => input.focus(), 50);
     }
   }
 

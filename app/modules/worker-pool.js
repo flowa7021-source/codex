@@ -1,6 +1,8 @@
 // ─── Worker Pool ────────────────────────────────────────────────────────────
 // Manages a pool of Web Workers for parallel OCR and PDF processing tasks.
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 /**
  * @typedef {object} PoolTask
  * @property {string} id
@@ -103,7 +105,7 @@ export class WorkerPool {
     this._destroyed = true;
     this.cancelPending();
     for (const entry of this.workers) {
-      if (entry.timer) clearTimeout(entry.timer);
+      if (entry.timer) clearSafeTimeout(entry.timer);
       entry.worker.terminate();
     }
     this.workers = [];
@@ -129,7 +131,7 @@ export class WorkerPool {
     this.activeTasks.set(task.id, task);
 
     // Set timeout
-    available.timer = setTimeout(() => {
+    available.timer = safeTimeout(() => {
       this._handleTimeout(available, task);
     }, this.taskTimeout);
 
@@ -172,7 +174,7 @@ export class WorkerPool {
   /** @private */
   _completeTask(workerEntry, task, result, error) {
     if (workerEntry.timer) {
-      clearTimeout(workerEntry.timer);
+      clearSafeTimeout(workerEntry.timer);
       workerEntry.timer = null;
     }
 
@@ -274,14 +276,14 @@ export function runInWorker(fn, payload, transfer) {
     const worker = new Worker(url);
     const id = `inline-${++taskIdCounter}`;
 
-    const timer = setTimeout(() => {
+    const timer = safeTimeout(() => {
       worker.terminate();
       URL.revokeObjectURL(url);
       reject(new Error('Inline worker timed out'));
     }, 30000);
 
     worker.onmessage = (e) => {
-      clearTimeout(timer);
+      clearSafeTimeout(timer);
       worker.terminate();
       URL.revokeObjectURL(url);
       if (e.data.error) reject(new Error(e.data.error));
@@ -289,7 +291,7 @@ export function runInWorker(fn, payload, transfer) {
     };
 
     worker.onerror = (e) => {
-      clearTimeout(timer);
+      clearSafeTimeout(timer);
       worker.terminate();
       URL.revokeObjectURL(url);
       reject(new Error(e.message || 'Worker error'));

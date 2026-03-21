@@ -3,6 +3,8 @@
 // Optimized for minimal peak memory via adaptive chunk sizes and
 // single-allocation ArrayBuffer assembly.
 
+import { safeTimeout } from './safe-timers.js';
+
 export class ProgressiveLoader {
   constructor() {
     this.abortController = null;
@@ -70,7 +72,7 @@ export class ProgressiveLoader {
         chunkCount++;
         // Yield to main thread periodically to keep UI responsive
         if (chunkCount % yieldInterval === 0) {
-          await new Promise((r) => setTimeout(r, 0));
+          await new Promise((r) => safeTimeout(r, 0));
         }
 
         offset = end;

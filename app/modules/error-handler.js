@@ -1,6 +1,8 @@
 // ─── Unified Error Handler ──────────────────────────────────────────────────
 // Centralized error handling with recovery strategies and state preservation.
 
+import { safeTimeout } from './safe-timers.js';
+
 /**
  * @typedef {object} AppError
  * @property {string} code - Error classification code
@@ -199,7 +201,7 @@ export async function withRetry(fn, options = {}) {
       if (attempt < maxRetries) {
         const delay = delays[Math.min(attempt, delays.length - 1)];
         if (onRetry) onRetry(attempt + 1, err);
-        await new Promise(r => setTimeout(r, delay));
+        await new Promise(r => safeTimeout(r, delay));
       }
     }
   }

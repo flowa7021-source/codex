@@ -10,7 +10,7 @@ import { pushDiagnosticEvent } from './diagnostics.js';
 import { parseEpub, EpubAdapter } from './epub-adapter.js';
 import { progressiveLoader } from './progressive-loader.js';
 import { formManager } from './pdf-forms.js';
-import { clearAllTimers } from './safe-timers.js';
+import { safeTimeout, clearAllTimers } from './safe-timers.js';
 import { toastInfo } from './toast.js';
 import { announce } from './a11y.js';
 import { resetTesseractAvailability } from './tesseract-adapter.js';
@@ -261,7 +261,7 @@ const _openFileImpl = async function openFileImpl(file) {
       // Wrap synchronous DjVu parsing in a macrotask so the UI can update
       // before the potentially heavy Document constructor runs.
       const doc = await new Promise((resolve, reject) => {
-        setTimeout(() => {
+        safeTimeout(() => {
           try {
             resolve(new DjVu.Document(data));
           } catch (err) {

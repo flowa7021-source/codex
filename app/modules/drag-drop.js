@@ -1,6 +1,8 @@
 // ─── Drag & Drop Improvements ───────────────────────────────────────────────
 // Page reorder, file merge, annotation drag, drop zone UI.
 
+import { safeTimeout } from './safe-timers.js';
+
 /**
  * Initialize drag-and-drop for the application.
  * @param {object} deps
@@ -122,7 +124,7 @@ function initThumbnailReorder(container, reorderPages) {
     e.dataTransfer.setData('text/plain', String(draggedPage));
 
     // Use timeout to allow the drag image to render
-    setTimeout(() => {
+    safeTimeout(() => {
       cell.style.opacity = '0.4';
     }, 0);
   });

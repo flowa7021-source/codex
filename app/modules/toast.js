@@ -2,6 +2,8 @@
 // Types: success, error, warning, info, progress
 // Auto-dismiss, stacking, click-to-dismiss, progress bar
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 const MAX_TOASTS = 5;
 const DEFAULT_DURATION = 4000;
 
@@ -31,14 +33,14 @@ function ensureContainer() {
 function removeToast(id) {
   const entry = activeToasts.get(id);
   if (!entry) return;
-  clearTimeout(entry.timer);
+  clearSafeTimeout(entry.timer);
   entry.el.classList.add('toast-exit');
   entry.el.addEventListener('animationend', () => {
     entry.el.remove();
     activeToasts.delete(id);
   }, { once: true });
   // Fallback: remove after 300ms even if animationend doesn't fire
-  setTimeout(() => {
+  safeTimeout(() => {
     if (activeToasts.has(id)) {
       entry.el.remove();
       activeToasts.delete(id);
@@ -102,7 +104,7 @@ export function toast(message, opts = {}) {
 
   container.appendChild(el);
 
-  const timer = duration > 0 ? setTimeout(() => removeToast(id), duration) : null;
+  const timer = duration > 0 ? safeTimeout(() => removeToast(id), duration) : null;
   activeToasts.set(id, { el, timer, type });
 
   return {
@@ -140,8 +142,8 @@ function updateToast(id, message, opts = {}) {
 
   // Reset timer if duration changed
   if (opts.duration != null && opts.duration > 0) {
-    clearTimeout(entry.timer);
-    entry.timer = setTimeout(() => removeToast(id), opts.duration);
+    clearSafeTimeout(entry.timer);
+    entry.timer = safeTimeout(() => removeToast(id), opts.duration);
   }
 
   return {

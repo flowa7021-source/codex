@@ -1,6 +1,8 @@
 // ─── Tooltip System ─────────────────────────────────────────────────────────
 // Visual tooltips with shortcut hints, replacing browser-default title tooltips.
 
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
 const SHOW_DELAY = 500;
 const HIDE_DELAY = 100;
 const TOOLTIP_OFFSET = 8;
@@ -86,9 +88,9 @@ function onPointerEnter(e) {
   if (!el || typeof el.closest !== 'function') return;
   const target = el.closest('[data-tooltip], [title]');
   if (!target) return;
-  clearTimeout(hideTimer);
-  clearTimeout(showTimer);
-  showTimer = setTimeout(() => showTooltip(target), SHOW_DELAY);
+  clearSafeTimeout(hideTimer);
+  clearSafeTimeout(showTimer);
+  showTimer = safeTimeout(() => showTooltip(target), SHOW_DELAY);
 }
 
 function onPointerLeave(e) {
@@ -96,13 +98,13 @@ function onPointerLeave(e) {
   if (!el || typeof el.closest !== 'function') return;
   const target = el.closest('[data-tooltip], [title]');
   if (!target) return;
-  clearTimeout(showTimer);
-  hideTimer = setTimeout(hideTooltip, HIDE_DELAY);
+  clearSafeTimeout(showTimer);
+  hideTimer = safeTimeout(hideTooltip, HIDE_DELAY);
 }
 
 function onScroll() {
   if (currentTarget) {
-    clearTimeout(showTimer);
+    clearSafeTimeout(showTimer);
     hideTooltip();
   }
 }
@@ -114,9 +116,9 @@ function onScroll() {
 export function initTooltips() {
   document.addEventListener('pointerenter', onPointerEnter, true);
   document.addEventListener('pointerleave', onPointerLeave, true);
-  document.addEventListener('pointerdown', () => { clearTimeout(showTimer); hideTooltip(); }, true);
+  document.addEventListener('pointerdown', () => { clearSafeTimeout(showTimer); hideTooltip(); }, true);
   document.addEventListener('scroll', onScroll, true);
-  document.addEventListener('keydown', () => { clearTimeout(showTimer); hideTooltip(); }, true);
+  document.addEventListener('keydown', () => { clearSafeTimeout(showTimer); hideTooltip(); }, true);
 
   // Convert existing title attributes on interactive elements
   document.querySelectorAll('[title]').forEach(el => {
