@@ -532,6 +532,9 @@ export function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean
     targetHeight = Math.max(1, Math.floor(targetHeight * safeScale));
   }
 
+  // Guard: if input canvas has no dimensions, return it as-is to avoid drawImage errors
+  if (!inputCanvas.width || !inputCanvas.height) return inputCanvas;
+
   const canvas = createOcrCanvas(targetWidth, targetHeight);
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   if (!ctx) return canvas;
@@ -575,7 +578,7 @@ export function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean
     try {
       ctx.putImageData(img, 0, 0);
       const enhanced = preprocessForOcr(canvas, { deskew: true, denoise: false, binarize: false, removeBorders: true });
-      if (enhanced !== canvas && enhanced.width > 0) {
+      if (enhanced !== canvas && enhanced.width > 0 && enhanced.height > 0) {
         canvas.width = enhanced.width;
         canvas.height = enhanced.height;
         ctx.drawImage(enhanced, 0, 0);

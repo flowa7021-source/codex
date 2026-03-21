@@ -260,8 +260,10 @@ const _openFileImpl = async function openFileImpl(file) {
       const data = await progressiveLoader.loadFileProgressive(file);
       // Wrap synchronous DjVu parsing in a macrotask so the UI can update
       // before the potentially heavy Document constructor runs.
+      // Use raw setTimeout (not safeTimeout) because clearAllTimers() was
+      // called earlier in openFile and would cancel a document-scoped timer.
       const doc = await new Promise((resolve, reject) => {
-        safeTimeout(() => {
+        setTimeout(() => {
           try {
             resolve(new DjVu.Document(data));
           } catch (err) {

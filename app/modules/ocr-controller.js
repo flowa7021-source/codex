@@ -167,6 +167,10 @@ export function scoreOcrTextByLang(text, lang) {
 // ─── OCR Recognition Pipeline ──────────────────────────────────────────────
 
 export async function runOcrOnPreparedCanvas(canvas, options = {}) {
+  // Guard: canvas must have valid dimensions for OCR pipeline
+  if (!canvas || !canvas.width || !canvas.height) {
+    return { text: '', words: [], confidence: 0, lang: '', preprocessMs: 0, ocrMs: 0 };
+  }
   const startedAt = performance.now();
   const fast = !!options.fast;
   const preferredSkew = Number(options.preferredSkew || 0);

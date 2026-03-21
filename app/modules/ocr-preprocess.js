@@ -13,6 +13,7 @@
  */
 export function preprocessForOcr(canvas, opts = {}) {
   const { deskew = true, denoise = true, binarize = true, removeBorders = true } = opts;
+  if (!canvas.width || !canvas.height) return canvas;
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
   let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);

@@ -61,12 +61,6 @@ export class ProgressiveLoader {
         const slice = file.slice(offset, end);
         const chunk = await slice.arrayBuffer();
 
-        // Validate chunk size matches expected length
-        const expectedLen = end - offset;
-        if (chunk.byteLength !== expectedLen) {
-          throw new Error(`Chunk size mismatch: expected ${expectedLen} bytes but got ${chunk.byteLength}`);
-        }
-
         // Copy directly into pre-allocated buffer (no intermediate array)
         combined.set(new Uint8Array(chunk), offset);
 
@@ -76,9 +70,11 @@ export class ProgressiveLoader {
         if (onProgress) onProgress(percent, end, file.size);
 
         chunkCount++;
-        // Yield to main thread periodically to keep UI responsive
+        // Yield to main thread periodically to keep UI responsive.
+        // Use raw setTimeout here (not safeTimeout) because clearAllTimers()
+        // during file-open must NOT kill the in-flight progressive load.
         if (chunkCount % yieldInterval === 0) {
-          await new Promise((r) => safeTimeout(r, 0));
+          await new Promise((r) => setTimeout(r, 0));
         }
 
         offset = end;
