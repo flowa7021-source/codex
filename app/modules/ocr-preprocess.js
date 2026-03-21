@@ -81,8 +81,9 @@ export function medianFilter(imageData, size) {
           buf[k++] = src[((y + dy) * w + (x + dx)) * 4];
         }
       }
-      buf.sort();
-      const median = buf[Math.floor(k / 2)];
+      // Only sort the filled portion of the buffer to get the correct median
+      const filled = buf.slice(0, k).sort((a, b) => a - b);
+      const median = filled[Math.floor(k / 2)];
       const idx = (y * w + x) * 4;
       out[idx] = out[idx + 1] = out[idx + 2] = median;
       out[idx + 3] = 255;
@@ -95,6 +96,12 @@ export function medianFilter(imageData, size) {
 /**
  * Sauvola adaptive binarization.
  * Better than Otsu for documents with uneven lighting.
+ *
+ * The default windowSize=15 and k=0.2 are standard Sauvola parameters tuned
+ * for 300 DPI document scans. windowSize controls the local neighbourhood
+ * (should be odd; ~15px covers roughly one character at 300 DPI). k is the
+ * sensitivity factor — lower values preserve more detail but increase noise;
+ * 0.2 is the value recommended in Sauvola & Pietikäinen (2000).
  */
 export function sauvolaBinarize(imageData, windowSize = 15, k = 0.2) {
   const w = imageData.width;
