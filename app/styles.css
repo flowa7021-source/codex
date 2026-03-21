@@ -3356,7 +3356,109 @@ body.high-contrast .minimap-viewport {
   transition: transform 0.15s ease-out;
 }
 
-/* ─── 12. Reduced motion respect ───────────────────────────────────────────── */
+/* ─── 12. Resize zones — smooth transitions & visual feedback ─────────────── */
+
+/* Smooth layout transitions when applying settings changes */
+.app-shell.layout-transitioning {
+  transition: grid-template-columns var(--transition-spring);
+}
+.app-shell.layout-transitioning .left-panel {
+  transition: width var(--transition-spring);
+}
+.viewer-area.layout-transitioning .canvas-wrap {
+  transition: height var(--transition-spring);
+}
+
+/* Resize handle base styles */
+#sidebarResizeHandle,
+#canvasResizeHandle {
+  position: relative;
+  z-index: 15;
+  user-select: none;
+  touch-action: none;
+}
+
+#sidebarResizeHandle {
+  position: absolute;
+  right: -4px;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  transition: background var(--transition-fast);
+}
+#sidebarResizeHandle:hover,
+#sidebarResizeHandle.active {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+#canvasResizeHandle {
+  width: 100%;
+  height: 8px;
+  cursor: row-resize;
+  background: transparent;
+  transition: background var(--transition-fast);
+  flex-shrink: 0;
+}
+#canvasResizeHandle:hover,
+#canvasResizeHandle.active {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* Resize zone indicators — highlight zones when settings modal open */
+body.settings-modal-open #sidebarResizeHandle,
+body.settings-modal-open #canvasResizeHandle {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}
+body.settings-modal-open .left-panel {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 30%, transparent);
+  outline-offset: -2px;
+}
+body.settings-modal-open .canvas-wrap {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 30%, transparent);
+  outline-offset: -2px;
+}
+
+/* Drag resize pixel-value tooltip */
+.resize-tooltip {
+  position: fixed;
+  z-index: 10001;
+  pointer-events: none;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-3);
+  color: var(--text);
+  font-size: var(--font-xs);
+  font-weight: 600;
+  border: 1px solid var(--border);
+  box-shadow: var(--elevation-2);
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.resize-tooltip.visible {
+  opacity: 1;
+}
+
+/* Reset defaults button */
+.btn-reset-defaults {
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-reset-defaults:hover {
+  background: var(--panel-3);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* ─── 13. Reduced motion respect ───────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

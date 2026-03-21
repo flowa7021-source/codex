@@ -15,6 +15,7 @@ const _deps = {
   saveAppSettings: null,
   clearOcrRuntimeCaches: null,
   applyLayoutState: null,
+  applyLayoutWithTransition: null,
 };
 
 export function initSettingsUiDeps(deps) {
@@ -115,8 +116,27 @@ export function applySectionVisibilitySettings() {
 }
 
 
+/** All UI size input IDs that should trigger live preview on change */
+const _uiSizeInputIds = [
+  'cfgSidebarWidth', 'cfgToolbarScale', 'cfgTextMinHeight',
+  'cfgPageAreaHeight', 'cfgTopToolbarHeight', 'cfgBottomToolbarHeight',
+  'cfgTextPanelHeight', 'cfgAnnotationCanvasScale',
+];
+
+/** Snapshot of settings before modal opened, for cancel/revert */
+let _settingsSnapshot = null;
+
+/** Abort controller for live-preview event listeners */
+let _previewAbort = null;
+
 export function openSettingsModal() {
   if (!els.settingsModal) return;
+
+  // Snapshot current state for revert on close without save
+  _settingsSnapshot = {
+    settings: state.settings ? JSON.parse(JSON.stringify(state.settings)) : null,
+  };
+
   const sidebarHidden = localStorage.getItem(_deps.uiLayoutKey('sidebarHidden')) === '1';
   const searchHidden = localStorage.getItem(_deps.uiLayoutKey('searchToolsHidden')) === '1';
   const annotHidden = localStorage.getItem(_deps.uiLayoutKey('annotToolsHidden')) === '1';
@@ -147,6 +167,21 @@ export function openSettingsModal() {
 
   els.settingsModal.classList.add('open');
   els.settingsModal.setAttribute('aria-hidden', 'false');
+
+  // Add zone highlight indicators
+  document.body.classList.add('settings-modal-open');
+
+  // Wire up real-time preview: listen for input events on all size sliders
+  if (_previewAbort) _previewAbort.abort();
+  _previewAbort = new AbortController();
+  const psignal = _previewAbort.signal;
+  _uiSizeInputIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('input', () => previewUiSizeFromModal(), { signal: psignal });
+    }
+  });
+
   // Populate OCR storage info when modal opens
   if (typeof _deps.refreshOcrStorageInfo === 'function') _deps.refreshOcrStorageInfo();
 }

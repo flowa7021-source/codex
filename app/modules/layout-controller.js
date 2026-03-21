@@ -148,6 +148,31 @@ export function ensureDefaultPageAreaHeight() {
 
 let _resizeAbort = null;
 
+/** Create or reuse a tooltip element for showing pixel values during drag resize. */
+function getOrCreateResizeTooltip() {
+  let tip = document.getElementById('resizeTooltip');
+  if (!tip) {
+    tip = document.createElement('div');
+    tip.id = 'resizeTooltip';
+    tip.className = 'resize-tooltip';
+    document.body.appendChild(tip);
+  }
+  return tip;
+}
+
+function showResizeTooltip(text, x, y) {
+  const tip = getOrCreateResizeTooltip();
+  tip.textContent = text;
+  tip.style.left = `${x + 12}px`;
+  tip.style.top = `${y - 24}px`;
+  tip.classList.add('visible');
+}
+
+function hideResizeTooltip() {
+  const tip = document.getElementById('resizeTooltip');
+  if (tip) tip.classList.remove('visible');
+}
+
 export function setupResizableLayout() {
   // Clean up previous listeners to prevent accumulation on re-init
   if (_resizeAbort) { _resizeAbort.abort(); }
@@ -168,16 +193,30 @@ export function setupResizableLayout() {
       const shellRect = appShell.getBoundingClientRect();
       const raw = e.clientX - shellRect.left;
       const safe = Math.max(180, Math.min(360, raw));
-      const val = String(Math.round(safe));
+      const rounded = Math.round(safe);
+      const val = String(rounded);
       debouncedSaveSidebar(val);
-      appShell.style.setProperty('--sidebar-width', `${Math.round(safe)}px`);
+      appShell.style.setProperty('--sidebar-width', `${rounded}px`);
+      showResizeTooltip(`${rounded}px`, e.clientX, e.clientY);
     }, 32);
     els.sidebarResizeHandle.addEventListener('pointerdown', (e) => {
       active = true;
       els.sidebarResizeHandle.setPointerCapture?.(e.pointerId);
+      els.sidebarResizeHandle.classList.add('active');
     }, { signal });
     window.addEventListener('pointermove', onMove, { signal });
-    window.addEventListener('pointerup', () => { active = false; }, { signal });
+    window.addEventListener('pointerup', () => {
+      if (active) {
+        active = false;
+        els.sidebarResizeHandle.classList.remove('active');
+        hideResizeTooltip();
+        // Sync persisted value to settings state
+        const cur = parseInt(appShell?.style.getPropertyValue('--sidebar-width'), 10);
+        if (cur && state.settings) {
+          state.settings.uiSidebarWidth = Math.max(160, Math.min(360, cur));
+        }
+      }
+    }, { signal });
   }
 
   if (els.canvasResizeHandle) {
@@ -193,17 +232,45 @@ export function setupResizableLayout() {
       const maxPageHeight = Math.max(420, viewerRect.height - minTextHeight - 14);
       const rawPageHeight = e.clientY - canvasRect.top;
       const safePageHeight = Math.max(420, Math.min(maxPageHeight, rawPageHeight));
-      const val = String(Math.round(safePageHeight));
+      const rounded = Math.round(safePageHeight);
+      const val = String(rounded);
       debouncedSavePage(val);
-      viewerArea.style.setProperty('--page-area-height', `${Math.round(safePageHeight)}px`);
+      viewerArea.style.setProperty('--page-area-height', `${rounded}px`);
+      showResizeTooltip(`${rounded}px`, e.clientX, e.clientY);
     }, 32);
     els.canvasResizeHandle.addEventListener('pointerdown', (e) => {
       active = true;
       els.canvasResizeHandle.setPointerCapture?.(e.pointerId);
+      els.canvasResizeHandle.classList.add('active');
     }, { signal });
     window.addEventListener('pointermove', onMove, { signal });
-    window.addEventListener('pointerup', () => { active = false; }, { signal });
+    window.addEventListener('pointerup', () => {
+      if (active) {
+        active = false;
+        els.canvasResizeHandle.classList.remove('active');
+        hideResizeTooltip();
+        // Sync persisted value to settings state
+        const cur = parseInt(viewerArea?.style.getPropertyValue('--page-area-height'), 10);
+        if (cur && state.settings) {
+          state.settings.uiPageAreaPx = Math.max(520, Math.min(2600, cur));
+        }
+      }
+    }, { signal });
   }
+}
+
+/**
+ * Temporarily add smooth transition class then remove it after transition completes.
+ */
+export function applyLayoutWithTransition() {
+  const appShell = document.querySelector('.app-shell');
+  const viewerArea = document.querySelector('.viewer-area');
+  if (appShell) appShell.classList.add('layout-transitioning');
+  if (viewerArea) viewerArea.classList.add('layout-transitioning');
+  safeTimeout(() => {
+    if (appShell) appShell.classList.remove('layout-transitioning');
+    if (viewerArea) viewerArea.classList.remove('layout-transitioning');
+  }, 350);
 }
 
 // ─── Drag and Drop ──────────────────────────────────────────────────────────
