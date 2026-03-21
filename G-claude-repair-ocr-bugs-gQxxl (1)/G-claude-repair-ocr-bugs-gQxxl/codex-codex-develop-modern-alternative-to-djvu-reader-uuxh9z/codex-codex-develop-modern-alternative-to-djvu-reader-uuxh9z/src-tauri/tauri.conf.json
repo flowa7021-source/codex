@@ -78,19 +78,5 @@
       }
     }
   },
-  "plugins": {
-    "fs": {
-      "scope": {
-        "allow": ["$APPDATA/**", "$DOCUMENT/**", "$DOWNLOAD/**", "$HOME/**", "$DESKTOP/**"],
-        "deny": ["$APPDATA/novareader/secrets/**"]
-      }
-    },
-    "dialog": {
-      "open": true,
-      "save": true
-    },
-    "shell": {
-      "open": true
-    }
-  }
+  "plugins": {}
 }

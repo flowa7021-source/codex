@@ -75,6 +75,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      - name: Clean stale build scripts
+        run: rm -rf /tmp/nr/src-tauri/target/debug/build/novareader-*
+
       - name: Cargo check
         run: cd /tmp/nr/src-tauri && cargo check
 
