@@ -62,6 +62,18 @@ const LANG_MAP = {
   tur: 'tur',
   pol: 'pol',
   ces: 'ces',
+  ukr: 'ukr',
+  bel: 'bel',
+  nld: 'nld',
+  swe: 'swe',
+  nor: 'nor',
+  fin: 'fin',
+  ell: 'ell',
+  heb: 'heb',
+  vie: 'vie',
+  tha: 'tha',
+  ron: 'ron',
+  bul: 'bul',
   auto: 'eng+rus', // multi-language mode for auto
 };
 
