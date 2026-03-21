@@ -1,0 +1,652 @@
+// ─── Text Layer Rendering Sub-module ────────────────────────────────────────
+// Text layer creation/management: PDF.js TextLayer, OCR text layer,
+// inline editing, paragraph editing, and text-to-storage sync.
+// Split from render-controller.js for maintainability.
+
+import { state, els } from './state.js';
+import { getPdfjsLib } from './loaders.js';
+import { loadOcrTextData } from './workspace-controller.js';
+import { setPageEdits, persistEdits } from './export-controller.js';
+import { blockEditor } from './pdf-advanced-edit.js';
+import { renderConfidenceOverlay } from './ocr-confidence-map.js';
+
+// ─── Late-bound dependencies ────────────────────────────────────────────────
+const _deps = {
+  setOcrStatus: () => {},
+};
+
+export function initRenderTextLayerDeps(deps) {
+  Object.assign(_deps, deps);
+}
+
+// ─── Module-local state ─────────────────────────────────────────────────────
+
+/** OCR word-level data per page, reused by DOCX export & search */
+export const _ocrWordCache = new Map();
+
+/** Track active TextLayer instance for cleanup */
+let _activeTextLayer = null;
+
+/** Active inline text editor element */
+let _activeInlineEditor = null;
+
+/** Get/set active text layer (used by render-controller for cleanup) */
+export function getActiveTextLayer() { return _activeTextLayer; }
+export function setActiveTextLayer(tl) { _activeTextLayer = tl; }
+
+/** Get/set active inline editor (used by render-controller for cleanup) */
+export function getActiveInlineEditor() { return _activeInlineEditor; }
+export function setActiveInlineEditor(ed) { _activeInlineEditor = ed; }
+
+// ─── PDF.js Annotation Layer ───────────────────────────────────────────────
+
+/**
+ * Render PDF.js AnnotationLayer (links, form widgets, etc.)
+ */
+export async function _renderPdfAnnotationLayer(page, viewport) {
+  const container = els.pdfAnnotationLayer;
+  if (!container) return;
+  container.innerHTML = '';
+  container.style.width = `${viewport.width}px`;
+  container.style.height = `${viewport.height}px`;
+
+  const pdfjsLib = getPdfjsLib();
+  if (!pdfjsLib?.AnnotationLayer) return;
+
+  try {
+    const annotations = await page.getAnnotations({ intent: 'display' });
+    if (!annotations?.length) return;
+
+    const parameters = {
+      viewport: viewport.clone({ dontFlip: true }),
+      div: container,
+      annotations,
+      page,
+      linkService: {
+        getDestinationHash: (_dest) => `#`,
+        getAnchorUrl: (hash) => hash,
+        addLinkAttributes: (link, url) => {
+          link.href = url;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+        },
+        isPageVisible: () => true,
+        isPageCached: () => true,
+      },
+      renderForms: false,
+    };
+
+    const annotationLayer = new pdfjsLib.AnnotationLayer(parameters);
+    await annotationLayer.render(parameters);
+  } catch (err) {
+    console.warn('AnnotationLayer render failed:', err);
+  }
+}
+
+/**
+ * Fallback: manual text layer rendering for older pdf.js without TextLayer class
+ */
+export function _renderManualTextLayer(container, textContent, viewport, zoom) {
+  const fragment = document.createDocumentFragment();
+  const transform = viewport.transform;
+
+  for (const item of textContent.items) {
+    if (!item.str || !item.str.trim()) continue;
+
+    const span = document.createElement('span');
+    span.textContent = item.str;
+
+    // Apply viewport transform to get display coordinates
+    const tx = item.transform;
+    // PDF transform: [scaleX, skewY, skewX, scaleY, translateX, translateY]
+    const x = transform[0] * tx[4] + transform[2] * tx[5] + transform[4];
+    const y = transform[1] * tx[4] + transform[3] * tx[5] + transform[5];
+    const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
+    const scaledFontSize = fontSize * zoom;
+
+    span.style.left = `${x}px`;
+    span.style.top = `${y - scaledFontSize}px`;
+    span.style.fontSize = `${scaledFontSize}px`;
+    span.style.fontFamily = item.fontName || 'sans-serif';
+    span.style.position = 'absolute';
+    span.style.whiteSpace = 'nowrap';
+    span.style.color = 'transparent';
+    span.style.lineHeight = '1';
+
+    if (item.width) {
+      span.style.width = `${item.width * zoom}px`;
+      span.style.letterSpacing = '0px';
+      span.style.overflow = 'hidden';
+    }
+
+    fragment.appendChild(span);
+  }
+
+  container.appendChild(fragment);
+}
+
+// ─── Main Text Layer Render ────────────────────────────────────────────────
+
+export async function renderTextLayer(pageNum, zoom, rotation) {
+  const container = els.textLayerDiv;
+  if (!container) return;
+
+  // Clean up previous TextLayer instance
+  if (_activeTextLayer) {
+    try { _activeTextLayer.cancel(); } catch (err) { console.warn('[render-controller] error:', err?.message); }
+    _activeTextLayer = null;
+  }
+  container.innerHTML = '';
+  if (els.pdfAnnotationLayer) els.pdfAnnotationLayer.innerHTML = '';
+  container.style.width = els.canvas.style.width;
+  container.style.height = els.canvas.style.height;
+
+  if (!state.adapter) return;
+
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+  // ── Path 1: PDF.js official TextLayer API ──
+  if (state.adapter.type === 'pdf') {
+    const pdfjsLib = getPdfjsLib();
+    const page = await state.adapter.pdfDoc.getPage(pageNum);
+    const displayViewport = page.getViewport({ scale: zoom, rotation });
+
+    try {
+      const textContent = await page.getTextContent({ normalizeWhitespace: true });
+
+      if (!textContent?.items?.length) {
+        container.classList.add('ocr-text-layer');
+        await _renderOcrTextLayer(pageNum, zoom, dpr);
+        return;
+      }
+      container.classList.remove('ocr-text-layer');
+
+      // Size container to match display dimensions
+      const displayW = parseFloat(els.canvas.style.width) || displayViewport.width;
+      const displayH = parseFloat(els.canvas.style.height) || displayViewport.height;
+      container.style.width = `${displayW}px`;
+      container.style.height = `${displayH}px`;
+
+      // Use official PDF.js TextLayer if available
+      if (pdfjsLib?.TextLayer) {
+        // Set --scale-factor CSS variable required by PDF.js TextLayer
+        container.style.setProperty('--scale-factor', String(zoom));
+
+        const textLayer = new pdfjsLib.TextLayer({
+          container,
+          textContentSource: textContent,
+          viewport: displayViewport,
+        });
+        _activeTextLayer = textLayer;
+        await textLayer.render();
+
+        // Also render AnnotationLayer for interactive elements (links, widgets)
+        _renderPdfAnnotationLayer(page, displayViewport).catch((err) => { console.warn('[render-controller] error:', err?.message); });
+      } else {
+        // Fallback: manual text layer (for older pdf.js without TextLayer class)
+        _renderManualTextLayer(container, textContent, displayViewport, zoom);
+      }
+    } catch (err) {
+      console.warn('Text layer render failed:', err);
+    }
+    return;
+  }
+
+  // ── Path 2: OCR-based text layer ──
+  await _renderOcrTextLayer(pageNum, zoom, dpr);
+}
+
+export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
+  const container = els.textLayerDiv;
+  if (!container) return;
+
+  // Check OCR word cache
+  let words = _ocrWordCache.get(pageNum);
+  if (!words) {
+    const ocr = loadOcrTextData();
+    if (ocr?.pagesWords?.[pageNum - 1]) {
+      words = ocr.pagesWords[pageNum - 1];
+    }
+  }
+  if (!words || !words.length) return;
+
+  // Word bboxes are in [0,1] normalized coordinates (relative to OCR source canvas).
+  // We map them to CSS display dimensions for correct on-screen positioning.
+  const displayW = parseFloat(els.canvas.style.width) || (els.canvas.width / dpr);
+  const displayH = parseFloat(els.canvas.style.height) || (els.canvas.height / dpr);
+
+  container.style.width = `${displayW}px`;
+  container.style.height = `${displayH}px`;
+
+  const measureCanvas = document.createElement('canvas');
+  const measureCtx = measureCanvas.getContext('2d');
+  if (!measureCtx) return;
+
+  // Sort words into reading order
+  const sortedWords = [...words].filter(w => w.text && w.bbox).sort((a, b) => {
+    const dy = a.bbox.y0 - b.bbox.y0;
+    const avgH = ((a.bbox.y1 - a.bbox.y0) + (b.bbox.y1 - b.bbox.y0)) / 2;
+    // avgH is now in [0,1] range; compare proportionally
+    return Math.abs(dy) < avgH * 0.4 ? a.bbox.x0 - b.bbox.x0 : dy;
+  });
+
+  const fragment = document.createDocumentFragment();
+
+  for (const word of sortedWords) {
+    const span = document.createElement('span');
+    span.textContent = word.text;
+    if (word.confidence != null) {
+      span.dataset.confidence = String(word.confidence);
+    }
+
+    // Map normalized [0,1] coords -> display pixels
+    const x = word.bbox.x0 * displayW;
+    const y = word.bbox.y0 * displayH;
+    const w = (word.bbox.x1 - word.bbox.x0) * displayW;
+    const h = (word.bbox.y1 - word.bbox.y0) * displayH;
+
+    // Improved font-size fitting: use measureText to find optimal size
+    let fontSize = Math.max(6, h * 0.78);
+    if (word.text.length > 0 && h > 6) {
+      // Try to match text height more accurately
+      measureCtx.font = `${fontSize}px sans-serif`;
+      const metrics = measureCtx.measureText(word.text);
+      const actualH = (metrics.actualBoundingBoxAscent || fontSize * 0.8) + (metrics.actualBoundingBoxDescent || fontSize * 0.2);
+      if (actualH > 0) {
+        fontSize = Math.max(6, fontSize * (h / actualH) * 0.92);
+      }
+    }
+
+    // Baseline alignment correction: shift down slightly for better overlap
+    const baselineShift = h * 0.05;
+
+    span.style.left = `${x}px`;
+    span.style.top = `${y + baselineShift}px`;
+    span.style.fontSize = `${fontSize}px`;
+    span.style.width = `${w}px`;
+    span.style.height = `${h}px`;
+    span.style.lineHeight = `${h}px`;
+
+    if (word.text.length > 1) {
+      measureCtx.font = `${fontSize}px sans-serif`;
+      const measuredWidth = measureCtx.measureText(word.text).width;
+      if (measuredWidth > 0 && Math.abs(w - measuredWidth) > 1) {
+        // Use scaleX transform if width difference is large
+        const ratio = w / measuredWidth;
+        if (ratio > 0.5 && ratio < 2.0) {
+          span.style.transform = `scaleX(${ratio.toFixed(3)})`;
+          span.style.transformOrigin = 'left top';
+        } else {
+          const spacing = (w - measuredWidth) / (word.text.length - 1);
+          const clampedSpacing = Math.max(-fontSize * 0.3, Math.min(fontSize * 0.5, spacing));
+          span.style.letterSpacing = `${clampedSpacing}px`;
+        }
+      }
+    } else if (word.text.length === 1) {
+      span.style.textAlign = 'center';
+    }
+
+    // Skew correction: apply rotation if word has baseline angle data
+    if (word.baseline?.angle && Math.abs(word.baseline.angle) > 0.5) {
+      span.style.transform = (span.style.transform || '') + ` rotate(${(-word.baseline.angle).toFixed(1)}deg)`;
+      span.style.transformOrigin = span.style.transformOrigin || 'left bottom';
+    }
+
+    fragment.appendChild(span);
+  }
+
+  container.appendChild(fragment);
+
+  // ── Render confidence overlay if enabled ──
+  if (state.ocrConfidenceMode && sortedWords.length) {
+    const annotCanvas = els.annotationCanvas;
+    if (annotCanvas) {
+      renderConfidenceOverlay(sortedWords, annotCanvas, displayW, displayH);
+    }
+  }
+}
+
+// ─── Inline Text Editor (Acrobat-style) ────────────────────────────────────
+
+export function enableInlineTextEditing() {
+  const container = els.textLayerDiv;
+  if (!container) return;
+  container.classList.add('editing');
+
+  // Single click activates inline editing for better UX (Acrobat-style)
+  container.addEventListener('click', _handleTextLayerClick);
+  // Keep dblclick as fallback for paragraph-level editing
+  container.addEventListener('dblclick', _handleTextLayerDblClick);
+}
+
+export function disableInlineTextEditing() {
+  const container = els.textLayerDiv;
+  if (!container) return;
+  container.classList.remove('editing');
+  container.removeEventListener('click', _handleTextLayerClick);
+  container.removeEventListener('dblclick', _handleTextLayerDblClick);
+  if (_activeInlineEditor) {
+    _activeInlineEditor.remove();
+    _activeInlineEditor = null;
+  }
+}
+
+/**
+ * Single-click handler: open an inline editor on the clicked span directly.
+ * This gives an Acrobat-style "click to edit" experience.
+ */
+export function _handleTextLayerClick(e) {
+  // Ignore clicks on an already-active inline editor
+  if (e.target.closest('.inline-editor')) return;
+
+  const span = e.target.closest('span');
+  if (!span) {
+    // Click on empty area -> create a new text block
+    const rect = els.textLayerDiv.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    _createInlineEditor(x, y, '', null, []);
+    return;
+  }
+
+  // Open single-span editor immediately on click
+  const rect = span.getBoundingClientRect();
+  const containerRect = els.textLayerDiv.getBoundingClientRect();
+  const x = rect.left - containerRect.left;
+  const y = rect.top - containerRect.top;
+  _createInlineEditor(x, y, span.textContent, span, []);
+}
+
+export function _handleTextLayerDblClick(e) {
+  const span = e.target.closest('span');
+  if (!span) {
+    // Click on empty area -> create new text block
+    const rect = els.textLayerDiv.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    _createInlineEditor(x, y, '', null, []);
+    return;
+  }
+
+  // Group spans into a paragraph by Y-proximity for reflow editing
+  const paragraphSpans = _findParagraphSpans(span);
+  if (paragraphSpans.length > 1) {
+    _createParagraphEditor(paragraphSpans);
+  } else {
+    // Single span edit (fallback)
+    const rect = span.getBoundingClientRect();
+    const containerRect = els.textLayerDiv.getBoundingClientRect();
+    const x = rect.left - containerRect.left;
+    const y = rect.top - containerRect.top;
+    _createInlineEditor(x, y, span.textContent, span, []);
+  }
+}
+
+/**
+ * Find all spans that belong to the same paragraph as the target span.
+ * Groups by Y-proximity: spans on the same or adjacent lines with similar X range.
+ */
+export function _findParagraphSpans(targetSpan) {
+  const container = els.textLayerDiv;
+  if (!container) return [targetSpan];
+
+  const allSpans = Array.from(container.querySelectorAll('span:not(.inline-editor)'));
+  if (allSpans.length <= 1) return [targetSpan];
+
+  const targetRect = targetSpan.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const lineH = targetRect.height || 14;
+
+  // Collect all spans with bounding info
+  const spansWithRect = allSpans.map(s => ({
+    span: s,
+    rect: s.getBoundingClientRect(),
+  }));
+
+  // Find all spans on lines near the target span
+  const _targetRelY = targetRect.top - containerRect.top;
+  const targetLeft = targetRect.left - containerRect.left;
+  const _targetRight = targetLeft + targetRect.width;
+
+  // Get all lines (groups of spans with similar Y)
+  const lines = [];
+  const sorted = [...spansWithRect].sort((a, b) => a.rect.top - b.rect.top);
+  let currentLine = [sorted[0]];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = currentLine[currentLine.length - 1];
+    if (Math.abs(sorted[i].rect.top - prev.rect.top) < lineH * 0.6) {
+      currentLine.push(sorted[i]);
+    } else {
+      lines.push(currentLine);
+      currentLine = [sorted[i]];
+    }
+  }
+  if (currentLine.length) lines.push(currentLine);
+
+  // Find which line the target is on
+  let targetLineIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].some(s => s.span === targetSpan)) {
+      targetLineIdx = i;
+      break;
+    }
+  }
+  if (targetLineIdx === -1) return [targetSpan];
+
+  // Expand up and down to find paragraph boundaries
+  let startLine = targetLineIdx;
+  let endLine = targetLineIdx;
+
+  // Expand upward
+  for (let i = targetLineIdx - 1; i >= 0; i--) {
+    const prevLine = lines[i + 1];
+    const thisLine = lines[i];
+    const gap = prevLine[0].rect.top - (thisLine[0].rect.top + thisLine[0].rect.height);
+    if (gap > lineH * 0.8) break; // Large gap = paragraph break
+    startLine = i;
+  }
+
+  // Expand downward
+  for (let i = targetLineIdx + 1; i < lines.length; i++) {
+    const prevLine = lines[i - 1];
+    const thisLine = lines[i];
+    const gap = thisLine[0].rect.top - (prevLine[0].rect.top + prevLine[0].rect.height);
+    if (gap > lineH * 0.8) break;
+    endLine = i;
+  }
+
+  // Collect all spans in the paragraph
+  const result = [];
+  for (let i = startLine; i <= endLine; i++) {
+    for (const s of lines[i]) {
+      result.push(s.span);
+    }
+  }
+
+  return result.length ? result : [targetSpan];
+}
+
+/**
+ * Create a paragraph-level contenteditable editor covering all paragraph spans.
+ * Supports text reflow: edited text re-wraps within the paragraph bounds.
+ */
+export function _createParagraphEditor(spans) {
+  if (_activeInlineEditor) _activeInlineEditor.remove();
+
+  const containerRect = els.textLayerDiv.getBoundingClientRect();
+
+  // Calculate bounding box of all spans in the paragraph
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const s of spans) {
+    const r = s.getBoundingClientRect();
+    const relX = r.left - containerRect.left;
+    const relY = r.top - containerRect.top;
+    minX = Math.min(minX, relX);
+    minY = Math.min(minY, relY);
+    maxX = Math.max(maxX, relX + r.width);
+    maxY = Math.max(maxY, relY + r.height);
+  }
+
+  // Determine dominant font size from spans
+  const fontSizes = spans.map(s => parseFloat(s.style.fontSize) || 14);
+  const dominantFontSize = fontSizes.sort((a, b) => b - a)[0] || 14;
+
+  // Collect text from spans (join with spaces, preserving line breaks)
+  const text = spans.map(s => s.textContent).join(' ').replace(/\s+/g, ' ').trim();
+
+  // Hide original spans
+  for (const s of spans) s.style.visibility = 'hidden';
+
+  const editor = document.createElement('div');
+  editor.className = 'inline-editor paragraph-editor';
+  editor.contentEditable = 'true';
+  editor.textContent = text;
+  editor.style.left = `${minX}px`;
+  editor.style.top = `${minY}px`;
+  editor.style.width = `${maxX - minX}px`;
+  editor.style.minHeight = `${maxY - minY}px`;
+  editor.style.fontSize = `${dominantFontSize}px`;
+  editor.style.lineHeight = '1.3';
+  editor.style.wordWrap = 'break-word';
+  editor.style.overflowWrap = 'break-word';
+  editor.style.whiteSpace = 'pre-wrap';
+
+  editor.addEventListener('blur', () => {
+    const newText = editor.textContent.trim();
+
+    // Restore original spans visibility
+    for (const s of spans) s.style.visibility = '';
+
+    if (newText) {
+      // Reflow: update the text content of spans to match edited text
+      _reflowTextToSpans(spans, newText, dominantFontSize, maxX - minX);
+    }
+
+    editor.remove();
+    _activeInlineEditor = null;
+    _syncTextLayerToStorage();
+  });
+
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      for (const s of spans) s.style.visibility = '';
+      editor.remove();
+      _activeInlineEditor = null;
+    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editor.blur(); }
+  });
+
+  els.textLayerDiv.appendChild(editor);
+  _activeInlineEditor = editor;
+  editor.focus();
+
+  // Select all text
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/**
+ * Reflow edited text back into the original spans.
+ * Distributes words across spans maintaining original positions.
+ */
+export function _reflowTextToSpans(spans, newText, _fontSize, _maxWidth) {
+  const words = newText.split(/\s+/).filter(Boolean);
+  if (!words.length || !spans.length) return;
+
+  // Simple distribution: evenly distribute words across existing spans
+  const wordsPerSpan = Math.max(1, Math.ceil(words.length / spans.length));
+
+  for (let i = 0; i < spans.length; i++) {
+    const start = i * wordsPerSpan;
+    const end = Math.min(start + wordsPerSpan, words.length);
+    const spanWords = words.slice(start, end);
+    if (spanWords.length) {
+      spans[i].textContent = spanWords.join(' ');
+      spans[i].style.visibility = '';
+    } else {
+      // Extra spans: clear their text
+      spans[i].textContent = '';
+    }
+  }
+
+  // If there are remaining words that didn't fit, append to the last span
+  const usedWords = spans.length * wordsPerSpan;
+  if (usedWords < words.length) {
+    const lastSpan = spans[spans.length - 1];
+    const remaining = words.slice(usedWords).join(' ');
+    lastSpan.textContent += ' ' + remaining;
+  }
+}
+
+export function _createInlineEditor(x, y, initialText, targetSpan, _paragraphSpans) {
+  if (_activeInlineEditor) _activeInlineEditor.remove();
+
+  const editor = document.createElement('div');
+  editor.className = 'inline-editor';
+  editor.contentEditable = 'true';
+  editor.textContent = initialText;
+  editor.style.left = `${x}px`;
+  editor.style.top = `${y}px`;
+  if (targetSpan) {
+    editor.style.minWidth = `${targetSpan.offsetWidth + 20}px`;
+    editor.style.fontSize = targetSpan.style.fontSize;
+  }
+
+  editor.addEventListener('blur', () => {
+    const newText = editor.textContent.trim();
+    if (targetSpan && newText) {
+      targetSpan.textContent = newText;
+    } else if (!targetSpan && newText) {
+      // Create new text block through block editor
+      const displayW = parseFloat(els.canvas.style.width) || 1;
+      const displayH = parseFloat(els.canvas.style.height) || 1;
+      const canvasW = els.canvas.width || 1;
+      const canvasH = els.canvas.height || 1;
+      blockEditor.addTextBlock(state.currentPage,
+        (x / displayW) * canvasW,
+        (y / displayH) * canvasH,
+        newText,
+        { fontSize: parseInt(editor.style.fontSize) || 14 }
+      );
+      if (blockEditor.active) {
+        blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
+      }
+    }
+    editor.remove();
+    _activeInlineEditor = null;
+    // Save the edited text back to OCR/edit storage
+    _syncTextLayerToStorage();
+  });
+
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { editor.remove(); _activeInlineEditor = null; }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); editor.blur(); }
+  });
+
+  els.textLayerDiv.appendChild(editor);
+  _activeInlineEditor = editor;
+  editor.focus();
+
+  // Select all text
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+export function _syncTextLayerToStorage() {
+  const container = els.textLayerDiv;
+  if (!container || !state.adapter) return;
+
+  // Collect all text from spans
+  const spans = container.querySelectorAll('span');
+  const text = Array.from(spans).map(s => s.textContent).join(' ');
+  if (text.trim()) {
+    setPageEdits(state.currentPage, text.trim());
+    persistEdits();
+  }
+}

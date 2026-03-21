@@ -1,25 +1,23 @@
-// ─── OCR Controller ─────────────────────────────────────────────────────────
-// OCR confidence scoring, text normalization, recognition pipeline,
-// manual/background OCR scheduling, and batch OCR queue management.
-// Image processing, caching, and preprocessing moved to ocr-image-processing.js.
+// ─── OCR Controller (Orchestrator) ──────────────────────────────────────────
+// Thin orchestrator that re-exports from focused sub-modules:
+//   - ocr-pipeline-variants.js: Variant generation, preprocessing, recognition loop
+//   - ocr-region.js:            Region-based OCR, background scan, text extraction
+//
+// OCR confidence scoring, text normalization, queue management, and UI controls
+// remain here as they are used across modules.
+// Image processing, caching, and preprocessing are in ocr-image-processing.js.
 
 import { state, els } from './state.js';
-import { OCR_SLOW_TASK_WARN_MS, OCR_HANG_WARN_MS } from './constants.js';
-import { yieldToMainThread } from './utils.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
-import { recordPerfMetric } from './perf.js';
-import { recordCrashEvent, recordSuccessfulOperation } from './crash-telemetry.js';
 import { ToolMode, toolStateMachine } from './tool-modes.js';
-import { postCorrectByLanguage, scoreTextByLanguage, detectLanguage } from './ocr-languages.js';
+import { postCorrectByLanguage, scoreTextByLanguage } from './ocr-languages.js';
 import { getOcrLang } from './settings-controller.js';
-import { getPageQualitySummary } from './ocr-word-confidence.js';
-import { initTesseract, recognizeTesseract, isTesseractAvailable, getTesseractStatus, initTesseractPool, recognizeWithPool, terminateTesseractPool, isTesseractPoolReady, getRecommendedPoolSize } from './tesseract-adapter.js';
-import { indexOcrPage } from './search-controller.js';
-import { loadOcrTextData, saveOcrTextData } from './workspace-controller.js';
-import { savePageOcrText, getPageOcrText } from './ocr-storage.js';
-import { toastSuccess } from './toast.js';
-import { AsyncLock } from './async-lock.js';
-import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+import { clearSafeTimeout } from './safe-timers.js';
+import {
+  convertLatinLookalikesToCyrillic,
+} from './ocr-image-processing.js';
+import { initOcrPipelineVariantsDeps } from './ocr-pipeline-variants.js';
+import { initOcrRegionDeps } from './ocr-region.js';
 
 // Re-export image processing functions for backwards compatibility
 export {
@@ -34,12 +32,15 @@ export {
   preprocessOcrCanvas, pickVariantsByBudget,
 } from './ocr-image-processing.js';
 
-import {
-  convertLatinLookalikesToCyrillic,
-  estimateSkewAngleFromBinary, rotateCanvas,
-  buildOcrSourceCanvas, estimatePageSkewAngle, cropCanvasByRelativeRect,
-  preprocessOcrCanvas, pickVariantsByBudget,
-} from './ocr-image-processing.js';
+// ─── Re-exports from ocr-pipeline-variants.js ──────────────────────────────
+export { runOcrOnPreparedCanvas } from './ocr-pipeline-variants.js';
+
+// ─── Re-exports from ocr-region.js ─────────────────────────────────────────
+export {
+  runOcrOnRectNow, runOcrOnRect, runOcrForCurrentPage,
+  extractTextForPage,
+  scheduleBackgroundOcrScan, startBackgroundOcrScan,
+} from './ocr-region.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
@@ -56,13 +57,18 @@ const _deps = {
 /**
  * Inject runtime dependencies that live in app.js.
  * Must be called once during startup before any OCR functions are used.
+ * Forwards relevant deps to sub-modules.
  */
 export function initOcrControllerDeps(deps) {
   Object.assign(_deps, deps);
+  // Forward deps to sub-modules
+  initOcrPipelineVariantsDeps({
+    _ocrWordCache: deps._ocrWordCache,
+  });
+  initOcrRegionDeps({
+    renderTextLayer: deps.renderTextLayer,
+  });
 }
-
-// ─── Async lock for background OCR ──────────────────────────────────────────
-const ocrBackgroundLock = new AsyncLock();
 
 // ─── Phase 2: OCR Confidence Scoring ───────────────────────────────────────
 
@@ -164,252 +170,7 @@ export function scoreOcrTextByLang(text, lang) {
   return scoreTextByLanguage(s, effectiveLang);
 }
 
-// ─── OCR Recognition Pipeline ──────────────────────────────────────────────
-
-export async function runOcrOnPreparedCanvas(canvas, options = {}) {
-  // Guard: canvas must have valid dimensions for OCR pipeline
-  if (!canvas || !canvas.width || !canvas.height) {
-    return { text: '', words: [], confidence: 0, lang: '', preprocessMs: 0, ocrMs: 0 };
-  }
-  const startedAt = performance.now();
-  const fast = !!options.fast;
-  const preferredSkew = Number(options.preferredSkew || 0);
-  const taskId = Number(options.taskId || 0);
-  const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null;
-
-  // Snapshot settings at pipeline start to prevent race conditions if user
-  // changes language or quality mode mid-pipeline
-  const pipelineLang = getOcrLang();
-  const pipelineQualityMode = state.settings?.ocrQualityMode || 'balanced';
-  const _pipelineCyrillicOnly = !!state.settings?.ocrCyrillicOnly;
-
-  // Early exit: check Tesseract availability BEFORE spending time on preprocessing
-  const lang = pipelineLang;
-  const tesseractAvail = await isTesseractAvailable();
-  if (tesseractAvail) {
-    const initOk = await initTesseract(lang === 'auto' ? 'auto' : lang);
-    const tessStatus = getTesseractStatus();
-    pushDiagnosticEvent('ocr.tesseract.init', { available: true, initialized: initOk, lang, failCount: tessStatus.initFailCount, lastError: tessStatus.lastError || undefined });
-    if (!initOk) {
-      pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-init-failed', lang, ms: Math.round(performance.now() - startedAt), lastError: tessStatus.lastError || undefined });
-      setOcrStatus(`OCR: ошибка инициализации движка (попытка ${tessStatus.initFailCount}/3)`);
-      return '';
-    }
-  } else {
-    pushDiagnosticEvent('ocr.tesseract.init', { available: false, initialized: false, lang }, 'error');
-    pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-unavailable', lang, ms: Math.round(performance.now() - startedAt) });
-    setOcrStatus('OCR: движок Tesseract недоступен');
-    return '';
-  }
-
-  const preprocessStart = performance.now();
-  const isAccurate = pipelineQualityMode === 'accurate';
-  const recipeList = isAccurate
-    ? [
-      [-32, 'mean', false, 1],
-      [-16, 'mean', false, 1],
-      [0, 'mean', false, 1],
-      [0, 'otsu', false, 1],
-      [16, 'otsu', false, 1],
-      [28, 'otsu', false, 1],
-      [10, 'otsu', true, 1],
-      [-10, 'otsu', false, 1],
-    ]
-    : [
-      [0, 'otsu', false, 1],
-      [0, 'mean', false, 1],
-      [16, 'otsu', false, 1],
-      [-16, 'mean', false, 1],
-    ];
-
-  let preprocessDone = 0;
-  const reportPreprocess = (total) => {
-    if (!onProgress) return;
-    onProgress({ phase: 'preprocess', current: preprocessDone, total: Math.max(1, total) });
-  };
-
-  const baseVariants = [];
-  reportPreprocess(recipeList.length);
-  for (let i = 0; i < recipeList.length; i += 1) {
-    if (taskId && taskId !== state.ocrTaskId) return '';
-    const [contrast, thresholdMode, invert, sharpen] = recipeList[i];
-    baseVariants.push(preprocessOcrCanvas(canvas, contrast, thresholdMode, invert, sharpen));
-    preprocessDone += 1;
-    reportPreprocess(recipeList.length);
-    if (i % 2 === 1) {
-      await yieldToMainThread();
-    }
-  }
-
-  let variants = baseVariants;
-  let skewProbeDeg = 0;
-  let skewRotateCount = 0;
-  let skewToApply = 0;
-  if (Math.abs(preferredSkew) >= 0.35) {
-    skewToApply = preferredSkew;
-  } else if (!fast) {
-    const probe = variants[Math.min(2, variants.length - 1)];
-    const probeCtx = probe.getContext('2d');
-    if (probeCtx) {
-      const probeImg = probeCtx.getImageData(0, 0, probe.width, probe.height);
-      const skew = estimateSkewAngleFromBinary(probeImg);
-      skewProbeDeg = Number(skew.toFixed(2));
-      if (Math.abs(skew) >= 0.35) {
-        skewToApply = skew;
-      }
-    }
-  }
-  if (Math.abs(skewToApply) >= 0.35) {
-    const expanded = [];
-    const totalSteps = recipeList.length + variants.length;
-    for (let i = 0; i < variants.length; i += 1) {
-      if (taskId && taskId !== state.ocrTaskId) return '';
-      const v = variants[i];
-      expanded.push(v);
-      expanded.push(rotateCanvas(v, -skewToApply));
-      skewRotateCount += 1;
-      preprocessDone += 1;
-      reportPreprocess(totalSteps);
-      if (i % 2 === 1) {
-        await yieldToMainThread();
-      }
-    }
-    variants = expanded;
-  }
-
-  const sourceMegaPixels = Number(((canvas.width * canvas.height) / 1_000_000).toFixed(2));
-  const variantBudget = isAccurate
-    ? (sourceMegaPixels >= 6 ? 6 : sourceMegaPixels >= 3.5 ? 8 : 12)
-    : (sourceMegaPixels >= 6 ? 3 : sourceMegaPixels >= 3.5 ? 4 : 6);
-  if (variants.length > variantBudget) {
-    variants = pickVariantsByBudget(variants, variantBudget);
-  }
-  const preprocessMs = Math.round(performance.now() - preprocessStart);
-
-  const recognizeStart = performance.now();
-  // Helper to free all variant canvases -- called in finally to prevent leaks on early exit
-  function freeAllVariants() {
-    for (let i = 0; i < variants.length; i += 1) {
-      const c = variants[i];
-      if (c && c.width) { c.width = 0; c.height = 0; }
-      variants[i] = null;
-    }
-    for (let i = 0; i < baseVariants.length; i += 1) {
-      const c = baseVariants[i];
-      if (c && c.width) { c.width = 0; c.height = 0; }
-      baseVariants[i] = null;
-    }
-  }
-
-  // lang already resolved at top of function; Tesseract already confirmed initialized
-  let best = '';
-  let bestScore = -Infinity;
-  let bestWords = [];
-  let bestVariantW = 0;
-  let bestVariantH = 0;
-  let detectedLang = lang;
-  let taskCancelled = false;
-  try {
-    for (let i = 0; i < variants.length; i += 1) {
-      if (taskId && taskId !== state.ocrTaskId) { taskCancelled = true; break; }
-      if (onProgress) onProgress({ phase: 'recognize', current: i + 1, total: variants.length });
-      const variant = variants[i];
-      let rawText = '';
-      let words = [];
-      try {
-        // Use pool if available (background scan), else single worker
-        const recognizeFn = isTesseractPoolReady() ? recognizeWithPool : recognizeTesseract;
-        const tessResult = await recognizeFn(variant, { lang });
-        if (tessResult && tessResult.text) {
-          rawText = tessResult.text;
-          words = tessResult.words || [];
-        }
-        if (!rawText && !getTesseractStatus().ready && !isTesseractPoolReady()) {
-          pushDiagnosticEvent('ocr.engine.missing', { variant: i });
-          break;
-        }
-      } catch (ocrErr) {
-        pushDiagnosticEvent('ocr.engine.error', { variant: i, error: ocrErr?.message || String(ocrErr) });
-        if (!getTesseractStatus().ready && !isTesseractPoolReady()) {
-          pushDiagnosticEvent('ocr.engine.dead', { variant: i, error: ocrErr?.message || String(ocrErr) }, 'error');
-          break;
-        }
-        continue;
-      }
-      const effectiveLang = (lang === 'auto' && rawText && rawText.length >= 20) ? detectLanguage(rawText) : lang;
-      const candidate = normalizeOcrTextByLang(rawText, effectiveLang);
-      const score = scoreOcrTextByLang(candidate, effectiveLang);
-      if (score > bestScore) {
-        best = candidate;
-        bestScore = score;
-        bestWords = words;
-        bestVariantW = variant?.width || 0;
-        bestVariantH = variant?.height || 0;
-        detectedLang = effectiveLang;
-      }
-      if (i === 0 && best.length >= 20 && bestScore > 50) {
-        break;
-      }
-      await yieldToMainThread();
-    }
-  } finally {
-    freeAllVariants();
-  }
-
-  // Normalize word bboxes to [0,1] relative coordinates so they are
-  // independent of the OCR source canvas resolution. The text layer
-  // renderer multiplies these by display dimensions for correct placement.
-  if (bestVariantW <= 0 || bestVariantH <= 0) {
-    bestWords = [];
-  }
-  if (bestWords.length > 0 && bestVariantW > 0 && bestVariantH > 0) {
-    for (const w of bestWords) {
-      if (w.bbox) {
-        w.bbox = {
-          x0: w.bbox.x0 / bestVariantW,
-          y0: w.bbox.y0 / bestVariantH,
-          x1: w.bbox.x1 / bestVariantW,
-          y1: w.bbox.y1 / bestVariantH,
-        };
-      }
-    }
-  }
-  const recognizeMs = Math.round(performance.now() - recognizeStart);
-  if (taskCancelled) return best;
-  pushDiagnosticEvent('ocr.pipeline.profile', {
-    fast,
-    lang,
-    detectedLang,
-    variantCount: variants.length,
-    variantBudget,
-    sourceMegaPixels,
-    preprocessMs,
-    recognizeMs,
-    totalMs: Math.round(performance.now() - startedAt),
-    skewProbeDeg,
-    skewRotateCount,
-    bestLength: best.length,
-    bestScore: Number.isFinite(bestScore) ? Math.round(bestScore) : null,
-  });
-  // Apply post-correction using detected language
-  best = postCorrectOcrText(best, detectedLang);
-
-  // Cache word-level data for text layer and DOCX export
-  if (bestWords.length > 0 && options.pageNum) {
-    _deps._ocrWordCache.set(options.pageNum, bestWords);
-    // Also persist to OCR storage
-    try {
-      const cache = loadOcrTextData();
-      if (cache) {
-        if (!cache.pagesWords) cache.pagesWords = [];
-        cache.pagesWords[options.pageNum - 1] = bestWords;
-        saveOcrTextData(cache);
-      }
-    } catch (err) { console.warn('[app] non-critical:', err?.message); }
-  }
-
-  return best;
-}
+// ─── Text Normalization ────────────────────────────────────────────────────
 
 export function normalizeOcrTextByLang(text, langOverride) {
   const lang = langOverride || getOcrLang();
@@ -574,144 +335,7 @@ export function classifyOcrError(message) {
   return 'processing';
 }
 
-// ─── OCR Execution ─────────────────────────────────────────────────────────
-
-export async function runOcrOnRectNow(rect) {
-  if (!state.adapter || !rect) return;
-  const taskId = ++state.ocrTaskId;
-  const taskStartedAt = performance.now();
-  let hangWarnTimer = null;
-  try {
-    hangWarnTimer = safeTimeout(() => {
-      if (taskId !== state.ocrTaskId) return;
-      setOcrStatus('OCR: длительная обработка, ожидайте...');
-      pushDiagnosticEvent('ocr.manual.hang-warning', { taskId, thresholdMs: OCR_HANG_WARN_MS, page: state.currentPage }, 'warn');
-    }, OCR_HANG_WARN_MS);
-    const rel = {
-      x: rect.x / Math.max(1, els.canvas.width),
-      y: rect.y / Math.max(1, els.canvas.height),
-      w: rect.w / Math.max(1, els.canvas.width),
-      h: rect.h / Math.max(1, els.canvas.height),
-    };
-
-    const ocrPageCanvas = await buildOcrSourceCanvas(state.currentPage);
-    const src = cropCanvasByRelativeRect(ocrPageCanvas, rel);
-    const preferredSkew = await estimatePageSkewAngle(state.currentPage);
-    const text = await runOcrOnPreparedCanvas(src, {
-      preferredSkew,
-      taskId,
-      pageNum: state.currentPage,
-      onProgress: ({ phase, current, total }) => {
-        if (taskId !== state.ocrTaskId) return;
-        if (phase === 'preprocess') {
-          const percent = Math.max(1, Math.min(25, Math.round((current / Math.max(1, total)) * 25)));
-          setOcrStatusThrottled(`OCR: подготовка... ${percent}%`);
-          return;
-        }
-        if (phase === 'recognize') {
-          const percent = Math.max(26, Math.min(100, 25 + Math.round((current / Math.max(1, total)) * 75)));
-          setOcrStatusThrottled(`OCR: обработка... ${percent}%`);
-        }
-      },
-    });
-    if (taskId !== state.ocrTaskId) return;
-    const totalMs = Math.round(performance.now() - taskStartedAt);
-    if (text) {
-      const corrected = postCorrectOcrText(text);
-      const confidence = computeOcrConfidence(corrected, []);
-      // Word-level confidence scoring
-      const qualitySummary = getPageQualitySummary(corrected, getOcrLang());
-      els.pageText.value = corrected;
-      indexOcrPage(state.currentPage, corrected);
-      // Persist to IndexedDB
-      if (state.docName) {
-        savePageOcrText(state.docName, state.currentPage, corrected).catch((err) => { console.warn('[ocr] error:', err?.message); });
-      }
-      setOcrStatus(`OCR: распознано ${corrected.length} символов за ${totalMs}мс [${confidence.level} ${confidence.score}%] качество: ${qualitySummary.quality}`);
-      recordPerfMetric('ocrTimes', totalMs);
-      recordSuccessfulOperation();
-      pushDiagnosticEvent('ocr.manual.finish', { taskId, textLength: corrected.length, totalMs, page: state.currentPage, confidence: confidence.score, confidenceLevel: confidence.level, wordQuality: qualitySummary.quality, avgWordScore: qualitySummary.avgScore, lowConfidenceWords: qualitySummary.lowCount });
-      if (totalMs >= OCR_SLOW_TASK_WARN_MS) {
-        pushDiagnosticEvent('ocr.manual.slow', { taskId, totalMs, page: state.currentPage }, 'warn');
-      }
-      // Refresh text layer with newly recognized word boxes
-      _deps.renderTextLayer(state.currentPage, state.zoom, state.rotation).catch((err) => { console.warn('[ocr] error:', err?.message); });
-    } else {
-      recordPerfMetric('ocrTimes', totalMs);
-      setOcrStatus(`OCR: текст не найден (${totalMs}мс)`);
-      pushDiagnosticEvent('ocr.manual.empty', { taskId, totalMs, page: state.currentPage }, 'warn');
-    }
-  } catch (error) {
-    const totalMs = Math.round(performance.now() - taskStartedAt);
-    const message = String(error?.message || 'unknown error');
-    const errorType = classifyOcrError(message);
-    setOcrStatus(`OCR: ошибка [${errorType}] (${message})`);
-    recordCrashEvent(errorType, message, 'ocr-manual');
-    pushDiagnosticEvent('ocr.manual.error', { taskId, totalMs, page: state.currentPage, message, errorType }, 'error');
-  } finally {
-    if (hangWarnTimer) clearSafeTimeout(hangWarnTimer);
-  }
-}
-
-export async function runOcrOnRect(rect, reason = 'manual') {
-  if (!state.adapter || !rect) return;
-  if (state.backgroundOcrRunning) {
-    cancelBackgroundOcrScan('manual-priority');
-  }
-  return enqueueOcrTask(reason, async () => {
-    state.ocrLastProgressUiAt = 0;
-    state.ocrLastProgressText = '';
-    setOcrStatus('OCR: обработка...');
-    await runOcrOnRectNow(rect);
-  }, { latestWins: true, latestReason: 'manual-ocr' });
-}
-
-export async function runOcrForCurrentPage() {
-  if (!state.adapter) return;
-  await runOcrOnRect({ x: 0, y: 0, w: els.canvas.width, h: els.canvas.height }, 'full-page');
-}
-
-export async function extractTextForPage(pageNumber) {
-  if (!state.adapter) return '';
-  let text = '';
-  try {
-    text = String(await state.adapter.getText(pageNumber) || '').trim();
-  } catch (err) {
-    console.warn('[ocr] error:', err?.message);
-    text = '';
-  }
-  if (text) return text;
-
-  // Check IndexedDB first, then localStorage
-  const idbText = await getPageOcrText(state.docName || 'global', pageNumber);
-  if (idbText) return idbText;
-  const cache = loadOcrTextData();
-  if (Array.isArray(cache?.pagesText) && cache.pagesText[pageNumber - 1]) {
-    return cache.pagesText[pageNumber - 1];
-  }
-
-  try {
-    const canvas = await buildOcrSourceCanvas(pageNumber);
-    const preferredSkew = await estimatePageSkewAngle(pageNumber);
-    const ocrResult = await runOcrOnPreparedCanvas(canvas, { fast: true, preferredSkew, pageNum: pageNumber });
-    // Persist OCR result to cache so we don't re-OCR on next access
-    if (ocrResult) {
-      try {
-        const existing = loadOcrTextData();
-        const pagesText = Array.isArray(existing?.pagesText) ? [...existing.pagesText] : [];
-        while (pagesText.length < pageNumber) pagesText.push('');
-        pagesText[pageNumber - 1] = ocrResult;
-        saveOcrTextData({ ...existing, pagesText, updatedAt: new Date().toISOString() });
-      } catch (err) { console.warn('[app] persist best-effort failed:', err?.message); }
-    }
-    return ocrResult;
-  } catch (err) {
-    console.warn('[ocr] error:', err?.message);
-    return '';
-  }
-}
-
-// ─── Background OCR Scan ───────────────────────────────────────────────────
+// ─── Background OCR Controls ───────────────────────────────────────────────
 
 export function cancelBackgroundOcrScan(reason = 'manual') {
   state.backgroundOcrToken = 0;
@@ -728,157 +352,4 @@ export function cancelAllOcrWork(reason = 'manual-stop') {
   cancelBackgroundOcrScan(reason);
   cancelManualOcrTasks(reason);
   setOcrStatus(`OCR: остановлено (${reason})`);
-}
-
-export function scheduleBackgroundOcrScan(reason = 'default', delayMs = 600) {
-  if (!state.settings?.backgroundOcr || !state.adapter) return;
-  if (state.backgroundOcrTimer) {
-    clearSafeTimeout(state.backgroundOcrTimer);
-  }
-  state.backgroundOcrTimer = safeTimeout(() => {
-    state.backgroundOcrTimer = null;
-    startBackgroundOcrScan(reason).catch(() => {
-      setOcrStatus('OCR: ошибка фонового сканирования');
-    });
-  }, Math.max(50, Number(delayMs) || 600));
-  pushDiagnosticEvent('ocr.background.schedule', { reason, delayMs: Math.max(50, Number(delayMs) || 600) });
-}
-
-export async function startBackgroundOcrScan(reason = 'auto') {
-  if (!state.adapter || !state.pageCount) return;
-  if (state.docName == null) return;
-  if (state.backgroundOcrRunning) return;
-
-  // Acquire lock to prevent concurrent background OCR mutations
-  const releaseLock = await ocrBackgroundLock.acquire();
-
-  // Pre-check: ensure Tesseract can initialize before scanning all pages
-  const tessAvail = await isTesseractAvailable();
-  if (!tessAvail) {
-    pushDiagnosticEvent('ocr.background.skip', { reason: 'tesseract-unavailable' }, 'warn');
-    return;
-  }
-  const lang = getOcrLang();
-  const tessLang = lang === 'auto' ? 'auto' : lang;
-
-  // Try to initialize a parallel worker pool for faster background scanning
-  const poolSize = getRecommendedPoolSize();
-  let usePool = false;
-  try {
-    usePool = await initTesseractPool(tessLang, poolSize);
-    if (usePool) {
-      pushDiagnosticEvent('ocr.background.pool', { poolSize, lang: tessLang });
-    }
-  } catch (err) {
-    console.warn('[ocr] error:', err?.message);
-    usePool = false;
-  }
-
-  // Fallback to single worker if pool failed
-  if (!usePool) {
-    const initOk = await initTesseract(tessLang);
-    if (!initOk) {
-      pushDiagnosticEvent('ocr.background.skip', { reason: 'tesseract-init-failed', lang }, 'warn');
-      setOcrStatus('OCR: фоновое распознавание невозможно — ошибка инициализации');
-      return;
-    }
-  }
-
-  const concurrency = usePool ? poolSize : 1;
-  const token = Date.now();
-  state.backgroundOcrToken = token;
-  state.backgroundOcrRunning = true;
-  pushDiagnosticEvent('ocr.background.start', { reason, pageCount: state.pageCount, concurrency });
-
-  const existing = loadOcrTextData();
-  const pagesText = Array.isArray(existing?.pagesText) ? [...existing.pagesText] : new Array(state.pageCount).fill('');
-  const maxPages = state.pageCount;
-  let consecutiveEmpty = 0;
-  let scannedCount = 0;
-
-  try {
-    // Build list of pages that need OCR
-    const pagesToScan = [];
-    for (let i = 1; i <= maxPages; i++) {
-      if (!pagesText[i - 1]) pagesToScan.push(i);
-    }
-
-    // Process pages in parallel batches
-    for (let batchStart = 0; batchStart < pagesToScan.length; batchStart += concurrency) {
-      if (state.backgroundOcrToken !== token) return;
-      if (state.docName === null || state.docName === undefined) return;
-
-      const batch = pagesToScan.slice(batchStart, batchStart + concurrency);
-      const batchPromises = batch.map(async (pageNum) => {
-        if (state.backgroundOcrToken !== token) return { pageNum, text: '' };
-        try {
-          const txt = await extractTextForPage(pageNum);
-          return { pageNum, text: txt || '' };
-        } catch (err) {
-          console.warn('[ocr] error:', err?.message);
-          return { pageNum, text: '' };
-        }
-      });
-
-      const results = await Promise.all(batchPromises);
-
-      for (const { pageNum, text } of results) {
-        if (state.backgroundOcrToken !== token) return;
-        if (text) {
-          consecutiveEmpty = 0;
-          const corrected = postCorrectOcrText(text);
-          pagesText[pageNum - 1] = corrected;
-          indexOcrPage(pageNum, corrected);
-          recordSuccessfulOperation();
-
-          if (pageNum === state.currentPage && !els.pageText.value) {
-            els.pageText.value = corrected;
-          }
-        } else {
-          consecutiveEmpty++;
-        }
-        scannedCount++;
-      }
-
-      // Check if engine died
-      if (consecutiveEmpty >= 5 && !getTesseractStatus().ready && !isTesseractPoolReady()) {
-        pushDiagnosticEvent('ocr.background.abort', { reason: 'engine-dead', scannedCount, consecutiveEmpty }, 'error');
-        setOcrStatus('OCR: фоновое распознавание прервано — движок недоступен');
-        break;
-      }
-
-      // Periodic save and status update
-      if (scannedCount % 5 === 0 || batchStart + concurrency >= pagesToScan.length) {
-        saveOcrTextData({
-          pagesText,
-          source: 'auto-ocr',
-          scannedPages: scannedCount,
-          totalPages: state.pageCount,
-          updatedAt: new Date().toISOString(),
-        });
-      }
-      setOcrStatus(`OCR: фоновое распознавание ${scannedCount}/${pagesToScan.length} (×${concurrency})`);
-      await yieldToMainThread();
-    }
-
-    saveOcrTextData({
-      pagesText,
-      source: 'auto-ocr',
-      scannedPages: maxPages,
-      totalPages: state.pageCount,
-      updatedAt: new Date().toISOString(),
-    });
-    setOcrStatus('OCR: фоновое распознавание завершено');
-    try { toastSuccess('OCR: фоновое распознавание завершено'); } catch (err) { console.warn('[ocr] toast failed:', err?.message); }
-    pushDiagnosticEvent('ocr.background.finish', { scannedPages: scannedCount, concurrency });
-  } finally {
-    if (state.backgroundOcrToken === token) {
-      state.backgroundOcrRunning = false;
-    }
-    // Tear down pool after background scan to free memory
-    if (usePool) {
-      terminateTesseractPool().catch((err) => { console.warn('[ocr] error:', err?.message); });
-    }
-    releaseLock();
-  }
 }
