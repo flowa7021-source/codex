@@ -1,9 +1,13 @@
+// @ts-check
 // ─── Search Controller ──────────────────────────────────────────────────────
 // Search index, search execution, search results/history management,
 // and text-layer highlighting.
 // Extracted from app.js as part of module decomposition.
 
-import { state, els } from './state.js';
+import { state, els as _els } from './state.js';
+
+/** @type {Record<string, any>} */
+const els = _els;
 import { yieldToMainThread } from './utils.js';
 import { recordPerfMetric } from './perf.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
@@ -13,6 +17,7 @@ import { loadOcrTextData } from './workspace-controller.js';
 // Some functions live in app.js and are not yet modularised. We accept them
 // via initSearchControllerDeps() so the module stays self-contained.
 
+/** @type {Record<string, any>} */
 const _deps = {
   setOcrStatus: () => {},
   renderCurrentPage: async () => {},
@@ -21,6 +26,8 @@ const _deps = {
 /**
  * Inject app-level dependencies that are not yet in their own modules.
  * Must be called once during app initialisation.
+ * @param {Record<string, any>} deps
+ * @returns {void}
  */
 export function initSearchControllerDeps(deps) {
   Object.assign(_deps, deps);
@@ -33,6 +40,7 @@ export const ocrSearchIndex = {
   version: 0,
 };
 
+/** @param {any} pageNum @param {any} text @returns {any} */
 export function buildOcrSearchEntry(pageNum, text) {
   if (!text) return null;
   const words = [];
@@ -56,6 +64,7 @@ export function buildOcrSearchEntry(pageNum, text) {
   return { pageNum, text, words, indexedAt: Date.now() };
 }
 
+/** @param {any} pageNum @param {any} text @returns {any} */
 export function indexOcrPage(pageNum, text) {
   const entry = buildOcrSearchEntry(pageNum, text);
   if (entry) {
@@ -64,6 +73,7 @@ export function indexOcrPage(pageNum, text) {
   }
 }
 
+/** @param {any} query @returns {any} */
 export function searchOcrIndex(query) {
   const norm = (query || '').trim().toLowerCase();
   if (!norm) return [];
@@ -82,6 +92,7 @@ export function searchOcrIndex(query) {
   return results.sort((a, b) => a.page - b.page);
 }
 
+/** @returns {any} */
 export function exportOcrTextWithCoordinates() {
   const output = { app: 'NovaReader', version: '2.0', exportedAt: new Date().toISOString(), pages: [] };
   for (const [pageNum, entry] of ocrSearchIndex.pages) {
@@ -100,6 +111,7 @@ export function exportOcrTextWithCoordinates() {
   return output;
 }
 
+/** @returns {any} */
 export function downloadOcrTextExport() {
   const data = exportOcrTextWithCoordinates();
   if (!data.pages.length) {
@@ -119,14 +131,17 @@ export function downloadOcrTextExport() {
 
 // ─── Search Scope / History Keys ────────────────────────────────────────────
 
+/** @returns {any} */
 export function canSearchCurrentDoc() {
   return !!(state.adapter && (state.adapter.type === 'pdf' || state.adapter.type === 'djvu'));
 }
 
+/** @returns {any} */
 export function searchScopeKey() {
   return 'novareader-search-scope';
 }
 
+/** @returns {any} */
 export function loadSearchScope() {
   const scope = localStorage.getItem(searchScopeKey());
   if (scope === 'current' || scope === 'all') {
@@ -136,17 +151,20 @@ export function loadSearchScope() {
   }
 }
 
+/** @returns {any} */
 export function saveSearchScope() {
   const scope = els.searchScope.value === 'current' ? 'current' : 'all';
   localStorage.setItem(searchScopeKey(), scope);
 }
 
+/** @returns {any} */
 export function searchHistoryKey() {
   return `novareader-search-history:${state.docName || 'global'}`;
 }
 
 // ─── Search Results Management ──────────────────────────────────────────────
 
+/** @returns {any} */
 export function buildSearchResultsSummaryText() {
   const rows = state.searchResults.map((page, idx) => {
     const count = state.searchResultCounts[page] || 0;
@@ -162,6 +180,7 @@ export function buildSearchResultsSummaryText() {
   return `${header.join('\n')}\n\n${rows.join('\n')}`;
 }
 
+/** @returns {Promise<any>} */
 export async function copySearchResultsSummary() {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Копирование доступно для PDF/DjVu';
@@ -192,6 +211,7 @@ export async function copySearchResultsSummary() {
   }
 }
 
+/** @returns {any} */
 export function exportSearchResultsSummaryTxt() {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Экспорт доступен для PDF/DjVu';
@@ -214,6 +234,7 @@ export function exportSearchResultsSummaryTxt() {
   els.searchStatus.textContent = `Summary экспортирован: ${state.searchResults.length}`;
 }
 
+/** @returns {any} */
 export function exportSearchResultsCsv() {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Экспорт доступен для PDF/DjVu';
@@ -254,6 +275,7 @@ export function exportSearchResultsCsv() {
   els.searchStatus.textContent = `CSV экспортирован: ${rows.length}`;
 }
 
+/** @returns {any} */
 export function exportSearchResultsJson() {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Экспорт доступен для PDF/DjVu';
@@ -292,6 +314,7 @@ export function exportSearchResultsJson() {
   els.searchStatus.textContent = `Экспортировано результатов: ${rows.length}`;
 }
 
+/** @param {any} file @returns {Promise<any>} */
 export async function importSearchResultsJson(file) {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Импорт доступен для PDF/DjVu';
@@ -339,6 +362,7 @@ export async function importSearchResultsJson(file) {
   }
 }
 
+/** @param {any} line @returns {any} */
 export function parseCsvLine(line) {
   const cells = [];
   let current = '';
@@ -365,6 +389,7 @@ export function parseCsvLine(line) {
   return cells.map((x) => x.trim());
 }
 
+/** @param {any} file @returns {Promise<any>} */
 export async function importSearchResultsCsv(file) {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Импорт доступен для PDF/DjVu';
@@ -438,6 +463,7 @@ export async function importSearchResultsCsv(file) {
   }
 }
 
+/** @returns {any} */
 export function clearSearchResults() {
   state.searchResults = [];
   state.searchCursor = -1;
@@ -448,6 +474,7 @@ export function clearSearchResults() {
   renderSearchResultsList();
 }
 
+/** @returns {any} */
 export function renderSearchResultsList() {
   els.searchResultsList.innerHTML = '';
 
@@ -486,6 +513,7 @@ export function renderSearchResultsList() {
 
 // ─── Search History ─────────────────────────────────────────────────────────
 
+/** @returns {any} */
 export function loadSearchHistory() {
   try {
     return JSON.parse(localStorage.getItem(searchHistoryKey()) || '[]');
@@ -495,10 +523,12 @@ export function loadSearchHistory() {
   }
 }
 
+/** @param {any} history @returns {any} */
 export function saveSearchHistory(history) {
   localStorage.setItem(searchHistoryKey(), JSON.stringify(history));
 }
 
+/** @returns {any} */
 export function renderSearchHistory() {
   els.searchHistoryList.innerHTML = '';
   const history = loadSearchHistory();
@@ -532,6 +562,7 @@ export function renderSearchHistory() {
   });
 }
 
+/** @param {any} query @returns {any} */
 export function rememberSearchQuery(query) {
   if (!canSearchCurrentDoc()) return;
   const normalized = (query || '').trim();
@@ -542,6 +573,7 @@ export function rememberSearchQuery(query) {
   renderSearchHistory();
 }
 
+/** @returns {any} */
 export function buildSearchHistoryText() {
   const history = loadSearchHistory();
   const lines = history.map((query, idx) => `${idx + 1}. ${query}`);
@@ -551,6 +583,7 @@ export function buildSearchHistoryText() {
 ${lines.join('\n')}`;
 }
 
+/** @returns {any} */
 export function exportSearchHistoryJson() {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Экспорт доступен для PDF/DjVu';
@@ -582,6 +615,7 @@ export function exportSearchHistoryJson() {
   els.searchStatus.textContent = `Экспортировано запросов: ${history.length}`;
 }
 
+/** @returns {any} */
 export function exportSearchHistoryTxt() {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Экспорт доступен для PDF/DjVu';
@@ -605,6 +639,7 @@ export function exportSearchHistoryTxt() {
   els.searchStatus.textContent = `TXT экспортирован: ${history.length}`;
 }
 
+/** @returns {Promise<any>} */
 export async function copySearchHistory() {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Копирование доступно для PDF/DjVu';
@@ -635,6 +670,7 @@ export async function copySearchHistory() {
   }
 }
 
+/** @param {any} file @returns {Promise<any>} */
 export async function importSearchHistoryJson(file) {
   if (!canSearchCurrentDoc()) {
     els.searchStatus.textContent = 'Импорт доступен для PDF/DjVu';
@@ -664,6 +700,7 @@ export async function importSearchHistoryJson(file) {
   }
 }
 
+/** @returns {any} */
 export function clearSearchHistory() {
   saveSearchHistory([]);
   renderSearchHistory();
@@ -671,6 +708,7 @@ export function clearSearchHistory() {
 
 // ─── Search Highlight in Text Layer ─────────────────────────────────────────
 
+/** @param {any} query @returns {any} */
 export function highlightSearchInTextLayer(query) {
   const container = els.textLayerDiv;
   if (!container || !query) return 0;
@@ -719,6 +757,7 @@ export function highlightSearchInTextLayer(query) {
   return count;
 }
 
+/** @param {any} index @returns {any} */
 export function scrollToSearchHighlight(index) {
   const marks = els.textLayerDiv?.querySelectorAll('.search-highlight');
   if (!marks?.length) return;
@@ -733,6 +772,7 @@ export function scrollToSearchHighlight(index) {
 
 // ─── Main Search Function ───────────────────────────────────────────────────
 
+/** @param {any} query @returns {Promise<any>} */
 export async function searchInPdf(query) {
   try { performance.mark('search-start'); } catch (_e) { /* Performance API unavailable */ }
   const searchStartedAt = performance.now();
@@ -824,6 +864,7 @@ export async function searchInPdf(query) {
   } catch (_e) { /* Performance API unavailable */ }
 }
 
+/** @param {any} index @returns {Promise<any>} */
 export async function jumpToSearchResult(index) {
   if (!state.searchResults.length) return;
   state.searchCursor = (index + state.searchResults.length) % state.searchResults.length;

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module measurement-tools
  * @description PDF measurement toolkit — distance, area, angle, perimeter.

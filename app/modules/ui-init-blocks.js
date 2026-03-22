@@ -1,3 +1,4 @@
+// @ts-check
 // ═══════════════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — UI Init Blocks (extracted from app.js)
 // Continuous Scroll, Batch OCR UI, Drag & Drop + Hotkeys, Tab Bar,
@@ -46,7 +47,7 @@ function initContinuousScroll(deps) {
 
       const canvas = document.createElement('canvas');
       canvas.id = `cs-page-${i}`;
-      canvas.dataset.pageNum = i;
+      canvas.dataset.pageNum = String(i);
       canvas.width = 800;
       canvas.height = 1100;
       canvas.style.width = '100%';
@@ -61,7 +62,7 @@ function initContinuousScroll(deps) {
       scrollObserver = new IntersectionObserver((entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
-            const pageNum = parseInt(entry.target.dataset.pageNum, 10);
+            const pageNum = parseInt(/** @type {HTMLElement} */ (entry.target).dataset.pageNum, 10);
             if (!renderedPages.has(pageNum)) {
               renderedPages.add(pageNum);
               renderScrollPage(pageNum, entry.target);
@@ -705,6 +706,7 @@ function initNovaReader3UI(/* deps not needed */) {
 // Single entry point
 // ═══════════════════════════════════════════════════════════════════════════════
 
+/** @param {any} deps @returns {any} */
 export function initUiBlocks(deps) {
   initContinuousScroll(deps);
   initBatchOcrUI(deps);

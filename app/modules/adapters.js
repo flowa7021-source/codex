@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * adapters.js — Document adapter classes extracted from app.js
  *
@@ -5,7 +6,10 @@
  * retrieving text, and navigating document outlines.
  */
 
-import { els } from './state.js';
+import { els as _els } from './state.js';
+
+/** @type {Record<string, any>} */
+const els = _els;
 import { loadImage } from './utils.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
 

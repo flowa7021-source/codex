@@ -165,6 +165,13 @@ if (typeof globalThis.fetch === 'undefined') {
 
 if (typeof globalThis.indexedDB === 'undefined') {
   globalThis.indexedDB = {
-    open: () => ({ result: null, onerror() {}, onsuccess() {}, onupgradeneeded() {} }),
+    open: () => {
+      const req = { result: null, onerror: null, onsuccess: null, onupgradeneeded: null };
+      // Simulate async failure so modules fall back to localStorage
+      queueMicrotask(() => {
+        if (req.onerror) req.onerror(new Event('error'));
+      });
+      return req;
+    },
   };
 }

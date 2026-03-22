@@ -128,6 +128,7 @@ function makeHyperlinkRun(run) {
 }
 
 // ─── Main conversion function ───────────────────────────────────────────────
+/** @param {any} pdfDoc @param {any} title @param {any} pageCount @param {any} options @returns {Promise<any>} */
 export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
   await _loadDocx();
 

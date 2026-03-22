@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module visual-diff
  * @description Phase 8 — Visual Diff overlay mode.

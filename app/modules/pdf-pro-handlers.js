@@ -7,11 +7,12 @@ import { PdfRedactor, REDACTION_PATTERNS } from './pdf-redact.js';
 import { state } from './state.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
+/** @type {Record<string, any>} */
 const _deps = {
   setOcrStatus: () => {},
   nrPrompt: async () => null,
   nrConfirm: async () => false,
-  safeCreateObjectURL: (b) => URL.createObjectURL(b),
+  safeCreateObjectURL: (/** @type {Blob} */ b) => URL.createObjectURL(b),
   pushDiagnosticEvent: () => {},
   ensurePdfJs: async () => {},
   toastSuccess: () => {},
@@ -30,6 +31,7 @@ const _deps = {
   reloadPdfFromBytes: async () => {},
 };
 
+/** @param {Record<string, any>} deps @returns {void} */
 export function initPdfProHandlersDeps(deps) {
   Object.assign(_deps, deps);
 }
@@ -60,6 +62,7 @@ async function applyInPlace(blob, statusMsg) {
 
 // ─── Init: register all Pro PDF event handlers ──────────────────────────────
 
+/** @returns {void} */
 export function initPdfProHandlers() {
 
   // ── PDF Redaction ──
@@ -86,11 +89,11 @@ export function initPdfProHandlers() {
         </div>`;
         document.body.appendChild(modal);
         modal.querySelectorAll('[data-pat]').forEach(btn => {
-          btn.addEventListener('click', () => { modal.remove(); resolve(btn.dataset.pat); });
+          btn.addEventListener('click', () => { modal.remove(); resolve(/** @type {HTMLElement} */ (btn).dataset.pat); });
         });
         modal.querySelector('#_redCloseModal').addEventListener('click', () => { modal.remove(); resolve(null); });
         modal.querySelector('#_redApplyCustom').addEventListener('click', () => {
-          const v = modal.querySelector('#_redCustom').value.trim();
+          const v = /** @type {HTMLInputElement} */ (modal.querySelector('#_redCustom')).value.trim();
           modal.remove();
           resolve(v || null);
         });
@@ -228,7 +231,7 @@ export function initPdfProHandlers() {
       input.type = 'file';
       input.accept = '.pdf';
       input.onchange = async (e) => {
-        const file2 = e.target.files?.[0];
+        const file2 = /** @type {HTMLInputElement} */ (e.target).files?.[0];
         if (!file2) return;
 
         try {
@@ -284,7 +287,7 @@ export function initPdfProHandlers() {
           const panelA = overlay.querySelector('#cmpPanelA');
           const panelB = overlay.querySelector('#cmpPanelB');
           const pageLabel = overlay.querySelector('#cmpPageLabel');
-          const viewMode = overlay.querySelector('#cmpViewMode');
+          const viewMode = /** @type {HTMLSelectElement} */ (overlay.querySelector('#cmpViewMode'));
           let currentPage = 1;
 
           // Synchronized scroll
@@ -561,7 +564,7 @@ export function initPdfProHandlers() {
   { const _el = document.getElementById('orgInsertPages'); if (_el) _el.addEventListener('change', async (e) => {
       const file = requirePdfFile();
       if (!file) return;
-      const insertFile = e.target.files?.[0];
+      const insertFile = /** @type {HTMLInputElement} */ (e.target).files?.[0];
       if (!insertFile) return;
 
       try {
@@ -573,7 +576,7 @@ export function initPdfProHandlers() {
       } catch (err) {
         _deps.setOcrStatus(`Ошибка объединения: ${err?.message || 'неизвестная'}`);
       }
-      e.target.value = '';
+      /** @type {HTMLInputElement} */ (e.target).value = '';
     });
   }
 }

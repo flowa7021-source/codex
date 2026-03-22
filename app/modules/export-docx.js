@@ -1,3 +1,4 @@
+// @ts-check
 // ─── DOCX Export Sub-module ──────────────────────────────────────────────────
 // DOCX XML builders, styles, numbering, settings, properties, and blob generation.
 // Split from export-controller.js for maintainability.
@@ -66,6 +67,7 @@ function _buildFormattedParagraph(escapeXml, text, style, indent) {
   return `<w:p>${pPr}<w:r>${rPr}<w:t xml:space="preserve">${escaped}</w:t></w:r></w:p>`;
 }
 
+/** @param {any} title @param {any} pages @returns {any} */
 export function buildDocxXml(title, pages) {
   const escapeXml = (s) => String(s || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -165,6 +167,7 @@ ${body}
 </w:document>`;
 }
 
+/** @param {any} rows @returns {any} */
 export function buildDocxTable(rows) {
   const escapeXml = (s) => String(s || '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -197,6 +200,7 @@ export function buildDocxTable(rows) {
   return xml;
 }
 
+/** @returns {any} */
 export function buildDocxStyles() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -288,6 +292,7 @@ export function buildDocxStyles() {
 </w:styles>`;
 }
 
+/** @returns {any} */
 export function buildDocxNumbering() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:numbering xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
@@ -308,6 +313,7 @@ export function buildDocxNumbering() {
 </w:numbering>`;
 }
 
+/** @returns {any} */
 export function buildDocxSettings() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -322,6 +328,7 @@ export function buildDocxSettings() {
 </w:settings>`;
 }
 
+/** @param {any} title @returns {any} */
 export function buildCoreProperties(title) {
   const now = new Date().toISOString();
   const escapeXml = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -338,6 +345,7 @@ export function buildCoreProperties(title) {
 </cp:coreProperties>`;
 }
 
+/** @returns {any} */
 export function buildContentTypes() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
@@ -351,6 +359,7 @@ export function buildContentTypes() {
 </Types>`;
 }
 
+/** @returns {any} */
 export function buildRels() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -359,6 +368,7 @@ export function buildRels() {
 </Relationships>`;
 }
 
+/** @returns {any} */
 export function buildWordRels() {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
@@ -370,6 +380,7 @@ export function buildWordRels() {
 
 // ─── CRC-32 & ZIP Blob Generation ───────────────────────────────────────────
 
+/** @param {any} data @returns {any} */
 export function crc32(data) {
   let crc = 0xFFFFFFFF;
   for (let i = 0; i < data.length; i++) {
@@ -381,6 +392,7 @@ export function crc32(data) {
   return (crc ^ 0xFFFFFFFF) >>> 0;
 }
 
+/** @param {any} title @param {any} pages @returns {Promise<any>} */
 export async function generateDocxBlob(title, pages) {
   const docXml = buildDocxXml(title, pages);
   const stylesXml = buildDocxStyles();
@@ -486,6 +498,7 @@ export async function generateDocxBlob(title, pages) {
 
 // ─── DOCX Import ────────────────────────────────────────────────────────────
 
+/** @param {any} bytes @returns {any} */
 export function extractDocumentXmlFromZip(bytes) {
   const decoder = new TextDecoder('utf-8');
   let pos = 0;
@@ -507,6 +520,7 @@ export function extractDocumentXmlFromZip(bytes) {
   return null;
 }
 
+/** @param {any} xml @returns {any} */
 export function parseDocxTextByPages(xml) {
   const pages = [];
   let currentPage = [];
@@ -533,6 +547,7 @@ export function parseDocxTextByPages(xml) {
   return pages.filter(p => p.length > 0);
 }
 
+/** @param {any} files @returns {any} */
 export function createZipBlob(files) {
   const encoder = new TextEncoder();
   const parts = [];

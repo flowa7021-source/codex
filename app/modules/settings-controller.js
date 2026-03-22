@@ -1,19 +1,25 @@
+// @ts-check
 // ─── Settings Controller ────────────────────────────────────────────────────
 // App settings, hotkeys, notes, bookmarks, and theme toggling.
 // Extracted from app.js as part of module decomposition.
 
 import { SIDEBAR_SECTION_CONFIG, TOOLBAR_SECTION_CONFIG, OCR_MIN_DPI, CSS_BASE_DPI } from './constants.js';
-import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './state.js';
+import { state, defaultHotkeys, hotkeys, setHotkeys, els as _els } from './state.js';
 import { toastError } from './toast.js';
 import { nrPrompt } from './modal-prompt.js';
 import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
+/** @type {Record<string, any>} */
+const els = _els;
+
 // ─── App Settings ───────────────────────────────────────────────────────────
 
+/** @returns {any} */
 export function appSettingsKey() {
   return 'novareader-settings';
 }
 
+/** @returns {any} */
 export function defaultSettings() {
   return {
     appLang: 'ru',
@@ -36,6 +42,7 @@ export function defaultSettings() {
   };
 }
 
+/** @returns {any} */
 export function loadAppSettings() {
   try {
     const raw = localStorage.getItem(appSettingsKey());
@@ -54,6 +61,7 @@ export function loadAppSettings() {
   }
 }
 
+/** @returns {any} */
 export function saveAppSettings() {
   localStorage.setItem(appSettingsKey(), JSON.stringify(state.settings || defaultSettings()));
 }
@@ -82,14 +90,16 @@ export function applyUiSizeSettings(uiLayoutKey) {
   document.documentElement.style.setProperty('--ui-text-panel-height', `${Math.round(textPanel)}px`);
   document.documentElement.style.setProperty('--ui-annotation-canvas-scale', annotationScale.toFixed(2));
 
-  document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${Math.round(sidebar)}px`);
-  document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${Math.round(pageArea)}px`);
+  /** @type {HTMLElement | null} */ (document.querySelector('.app-shell'))?.style.setProperty('--sidebar-width', `${Math.round(sidebar)}px`);
+  /** @type {HTMLElement | null} */ (document.querySelector('.viewer-area'))?.style.setProperty('--page-area-height', `${Math.round(pageArea)}px`);
 }
 
+/** @returns {any} */
 export function getOcrLang() {
   return state.settings?.ocrLang || 'auto';
 }
 
+/** @returns {any} */
 export function getOcrScale() {
   const lang = getOcrLang();
   const qualityScale = state.settings?.ocrQualityMode === 'accurate' ? 1.35 : 1;
@@ -115,7 +125,7 @@ export function toggleTheme(applyTheme) {
 
 /**
  * Build the notes model from the current DOM inputs.
- * @param {function} noteKey - Returns the localStorage key for notes.
+ * @returns {{ title: string, tags: string, body: string, updatedAt: string }}
  */
 export function getNotesModel() {
   return {
@@ -126,6 +136,7 @@ export function getNotesModel() {
   };
 }
 
+/** @param {any} payload @returns {any} */
 export function normalizeImportedNotes(payload) {
   if (payload && payload.notes && typeof payload.notes === 'object') {
     return {
@@ -150,6 +161,7 @@ export function normalizeImportedNotes(payload) {
   };
 }
 
+/** @param {any} current @param {any} incoming @param {any} mode @returns {any} */
 export function mergeNotesByMode(current, incoming, mode) {
   if (mode === 'append') {
     const joinedBody = [current.body, incoming.body].filter(Boolean).join('\n\n');
@@ -211,6 +223,7 @@ export function loadNotes(noteKey) {
 
 let notesAutosaveTimer = null;
 
+/** @param {any} message @returns {any} */
 export function setNotesStatus(message) {
   els.notesStatus.textContent = message;
 }
@@ -263,6 +276,7 @@ ${m.body}`;
   URL.revokeObjectURL(url);
 }
 
+/** @returns {any} */
 export function exportNotesMarkdown() {
   const m = getNotesModel();
   const title = m.title || state.docName || 'Документ';
@@ -284,6 +298,7 @@ _Обновлено: ${m.updatedAt}_
   URL.revokeObjectURL(url);
 }
 
+/** @returns {any} */
 export function exportNotesJson() {
   const payload = {
     app: 'NovaReader',
@@ -348,11 +363,13 @@ export function insertTimestamp(noteKey) {
 
 // ─── Hotkeys ────────────────────────────────────────────────────────────────
 
+/** @param {any} value @param {any} fallback @returns {any} */
 export function normalizeHotkey(value, fallback) {
   const v = (value || '').trim().toLowerCase();
   return v || fallback;
 }
 
+/** @param {any} message @param {any} type @returns {any} */
 export function setHotkeysStatus(message, type = '') {
   els.hotkeysStatus.textContent = message;
   els.hotkeysStatus.classList.remove('error', 'success');
@@ -373,10 +390,12 @@ export const hotkeyFieldMeta = {
   fitPage: { input: () => els.hkFitPage, hint: () => els.hkFitPageHint, label: 'По странице' },
 };
 
+/** @returns {any} */
 export function hotkeyKeys() {
   return Object.keys(hotkeyFieldMeta);
 }
 
+/** @param {any} value @returns {any} */
 export function normalizeHotkeyForDisplay(value) {
   const v = (value || '').toLowerCase();
   if (v === 'arrowright') return '>';
@@ -384,6 +403,7 @@ export function normalizeHotkeyForDisplay(value) {
   return value;
 }
 
+/** @param {any} fields @param {any} details @returns {any} */
 export function setHotkeysInputErrors(fields = [], details = {}) {
   Object.values(hotkeyFieldMeta).forEach((meta) => {
     const input = meta.input();
@@ -402,6 +422,7 @@ export function setHotkeysInputErrors(fields = [], details = {}) {
   });
 }
 
+/** @param {any} nextHotkeys @returns {any} */
 export function validateHotkeys(nextHotkeys) {
   const entries = Object.entries(nextHotkeys);
   const emptyFields = entries.filter(([, value]) => !value || value.length < 1).map(([field]) => field);
@@ -438,6 +459,7 @@ export function validateHotkeys(nextHotkeys) {
   return { ok: true, message: 'Hotkeys сохранены.', fields: [], fieldMessages: {} };
 }
 
+/** @returns {any} */
 export function renderHotkeyInputs() {
   els.hkNext.value = normalizeHotkeyForDisplay(hotkeys.next);
   els.hkPrev.value = normalizeHotkeyForDisplay(hotkeys.prev);
@@ -450,6 +472,7 @@ export function renderHotkeyInputs() {
   if (els.hkFitPage) els.hkFitPage.value = hotkeys.fitPage;
 }
 
+/** @returns {any} */
 export function saveHotkeys() {
   const candidate = {
     next: normalizeHotkey(els.hkNext.value === '>' ? 'arrowright' : els.hkNext.value, defaultHotkeys.next),
@@ -477,6 +500,7 @@ export function saveHotkeys() {
   setHotkeysStatus(validation.message, 'success');
 }
 
+/** @returns {any} */
 export function loadHotkeys() {
   const raw = localStorage.getItem('novareader-hotkeys');
   if (!raw) {
@@ -509,6 +533,7 @@ export function loadHotkeys() {
   setHotkeysStatus('Hotkeys загружены.');
 }
 
+/** @returns {any} */
 export function resetHotkeys() {
   setHotkeys({ ...defaultHotkeys });
   localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
@@ -517,6 +542,7 @@ export function resetHotkeys() {
   setHotkeysStatus('Hotkeys сброшены к умолчанию.', 'success');
 }
 
+/** @param {any} e @returns {any} */
 export function stringifyHotkeyEvent(e) {
   const base = e.key.toLowerCase();
   const specialMap = {
@@ -539,6 +565,7 @@ export function stringifyHotkeyEvent(e) {
   return combo.join('+');
 }
 
+/** @returns {any} */
 export function bindHotkeyCapture() {
   const fields = hotkeyKeys();
   fields.forEach((field) => {
@@ -561,6 +588,7 @@ export function bindHotkeyCapture() {
   });
 }
 
+/** @returns {any} */
 export function autoFixHotkeys() {
   const fields = hotkeyKeys();
   const candidate = {
@@ -609,6 +637,7 @@ export function autoFixHotkeys() {
 
 // ─── Bookmarks ──────────────────────────────────────────────────────────────
 
+/** @param {any} message @param {any} type @returns {any} */
 export function setBookmarksStatus(message, type = '') {
   els.bookmarksStatus.textContent = message;
   els.bookmarksStatus.classList.remove('error', 'success');

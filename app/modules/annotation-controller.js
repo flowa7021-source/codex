@@ -1,4 +1,3 @@
-// @ts-check
 
 // ─── Annotation Controller ──────────────────────────────────────────────────
 // Drawing, annotation storage, comment management, and annotation import/export.
@@ -11,7 +10,10 @@
  * @typedef {{ renderDocStats: () => void, renderReadingGoalStatus: () => void, renderEtaStatus: () => void, setOcrStatus: (msg: string) => void, runOcrOnRect: (rect: any, mode: string) => Promise<void>, drawOcrSelectionPreview: () => void, nrPrompt: (msg: string) => Promise<string|null>, toastError: (msg: string) => void }} AnnotationDeps
  */
 
-import { state, hotkeys, els } from './state.js';
+import { state, hotkeys, els as _els } from './state.js';
+
+/** @type {Record<string, any>} */
+const els = _els;
 import { annotationManager, ANNOTATION_TYPES } from './pdf-annotations-pro.js';
 import { ToolMode, toolStateMachine } from './tool-modes.js';
 
@@ -77,6 +79,7 @@ export function getAnnotationDpr() {
   return Math.max(1, window.devicePixelRatio || 1);
 }
 
+/** @param {number} [page] @returns {Stroke[]} */
 export function loadStrokes(page = state.currentPage) {
   if (_strokesCache.has(page)) return _strokesCache.get(page);
   const data = JSON.parse(localStorage.getItem(annotationKey(page)) || '[]');
@@ -84,6 +87,7 @@ export function loadStrokes(page = state.currentPage) {
   return data;
 }
 
+/** @param {Stroke[]} strokes @param {number} [page] @returns {void} */
 export function saveStrokes(strokes, page = state.currentPage) {
   _strokesCache.set(page, strokes);
   localStorage.setItem(annotationKey(page), JSON.stringify(strokes));
@@ -92,6 +96,7 @@ export function saveStrokes(strokes, page = state.currentPage) {
   _deps.renderEtaStatus();
 }
 
+/** @param {number} [page] @returns {Comment[]} */
 export function loadComments(page = state.currentPage) {
   if (_commentsCache.has(page)) return _commentsCache.get(page);
   const data = JSON.parse(localStorage.getItem(commentKey(page)) || '[]');
@@ -99,6 +104,7 @@ export function loadComments(page = state.currentPage) {
   return data;
 }
 
+/** @param {Comment[]} comments @param {number} [page] @returns {void} */
 export function saveComments(comments, page = state.currentPage) {
   _commentsCache.set(page, comments);
   localStorage.setItem(commentKey(page), JSON.stringify(comments));
@@ -106,6 +112,7 @@ export function saveComments(comments, page = state.currentPage) {
   _deps.renderEtaStatus();
 }
 
+/** @returns {void} */
 export function clearDocumentCommentStorage() {
   if (!state.pageCount) return;
   for (let page = 1; page <= state.pageCount; page += 1) {
@@ -113,6 +120,7 @@ export function clearDocumentCommentStorage() {
   }
 }
 
+/** @returns {void} */
 export function renderCommentList() {
   const comments = loadComments();
   els.commentList.innerHTML = '';
@@ -151,6 +159,7 @@ export function renderCommentList() {
   });
 }
 
+/** @returns {void} */
 export function clearDocumentAnnotationStorage() {
   if (!state.pageCount) return;
   for (let page = 1; page <= state.pageCount; page += 1) {
@@ -158,11 +167,13 @@ export function clearDocumentAnnotationStorage() {
   }
 }
 
+/** @returns {void} */
 export function updateOverlayInteractionState() {
   const enabled = !!(state.drawEnabled || state.ocrRegionMode);
   if (els.annotationCanvas) els.annotationCanvas.classList.toggle('drawing-enabled', enabled);
 }
 
+/** @param {boolean} enabled @returns {void} */
 export function setDrawMode(enabled) {
   if (enabled) {
     toolStateMachine.transition(ToolMode.ANNOTATE);
@@ -179,6 +190,7 @@ export function setDrawMode(enabled) {
 
 // ─── Drawing Functions ──────────────────────────────────────────────────────
 
+/** @param {number} x @param {number} y @returns {NormalizedPoint} */
 export function normalizePoint(x, y) {
   return {
     x: x / Math.max(1, els.annotationCanvas.width),
@@ -186,6 +198,7 @@ export function normalizePoint(x, y) {
   };
 }
 
+/** @param {NormalizedPoint} point @returns {{ x: number, y: number }} */
 export function denormalizePoint(point) {
   return {
     x: point.x * els.annotationCanvas.width,
@@ -193,6 +206,7 @@ export function denormalizePoint(point) {
   };
 }
 
+/** @param {CanvasRenderingContext2D} ctx @param {Stroke} stroke @returns {void} */
 export function applyStrokeStyle(ctx, stroke) {
   if (stroke.tool === 'highlighter') {
     ctx.globalCompositeOperation = 'source-over';
@@ -214,6 +228,7 @@ export function applyStrokeStyle(ctx, stroke) {
   ctx.lineCap = 'round';
 }
 
+/** @param {CanvasRenderingContext2D} ctx @param {Stroke} stroke @returns {void} */
 export function drawStroke(ctx, stroke) {
   if (!stroke.points?.length) return;
   ctx.save();
@@ -406,6 +421,7 @@ export function drawStroke(ctx, stroke) {
   ctx.restore();
 }
 
+/** @returns {void} */
 export function renderAnnotations() {
   const ctx = getCurrentAnnotationCtx();
   const adpr = getAnnotationDpr();
@@ -451,6 +467,9 @@ export function renderAnnotations() {
 /**
  * Apply text markup (highlight/underline/strikethrough) from text selection.
  * Gets bounding rects of the selection within the text layer and creates annotations.
+ * @param {Selection} selection
+ * @param {string} toolValue
+ * @returns {void}
  */
 export function _applyTextMarkupFromSelection(selection, toolValue) {
   const typeMap = {
@@ -487,6 +506,7 @@ export function _applyTextMarkupFromSelection(selection, toolValue) {
   renderAnnotations();
 }
 
+/** @param {MouseEvent} e @returns {{ x: number, y: number }} */
 export function getCanvasPointFromEvent(e) {
   const rect = els.annotationCanvas.getBoundingClientRect();
   const x = ((e.clientX - rect.left) / rect.width) * els.annotationCanvas.width;
@@ -494,6 +514,7 @@ export function getCanvasPointFromEvent(e) {
   return { x, y };
 }
 
+/** @param {MouseEvent} e @returns {Promise<void>} */
 export async function beginStroke(e) {
   if (!state.adapter) return;
 
@@ -564,6 +585,7 @@ export async function beginStroke(e) {
   drawStroke(ctx, state.currentStroke);
 }
 
+/** @param {MouseEvent} e @returns {void} */
 export function moveStroke(e) {
   if (state.ocrRegionMode && state.isSelectingOcr && state.ocrSelection) {
     const p = getCanvasPointFromEvent(e);
@@ -588,6 +610,7 @@ export function moveStroke(e) {
   drawStroke(ctx, state.currentStroke);
 }
 
+/** @returns {Promise<void>} */
 export async function endStroke() {
   if (state.ocrRegionMode && state.isSelectingOcr && state.ocrSelection) {
     state.isSelectingOcr = false;
@@ -671,6 +694,7 @@ export async function endStroke() {
   renderAnnotations();
 }
 
+/** @returns {void} */
 export function undoStroke() {
   // Try undoing pro annotations first (most recent)
   const proAnns = annotationManager.getForPage(state.currentPage);
@@ -687,6 +711,7 @@ export function undoStroke() {
   renderAnnotations();
 }
 
+/** @returns {void} */
 export function clearStrokes() {
   saveStrokes([]);
   // Also clear pro annotations for current page
@@ -695,12 +720,14 @@ export function clearStrokes() {
   renderAnnotations();
 }
 
+/** @returns {void} */
 export function clearComments() {
   saveComments([]);
   renderAnnotations();
   renderCommentList();
 }
 
+/** @returns {void} */
 export function exportAnnotatedPng() {
   if (!state.adapter) return;
   const exportCanvas = document.createElement('canvas');
@@ -717,6 +744,7 @@ export function exportAnnotatedPng() {
   a.click();
 }
 
+/** @returns {void} */
 export function exportAnnotationsJson() {
   if (!state.adapter) return;
   const payload = {
@@ -736,6 +764,7 @@ export function exportAnnotationsJson() {
   URL.revokeObjectURL(url);
 }
 
+/** @param {File} file @returns {Promise<void>} */
 export async function importAnnotationsJson(file) {
   if (!state.adapter || !file) return;
 
@@ -763,6 +792,7 @@ export async function importAnnotationsJson(file) {
   }
 }
 
+/** @returns {void} */
 export function showShortcutsHelp() {
   // Use the new shortcuts modal if available, else fallback
   if (window._novaShortcuts?.openShortcuts) {
@@ -799,6 +829,7 @@ export function showShortcutsHelp() {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 }
 
+/** @returns {void} */
 export function exportAnnotationBundleJson() {
   if (!state.adapter) return;
   const pages = {};
@@ -827,6 +858,7 @@ export function exportAnnotationBundleJson() {
   URL.revokeObjectURL(url);
 }
 
+/** @param {File} file @returns {Promise<void>} */
 export async function importAnnotationBundleJson(file) {
   if (!state.adapter || !file) return;
   try {

@@ -3,7 +3,10 @@
 // Comprehensive activity logger with ring buffer, localStorage persistence,
 // performance tracking, and UI log viewer.
 
-import { state, els } from './state.js';
+import { state, els as _els } from './state.js';
+
+/** @type {Record<string, any>} */
+const els = _els;
 import { APP_VERSION, NOVAREADER_PLAN_PROGRESS_PERCENT } from './constants.js';
 import { yieldToMainThread } from './utils.js';
 import { getPerfSummary, pageRenderCache, objectUrlRegistry } from './perf.js';
@@ -439,10 +442,12 @@ const _deps = {
   getToolMode: () => 'idle',
 };
 
+/** @param {any} deps @returns {any} */
 export function initDiagnosticsDeps(deps) {
   Object.assign(_deps, deps);
 }
 
+/** @param {any} type @param {any} payload @param {any} level @returns {any} */
 export function pushDiagnosticEvent(type, payload = {}, level = 'info') {
   const event = {
     ts: new Date().toISOString(),
@@ -463,6 +468,7 @@ export function pushDiagnosticEvent(type, payload = {}, level = 'info') {
   novaLog('diagnostics', type, payload, level);
 }
 
+/** @returns {any} */
 export function clearDiagnostics() {
   state.diagnostics.events = [];
   if (els.diagnosticsStatus) {
@@ -470,6 +476,7 @@ export function clearDiagnostics() {
   }
 }
 
+/** @returns {any} */
 export function collectPerfBaseline() {
   const nav = performance.getEntriesByType('navigation')?.[0] || null;
   const longTasks = performance.getEntriesByType('longtask') || [];
@@ -512,6 +519,7 @@ export function collectPerfBaseline() {
   };
 }
 
+/** @param {any} payload @returns {any} */
 export function formatDiagnosticsForChat(payload) {
   const lines = [];
   lines.push('# NovaReader diagnostics');
@@ -546,6 +554,7 @@ export function formatDiagnosticsForChat(payload) {
   return lines.join('\n');
 }
 
+/** @returns {any} */
 export function exportDiagnostics() {
   const payload = {
     appVersion: APP_VERSION,
@@ -575,6 +584,7 @@ export function exportDiagnostics() {
   });
 }
 
+/** @returns {Promise<any>} */
 export async function verifyBundledAssets() {
   const assets = [
     { key: 'pdfRuntime', url: new URL('../../node_modules/pdfjs-dist/build/pdf.mjs', import.meta.url).href },
@@ -607,6 +617,7 @@ export async function verifyBundledAssets() {
   };
 }
 
+/** @returns {Promise<any>} */
 export async function runRuntimeSelfCheck() {
   const startedAt = performance.now();
   const report = {
@@ -654,6 +665,7 @@ export async function runRuntimeSelfCheck() {
   }, okCount === 4 ? 'info' : 'warn');
 }
 
+/** @returns {any} */
 export function setupRuntimeDiagnostics() {
   // Intercept console.warn and console.error
   _interceptConsole();

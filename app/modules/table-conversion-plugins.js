@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Table Conversion Plugins ────────────────────────────────────────────────
 // Plugin system for converting complex table templates detected in PDF pages
 // into structured table blocks for DOCX export.

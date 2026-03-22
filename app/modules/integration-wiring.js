@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module integration-wiring
  * @description Phase 7 — Integration layer.

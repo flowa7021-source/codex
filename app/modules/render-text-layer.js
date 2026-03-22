@@ -1,9 +1,13 @@
+// @ts-check
 // ─── Text Layer Rendering Sub-module ────────────────────────────────────────
 // Text layer creation/management: PDF.js TextLayer, OCR text layer,
 // inline editing, paragraph editing, and text-to-storage sync.
 // Split from render-controller.js for maintainability.
 
-import { state, els } from './state.js';
+import { state, els as _els } from './state.js';
+
+/** @type {Record<string, any>} */
+const els = _els;
 import { getPdfjsLib } from './loaders.js';
 import { loadOcrTextData } from './workspace-controller.js';
 import { setPageEdits, persistEdits } from './export-controller.js';
@@ -15,6 +19,7 @@ const _deps = {
   setOcrStatus: () => {},
 };
 
+/** @param {any} deps @returns {any} */
 export function initRenderTextLayerDeps(deps) {
   Object.assign(_deps, deps);
 }
@@ -32,10 +37,12 @@ let _activeInlineEditor = null;
 
 /** Get/set active text layer (used by render-controller for cleanup) */
 export function getActiveTextLayer() { return _activeTextLayer; }
+/** @param {any} tl @returns {any} */
 export function setActiveTextLayer(tl) { _activeTextLayer = tl; }
 
 /** Get/set active inline editor (used by render-controller for cleanup) */
 export function getActiveInlineEditor() { return _activeInlineEditor; }
+/** @param {any} ed @returns {any} */
 export function setActiveInlineEditor(ed) { _activeInlineEditor = ed; }
 
 // ─── PDF.js Annotation Layer ───────────────────────────────────────────────
@@ -127,6 +134,7 @@ export function _renderManualTextLayer(container, textContent, viewport, zoom) {
 
 // ─── Main Text Layer Render ────────────────────────────────────────────────
 
+/** @param {any} pageNum @param {any} zoom @param {any} rotation @returns {Promise<any>} */
 export async function renderTextLayer(pageNum, zoom, rotation) {
   const container = els.textLayerDiv;
   if (!container) return;
@@ -196,6 +204,7 @@ export async function renderTextLayer(pageNum, zoom, rotation) {
   await _renderOcrTextLayer(pageNum, zoom, dpr);
 }
 
+/** @param {any} pageNum @param {any} zoom @param {any} dpr @returns {Promise<any>} */
 export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
   const container = els.textLayerDiv;
   if (!container) return;
@@ -308,6 +317,7 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
 
 // ─── Inline Text Editor (Acrobat-style) ────────────────────────────────────
 
+/** @returns {any} */
 export function enableInlineTextEditing() {
   const container = els.textLayerDiv;
   if (!container) return;
@@ -319,6 +329,7 @@ export function enableInlineTextEditing() {
   container.addEventListener('dblclick', _handleTextLayerDblClick);
 }
 
+/** @returns {any} */
 export function disableInlineTextEditing() {
   const container = els.textLayerDiv;
   if (!container) return;
@@ -357,6 +368,7 @@ export function _handleTextLayerClick(e) {
   _createInlineEditor(x, y, span.textContent, span, []);
 }
 
+/** @param {any} e @returns {any} */
 export function _handleTextLayerDblClick(e) {
   const span = e.target.closest('span');
   if (!span) {
@@ -581,6 +593,7 @@ export function _reflowTextToSpans(spans, newText, _fontSize, _maxWidth) {
   }
 }
 
+/** @param {any} x @param {any} y @param {any} initialText @param {any} targetSpan @param {any} _paragraphSpans @returns {any} */
 export function _createInlineEditor(x, y, initialText, targetSpan, _paragraphSpans) {
   if (_activeInlineEditor) _activeInlineEditor.remove();
 
@@ -638,6 +651,7 @@ export function _createInlineEditor(x, y, initialText, targetSpan, _paragraphSpa
   sel.addRange(range);
 }
 
+/** @returns {any} */
 export function _syncTextLayerToStorage() {
   const container = els.textLayerDiv;
   if (!container || !state.adapter) return;

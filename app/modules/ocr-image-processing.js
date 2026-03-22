@@ -25,6 +25,7 @@ function createOcrCanvas(width, height) {
   return c;
 }
 
+/** @returns {any} */
 export function getConfusableLatinToCyrillicMap() {
   return {
     A: 'А', a: 'а', B: 'В', E: 'Е', e: 'е', K: 'К', k: 'к', M: 'М', m: 'м',
@@ -34,15 +35,18 @@ export function getConfusableLatinToCyrillicMap() {
   };
 }
 
+/** @param {any} input @returns {any} */
 export function convertLatinLookalikesToCyrillic(input) {
   const map = getConfusableLatinToCyrillicMap();
   return String(input || '').replace(/[A-Za-z]/g, (ch) => map[ch] || ch);
 }
 
+/** @param {any} text @returns {any} */
 export function hasMixedCyrillicLatinToken(text) {
   return /(?=.*[A-Za-z])(?=.*[А-Яа-яЁё])[A-Za-zА-Яа-яЁё]{2,}/.test(text || '');
 }
 
+/** @param {any} data @returns {any} */
 export function computeOtsuThreshold(data) {
   const hist = new Uint32Array(256);
   for (let i = 0; i < data.length; i += 4) {
@@ -75,6 +79,7 @@ export function computeOtsuThreshold(data) {
   return best;
 }
 
+/** @param {any} hist @param {any} percentile @param {any} total @returns {any} */
 export function countHistogramPercentile(hist, percentile, total) {
   const target = total * percentile;
   let acc = 0;
@@ -85,6 +90,7 @@ export function countHistogramPercentile(hist, percentile, total) {
   return hist.length - 1;
 }
 
+/** @param {any} text @returns {any} */
 export function scoreCyrillicWordQuality(text) {
   const words = String(text || '').toLowerCase().split(/\s+/).filter(Boolean);
   let score = 0;
@@ -98,6 +104,7 @@ export function scoreCyrillicWordQuality(text) {
   return score;
 }
 
+/** @param {any} text @returns {any} */
 export function scoreRussianBigrams(text) {
   const normalized = String(text || '').toLowerCase().replace(/[^а-яё\s]/g, ' ');
   const pairs = ['ст', 'но', 'ен', 'то', 'на', 'ов', 'ни', 'ра', 'ко', 'ал', 'пр', 'ро', 'во', 'по', 'ре', 'ос', 'от', 'та', 'го'];
@@ -109,6 +116,7 @@ export function scoreRussianBigrams(text) {
   return score;
 }
 
+/** @param {any} text @returns {any} */
 export function scoreEnglishBigrams(text) {
   const normalized = String(text || '').toLowerCase().replace(/[^a-z\s]/g, ' ');
   const pairs = ['th', 'he', 'in', 'er', 'an', 're', 'on', 'at', 'en', 'nd', 'ti', 'es', 'or', 'te', 'of', 'ed', 'is', 'it'];
@@ -120,6 +128,7 @@ export function scoreEnglishBigrams(text) {
   return score;
 }
 
+/** @param {any} imageData @returns {any} */
 export function medianDenoiseMonochrome(imageData) {
   const { width, height, data } = imageData;
   if (width < 3 || height < 3) return;
@@ -168,6 +177,7 @@ export function medianDenoiseMonochrome(imageData) {
   }
 }
 
+/** @param {any} imageData @returns {any} */
 export function morphologyCloseMonochrome(imageData) {
   const { width, height, data } = imageData;
   if (width < 3 || height < 3) return;
@@ -211,6 +221,7 @@ export function morphologyCloseMonochrome(imageData) {
   }
 }
 
+/** @param {any} imageData @returns {any} */
 export function estimateSkewAngleFromBinary(imageData) {
   const { width, height, data } = imageData;
   const darkPoints = [];
@@ -267,6 +278,7 @@ export function estimateSkewAngleFromBinary(imageData) {
   return bestAngle;
 }
 
+/** @param {any} source @param {any} angleDeg @returns {any} */
 export function rotateCanvas(source, angleDeg) {
   const rad = (angleDeg * Math.PI) / 180;
   const cos = Math.abs(Math.cos(rad));
@@ -286,6 +298,7 @@ export function rotateCanvas(source, angleDeg) {
   return out;
 }
 
+/** @param {any} reason @returns {any} */
 export function clearOcrRuntimeCaches(reason = 'manual') {
   const cacheSizeBefore = state.ocrSourceCache.size;
   for (const entry of state.ocrSourceCache.values()) {
@@ -305,6 +318,7 @@ export function clearOcrRuntimeCaches(reason = 'manual') {
   pushDiagnosticEvent('ocr.cache.clear', { reason, cacheSizeBefore });
 }
 
+/** @param {any} pageNumber @returns {any} */
 export function getOcrSourceCacheKey(pageNumber) {
   const mode = state.settings?.ocrQualityMode === 'accurate' ? 'accurate' : 'balanced';
   const rotation = Number(state.rotation || 0);
@@ -313,6 +327,7 @@ export function getOcrSourceCacheKey(pageNumber) {
   return `${doc}|${adapterType}|${pageNumber}|${rotation}|${mode}`;
 }
 
+/** @param {any} key @param {any} canvas @returns {any} */
 export function updateOcrSourceCache(key, canvas) {
   if (!key || !canvas) return;
   const now = Date.now();
@@ -373,6 +388,7 @@ export function updateOcrSourceCache(key, canvas) {
   }
 }
 
+/** @param {any} canvas @param {any} maxPixels @returns {any} */
 export function constrainOcrSourceCanvasPixels(canvas, maxPixels = OCR_SOURCE_MAX_PIXELS) {
   const totalPx = Math.max(1, canvas.width * canvas.height);
   const limitPx = Math.max(1, Number(maxPixels) || OCR_SOURCE_MAX_PIXELS);
@@ -391,6 +407,7 @@ export function constrainOcrSourceCanvasPixels(canvas, maxPixels = OCR_SOURCE_MA
   return { canvas: out, scaled: true, scale, sourcePixels: totalPx, outputPixels: width * height };
 }
 
+/** @param {any} cacheKey @returns {any} */
 export function getFreshOcrSourceCacheEntry(cacheKey) {
   if (!cacheKey) return null;
   const entry = state.ocrSourceCache.get(cacheKey);
@@ -409,6 +426,7 @@ export function getFreshOcrSourceCacheEntry(cacheKey) {
   return entry;
 }
 
+/** @param {any} pageNumber @returns {Promise<any>} */
 export async function buildOcrSourceCanvas(pageNumber) {
   const cacheKey = getOcrSourceCacheKey(pageNumber);
   const cached = getFreshOcrSourceCacheEntry(cacheKey);
@@ -479,6 +497,7 @@ export async function buildOcrSourceCanvas(pageNumber) {
   return normalized.canvas;
 }
 
+/** @param {any} pageNumber @returns {Promise<any>} */
 export async function estimatePageSkewAngle(pageNumber) {
   if (!state.adapter) return 0;
   if (typeof state.pageSkewAngles[pageNumber] === 'number') return state.pageSkewAngles[pageNumber];
@@ -506,6 +525,7 @@ export async function estimatePageSkewAngle(pageNumber) {
   return state.pageSkewPromises[pageNumber];
 }
 
+/** @param {any} sourceCanvas @param {any} relativeRect @returns {any} */
 export function cropCanvasByRelativeRect(sourceCanvas, relativeRect) {
   const sx = Math.max(0, Math.floor(sourceCanvas.width * relativeRect.x));
   const sy = Math.max(0, Math.floor(sourceCanvas.height * relativeRect.y));
@@ -518,6 +538,7 @@ export function cropCanvasByRelativeRect(sourceCanvas, relativeRect) {
   return out;
 }
 
+/** @param {any} inputCanvas @param {any} thresholdBias @param {any} mode @param {any} invert @param {any} extraScale @returns {any} */
 export function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean', invert = false, extraScale = 1) {
   const baseScale = getOcrScale() * Math.max(0.8, Math.min(1.8, extraScale));
   let targetWidth = Math.max(1, Math.floor(inputCanvas.width * baseScale));
@@ -602,6 +623,7 @@ export function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean
   return canvas;
 }
 
+/** @param {any} variants @param {any} maxCount @returns {any} */
 export function pickVariantsByBudget(variants, maxCount) {
   const list = Array.isArray(variants) ? variants : [];
   const budget = Math.max(1, Number(maxCount) || list.length || 1);
