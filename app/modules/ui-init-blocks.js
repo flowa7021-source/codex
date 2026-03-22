@@ -1,4 +1,3 @@
-// @ts-check
 // ═══════════════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — UI Init Blocks (extracted from app.js)
 // Continuous Scroll, Batch OCR UI, Drag & Drop + Hotkeys, Tab Bar,
@@ -6,6 +5,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { safeTimeout } from './safe-timers.js';
+
+/** @type {any} */
+const _win = window;
 
 // ── Continuous Scroll Mode ──────────────────────────────────────────────────
 function initContinuousScroll(deps) {
