@@ -568,18 +568,14 @@ test.describe('G — Export/print flow', () => {
     await expect(printBtn).toBeEnabled();
   });
 
-  test('clicking print opens print modal dialog', async ({ page }) => {
+  test('Ctrl+P opens print modal dialog', async ({ page }) => {
     await openApp(page);
-    await page.locator('[data-tool="tools"]').click();
-    await page.waitForTimeout(300);
-    // Override window.print to prevent actual print dialog
-    await page.evaluate(() => { window.print = () => {}; });
-    await page.locator('#printPage').click();
+    // Ctrl+P triggers the print dialog modal (not #printPage click which uses printCanvasPage)
+    await page.keyboard.press('Control+p');
     await page.waitForTimeout(500);
     const printModal = page.locator('#printModal');
     const isOpen = await printModal.evaluate(el =>
       el.classList.contains('open') ||
-      el.style.display !== 'none' ||
       el.getAttribute('aria-hidden') === 'false'
     );
     expect(isOpen).toBe(true);
@@ -587,12 +583,8 @@ test.describe('G — Export/print flow', () => {
 
   test('print modal has page range options', async ({ page }) => {
     await openApp(page);
-    await page.locator('[data-tool="tools"]').click();
-    await page.waitForTimeout(300);
-    await page.evaluate(() => { window.print = () => {}; });
-    await page.locator('#printPage').click();
+    await page.keyboard.press('Control+p');
     await page.waitForTimeout(500);
-    // Check for range radio buttons
     const rangeOptions = page.locator('input[name="printRange"]');
     const count = await rangeOptions.count();
     expect(count).toBeGreaterThanOrEqual(2);
@@ -600,10 +592,7 @@ test.describe('G — Export/print flow', () => {
 
   test('print modal has scale and orientation selectors', async ({ page }) => {
     await openApp(page);
-    await page.locator('[data-tool="tools"]').click();
-    await page.waitForTimeout(300);
-    await page.evaluate(() => { window.print = () => {}; });
-    await page.locator('#printPage').click();
+    await page.keyboard.press('Control+p');
     await page.waitForTimeout(500);
     await expect(page.locator('#printScale')).toBeVisible();
     await expect(page.locator('#printOrientation')).toBeVisible();
@@ -611,17 +600,13 @@ test.describe('G — Export/print flow', () => {
 
   test('print modal can be closed with cancel button', async ({ page }) => {
     await openApp(page);
-    await page.locator('[data-tool="tools"]').click();
-    await page.waitForTimeout(300);
-    await page.evaluate(() => { window.print = () => {}; });
-    await page.locator('#printPage').click();
+    await page.keyboard.press('Control+p');
     await page.waitForTimeout(500);
     await page.locator('#printCancel').click();
     await page.waitForTimeout(300);
     const printModal = page.locator('#printModal');
     const isClosed = await printModal.evaluate(el =>
       !el.classList.contains('open') ||
-      el.style.display === 'none' ||
       el.getAttribute('aria-hidden') === 'true'
     );
     expect(isClosed).toBe(true);
