@@ -13,7 +13,7 @@
 
 // Lazily resolved — docx is in a separate chunk, loaded on first use
 let _AlignmentType = { LEFT: 'left', CENTER: 'center', RIGHT: 'right', JUSTIFIED: 'justified' };
-try { import('docx').then(m => { _AlignmentType = m.AlignmentType || _AlignmentType; }); } catch (_e) { /* fallback to defaults */ }
+import('docx').then(m => { _AlignmentType = m.AlignmentType || _AlignmentType; }).catch(() => { /* fallback to defaults */ });
 
 // ---------------------------------------------------------------------------
 // Base class — TableConversionPlugin

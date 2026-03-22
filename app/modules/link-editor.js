@@ -375,6 +375,6 @@ export class LinkEditor {
     addLink(pdfBytes, this._deps.getPageNum(), rect, { url }).then(blob => {
       this._deps.onApply(blob);
       this.close();
-    });
+    }).catch(err => console.warn('[link-editor] error:', err?.message));
   }
 }

@@ -70,7 +70,7 @@ export function bootstrapAdvancedTools(ctx) {
 
   // 2. Permission enforcer (reads Encrypt dict from raw bytes)
   // Async — resolves in background; non-blocking
-  _initPermissions(ctx).then(enforcer => { handles.permEnforcer = enforcer; });
+  _initPermissions(ctx).then(enforcer => { handles.permEnforcer = enforcer; }).catch(err => console.warn('[integration] error:', err?.message));
 
   // 3. Toolbar buttons
   _addToolbarButtons(ctx, handles);
@@ -301,7 +301,7 @@ function _addToolbarButtons(ctx, handles) {
       getPdfBytes: () => ctx.pdfBytes,
       onApply: (result) => {
         if (result.blob) {
-          result.blob.arrayBuffer().then(buf => ctx.onPdfModified(new Uint8Array(buf)));
+          result.blob.arrayBuffer().then(buf => ctx.onPdfModified(new Uint8Array(buf))).catch(err => console.warn('[integration] error:', err?.message));
         }
       },
       onCancel: () => {},
@@ -315,7 +315,7 @@ function _addToolbarButtons(ctx, handles) {
     const editor = new OutlineEditor(ctx.container, {
       getPdfBytes: () => ctx.pdfBytes,
       onApply: (blob) => {
-        blob.arrayBuffer().then(buf => ctx.onPdfModified(new Uint8Array(buf)));
+        blob.arrayBuffer().then(buf => ctx.onPdfModified(new Uint8Array(buf))).catch(err => console.warn('[integration] error:', err?.message));
       },
       onNavigate: (pageNum) => {
         ctx.eventBus?.dispatchEvent?.(new CustomEvent('go-to-page', { detail: { pageNum } }));

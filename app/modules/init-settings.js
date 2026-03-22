@@ -35,7 +35,7 @@ export function initSettings(deps) {
   // ─── DjVu data import ────────────────────────────────────────────────────
   async function importDjvuDataJson(file) {
     if (!state.adapter || state.adapter.type !== 'djvu') {
-      els.searchStatus.textContent = 'Импорт DjVu data доступен только для DjVu';
+      if (els.searchStatus) els.searchStatus.textContent = 'Импорт DjVu data доступен только для DjVu';
       return;
     }
 
@@ -53,10 +53,10 @@ export function initSettings(deps) {
       await renderOutline();
       await renderPagePreviews();
       await renderCurrentPage();
-      els.searchStatus.textContent = 'DjVu data JSON импортирован';
+      if (els.searchStatus) els.searchStatus.textContent = 'DjVu data JSON импортирован';
     } catch (err) {
       console.warn('[app] error:', err?.message);
-      els.searchStatus.textContent = 'Ошибка импорта DjVu data JSON';
+      if (els.searchStatus) els.searchStatus.textContent = 'Ошибка импорта DjVu data JSON';
     }
   }
 

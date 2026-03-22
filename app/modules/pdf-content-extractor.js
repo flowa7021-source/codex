@@ -493,6 +493,7 @@ async function processOperatorList(opList, pdfPage, viewport) {
             pngData = await new Promise(resolve => {
 // @ts-ignore
               canvas.toBlob(blob => {
+                if (!blob) { resolve(null); return; }
                 blob.arrayBuffer().then(ab => resolve(new Uint8Array(ab)));
               }, 'image/png');
             });

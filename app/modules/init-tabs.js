@@ -75,9 +75,10 @@ export function initTabs(deps) {
   };
 
   // Override fileInput handler: remove original, add tab-aware one
-  if (els.fileInput._nrChangeHandler) {
+  if (els.fileInput?._nrChangeHandler) {
     els.fileInput.removeEventListener('change', els.fileInput._nrChangeHandler);
   }
+  if (!els.fileInput) return;
   els.fileInput._nrChangeHandler = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
