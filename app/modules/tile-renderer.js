@@ -38,6 +38,12 @@ const DEFAULT_TILE_SIZE = 2048;
 /** @type {Map<string, TileCacheEntry>} */
 const _tileCache = new Map();
 
+/** Maximum number of cached tiles to prevent unbounded memory growth. */
+const MAX_TILE_CACHE_ENTRIES = 32;
+
+/** Maximum total pixels across all cached tiles (~128 MB at 4 bytes/pixel). */
+const MAX_TILE_CACHE_PIXELS = 32_000_000;
+
 /**
  * Build a unique cache key for a tile.
  * @param {number} page
@@ -146,6 +152,7 @@ export async function renderTiles(adapter, page, canvas, { zoom, rotation }, scr
           .then((tileCanvas) => {
             if (!tileCanvas) return;
             ctx.drawImage(tileCanvas, tx, ty);
+            _evictTileCacheIfNeeded();
             _tileCache.set(key, { canvas: tileCanvas, col, row, zoom, rotation, page });
             tilesRendered++;
           })
@@ -170,6 +177,33 @@ export async function renderTiles(adapter, page, canvas, { zoom, rotation }, scr
     tilesCached,
     cacheSize: _tileCache.size,
   });
+}
+
+/**
+ * Evict oldest entries when tile cache exceeds size or pixel limits.
+ */
+function _evictTileCacheIfNeeded() {
+  // Check entry count
+  while (_tileCache.size >= MAX_TILE_CACHE_ENTRIES) {
+    const oldest = _tileCache.keys().next().value;
+    const entry = _tileCache.get(oldest);
+    if (entry?.canvas) { entry.canvas.width = 0; entry.canvas.height = 0; }
+    _tileCache.delete(oldest);
+  }
+  // Check total pixels
+  let totalPx = 0;
+  for (const entry of _tileCache.values()) {
+    totalPx += (entry.canvas?.width || 0) * (entry.canvas?.height || 0);
+  }
+  while (totalPx > MAX_TILE_CACHE_PIXELS && _tileCache.size > 0) {
+    const oldest = _tileCache.keys().next().value;
+    const entry = _tileCache.get(oldest);
+    if (entry?.canvas) {
+      totalPx -= entry.canvas.width * entry.canvas.height;
+      entry.canvas.width = 0; entry.canvas.height = 0;
+    }
+    _tileCache.delete(oldest);
+  }
 }
 
 /**

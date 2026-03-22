@@ -288,8 +288,12 @@ export async function startBackgroundOcrScan(reason = 'auto') {
           indexOcrPage(pageNum, corrected);
           recordSuccessfulOperation();
 
-          if (pageNum === state.currentPage && !/** @type {any} */ (els.pageText).value) {
-            /** @type {any} */ (els.pageText).value = corrected;
+          if (pageNum === state.currentPage) {
+            if (!/** @type {any} */ (els.pageText).value) {
+              /** @type {any} */ (els.pageText).value = corrected;
+            }
+            // Refresh text layer for current page so OCR results are visible
+            /** @type {any} */ (_deps).renderTextLayer(state.currentPage, state.zoom, state.rotation).catch((err) => { console.warn('[ocr] text layer refresh:', err?.message); });
           }
         } else {
           consecutiveEmpty++;

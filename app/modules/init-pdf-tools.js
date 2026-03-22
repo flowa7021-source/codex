@@ -159,6 +159,18 @@ export function initPdfTools(deps) {
     e.target.value = '';
   });
 
+  // ── Text Alignment ──────────────────────────────────────────────────────
+  for (const [btnId, align] of [['blockAlignLeft', 'left'], ['blockAlignCenter', 'center'], ['blockAlignRight', 'right']]) {
+    const btn = document.getElementById(btnId);
+    if (btn) {
+      btn.addEventListener('click', () => {
+        if (!blockEditor.active || !blockEditor.selectedBlock) return;
+        blockEditor.updateBlockStyle(state.currentPage, blockEditor.selectedBlock, { align });
+        blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
+      });
+    }
+  }
+
   // ── Watermark ──────────────────────────────────────────────────────────
   safeOn(els.addWatermark, 'click', async () => {
     if (!state.adapter) return;

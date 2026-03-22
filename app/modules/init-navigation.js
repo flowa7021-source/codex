@@ -74,8 +74,9 @@ export function initNavigation(deps) {
         }
       } catch (_e) { /* keep current zoom */ }
     }
-    await renderPagePreviews();
     await renderCurrentPage();
+    // Render thumbnails in background after main page is visible
+    renderPagePreviews().catch((err) => { console.warn('[nav] preview error:', err?.message); });
     if (state.settings?.backgroundOcr) scheduleBackgroundOcrScan('save-settings', 600);
   });
 

@@ -193,6 +193,8 @@ function initBatchOcrUI(deps) {
           ? `OCR отменён: обработано ${result.processed} из ${result.total} страниц`
           : `OCR завершён: ${result.processed} страниц`);
         pushDiagnosticEvent('batch-ocr.done', { processed: result.processed, total: result.total });
+        // Refresh current page to show text layer with OCR results
+        renderCurrentPage();
       } catch (err) {
         if (progressBar) progressBar.style.display = 'none';
         setBatchStatus(`Ошибка OCR: ${err?.message || 'неизвестная'}`);

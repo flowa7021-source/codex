@@ -7,6 +7,7 @@ import { state, els } from './state.js';
 import { loadImage } from './utils.js';
 import { ensurePdfJs, ensureDjVuJs } from './loaders.js';
 import { clearPageRenderCache, revokeAllTrackedUrls, recordPerfMetric } from './perf.js';
+import { _ocrWordCache } from './render-text-layer.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
 import { parseEpub, EpubAdapter } from './epub-adapter.js';
 import { progressiveLoader } from './progressive-loader.js';
@@ -16,6 +17,7 @@ import { toastInfo } from './toast.js';
 import { announce } from './a11y.js';
 import { resetTesseractAvailability } from './tesseract-adapter.js';
 import { bumpRenderGeneration } from './render-controller.js';
+import { invalidateTiles } from './tile-renderer.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
@@ -210,6 +212,8 @@ const _openFileImpl = async function openFileImpl(file) {
   bumpRenderGeneration();
   revokeCurrentObjectUrl();
   clearPageRenderCache();
+  invalidateTiles(); // Free GPU memory from tile-rendered pages
+  _ocrWordCache.clear(); // Free OCR word-level data from previous document
   revokeAllTrackedUrls();
   clearAllTimers(); // Q0.3: prevent timer leaks from previous document
   state.file = file;
