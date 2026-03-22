@@ -1,3 +1,4 @@
+// @ts-check
 // ═══════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — Professional PDF Tools
 // Header/Footer, Bates Numbering, Flatten, Accessibility Checker
@@ -83,7 +84,7 @@ export async function addHeaderFooter(pdfBytes, options = {}) {
     drawText(page, resolveVars(footerRight, pageNum), width - margin, footerY, 'right');
   }
 
-  return new Blob([await pdfDoc.save()], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (await pdfDoc.save())], { type: 'application/pdf' });
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -133,7 +134,7 @@ export async function addBatesNumbering(pdfBytes, options = {}) {
   }
 
   return {
-    blob: new Blob([await pdfDoc.save()], { type: 'application/pdf' }),
+    blob: new Blob([/** @type {any} */ (await pdfDoc.save())], { type: 'application/pdf' }),
     startNum,
     endNum: currentNum - 1,
     totalPages: pages.length,
@@ -187,7 +188,7 @@ export async function flattenPdf(pdfBytes, options = {}) {
   }
 
   return {
-    blob: new Blob([await pdfDoc.save()], { type: 'application/pdf' }),
+    blob: new Blob([/** @type {any} */ (await pdfDoc.save())], { type: 'application/pdf' }),
     formsFlattened,
     annotationsFlattened,
   };
@@ -388,7 +389,7 @@ export async function autoFixAccessibility(pdfBytes, fixes = {}) {
   } catch (err) { /* ignore */ console.warn('[pdf-pro-tools] MarkInfo fix:', err?.message); }
 
   return {
-    blob: new Blob([await pdfDoc.save()], { type: 'application/pdf' }),
+    blob: new Blob([/** @type {any} */ (await pdfDoc.save())], { type: 'application/pdf' }),
     fixCount,
   };
 }
@@ -437,5 +438,5 @@ export async function cropPdfPages(pdfBytes, cropBox, pageRange = null) {
     page.setCropBox(x, y, width, height);
   }
 
-  return new Blob([await pdfDoc.save()], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (await pdfDoc.save())], { type: 'application/pdf' });
 }

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Batch Conversion System ────────────────────────────────────────────────
 // Multi-file conversion queue with progress tracking and ZIP output.
 
@@ -43,8 +44,8 @@ export class BatchConverter {
     for (const file of files) {
       this.queue.push({
         file,
-        format,
-        status: 'pending',
+        format: /** @type {any} */ (format),
+        status: /** @type {any} */ ('pending'),
         progress: 0,
         result: null,
         error: null,

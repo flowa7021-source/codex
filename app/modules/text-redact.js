@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module text-redact
  * @description Secure text redaction for PDF documents.
@@ -50,10 +51,10 @@ export const REDACTION_PATTERNS = {
  * @param {Uint8Array|ArrayBuffer} pdfBytes
  * @param {string|RegExp} searchTerm
  * @param {Object} [opts]
- * @param {{ r:number, g:number, b:number }} [opts.color]  – redaction fill color
- * @param {number[]} [opts.pages]         – 1-based page numbers (default: all)
+ * @param {{ r:number, g:number, b:number }} [opts.color]  - redaction fill color
+ * @param {number[]} [opts.pages]         - 1-based page numbers (default: all)
  * @param {boolean}  [opts.caseSensitive=false]
- * @param {string}   [opts.replacementText]  – optional text drawn over redaction
+ * @param {string}   [opts.replacementText]  - optional text drawn over redaction
  * @returns {Promise<{ blob: Blob, count: number, locations: Array }>}
  */
 export async function redactBySearch(pdfBytes, searchTerm, opts = {}) {
@@ -64,7 +65,7 @@ export async function redactBySearch(pdfBytes, searchTerm, opts = {}) {
   const locations = await _findTextLocations(data, searchTerm, opts);
 
   if (locations.length === 0) {
-    return { blob: new Blob([data], { type: 'application/pdf' }), count: 0, locations: [] };
+    return { blob: new Blob([/** @type {any} */ (data)], { type: 'application/pdf' }), count: 0, locations: [] };
   }
 
   // 2. Apply redactions via pdf-lib
@@ -105,7 +106,7 @@ export async function redactBySearch(pdfBytes, searchTerm, opts = {}) {
 
   const saved = await pdfDoc.save();
   return {
-    blob: new Blob([saved], { type: 'application/pdf' }),
+    blob: new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' }),
     count: locations.length,
     locations,
   };
@@ -119,8 +120,8 @@ export async function redactBySearch(pdfBytes, searchTerm, opts = {}) {
  * Redact all matches of a pre-built pattern (SSN, email, phone, etc.).
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {string} patternName – key from REDACTION_PATTERNS
- * @param {Object} [opts]      – same as redactBySearch opts
+ * @param {string} patternName - key from REDACTION_PATTERNS
+ * @param {Object} [opts]      - same as redactBySearch opts
  * @returns {Promise<{ blob: Blob, count: number, locations: Array }>}
  */
 export async function redactByPattern(pdfBytes, patternName, opts = {}) {
@@ -139,8 +140,8 @@ export async function redactByPattern(pdfBytes, patternName, opts = {}) {
  * Redact a rectangular region on a specific page.
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {number} pageNum – 1-based
- * @param {{ x: number, y: number, width: number, height: number }} rect – PDF coords (bottom-left origin)
+ * @param {number} pageNum - 1-based
+ * @param {{ x: number, y: number, width: number, height: number }} rect - PDF coords (bottom-left origin)
  * @param {Object} [opts]
  * @param {{ r:number, g:number, b:number }} [opts.color]
  * @returns {Promise<Blob>}
@@ -163,7 +164,7 @@ export async function redactByRegion(pdfBytes, pageNum, rect, opts = {}) {
   });
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -175,7 +176,7 @@ export async function redactByRegion(pdfBytes, pageNum, rect, opts = {}) {
  * Returns a preview of what would be redacted.
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {string[]} [patternNames] – keys from REDACTION_PATTERNS (default: all)
+ * @param {string[]} [patternNames] - keys from REDACTION_PATTERNS (default: all)
  * @returns {Promise<Array<{ pattern: string, count: number, samples: string[] }>>}
  */
 export async function scanForSensitiveData(pdfBytes, patternNames) {
@@ -218,9 +219,9 @@ export class RedactionEditor {
   /**
    * @param {HTMLElement} container
    * @param {Object} deps
-   * @param {Function} deps.onApply   – (result: { blob, count }) => void
+   * @param {Function} deps.onApply   - (result: { blob, count }) => void
    * @param {Function} [deps.onCancel]
-   * @param {Function} deps.getPdfBytes – () => Uint8Array
+   * @param {Function} deps.getPdfBytes - () => Uint8Array
    */
   constructor(container, deps) {
     this._container = container;

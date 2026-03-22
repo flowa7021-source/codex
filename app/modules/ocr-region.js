@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Region Sub-module ──────────────────────────────────────────────────
 // Region-based OCR: runOcrOnRectNow, runOcrOnRect, runOcrForCurrentPage,
 // extractTextForPage, background OCR scan, and batch management.
@@ -54,10 +55,10 @@ export async function runOcrOnRectNow(rect) {
       pushDiagnosticEvent('ocr.manual.hang-warning', { taskId, thresholdMs: OCR_HANG_WARN_MS, page: state.currentPage }, 'warn');
     }, OCR_HANG_WARN_MS);
     const rel = {
-      x: rect.x / Math.max(1, els.canvas.width),
-      y: rect.y / Math.max(1, els.canvas.height),
-      w: rect.w / Math.max(1, els.canvas.width),
-      h: rect.h / Math.max(1, els.canvas.height),
+      x: rect.x / Math.max(1, /** @type {any} */ (els.canvas).width),
+      y: rect.y / Math.max(1, /** @type {any} */ (els.canvas).height),
+      w: rect.w / Math.max(1, /** @type {any} */ (els.canvas).width),
+      h: rect.h / Math.max(1, /** @type {any} */ (els.canvas).height),
     };
 
     const ocrPageCanvas = await buildOcrSourceCanvas(state.currentPage);
@@ -87,7 +88,7 @@ export async function runOcrOnRectNow(rect) {
       const confidence = computeOcrConfidence(corrected, []);
       // Word-level confidence scoring
       const qualitySummary = getPageQualitySummary(corrected, getOcrLang());
-      els.pageText.value = corrected;
+      /** @type {any} */ (els.pageText).value = corrected;
       indexOcrPage(state.currentPage, corrected);
       // Persist to IndexedDB
       if (state.docName) {
@@ -101,7 +102,7 @@ export async function runOcrOnRectNow(rect) {
         pushDiagnosticEvent('ocr.manual.slow', { taskId, totalMs, page: state.currentPage }, 'warn');
       }
       // Refresh text layer with newly recognized word boxes
-      _deps.renderTextLayer(state.currentPage, state.zoom, state.rotation).catch((err) => { console.warn('[ocr] error:', err?.message); });
+      /** @type {any} */ (_deps).renderTextLayer(state.currentPage, state.zoom, state.rotation).catch((err) => { console.warn('[ocr] error:', err?.message); });
     } else {
       recordPerfMetric('ocrTimes', totalMs);
       setOcrStatus(`OCR: текст не найден (${totalMs}мс)`);
@@ -134,7 +135,7 @@ export async function runOcrOnRect(rect, reason = 'manual') {
 
 export async function runOcrForCurrentPage() {
   if (!state.adapter) return;
-  await runOcrOnRect({ x: 0, y: 0, w: els.canvas.width, h: els.canvas.height }, 'full-page');
+  await runOcrOnRect({ x: 0, y: 0, w: /** @type {any} */ (els.canvas).width, h: /** @type {any} */ (els.canvas).height }, 'full-page');
 }
 
 export async function extractTextForPage(pageNumber) {
@@ -280,8 +281,8 @@ export async function startBackgroundOcrScan(reason = 'auto') {
           indexOcrPage(pageNum, corrected);
           recordSuccessfulOperation();
 
-          if (pageNum === state.currentPage && !els.pageText.value) {
-            els.pageText.value = corrected;
+          if (pageNum === state.currentPage && !/** @type {any} */ (els.pageText).value) {
+            /** @type {any} */ (els.pageText).value = corrected;
           }
         } else {
           consecutiveEmpty++;

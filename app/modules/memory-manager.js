@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Memory Manager ─────────────────────────────────────────────────────────
 // ObjectURL lifecycle, canvas pooling, memory pressure monitoring.
 
@@ -27,7 +28,7 @@ export function initMemoryManager() {
   cleanupTimer = safeInterval(cleanupStaleUrls, URL_CLEANUP_INTERVAL, { scope: 'app' });
 
   // Memory pressure monitoring (if available)
-  if (typeof performance !== 'undefined' && performance.measureUserAgentSpecificMemory) {
+  if (typeof performance !== 'undefined' && /** @type {any} */ (performance).measureUserAgentSpecificMemory) {
     monitorMemory();
   }
 }
@@ -138,10 +139,10 @@ export function getMemoryStats() {
   };
 
   // JS heap info (Chrome only)
-  if (performance.memory) {
-    stats.jsHeapUsed = Math.round(performance.memory.usedJSHeapSize / 1048576);
-    stats.jsHeapTotal = Math.round(performance.memory.totalJSHeapSize / 1048576);
-    stats.jsHeapLimit = Math.round(performance.memory.jsHeapSizeLimit / 1048576);
+  if (/** @type {any} */ (performance).memory) {
+    stats.jsHeapUsed = Math.round(/** @type {any} */ (performance).memory.usedJSHeapSize / 1048576);
+    stats.jsHeapTotal = Math.round(/** @type {any} */ (performance).memory.totalJSHeapSize / 1048576);
+    stats.jsHeapLimit = Math.round(/** @type {any} */ (performance).memory.jsHeapSizeLimit / 1048576);
   }
 
   return stats;
@@ -161,8 +162,8 @@ export function forceCleanup() {
  */
 async function monitorMemory() {
   try {
-    if (performance.memory) {
-      const usedMB = performance.memory.usedJSHeapSize / 1048576;
+    if (/** @type {any} */ (performance).memory) {
+      const usedMB = /** @type {any} */ (performance).memory.usedJSHeapSize / 1048576;
       if (usedMB > MEMORY_WARNING_MB && !memoryWarningShown) {
         memoryWarningShown = true;
         window.dispatchEvent(new CustomEvent('memory-warning', {

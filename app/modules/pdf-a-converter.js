@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF/A Converter ────────────────────────────────────────────────────────
 // Convert PDF to PDF/A-2b compliant format via pdf-lib metadata injection.
 
@@ -111,7 +112,7 @@ export async function convertToPdfA(pdfBytes, options = {}) {
 
   const saved = await pdfDoc.save();
   return {
-    blob: new Blob([saved], { type: 'application/pdf' }),
+    blob: new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' }),
     report,
   };
 }

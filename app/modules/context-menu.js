@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Context Menu System ────────────────────────────────────────────────────
 // Custom right-click context menus for the viewer, annotations, and thumbnails.
 
@@ -117,17 +118,17 @@ function onKeyDown(e) {
 export function initContextMenu() {
   document.addEventListener('contextmenu', (e) => {
     // Only intercept within app-shell
-    if (!e.target.closest('.app-shell')) return;
+    if (!/** @type {any} */ (e.target).closest('.app-shell')) return;
 
     // Allow default context menu on text inputs
-    if (e.target.matches('input, textarea, [contenteditable]')) return;
+    if (/** @type {any} */ (e.target).matches('input, textarea, [contenteditable]')) return;
 
     e.preventDefault();
 
     const target = e.target;
     const items = buildContextItems(target);
     if (items.length === 0) return;
-    showContextMenu(e.clientX, e.clientY, items);
+    showContextMenu(e.clientX, e.clientY, /** @type {any} */ (items));
   });
 
   document.addEventListener('click', (e) => {

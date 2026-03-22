@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module bates-numbering
  * @description Professional Bates numbering / page stamps for legal documents.
@@ -105,7 +106,7 @@ export async function applyBatesNumbering(pdfBytes, opts = {}) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +166,7 @@ export async function applyPageStamp(pdfBytes, stampText, opts = {}) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------

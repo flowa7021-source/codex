@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module outline-editor
  * @description PDF bookmark / outline tree editor.
@@ -27,9 +28,9 @@ import { getDocument } from 'pdfjs-dist/build/pdf.mjs';
 /**
  * @typedef {Object} OutlineItem
  * @property {string}        title
- * @property {number}        pageNum    – 1-based destination page
+ * @property {number}        pageNum    - 1-based destination page
  * @property {OutlineItem[]} children
- * @property {boolean}       [open=true] – expanded by default
+ * @property {boolean}       [open=true] - expanded by default
  */
 
 // ---------------------------------------------------------------------------
@@ -80,7 +81,7 @@ export async function writeOutline(pdfBytes, outlineTree) {
 
   if (outlineTree.length === 0) {
     const saved = await pdfDoc.save();
-    return new Blob([saved], { type: 'application/pdf' });
+    return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
   }
 
   // Build new outline dict tree
@@ -88,7 +89,7 @@ export async function writeOutline(pdfBytes, outlineTree) {
   catalog.set(PDFName.of('Outlines'), outlinesRef);
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -101,8 +102,8 @@ export async function writeOutline(pdfBytes, outlineTree) {
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
  * @param {Object} [opts]
- * @param {number} [opts.minFontSize=14]  – minimum font size to consider a heading
- * @param {number} [opts.maxDepth=3]      – maximum nesting depth
+ * @param {number} [opts.minFontSize=14]  - minimum font size to consider a heading
+ * @param {number} [opts.maxDepth=3]      - maximum nesting depth
  * @returns {Promise<OutlineItem[]>}
  */
 export async function autoGenerateOutline(pdfBytes, opts = {}) {
@@ -145,9 +146,9 @@ export class OutlineEditor {
   /**
    * @param {HTMLElement} container
    * @param {Object} deps
-   * @param {Function} deps.getPdfBytes   – () => Uint8Array
-   * @param {Function} deps.onApply       – (blob: Blob) => void
-   * @param {Function} [deps.onNavigate]  – (pageNum: number) => void
+   * @param {Function} deps.getPdfBytes   - () => Uint8Array
+   * @param {Function} deps.onApply       - (blob: Blob) => void
+   * @param {Function} [deps.onNavigate]  - (pageNum: number) => void
    * @param {Function} [deps.onCancel]
    */
   constructor(container, deps) {

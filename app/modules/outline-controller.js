@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * outline-controller.js
  * ---------------------
@@ -104,7 +105,7 @@ export async function renderOutline() {
 export function updatePreviewSelection() {
   const buttons = els.pagePreviewList.querySelectorAll('button[data-page]');
   buttons.forEach((btn) => {
-    const page = Number(btn.dataset.page);
+    const page = Number(/** @type {HTMLElement} */ (btn).dataset.page);
     btn.classList.toggle('active', page === state.currentPage);
   });
 }
@@ -123,7 +124,7 @@ export async function _renderDeferredPreviews(from, to) {
   if (!state.adapter) return;
   const buttons = els.pagePreviewList.querySelectorAll('button[data-page]');
   for (const btn of buttons) {
-    const page = Number(btn.dataset.page);
+    const page = Number(/** @type {HTMLElement} */ (btn).dataset.page);
     if (page < from || page > to) continue;
     const canvas = btn.querySelector('canvas');
     if (!canvas || canvas.dataset.needsRender !== '1') continue;

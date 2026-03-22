@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Library Loaders ────────────────────────────────────────────────────────
 //
 // Import strategy:
@@ -93,7 +94,7 @@ export async function ensureDjVuJs() {
       await new Promise((resolve, reject) => {
         const existing = document.querySelector('script[data-djvu-runtime="1"]');
         if (existing) {
-          if (window.DjVu) {
+          if (/** @type {any} */ (window).DjVu) {
             resolve();
           } else {
             existing.addEventListener('load', () => resolve(), { once: true });
@@ -111,11 +112,11 @@ export async function ensureDjVuJs() {
         document.head.appendChild(script);
       });
 
-      if (!window.DjVu) {
+      if (!/** @type {any} */ (window).DjVu) {
         throw new Error('DjVu runtime не инициализирован');
       }
 
-      djvuLib = window.DjVu;
+      djvuLib = /** @type {any} */ (window).DjVu;
       return djvuLib;
     } catch (err) {
       console.warn('[loaders] DjVu load error:', err?.message);

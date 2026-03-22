@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Pipeline Variants Sub-module ────────────────────────────────────────
 // Variant generation, preprocessing pipeline, recognition loop, and
 // the main runOcrOnPreparedCanvas function.
@@ -51,10 +52,10 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   if (tesseractAvail) {
     const initOk = await initTesseract(lang === 'auto' ? 'auto' : lang);
     const tessStatus = getTesseractStatus();
-    pushDiagnosticEvent('ocr.tesseract.init', { available: true, initialized: initOk, lang, failCount: tessStatus.initFailCount, lastError: tessStatus.lastError || undefined });
+    pushDiagnosticEvent('ocr.tesseract.init', { available: true, initialized: initOk, lang, failCount: /** @type {any} */ (tessStatus).initFailCount, lastError: /** @type {any} */ (tessStatus).lastError || undefined });
     if (!initOk) {
-      pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-init-failed', lang, ms: Math.round(performance.now() - startedAt), lastError: tessStatus.lastError || undefined });
-      setOcrStatus(`OCR: ошибка инициализации движка (попытка ${tessStatus.initFailCount}/3)`);
+      pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-init-failed', lang, ms: Math.round(performance.now() - startedAt), lastError: /** @type {any} */ (tessStatus).lastError || undefined });
+      setOcrStatus(`OCR: ошибка инициализации движка (попытка ${/** @type {any} */ (tessStatus).initFailCount}/3)`);
       return '';
     }
   } else {

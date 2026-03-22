@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Layout Controller ────────────────────────────────────────────────────────
 // UI layout persistence, resizable panels, drag-and-drop, and annotation event setup.
 // Extracted from app.js as part of module decomposition.
@@ -122,9 +123,9 @@ export function applyResizableLayoutState() {
   const pageAreaPx = Number(localStorage.getItem(uiLayoutKey('pageAreaPx')) || 0);
   const safeSidebar = Math.max(180, Math.min(360, sidebarWidth));
   const safePage = Math.max(520, Math.min(3200, pageAreaPx || 0));
-  document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${safeSidebar}px`);
+  /** @type {any} */ (document.querySelector('.app-shell'))?.style.setProperty('--sidebar-width', `${safeSidebar}px`);
   if (pageAreaPx > 0) {
-    document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${safePage}px`);
+    /** @type {any} */ (document.querySelector('.viewer-area'))?.style.setProperty('--page-area-height', `${safePage}px`);
   }
 }
 
@@ -196,7 +197,7 @@ export function setupResizableLayout() {
       const rounded = Math.round(safe);
       const val = String(rounded);
       debouncedSaveSidebar(val);
-      appShell.style.setProperty('--sidebar-width', `${rounded}px`);
+      /** @type {any} */ (appShell).style.setProperty('--sidebar-width', `${rounded}px`);
       showResizeTooltip(`${rounded}px`, e.clientX, e.clientY);
     }, 32);
     els.sidebarResizeHandle.addEventListener('pointerdown', (e) => {
@@ -211,7 +212,7 @@ export function setupResizableLayout() {
         els.sidebarResizeHandle.classList.remove('active');
         hideResizeTooltip();
         // Sync persisted value to settings state
-        const cur = parseInt(appShell?.style.getPropertyValue('--sidebar-width'), 10);
+        const cur = parseInt(/** @type {any} */ (appShell)?.style.getPropertyValue('--sidebar-width'), 10);
         if (cur && state.settings) {
           state.settings.uiSidebarWidth = Math.max(160, Math.min(360, cur));
         }
@@ -235,7 +236,7 @@ export function setupResizableLayout() {
       const rounded = Math.round(safePageHeight);
       const val = String(rounded);
       debouncedSavePage(val);
-      viewerArea.style.setProperty('--page-area-height', `${rounded}px`);
+      /** @type {any} */ (viewerArea).style.setProperty('--page-area-height', `${rounded}px`);
       showResizeTooltip(`${rounded}px`, e.clientX, e.clientY);
     }, 32);
     els.canvasResizeHandle.addEventListener('pointerdown', (e) => {
@@ -250,7 +251,7 @@ export function setupResizableLayout() {
         els.canvasResizeHandle.classList.remove('active');
         hideResizeTooltip();
         // Sync persisted value to settings state
-        const cur = parseInt(viewerArea?.style.getPropertyValue('--page-area-height'), 10);
+        const cur = parseInt(/** @type {any} */ (viewerArea)?.style.getPropertyValue('--page-area-height'), 10);
         if (cur && state.settings) {
           state.settings.uiPageAreaPx = Math.max(520, Math.min(2600, cur));
         }
@@ -293,7 +294,7 @@ export function setupDragAndDrop() {
     e.preventDefault();
     e.stopPropagation();
     const file = e.dataTransfer?.files?.[0];
-    if (file) await _deps.openFile(file);
+    if (file) await /** @type {any} */ (_deps).openFile(file);
   }, { signal });
 }
 
@@ -306,10 +307,10 @@ export function setupAnnotationEvents() {
   target.addEventListener('pointerup', _deps.endStroke);
   target.addEventListener('pointerleave', _deps.endStroke);
   target.addEventListener('dblclick', (e) => {
-    const p = _deps.getCanvasPointFromEvent(e);
-    const comments = _deps.loadComments();
+    const p = /** @type {any} */ (_deps).getCanvasPointFromEvent(e);
+    const comments = /** @type {any} */ (_deps).loadComments();
     for (let i = 0; i < comments.length; i += 1) {
-      const c = _deps.denormalizePoint(comments[i].point);
+      const c = /** @type {any} */ (_deps).denormalizePoint(comments[i].point);
       const d = Math.hypot(c.x - p.x, c.y - p.y);
       if (d <= 14) {
         const overlay = document.createElement('div');
@@ -380,7 +381,7 @@ export function setupAnnotationEvents() {
         btn.addEventListener('mouseenter', () => { btn.style.background = 'var(--hover, #333)'; });
         btn.addEventListener('mouseleave', () => { btn.style.background = 'transparent'; });
         btn.addEventListener('click', () => {
-          _deps._applyTextMarkupFromSelection(window.getSelection(), t.tool);
+          /** @type {any} */ (_deps)._applyTextMarkupFromSelection(window.getSelection(), t.tool);
           window.getSelection()?.removeAllRanges();
           popup.remove();
         });

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Tab Manager Integration ────────────────────────────────────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 
@@ -117,7 +118,7 @@ export function initTabs(deps) {
     }
   } catch (e) { /* invalid or no session data */ void e; }
 
-  window._tabManagerInstance = tabManager;
+  /** @type {any} */ (window)._tabManagerInstance = tabManager;
 
   return { tabManager, openFileWithTabs };
 }

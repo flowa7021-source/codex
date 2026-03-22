@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Text Export Sub-module ──────────────────────────────────────────────────
 // DOCX import, session health report, and text-based export utilities.
 // Split from export-controller.js for maintainability.
@@ -31,24 +32,24 @@ export function initExportTextDeps(deps) {
 
 export async function importDocxEdits(file) {
   if (!file || !state.adapter) {
-    _deps.setOcrStatus('Импорт DOCX: нужен открытый документ');
+    /** @type {any} */ (_deps).setOcrStatus('Импорт DOCX: нужен открытый документ');
     return;
   }
 
   try {
-    _deps.setOcrStatus('Импорт DOCX: чтение файла...');
+    /** @type {any} */ (_deps).setOcrStatus('Импорт DOCX: чтение файла...');
     const arrayBuffer = await file.arrayBuffer();
     const bytes = new Uint8Array(arrayBuffer);
 
     const xmlContent = extractDocumentXmlFromZip(bytes);
     if (!xmlContent) {
-      _deps.setOcrStatus('Импорт DOCX: не удалось найти word/document.xml');
+      /** @type {any} */ (_deps).setOcrStatus('Импорт DOCX: не удалось найти word/document.xml');
       return;
     }
 
     const pages = parseDocxTextByPages(xmlContent);
     if (!pages.length) {
-      _deps.setOcrStatus('Импорт DOCX: текст не найден в документе');
+      /** @type {any} */ (_deps).setOcrStatus('Импорт DOCX: текст не найден в документе');
       return;
     }
 
@@ -75,13 +76,13 @@ export async function importDocxEdits(file) {
     persistEdits();
 
     if (state.currentPage <= pages.length && pages[state.currentPage - 1]) {
-      els.pageText.value = pages[state.currentPage - 1];
+      /** @type {any} */ (els.pageText).value = pages[state.currentPage - 1];
     }
 
-    _deps.setOcrStatus(`Импорт DOCX: объединено ${merged} страниц из ${pages.length}`);
+    /** @type {any} */ (_deps).setOcrStatus(`Импорт DOCX: объединено ${merged} страниц из ${pages.length}`);
     pushDiagnosticEvent('docx.import', { pages: pages.length, merged });
   } catch (error) {
-    _deps.setOcrStatus(`Импорт DOCX: ошибка — ${error.message}`);
+    /** @type {any} */ (_deps).setOcrStatus(`Импорт DOCX: ошибка — ${error.message}`);
     pushDiagnosticEvent('docx.import.error', { message: error.message }, 'error');
   }
 }

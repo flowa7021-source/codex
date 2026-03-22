@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module document-properties-editor
  * @description Edit PDF document metadata (properties / info dictionary).
@@ -100,7 +101,7 @@ export async function setDocumentProperties(pdfBytes, props) {
   pdfDoc.setModificationDate(new Date());
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------

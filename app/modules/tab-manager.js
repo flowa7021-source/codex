@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Tab Manager ────────────────────────────────────────────────────────────
 // Multi-document tab system: open several documents in one window.
 
@@ -18,12 +19,14 @@ export class TabManager {
    * @param {HTMLElement} options.tabBar - Container for tab buttons
    * @param {Function} options.onActivate - (tab: DocumentTab) => void
    * @param {Function} options.onClose - (tab: DocumentTab) => boolean (return false to cancel)
+   * @param {Function} [options.onDeactivate] - (tab: DocumentTab) => void
    * @param {number} [options.maxTabs=10]
    */
   constructor(options) {
     this.tabBar = options.tabBar;
     this.onActivate = options.onActivate;
     this.onClose = options.onClose || (() => true);
+    this.onDeactivate = options.onDeactivate || null;
     this.maxTabs = options.maxTabs ?? 10;
 
     /** @type {Map<string, DocumentTab>} */

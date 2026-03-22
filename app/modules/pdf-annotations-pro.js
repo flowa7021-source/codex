@@ -1,3 +1,4 @@
+// @ts-check
 // ═══════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — Extended Annotations Module
 // Professional annotation types: highlight, underline, strikethrough,
@@ -360,7 +361,7 @@ export class AnnotationManager {
       }
     }
 
-    return new Blob([await pdfDoc.save()], { type: 'application/pdf' });
+    return new Blob([/** @type {any} */ (await pdfDoc.save())], { type: 'application/pdf' });
   }
 
   // ── XFDF Export/Import ──

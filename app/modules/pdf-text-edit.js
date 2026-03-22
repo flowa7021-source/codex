@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF Inline Text Editing ────────────────────────────────────────────────
 // Direct text editing in PDF via pdf-lib. Font replacement, spell-check hooks.
 
@@ -77,7 +78,7 @@ export async function applyTextEdits(pdfBytes, edits) {
     });
   }
 
-  return new Blob([await pdfDoc.save()], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (await pdfDoc.save())], { type: 'application/pdf' });
 }
 
 /**
@@ -116,7 +117,7 @@ export async function addTextBlock(pdfBytes, options) {
     page.drawText(text, { x, y, size: fontSize, font, color: textColor });
   }
 
-  return new Blob([await pdfDoc.save()], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (await pdfDoc.save())], { type: 'application/pdf' });
 }
 
 function wrapText(text, font, fontSize, maxWidth) {
@@ -159,9 +160,9 @@ export async function findAndReplace(pdfBytes, searchText, replaceText, options 
       // Get content stream as text
       const ref = contents;
       const stream = pdfDoc.context.lookup(ref);
-      if (!stream?.getContents) continue;
+      if (!/** @type {any} */ (stream)?.getContents) continue;
 
-      const decoded = new TextDecoder().decode(stream.getContents());
+      const decoded = new TextDecoder().decode(/** @type {any} */ (stream).getContents());
 
       // Search for text in TJ/Tj operators
       const search = caseSensitive ? searchText : searchText.toLowerCase();
@@ -175,7 +176,7 @@ export async function findAndReplace(pdfBytes, searchText, replaceText, options 
         );
         const newContent = decoded.replace(regex, replaceText);
         const encoded = new TextEncoder().encode(newContent);
-        stream.setContents(encoded);
+        /** @type {any} */ (stream).setContents(encoded);
         replacements++;
       }
     } catch (err) {
@@ -185,7 +186,7 @@ export async function findAndReplace(pdfBytes, searchText, replaceText, options 
   }
 
   return {
-    blob: new Blob([await pdfDoc.save()], { type: 'application/pdf' }),
+    blob: new Blob([/** @type {any} */ (await pdfDoc.save())], { type: 'application/pdf' }),
     replacements,
   };
 }
@@ -208,6 +209,6 @@ export function getAvailableFonts() {
  */
 export function spellCheck(text, dictionary) {
   if (!text || !dictionary) return [];
-  const words = text.match(/[\p{L}]{2,}/gu) || [];
+  const words = /** @type {string[]} */ (text.match(/[\p{L}]{2,}/gu) || []);
   return words.filter(w => !dictionary.has(w.toLowerCase()));
 }

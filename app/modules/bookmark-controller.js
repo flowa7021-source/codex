@@ -1,3 +1,4 @@
+// @ts-check
 // bookmark-controller.js — Bookmark management for NovaReader
 import { state, els } from './state.js';
 
@@ -75,7 +76,7 @@ export function renderBookmarkList() {
 
   const bookmarks = loadBookmarks();
   const filterEl = els.bookmarkFilter;
-  const filterText = (filterEl?.value || '').toLowerCase().trim();
+  const filterText = (/** @type {any} */ (filterEl)?.value || '').toLowerCase().trim();
 
   const filtered = filterText
     ? bookmarks.filter(b => b.title.toLowerCase().includes(filterText) || String(b.page).includes(filterText))
@@ -138,7 +139,7 @@ export function importBookmarks(file) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const imported = JSON.parse(reader.result);
+      const imported = JSON.parse(/** @type {string} */ (reader.result));
       if (!Array.isArray(imported)) return;
       const current = loadBookmarks();
       const merged = [...current];
@@ -188,8 +189,8 @@ export function initBookmarkController() {
   // Import
   if (els.importBookmarks) {
     els.importBookmarks.addEventListener('change', (e) => {
-      importBookmarks(e.target.files?.[0]);
-      e.target.value = '';
+      importBookmarks(/** @type {any} */ (e.target).files?.[0]);
+      /** @type {any} */ (e.target).value = '';
     });
   }
 
@@ -199,14 +200,14 @@ export function initBookmarkController() {
   }
   if (els.clearBookmarkFilter) {
     els.clearBookmarkFilter.addEventListener('click', () => {
-      if (els.bookmarkFilter) els.bookmarkFilter.value = '';
+      if (els.bookmarkFilter) /** @type {any} */ (els.bookmarkFilter).value = '';
       renderBookmarkList();
     });
   }
 
   // Navigation event listener
   window.addEventListener('bookmark-navigate', (e) => {
-    const page = e.detail?.page;
+    const page = /** @type {any} */ (e).detail?.page;
     if (page && page >= 1 && page <= state.pageCount) {
       state.currentPage = page;
       // Will be picked up by app.js renderCurrentPage dep

@@ -1,3 +1,4 @@
+// @ts-check
 // ═══════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — PDF Optimizer Module
 // Reduce PDF file size by compressing images, removing duplicates, cleaning metadata
@@ -25,7 +26,7 @@ export class PdfOptimizer {
       removeAnnotations = false,
     } = options;
 
-    const originalSize = pdfBytes.byteLength || pdfBytes.length;
+    const originalSize = /** @type {any} */ (pdfBytes).byteLength || /** @type {any} */ (pdfBytes).length;
     const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
 
     const details = {
@@ -126,7 +127,7 @@ export class PdfOptimizer {
     const savingsPercent = originalSize > 0 ? ((savings / originalSize) * 100).toFixed(1) : '0.0';
 
     return {
-      blob: new Blob([optimizedBytes], { type: 'application/pdf' }),
+      blob: new Blob([/** @type {any} */ (optimizedBytes)], { type: 'application/pdf' }),
       original: originalSize,
       optimized: optimizedSize,
       savings: Math.max(0, savings),

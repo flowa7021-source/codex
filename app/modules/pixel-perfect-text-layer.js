@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module pixel-perfect-text-layer
  * @description Phase 2 — Pixel-perfect text layer.
@@ -128,7 +129,7 @@ export class FontWidthProvider {
         const fd = entry?.data;
         if (!fd || !fd.type) continue; // not a font object
 
-        this.fonts.set(name, {
+        this.fonts.set(name, /** @type {any} */ ({
           fallbackFont: mapToSystemFont(fd),
           widths: fd.widths || [],
           defaultWidth: fd.defaultWidth || 1000,
@@ -137,7 +138,7 @@ export class FontWidthProvider {
           isMonospace: fd.isMonospace || false,
           italic: fd.italic || false,
           bold: fd.bold || false,
-        });
+        }));
       }
     } catch (err) {
       console.warn('[pixel-perfect-text-layer] FontWidthProvider.loadFromPage:', err?.message);

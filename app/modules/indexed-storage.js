@@ -1,3 +1,4 @@
+// @ts-check
 // ─── IndexedDB Storage ──────────────────────────────────────────────────────
 // Persistent storage for rendered pages, OCR data, annotations. LRU eviction.
 
@@ -28,7 +29,7 @@ export async function openDatabase() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
-      const database = event.target.result;
+      const database = /** @type {any} */ (event.target).result;
 
       // Rendered pages store
       if (!database.objectStoreNames.contains(STORES.pages)) {
@@ -56,7 +57,7 @@ export async function openDatabase() {
     };
 
     request.onsuccess = (event) => {
-      db = event.target.result;
+      db = /** @type {any} */ (event.target).result;
       resolve(db);
     };
 
@@ -258,7 +259,7 @@ async function _evictIfNeeded(storeName) {
 
   await new Promise((resolve, reject) => {
     cursor.onsuccess = (event) => {
-      const c = event.target.result;
+      const c = /** @type {any} */ (event.target).result;
       if (c && evicted < toEvict) {
         c.delete();
         evicted++;

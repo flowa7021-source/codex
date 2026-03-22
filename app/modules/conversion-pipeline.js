@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module conversion-pipeline
  * @description Integration module that wires all five layers of the PDF→DOCX
@@ -123,6 +124,7 @@ export async function convertPdfToDocxV2(pdfDoc, options = {}) {
   for (let i = 0; i < pagesToConvert.length; i++) {
     const pageNum = pagesToConvert[i];
     const pdfPage = await pdfDoc.getPage(pageNum);
+    // @ts-ignore - extractPageContent accepts options as second arg
     const extracted = await extractPageContent(pdfPage, { ocrWordCache });
     extractedPages.push(extracted);
 

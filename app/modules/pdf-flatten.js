@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module pdf-flatten
  * @description Flatten PDF annotations and form fields.
@@ -32,7 +33,7 @@ import { PDFDocument, PDFName, PDFArray } from 'pdf-lib';
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
  * @param {Object} [opts]
- * @param {number[]} [opts.pages] – 1-based page numbers (default: all)
+ * @param {number[]} [opts.pages] - 1-based page numbers (default: all)
  * @returns {Promise<Blob>}
  */
 export async function flattenForms(pdfBytes, opts = {}) {
@@ -43,7 +44,7 @@ export async function flattenForms(pdfBytes, opts = {}) {
   const fields = form.getFields();
   if (fields.length === 0) {
     const saved = await pdfDoc.save();
-    return new Blob([saved], { type: 'application/pdf' });
+    return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
   }
 
   const pageSet = _pageSet(pdfDoc, opts.pages);
@@ -74,7 +75,7 @@ export async function flattenForms(pdfBytes, opts = {}) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 /**
@@ -85,8 +86,8 @@ export async function flattenForms(pdfBytes, opts = {}) {
  * @param {Uint8Array|ArrayBuffer} pdfBytes
  * @param {Object} [opts]
  * @param {number[]}  [opts.pages]
- * @param {string[]}  [opts.types]       – annotation subtypes to flatten (default: all)
- * @param {boolean}   [opts.keepLinks=true] – preserve Link annotations
+ * @param {string[]}  [opts.types]       - annotation subtypes to flatten (default: all)
+ * @param {boolean}   [opts.keepLinks=true] - preserve Link annotations
  * @returns {Promise<Blob>}
  */
 export async function flattenAnnotations(pdfBytes, opts = {}) {
@@ -110,7 +111,7 @@ export async function flattenAnnotations(pdfBytes, opts = {}) {
       const annotDict = page.node.context.lookup(annotRef);
       if (!annotDict) { kept.push(annotRef); continue; }
 
-      const subtype = annotDict.get(PDFName.of('Subtype'));
+      const subtype = /** @type {any} */ (annotDict).get(PDFName.of('Subtype'));
       const subtypeName = subtype ? String(subtype).replace('/', '').toLowerCase() : '';
 
       // Keep links if requested
@@ -138,7 +139,7 @@ export async function flattenAnnotations(pdfBytes, opts = {}) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 /**
@@ -186,7 +187,7 @@ export async function getFlattenSummary(pdfBytes) {
       const annotDict = page.node.context.lookup(annotRef);
       if (!annotDict) continue;
 
-      const subtype = annotDict.get(PDFName.of('Subtype'));
+      const subtype = /** @type {any} */ (annotDict).get(PDFName.of('Subtype'));
       const name    = subtype ? String(subtype).replace('/', '') : 'Unknown';
 
       annotCounts[name] = (annotCounts[name] || 0) + 1;
@@ -196,7 +197,7 @@ export async function getFlattenSummary(pdfBytes) {
 
   return {
     formFields,
-    annotations: annotCounts,
+    annotations: /** @type {any} */ (annotCounts),
     total: formFields + totalAnnots,
   };
 }

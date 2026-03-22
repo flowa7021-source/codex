@@ -1,3 +1,4 @@
+// @ts-check
 // ═══════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — Batch OCR & Searchable PDF Module
 // Full-document OCR processing with progress tracking
@@ -128,7 +129,7 @@ export class BatchOcrProcessor {
  *
  * @param {ArrayBuffer|Uint8Array} pdfBytes - Original PDF bytes
  * @param {Map<number, Object>} ocrResults - Map of pageNum → { words, imageWidth, imageHeight }
- * @returns {Promise<Blob>}
+ * @returns {Promise<{blob: Blob, pagesProcessed: number}>}
  */
 export async function createSearchablePdf(pdfBytes, ocrResults) {
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -179,7 +180,7 @@ export async function createSearchablePdf(pdfBytes, ocrResults) {
 
   const savedBytes = await pdfDoc.save();
   return {
-    blob: new Blob([savedBytes], { type: 'application/pdf' }),
+    blob: new Blob([/** @type {any} */ (savedBytes)], { type: 'application/pdf' }),
     pagesProcessed,
   };
 }

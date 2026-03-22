@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Search Index ───────────────────────────────────────────────────────
 // Full-text search over OCR results with coordinate mapping.
 
@@ -5,6 +6,7 @@
  * @typedef {object} SearchEntry
  * @property {number} page
  * @property {string} text
+ * @property {string} [fullText]
  * @property {Array<{word: string, x: number, y: number, w: number, h: number}>} words
  */
 

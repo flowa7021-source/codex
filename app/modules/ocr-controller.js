@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Controller (Orchestrator) ──────────────────────────────────────────
 // Thin orchestrator that re-exports from focused sub-modules:
 //   - ocr-pipeline-variants.js: Variant generation, preprocessing, recognition loop
@@ -224,9 +225,9 @@ export function normalizeOcrTextByLang(text, langOverride) {
 
 export function setOcrControlsBusy(busy) {
   const disabled = !!busy;
-  if (els.ocrCurrentPage) els.ocrCurrentPage.disabled = disabled;
-  if (els.ocrRegionMode) els.ocrRegionMode.disabled = disabled;
-  if (els.copyOcrText) els.copyOcrText.disabled = disabled;
+  if (els.ocrCurrentPage) /** @type {any} */ (els.ocrCurrentPage).disabled = disabled;
+  if (els.ocrRegionMode) /** @type {any} */ (els.ocrRegionMode).disabled = disabled;
+  if (els.copyOcrText) /** @type {any} */ (els.copyOcrText).disabled = disabled;
 }
 
 export function cancelManualOcrTasks(reason = 'manual-stop') {

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── XPS/OXPS Adapter ───────────────────────────────────────────────────────
 // Read XPS (XML Paper Specification) and OXPS (Open XPS) documents.
 // XPS/OXPS files are ZIP archives containing XAML-like page descriptions.
@@ -139,7 +140,7 @@ export class XpsAdapter {
       img.onerror = reject;
       img.src = url;
     });
-    img._blobUrl = url;
+    /** @type {any} */ (img)._blobUrl = url;
     this._imageCache.set(pageNum, img);
     return img;
   }

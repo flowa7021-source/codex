@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Internationalization Module ─────────────────────────────────────────────
 
 import ru from '../locales/ru.json';
@@ -56,12 +57,12 @@ export function applyI18nToDOM() {
 
   document.querySelectorAll('[data-i18n-title]').forEach((el) => {
     const key = el.getAttribute('data-i18n-title');
-    if (key) el.title = t(key);
+    if (key) /** @type {any} */ (el).title = t(key);
   });
 
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
     const key = el.getAttribute('data-i18n-placeholder');
-    if (key) el.placeholder = t(key);
+    if (key) /** @type {any} */ (el).placeholder = t(key);
   });
 
   document.documentElement.lang = lang;

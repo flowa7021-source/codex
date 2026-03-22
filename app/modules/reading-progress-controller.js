@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Reading Progress Controller ────────────────────────────────────────────
 // Reading progress, reading goal, reading time, visit trail, history navigation,
 // view state, recent files, ETA/doc stats, and storage key helpers.
@@ -67,7 +68,7 @@ export function saveReadingGoal() {
     els.readingGoalStatus.textContent = 'Сначала откройте документ';
     return;
   }
-  const raw = Number.parseInt(els.readingGoalPage.value, 10);
+  const raw = Number.parseInt(/** @type {any} */ (els.readingGoalPage).value, 10);
   if (Number.isNaN(raw)) {
     els.readingGoalStatus.textContent = 'Введите корректный номер страницы';
     return;
@@ -81,7 +82,7 @@ export function saveReadingGoal() {
 export function clearReadingGoal() {
   state.readingGoalPage = null;
   localStorage.removeItem(readingGoalKey());
-  els.readingGoalPage.value = '';
+  /** @type {any} */ (els.readingGoalPage).value = '';
   renderReadingGoalStatus();
 }
 
@@ -97,7 +98,7 @@ export function renderReadingGoalStatus() {
     return;
   }
 
-  els.readingGoalPage.value = String(goal);
+  /** @type {any} */ (els.readingGoalPage).value = String(goal);
   const remaining = goal - state.currentPage;
   if (remaining <= 0) {
     els.readingGoalStatus.textContent = `Цель достигнута (стр. ${goal})`;
@@ -153,8 +154,8 @@ export function renderDocStats() {
   let totalStrokes = 0;
   let totalComments = 0;
   for (let page = 1; page <= state.pageCount; page += 1) {
-    totalStrokes += _deps.loadStrokes(page).length;
-    totalComments += _deps.loadComments(page).length;
+    totalStrokes += /** @type {any} */ (_deps).loadStrokes(page).length;
+    totalComments += /** @type {any} */ (_deps).loadComments(page).length;
   }
 
   const bookmarks = _deps.loadBookmarks().length;
@@ -208,8 +209,8 @@ export function clearVisitTrail() {
 
 export function updateHistoryButtons() {
   if (!els.historyBack || !els.historyForward) return;
-  els.historyBack.disabled = state.historyBack.length === 0;
-  els.historyForward.disabled = state.historyForward.length === 0;
+  /** @type {any} */ (els.historyBack).disabled = state.historyBack.length === 0;
+  /** @type {any} */ (els.historyForward).disabled = state.historyForward.length === 0;
 }
 
 export function resetHistory() {

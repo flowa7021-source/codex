@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Navigation Enhancements ────────────────────────────────────────────────
 // Minimap, page labels, reading position memory, link following.
 
@@ -199,7 +200,7 @@ export function setupLinkFollowing(textLayer, goToPage, resolveDestToPage) {
   if (!textLayer) return;
 
   textLayer.addEventListener('click', async (e) => {
-    const link = e.target.closest('a[href]');
+    const link = /** @type {any} */ (e.target).closest('a[href]');
     if (!link) return;
 
     const href = link.getAttribute('href');
@@ -240,7 +241,7 @@ export function renderThumbnailGrid(container, pageCount, renderThumb, goToPage)
   for (let i = 1; i <= pageCount; i++) {
     const cell = document.createElement('button');
     cell.className = 'thumbnail-cell';
-    cell.dataset.page = i;
+    cell.dataset.page = String(i);
     cell.title = `Страница ${i}`;
     cell.setAttribute('aria-label', `Перейти к странице ${i}`);
 

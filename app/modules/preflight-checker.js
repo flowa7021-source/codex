@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module preflight-checker
  * @description Pre-print PDF preflight validation.
@@ -34,16 +35,16 @@ import { getDocument } from 'pdfjs-dist/build/pdf.mjs';
  * @typedef {Object} PreflightCheck
  * @property {string}      id
  * @property {string}      name
- * @property {string}      category   – 'fonts' | 'images' | 'color' | 'geometry' | 'structure' | 'output'
+ * @property {string}      category   - 'fonts' | 'images' | 'color' | 'geometry' | 'structure' | 'output'
  * @property {CheckStatus} status
  * @property {string}      message
- * @property {string}      [fix]      – suggested remediation
+ * @property {string}      [fix]      - suggested remediation
  */
 
 /**
  * @typedef {Object} PreflightReport
  * @property {PreflightCheck[]} checks
- * @property {Object} summary – { pass, fail, warn, info }
+ * @property {Object} summary - { pass, fail, warn, info }
  * @property {boolean} printReady
  * @property {string}  timestamp
  */
@@ -364,7 +365,7 @@ export class PreflightPanel {
   /**
    * @param {HTMLElement} container
    * @param {Object} deps
-   * @param {Function} deps.getPdfBytes – () => Uint8Array
+   * @param {Function} deps.getPdfBytes - () => Uint8Array
    * @param {Function} [deps.onClose]
    */
   constructor(container, deps) {

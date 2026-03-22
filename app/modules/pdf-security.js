@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module pdf-security
  * @description PDF Security — Phase 1.
@@ -78,7 +79,7 @@ export async function setPassword(pdfBytes, ownerPassword, userPassword = '', pe
   const perms = { ...DEFAULT_PERMISSIONS, ...permissions };
 
   // Map NovaReader PermissionFlags → pdf-lib encrypt options
-  await pdfDoc.encrypt({
+  await /** @type {any} */ (pdfDoc).encrypt({
     ownerPassword,
     userPassword,
     permissions: {
@@ -98,7 +99,7 @@ export async function setPassword(pdfBytes, ownerPassword, userPassword = '', pe
   const saved = await pdfDoc.save();
 
   return {
-    blob: new Blob([saved], { type: 'application/pdf' }),
+    blob: new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' }),
     info: { passwordSet: true, permissions: perms },
   };
 }
@@ -200,7 +201,7 @@ export async function cleanMetadata(pdfBytes, options = {}) {
 
   pdfDoc.setProducer('NovaReader');
   const saved = await pdfDoc.save();
-  return { blob: new Blob([saved], { type: 'application/pdf' }), removed };
+  return { blob: new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' }), removed };
 }
 
 // ---------------------------------------------------------------------------
@@ -264,7 +265,7 @@ export async function sanitizePdf(pdfBytes) {
   }
 
   const saved = await pdfDoc.save();
-  return { blob: new Blob([saved], { type: 'application/pdf' }), sanitized: [...new Set(sanitized)] };
+  return { blob: new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' }), sanitized: [...new Set(sanitized)] };
 }
 
 // ---------------------------------------------------------------------------

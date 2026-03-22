@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Extended Hotkeys ───────────────────────────────────────────────────────
 // Professional keyboard shortcuts with Space+drag hand tool, single-key tools.
 
@@ -204,5 +205,5 @@ function isInputFocused() {
   const el = document.activeElement;
   if (!el) return false;
   const tag = el.tagName.toLowerCase();
-  return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || /** @type {any} */ (el).isContentEditable;
 }

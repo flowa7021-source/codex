@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Undo/Redo System (Command Pattern) ─────────────────────────────────────
 // Global undo/redo stack with named commands.
 
@@ -115,7 +116,7 @@ export function strokeCommand(page, stroke, addFn, removeFn) {
 export function bindUndoRedoKeys() {
   document.addEventListener('keydown', (e) => {
     // Don't intercept if in input/textarea
-    if (e.target.matches('input, textarea, [contenteditable]')) return;
+    if (/** @type {any} */ (e.target).matches('input, textarea, [contenteditable]')) return;
 
     if ((e.ctrlKey || e.metaKey) && !e.altKey) {
       if (e.key === 'z' && !e.shiftKey) {

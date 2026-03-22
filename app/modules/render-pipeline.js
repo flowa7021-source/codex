@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Render Pipeline ────────────────────────────────────────────────────────
 // Unified page rendering with caching, pre-rendering, and overlay management.
 
@@ -218,7 +219,7 @@ export async function renderPageProgressive(options, ctx, callbacks = {}) {
       });
   });
 
-  return { width: ctx.canvas.width, height: ctx.canvas.height, fromCache: false, renderMs: Math.round(performance.now() - start) };
+  return /** @type {any} */ ({ width: ctx.canvas.width, height: ctx.canvas.height, fromCache: false, renderMs: Math.round(performance.now() - start) });
 }
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
@@ -234,7 +235,7 @@ function cachePageResult(key, canvas) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    pageCache.set(key, { imageData, width: canvas.width, height: canvas.height });
+    pageCache.set(key, /** @type {any} */ ({ imageData, width: canvas.width, height: canvas.height }));
   } catch (err) { console.warn('[render-pipeline] cache failed:', err?.message); }
 }
 

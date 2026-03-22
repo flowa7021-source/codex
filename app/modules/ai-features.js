@@ -1,3 +1,4 @@
+// @ts-check
 // ─── AI-Powered Features ────────────────────────────────────────────────────
 // Smart summary, auto-tagging, semantic search, auto-TOC generation.
 // Uses pluggable AI backend (local heuristics + optional API).
@@ -38,8 +39,8 @@ export async function summarizeText(text, options = {}) {
 
   // Score each sentence by sum of word frequencies
   const scored = sentences.map((sentence, i) => {
-    const words = sentence.toLowerCase().match(/[\p{L}]+/gu) || [];
-    const score = words.reduce((sum, w) => sum + (wordFreq.get(w) || 0), 0);
+    const words = /** @type {string[]} */ (sentence.toLowerCase().match(/[\p{L}]+/gu) || []);
+    const score = words.reduce((sum, w) => sum + (/** @type {any} */ (wordFreq).get(w) || 0), 0);
     // Boost first/last sentences
     const positionBoost = i === 0 ? 1.5 : i === sentences.length - 1 ? 1.2 : 1;
     return { sentence: sentence.trim(), score: score * positionBoost, index: i };

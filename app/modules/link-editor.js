@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module link-editor
  * @description Add, edit, and remove hyperlinks in PDF documents.
@@ -26,12 +27,12 @@ import { getDocument } from 'pdfjs-dist/build/pdf.mjs';
  * Add a hyperlink annotation to a PDF page.
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {number} pageNum – 1-based
- * @param {{ x: number, y: number, width: number, height: number }} rect – PDF coords (bottom-left)
+ * @param {number} pageNum - 1-based
+ * @param {{ x: number, y: number, width: number, height: number }} rect - PDF coords (bottom-left)
  * @param {Object} link
- * @param {string} [link.url]        – external URL
- * @param {number} [link.destPage]   – internal page destination (1-based)
- * @param {{ r:number, g:number, b:number }} [link.color] – border colour
+ * @param {string} [link.url]        - external URL
+ * @param {number} [link.destPage]   - internal page destination (1-based)
+ * @param {{ r:number, g:number, b:number }} [link.color] - border colour
  * @param {number} [link.borderWidth=0]
  * @returns {Promise<Blob>}
  */
@@ -86,7 +87,7 @@ export async function addLink(pdfBytes, pageNum, rect, link) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -97,8 +98,8 @@ export async function addLink(pdfBytes, pageNum, rect, link) {
  * Remove a link annotation by index from a page.
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {number} pageNum – 1-based
- * @param {number} linkIndex – 0-based index among Link annotations on the page
+ * @param {number} pageNum - 1-based
+ * @param {number} linkIndex - 0-based index among Link annotations on the page
  * @returns {Promise<Blob>}
  */
 export async function removeLink(pdfBytes, pageNum, linkIndex) {
@@ -109,10 +110,10 @@ export async function removeLink(pdfBytes, pageNum, linkIndex) {
   if (!page) throw new Error(`Page ${pageNum} not found`);
 
   const annotsRef = page.node.get(PDFName.of('Annots'));
-  if (!annotsRef) return new Blob([data], { type: 'application/pdf' });
+  if (!annotsRef) return new Blob([/** @type {any} */ (data)], { type: 'application/pdf' });
 
   const annots = ctx.lookup(annotsRef);
-  if (!(annots instanceof PDFArray)) return new Blob([data], { type: 'application/pdf' });
+  if (!(annots instanceof PDFArray)) return new Blob([/** @type {any} */ (data)], { type: 'application/pdf' });
 
   // Find Link annotations
   let linkCount = 0;
@@ -120,7 +121,7 @@ export async function removeLink(pdfBytes, pageNum, linkIndex) {
   for (let i = 0; i < annots.size(); i++) {
     const ref  = annots.get(i);
     const dict = ctx.lookup(ref);
-    const sub  = dict?.get?.(PDFName.of('Subtype'));
+    const sub  = /** @type {any} */ (dict)?.get?.(PDFName.of('Subtype'));
     const isLink = sub && String(sub).includes('Link');
 
     if (isLink && linkCount === linkIndex) {
@@ -138,7 +139,7 @@ export async function removeLink(pdfBytes, pageNum, linkIndex) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 /**
@@ -163,7 +164,7 @@ export async function removeAllLinks(pdfBytes) {
     for (let i = 0; i < annots.size(); i++) {
       const ref  = annots.get(i);
       const dict = ctx.lookup(ref);
-      const sub  = dict?.get?.(PDFName.of('Subtype'));
+      const sub  = /** @type {any} */ (dict)?.get?.(PDFName.of('Subtype'));
       if (sub && String(sub).includes('Link')) continue;
       kept.push(ref);
     }
@@ -176,7 +177,7 @@ export async function removeAllLinks(pdfBytes) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +188,7 @@ export async function removeAllLinks(pdfBytes) {
  * Extract all link annotations from a page.
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {number} pageNum – 1-based
+ * @param {number} pageNum - 1-based
  * @returns {Promise<Array<{ rect: Object, url?: string, destPage?: number, index: number }>>}
  */
 export async function getPageLinks(pdfBytes, pageNum) {
@@ -231,11 +232,11 @@ export async function getPageLinks(pdfBytes, pageNum) {
 
 export class LinkEditor {
   /**
-   * @param {HTMLElement} container – page container element
+   * @param {HTMLElement} container - page container element
    * @param {Object} deps
-   * @param {Function} deps.getPdfBytes – () => Uint8Array
-   * @param {Function} deps.getPageNum  – () => number (1-based)
-   * @param {Function} deps.onApply     – (blob: Blob) => void
+   * @param {Function} deps.getPdfBytes - () => Uint8Array
+   * @param {Function} deps.getPageNum  - () => number (1-based)
+   * @param {Function} deps.onApply     - (blob: Blob) => void
    * @param {number}   deps.pageWidthPt
    * @param {number}   deps.pageHeightPt
    * @param {number}   [deps.zoom=1]

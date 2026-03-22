@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Tool State Machine Module ───────────────────────────────────────────────
 // Self-contained tool mode management with dependency injection.
 
@@ -92,12 +93,13 @@ export function activateOcrRegionMode() {
   state.ocrRegionMode = true;
   if (els.ocrRegionMode) els.ocrRegionMode.classList.add('active');
   _deps.updateOverlayInteractionState();
+  // @ts-ignore - setOcrStatus accepts a string message
   _deps.setOcrStatus('OCR: выделите область на странице');
 }
 
 export function deactivateTextEditMode() {
   state.textEditMode = false;
-  if (els.pageText) els.pageText.readOnly = true;
+  if (els.pageText) /** @type {any} */ (els.pageText).readOnly = true;
   if (els.toggleTextEdit) {
     els.toggleTextEdit.textContent = 'Ред.';
     els.toggleTextEdit.classList.remove('active');
@@ -106,7 +108,7 @@ export function deactivateTextEditMode() {
 
 export function activateTextEditMode() {
   state.textEditMode = true;
-  if (els.pageText) els.pageText.readOnly = false;
+  if (els.pageText) /** @type {any} */ (els.pageText).readOnly = false;
   if (els.toggleTextEdit) {
     els.toggleTextEdit.textContent = 'Ред.';
     els.toggleTextEdit.classList.add('active');

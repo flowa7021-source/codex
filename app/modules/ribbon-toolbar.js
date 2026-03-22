@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Ribbon-like Toolbar ────────────────────────────────────────────────────
 // Contextual tab system: tabs switch based on active tool/content type.
 
@@ -133,7 +134,7 @@ export function initRibbonToolbar(options) {
         // Try to find existing button and move it into the ribbon
         const existing = document.getElementById(btnId);
         if (existing) {
-          const clone = existing.cloneNode(true);
+          const clone = /** @type {HTMLElement} */ (existing.cloneNode(true));
           clone.id = `ribbon-${btnId}`;
           clone.classList.add('ribbon-btn');
           // Forward clicks to original
@@ -196,7 +197,7 @@ export function setContextualTab(container, context, show) {
   if (!container) return;
   const tabs = container.querySelectorAll(`.ribbon-tab-contextual[data-context="${context}"]`);
   tabs.forEach(tab => {
-    tab.hidden = !show;
-    if (show) switchTab(container, tab.dataset.ribbonTab);
+    /** @type {any} */ (tab).hidden = !show;
+    if (show) switchTab(container, /** @type {HTMLElement} */ (tab).dataset.ribbonTab);
   });
 }

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Layout Analysis ────────────────────────────────────────────────────────
 // Zone detection, reading order analysis, table structure recognition.
 
@@ -9,12 +10,12 @@
  * @property {number} width
  * @property {number} height
  * @property {number} order - Reading order index
- * @property {TextItem[]} [items] - Text items in this zone
+ * @property {any[]} [items] - Text items in this zone
  */
 
 /**
  * Analyze page layout and detect zones.
- * @param {TextItem[]} items - Text items from PDF.js
+ * @param {any[]} items - Text items from PDF.js
  * @param {object} pageInfo - { width, height }
  * @returns {Zone[]}
  */
@@ -64,7 +65,7 @@ export function analyzeLayout(items, pageInfo) {
 
 /**
  * Detect table structure from text items.
- * @param {TextItem[]} items
+ * @param {any[]} items
  * @param {object} [options]
  * @param {number} [options.minRows=2]
  * @param {number} [options.minCols=2]

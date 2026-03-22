@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Advanced Features Bootstrap ────────────────────────────────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 
@@ -48,7 +49,7 @@ export function initAdvanced(deps) {
     onAction: (id, text) => {
       if (id === 'search' && text) {
         const searchInput = document.getElementById('searchInput');
-        if (searchInput) { searchInput.value = text; searchInput.dispatchEvent(new Event('input')); }
+        if (searchInput) { /** @type {HTMLInputElement} */ (searchInput).value = text; searchInput.dispatchEvent(new Event('input')); }
       }
     },
   });

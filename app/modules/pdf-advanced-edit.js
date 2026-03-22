@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Advanced PDF Editing Module ─────────────────────────────────────────────
 // Block repositioning, text block management, layout editing capabilities
 
@@ -455,7 +456,7 @@ export class PdfBlockEditor {
     }
 
     const bytes = await pdfDoc.save();
-    return new Blob([bytes], { type: 'application/pdf' });
+    return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
   }
 
   _parseColor(hex) {

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Command Palette Module ─────────────────────────────────────────────────
 // VS Code-style Ctrl+K command palette for NovaReader 4.0
 
@@ -115,7 +116,7 @@ function getFilteredCommands(input) {
         action: () => {
           const n = parseInt(pageNum, 10);
           if (_deps && n >= 1) {
-            _deps.goToPage(n);
+            /** @type {any} */ (_deps).goToPage(n);
           }
         },
       }];
@@ -141,7 +142,7 @@ function getFilteredCommands(input) {
         action: () => {
           const n = parseInt(pageNum, 10);
           if (_deps && n >= 1) {
-            _deps.goToPage(n);
+            /** @type {any} */ (_deps).goToPage(n);
           }
         },
       }];
@@ -279,7 +280,7 @@ function onInput() {
     const { input } = getElements();
     if (!input) return;
     _selectedIndex = 0;
-    const filtered = getFilteredCommands(input.value);
+    const filtered = getFilteredCommands(/** @type {any} */ (input).value);
     renderList(filtered);
   }, DEBOUNCE_MS);
 }
@@ -302,7 +303,7 @@ function onKeyDown(e) {
   } else if (e.key === 'Enter') {
     e.preventDefault();
     if (items[_selectedIndex]) {
-      const filtered = getFilteredCommands(input.value);
+      const filtered = getFilteredCommands(/** @type {any} */ (input).value);
       if (filtered[_selectedIndex]) {
         executeCommand(filtered[_selectedIndex]);
       }
@@ -323,7 +324,7 @@ export function showCommandPalette() {
   _selectedIndex = 0;
   overlay.style.display = '';
   overlay.classList.add('open');
-  input.value = '';
+  /** @type {any} */ (input).value = '';
 
   const filtered = getFilteredCommands('');
   renderList(filtered);
@@ -343,7 +344,7 @@ export function hideCommandPalette() {
   overlay.style.display = 'none';
 
   if (input) {
-    input.value = '';
+    /** @type {any} */ (input).value = '';
   }
 
   if (_debounceTimer !== null) {

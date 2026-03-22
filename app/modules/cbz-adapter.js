@@ -1,3 +1,4 @@
+// @ts-check
 // ─── CBZ/CBR Adapter ────────────────────────────────────────────────────────
 // Support for comic book archive formats (CBZ = ZIP, CBR = info only).
 // Uses fflate (via zip-utils) for proper DEFLATE + Store ZIP support.
@@ -21,7 +22,7 @@ export async function parseCbz(data) {
 
   const pages = imageEntries.map(([name, bytes], index) => ({
     name,
-    blob: new Blob([bytes], { type: getMimeType(name) }),
+    blob: new Blob([/** @type {any} */ (bytes)], { type: getMimeType(name) }),
     index,
   }));
 
@@ -135,7 +136,7 @@ export class CbzAdapter {
     });
 
     // Cache the loaded image element (keep URL for cleanup)
-    img._blobUrl = url;
+    /** @type {any} */ (img)._blobUrl = url;
     this._imageCache.set(pageNum, img);
     return img;
   }

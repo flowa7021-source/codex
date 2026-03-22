@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module page-headers-footers
  * @description Configurable page headers and footers for PDF documents.
@@ -45,16 +46,16 @@ const SEPARATOR_OFFSET    = 4;           // gap between text and line
  * @typedef {Object} HeaderFooterOptions
  * @property {HFSlot}  [header]
  * @property {HFSlot}  [footer]
- * @property {HFSlot}  [firstPageHeader]   – override for page 1
+ * @property {HFSlot}  [firstPageHeader]   - override for page 1
  * @property {HFSlot}  [firstPageFooter]
- * @property {HFSlot}  [evenHeader]        – override for even pages
+ * @property {HFSlot}  [evenHeader]        - override for even pages
  * @property {HFSlot}  [evenFooter]
  * @property {number}  [fontSize=9]
  * @property {{ r:number, g:number, b:number }} [color]
- * @property {number}  [margin=36]         – distance from page edge in pt
- * @property {boolean} [separator=true]    – draw line under header / above footer
- * @property {number}  [startPage=1]       – 1-based start (skip before this)
- * @property {number[]} [pages]            – specific pages (overrides startPage)
+ * @property {number}  [margin=36]         - distance from page edge in pt
+ * @property {boolean} [separator=true]    - draw line under header / above footer
+ * @property {number}  [startPage=1]       - 1-based start (skip before this)
+ * @property {number[]} [pages]            - specific pages (overrides startPage)
  * @property {string}  [dateFormat='iso']
  */
 
@@ -126,7 +127,7 @@ export async function addHeadersFooters(pdfBytes, opts = {}) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -137,7 +138,7 @@ export class HeaderFooterEditor {
   /**
    * @param {HTMLElement} container
    * @param {Object} deps
-   * @param {Function} deps.onApply  – (opts: HeaderFooterOptions) => Promise<void>
+   * @param {Function} deps.onApply  - (opts: HeaderFooterOptions) => Promise<void>
    * @param {Function} [deps.onCancel]
    */
   constructor(container, deps) {

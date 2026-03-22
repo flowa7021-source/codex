@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module attachment-manager
  * @description Embed, list, extract, and delete file attachments in PDF documents.
@@ -76,8 +77,8 @@ export async function listAttachments(pdfBytes) {
           const fStream = ef.get(PDFName.of('F'));
           if (fStream) {
             const stream = ctx.lookup(fStream);
-            if (stream?.dict) {
-              const params = stream.dict.get(PDFName.of('Params'));
+            if (/** @type {any} */ (stream)?.dict) {
+              const params = /** @type {any} */ (stream).dict.get(PDFName.of('Params'));
               if (params) {
                 const p = ctx.lookup(params);
                 if (p instanceof PDFDict) {
@@ -85,7 +86,7 @@ export async function listAttachments(pdfBytes) {
                   if (sizeObj) size = Number(sizeObj) || 0;
                 }
               }
-              const subtypeObj = stream.dict.get(PDFName.of('Subtype'));
+              const subtypeObj = /** @type {any} */ (stream).dict.get(PDFName.of('Subtype'));
               if (subtypeObj) mimeType = String(subtypeObj).replace('/', '');
             }
           }
@@ -158,7 +159,7 @@ export async function addAttachment(pdfBytes, fileName, fileData, mimeType, desc
   arr.push(fileSpecRef);
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -208,10 +209,10 @@ export async function extractAttachment(pdfBytes, index) {
   const stream = ctx.lookup(fStreamRef);
   if (!stream) return null;
 
-  const contents = stream.getContents?.() ?? stream.contents;
+  const contents = /** @type {any} */ (stream).getContents?.() ?? /** @type {any} */ (stream).contents;
   if (!contents) return null;
 
-  const subtypeObj = stream.dict?.get(PDFName.of('Subtype'));
+  const subtypeObj = /** @type {any} */ (stream).dict?.get(PDFName.of('Subtype'));
   const mimeType   = subtypeObj ? String(subtypeObj).replace('/', '') : 'application/octet-stream';
 
   return { name, data: new Uint8Array(contents), mimeType };
@@ -234,17 +235,17 @@ export async function deleteAttachment(pdfBytes, index) {
   const ctx    = pdfDoc.context;
 
   const namesDict  = _getEmbeddedFilesNames(pdfDoc);
-  if (!namesDict) return new Blob([data], { type: 'application/pdf' });
+  if (!namesDict) return new Blob([/** @type {any} */ (data)], { type: 'application/pdf' });
 
   const namesArray = namesDict.get(PDFName.of('Names'));
-  if (!namesArray) return new Blob([data], { type: 'application/pdf' });
+  if (!namesArray) return new Blob([/** @type {any} */ (data)], { type: 'application/pdf' });
 
   const arr = ctx.lookup(namesArray);
-  if (!(arr instanceof PDFArray)) return new Blob([data], { type: 'application/pdf' });
+  if (!(arr instanceof PDFArray)) return new Blob([/** @type {any} */ (data)], { type: 'application/pdf' });
 
   const nameIdx = index * 2;
   const specIdx = index * 2 + 1;
-  if (specIdx >= arr.size()) return new Blob([data], { type: 'application/pdf' });
+  if (specIdx >= arr.size()) return new Blob([/** @type {any} */ (data)], { type: 'application/pdf' });
 
   // Rebuild array without the removed entry
   const newItems = [];
@@ -256,7 +257,7 @@ export async function deleteAttachment(pdfBytes, index) {
   namesDict.set(PDFName.of('Names'), ctx.obj(newItems));
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -389,7 +390,7 @@ export class AttachmentPanel {
     const result = await extractAttachment(pdfBytes, index);
     if (!result) return;
 
-    const blob = new Blob([result.data], { type: result.mimeType });
+    const blob = new Blob([/** @type {any} */ (result.data)], { type: result.mimeType });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.href     = url;

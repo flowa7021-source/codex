@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF Creator ────────────────────────────────────────────────────────────
 // Create PDF documents from images, blank pages, or HTML content.
 
@@ -115,7 +116,7 @@ export async function createPdfFromImages(images, options = {}) {
   }
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 /**
@@ -181,7 +182,7 @@ export async function createBlankPdf(options = {}) {
   }
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 /**
@@ -207,5 +208,5 @@ export async function canvasesToPdf(canvases) {
   }
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module inline-text-editor
  * @description Phase 6 — Seamless Inline Text Editor.
@@ -315,8 +316,8 @@ export class InlineTextEditor {
     // Update the PageModel's background image data
     const bgImage = this.page.backgroundImage;
     if (bgImage) {
-      const bytes = await _canvasToBytes(bgCanvas, bgImage.mimeType);
-      bgImage.data = bytes;
+      const bytes = await _canvasToBytes(bgCanvas, /** @type {any} */ (bgImage).mimeType);
+      /** @type {any} */ (bgImage).data = bytes;
     }
   }
 }
@@ -350,7 +351,7 @@ function _canvasToBytes(canvas, mimeType) {
     canvas.toBlob(blob => {
       if (!blob) { reject(new Error('canvas.toBlob returned null')); return; }
       const reader = new FileReader();
-      reader.onload  = () => resolve(new Uint8Array(reader.result));
+      reader.onload  = () => resolve(new Uint8Array(/** @type {ArrayBuffer} */ (reader.result)));
       reader.onerror = reject;
       reader.readAsArrayBuffer(blob);
     }, type, 0.92);

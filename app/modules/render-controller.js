@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Render Controller (Orchestrator) ────────────────────────────────────────
 // Page rendering, pre-render bookkeeping, annotation-canvas sync, page-UI updates.
 // Text layer, inline editing, and annotation overlay logic split into sub-modules:
@@ -149,11 +150,11 @@ export function _blitCacheToCanvas(entry, canvas) {
 }
 
 export function _updateAnnotationCanvas() {
-  const displayWidth = Math.max(1, Math.round(parseFloat(els.canvas.style.width || String(els.canvas.width))));
-  const displayHeight = Math.max(1, Math.round(parseFloat(els.canvas.style.height || String(els.canvas.height))));
+  const displayWidth = Math.max(1, Math.round(parseFloat(/** @type {any} */ (els.canvas).style.width || String(/** @type {any} */ (els.canvas).width))));
+  const displayHeight = Math.max(1, Math.round(parseFloat(/** @type {any} */ (els.canvas).style.height || String(/** @type {any} */ (els.canvas).height))));
   const annotDpr = Math.max(1, window.devicePixelRatio || 1);
-  els.annotationCanvas.width = Math.ceil(displayWidth * annotDpr);
-  els.annotationCanvas.height = Math.ceil(displayHeight * annotDpr);
+  /** @type {any} */ (els.annotationCanvas).width = Math.ceil(displayWidth * annotDpr);
+  /** @type {any} */ (els.annotationCanvas).height = Math.ceil(displayHeight * annotDpr);
   els.annotationCanvas.style.width = `${displayWidth}px`;
   els.annotationCanvas.style.height = `${displayHeight}px`;
   // Re-apply drawing-enabled class after canvas resize to preserve pointer events
@@ -165,7 +166,7 @@ export function _updateAnnotationCanvas() {
 export function _updatePageUI(renderMs) {
   els.pageStatus.textContent = `${state.currentPage} / ${state.pageCount}`;
   els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
-  els.pageInput.value = String(state.currentPage);
+  /** @type {any} */ (els.pageInput).value = String(state.currentPage);
   _deps.capturePageHistoryOnRender?.();
   _deps.saveViewState?.();
   // Update status bar
@@ -181,7 +182,7 @@ export function _updatePageUI(renderMs) {
   }
   requestAnimationFrame(() => {
     _deps.renderCommentList?.();
-    _deps.trackVisitedPage?.(renderedPage);
+    /** @type {any} */ (_deps).trackVisitedPage?.(renderedPage);
     _deps.renderReadingProgress?.();
     pushDiagnosticEvent('page.render', {
       page: renderedPage,
@@ -270,7 +271,7 @@ export async function renderCurrentPage() {
     const previewViewport = await state.adapter.getPageViewport(page, zoom * dpr, rotation);
     if (shouldUseTileRendering(previewViewport)) {
       invalidateTiles();
-      await renderTiles(state.adapter, page, els.canvas, { zoom, rotation }, els.canvasWrap);
+      await renderTiles(state.adapter, page, /** @type {any} */ (els.canvas), { zoom, rotation }, els.canvasWrap);
     } else {
       await state.adapter.renderPage(page, els.canvas, { zoom, rotation });
     }

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module smart-crop
  * @description Phase 8 — Smart Crop (Tier 4 unique tool).
@@ -68,7 +69,7 @@ export function detectContentBounds(canvas, opts = {}) {
   const minRatio     = opts.minContentRatio ?? 0.05;
 
   const ctx = canvas.getContext('2d');
-  if (!ctx) return { x: 0, y: 0, width: canvas.width, height: canvas.height };
+  if (!ctx) return /** @type {any} */ ({ x: 0, y: 0, width: canvas.width, height: canvas.height });
   const { width, height } = canvas;
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
@@ -144,7 +145,7 @@ export function detectContentBounds(canvas, opts = {}) {
     marginRight,
     marginBottom,
     marginLeft,
-    // Store scale for conversion to PDF pt
+    // @ts-ignore Store scale for conversion to PDF pt
     _canvasWidth:  width,
     _canvasHeight: height,
   };
@@ -226,7 +227,7 @@ export async function smartCropPage(pdfBytes, pageNum, opts = {}) {
 
   const saved = await pdfDoc.save();
   return {
-    blob: new Blob([saved], { type: 'application/pdf' }),
+    blob: new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' }),
     cropRect: cropRectPt,
   };
 }
@@ -297,7 +298,7 @@ export async function smartCropAll(pdfBytes, opts = {}) {
   }
 
   const saved = await pdfDoc.save();
-  return { blob: new Blob([saved], { type: 'application/pdf' }), rects };
+  return { blob: new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' }), rects };
 }
 
 // ---------------------------------------------------------------------------

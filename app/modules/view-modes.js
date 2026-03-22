@@ -1,3 +1,4 @@
+// @ts-check
 // ─── View Modes ─────────────────────────────────────────────────────────────
 // Single page, two-up (spread), book mode, continuous scroll, presentation.
 
@@ -158,7 +159,7 @@ function setupContinuousScroll() {
   for (let i = 1; i <= pageCount; i++) {
     const slot = document.createElement('div');
     slot.className = 'continuous-page-slot';
-    slot.dataset.page = i;
+    slot.dataset.page = String(i);
     slot.style.minHeight = `${Math.round(792 * zoom)}px`; // A4 estimate
     slot.style.marginBottom = '8px';
     wrap.appendChild(slot);
@@ -168,7 +169,7 @@ function setupContinuousScroll() {
   continuousObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       if (entry.isIntersecting) {
-        const page = parseInt(entry.target.dataset.page, 10);
+        const page = parseInt(/** @type {HTMLElement} */ (entry.target).dataset.page, 10);
         renderContinuousPage(entry.target, page);
       }
     }

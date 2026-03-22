@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Image Export Sub-module ─────────────────────────────────────────────────
 // DOCX image embedding, page capture, and image-enriched DOCX generation.
 // Split from export-controller.js for maintainability.
@@ -29,7 +30,7 @@ export async function capturePageAsImageData(pageNum) {
   // Use a higher zoom factor (2x) for better image quality in DOCX export
   const EXPORT_ZOOM = 2;
 
-  const cachedEntry = _deps.getCachedPage(pageNum);
+  const cachedEntry = /** @type {any} */ (_deps).getCachedPage(pageNum);
   if (cachedEntry && cachedEntry.canvas && cachedEntry.canvas.width > 0) {
     // If cached canvas is high-res already, use it directly
     if (cachedEntry.canvas.width >= 800) {

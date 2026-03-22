@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module presentation-mode
  * @description Full-screen slideshow mode for PDF documents.
@@ -42,11 +43,11 @@ const TRANSITIONS = {
 export class PresentationMode {
   /**
    * @param {Object} deps
-   * @param {Function} deps.renderPage     – (pageNum) => Promise<HTMLCanvasElement>
-   * @param {Function} deps.getTotalPages  – () => number
-   * @param {Function} deps.getCurrentPage – () => number (1-based)
+   * @param {Function} deps.renderPage     - (pageNum) => Promise<HTMLCanvasElement>
+   * @param {Function} deps.getTotalPages  - () => number
+   * @param {Function} deps.getCurrentPage - () => number (1-based)
    * @param {Function} [deps.onExit]
-   * @param {Function} [deps.onPageChange] – (pageNum) => void
+   * @param {Function} [deps.onPageChange] - (pageNum) => void
    */
   constructor(deps) {
     this._deps       = deps;
@@ -207,18 +208,18 @@ export class PresentationMode {
         // Trigger reflow then set opacity
         display.getBoundingClientRect();
         display.style.opacity = '1';
-        old.style.transition = `opacity ${transConfig.duration}ms ease`;
-        old.style.opacity    = '0';
-        safeTimeout(() => { old.width = 0; old.height = 0; old.remove(); }, transConfig.duration);
+        /** @type {any} */ (old).style.transition = `opacity ${transConfig.duration}ms ease`;
+        /** @type {any} */ (old).style.opacity    = '0';
+        safeTimeout(() => { /** @type {any} */ (old).width = 0; /** @type {any} */ (old).height = 0; old.remove(); }, transConfig.duration);
       } else if (transition === 'slide') {
         display.style.transform  = 'translateX(100%)';
         display.style.transition = `transform ${transConfig.duration}ms ease`;
         this._slideContainer.appendChild(display);
         display.getBoundingClientRect();
         display.style.transform = 'translateX(0)';
-        old.style.transition    = `transform ${transConfig.duration}ms ease`;
-        old.style.transform     = 'translateX(-100%)';
-        safeTimeout(() => { old.width = 0; old.height = 0; old.remove(); }, transConfig.duration);
+        /** @type {any} */ (old).style.transition    = `transform ${transConfig.duration}ms ease`;
+        /** @type {any} */ (old).style.transform     = 'translateX(-100%)';
+        safeTimeout(() => { /** @type {any} */ (old).width = 0; /** @type {any} */ (old).height = 0; old.remove(); }, transConfig.duration);
       }
     } else {
       this._slideContainer.innerHTML = '';

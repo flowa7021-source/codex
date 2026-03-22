@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module cross-format-paste
  * @description Phase 7 — Cross-format clipboard.
@@ -40,9 +41,9 @@ const DEFAULT_PASTE_FONT_SIZE = 12;   // pt
  *
  * Each block is expected to have `{ text, fontFamily, fontSize, bold, italic, color }`.
  *
- * @param {Array<Object>} selectedBlocks – text blocks from PageModel
+ * @param {Array<Object>} selectedBlocks - text blocks from PageModel
  * @param {Object} [opts]
- * @param {string} [opts.title]          – document title for HTML header
+ * @param {string} [opts.title]          - document title for HTML header
  * @returns {Promise<void>}
  */
 export async function copyFormattedText(selectedBlocks, opts = {}) {
@@ -81,8 +82,8 @@ export async function copyFormattedText(selectedBlocks, opts = {}) {
 /**
  * Copy a rectangular region of a canvas as a PNG image to the clipboard.
  *
- * @param {HTMLCanvasElement} canvas – source canvas
- * @param {{ x: number, y: number, width: number, height: number }} rect – crop region in canvas px
+ * @param {HTMLCanvasElement} canvas - source canvas
+ * @param {{ x: number, y: number, width: number, height: number }} rect - crop region in canvas px
  * @returns {Promise<void>}
  */
 export async function copyRegionAsImage(canvas, rect) {
@@ -107,7 +108,7 @@ export async function copyRegionAsImage(canvas, rect) {
 /**
  * Copy the full rendered page as a PNG to the clipboard.
  *
- * @param {HTMLCanvasElement} pageCanvas – rendered page canvas
+ * @param {HTMLCanvasElement} pageCanvas - rendered page canvas
  * @returns {Promise<void>}
  */
 export async function copyPageAsImage(pageCanvas) {
@@ -128,14 +129,14 @@ export async function copyPageAsImage(pageCanvas) {
  *   • HTML text → strip tags, draw as plain text
  *   • Plain text → draw as text via pdf-lib
  *
- * @param {PDFDocument} pdfDoc  – pdf-lib document (mutable)
- * @param {number} pageNum      – 0-based page index
- * @param {{ x: number, y: number }} position – PDF-space coordinate (bottom-left origin)
+ * @param {any} pdfDoc  - pdf-lib document (mutable)
+ * @param {number} pageNum      - 0-based page index
+ * @param {{ x: number, y: number }} position - PDF-space coordinate (bottom-left origin)
  * @param {Object} [opts]
  * @param {number} [opts.fontSize=12]
  * @param {string} [opts.fontFamily='Helvetica']
- * @param {number} [opts.maxWidth]       – word-wrap width in pt
- * @param {number} [opts.lineHeight=1.4] – line height multiplier
+ * @param {number} [opts.maxWidth]       - word-wrap width in pt
+ * @param {number} [opts.lineHeight=1.4] - line height multiplier
  * @returns {Promise<{type: string, content: string|null}>}
  */
 export async function pasteIntoPage(pdfDoc, pageNum, position, opts = {}) {
@@ -287,14 +288,14 @@ async function _writeToClipboard(plainText, html) {
 export class ClipboardController {
   /**
    * @param {Object} deps
-   * @param {HTMLElement}   deps.container      – page container element
-   * @param {Function}      deps.getSelection   – () → { blocks: Object[], rect?: Rect } | null
-   * @param {Function}      deps.getPageCanvas  – () → HTMLCanvasElement | null
-   * @param {Function}      deps.getPdfDoc      – () → PDFDocument | null
-   * @param {Function}      deps.getPageNum     – () → number  (0-based)
-   * @param {Function}      deps.getCursorPos   – () → { x: number, y: number }  (PDF coords)
-   * @param {Function}      deps.onPasteComplete – ({ type, content }) → void
-   * @param {Function}      [deps.onCopyComplete] – () → void
+   * @param {HTMLElement}   deps.container      - page container element
+   * @param {Function}      deps.getSelection   - () → { blocks: Object[], rect?: Rect } | null
+   * @param {Function}      deps.getPageCanvas  - () → HTMLCanvasElement | null
+   * @param {Function}      deps.getPdfDoc      - () → PDFDocument | null
+   * @param {Function}      deps.getPageNum     - () → number  (0-based)
+   * @param {Function}      deps.getCursorPos   - () → { x: number, y: number }  (PDF coords)
+   * @param {Function}      deps.onPasteComplete - ({ type, content }) → void
+   * @param {Function}      [deps.onCopyComplete] - () → void
    */
   constructor(deps) {
     this._deps      = deps;

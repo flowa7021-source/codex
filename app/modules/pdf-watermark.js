@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module pdf-watermark
  * @description Professional watermark tool for PDF documents.
@@ -108,7 +109,7 @@ export async function addTextWatermark(pdfBytes, text, opts = {}) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -119,7 +120,7 @@ export async function addTextWatermark(pdfBytes, text, opts = {}) {
  * Add an image watermark (PNG or JPEG) to a PDF.
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {Uint8Array|ArrayBuffer} imageBytes – PNG or JPEG
+ * @param {Uint8Array|ArrayBuffer} imageBytes - PNG or JPEG
  * @param {ImageWatermarkOptions} [opts]
  * @returns {Promise<Blob>}
  */
@@ -152,7 +153,7 @@ export async function addImageWatermark(pdfBytes, imageBytes, opts = {}) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -164,8 +165,8 @@ export async function addImageWatermark(pdfBytes, imageBytes, opts = {}) {
  * This is a visual removal — the original content may still exist in the PDF.
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {{ x: number, y: number, width: number, height: number }} rect – region to cover (PDF pt)
- * @param {number[]} [pages] – 1-based page numbers (default: all)
+ * @param {{ x: number, y: number, width: number, height: number }} rect - region to cover (PDF pt)
+ * @param {number[]} [pages] - 1-based page numbers (default: all)
  * @returns {Promise<Blob>}
  */
 export async function removeWatermarkRegion(pdfBytes, rect, pages) {
@@ -186,7 +187,7 @@ export async function removeWatermarkRegion(pdfBytes, rect, pages) {
   }
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -195,9 +196,9 @@ export async function removeWatermarkRegion(pdfBytes, rect, pages) {
 
 export class WatermarkEditor {
   /**
-   * @param {HTMLElement} container – host element for the floating panel
+   * @param {HTMLElement} container - host element for the floating panel
    * @param {Object} deps
-   * @param {Function} deps.onApply – (opts) => void  — called with watermark options
+   * @param {Function} deps.onApply - (opts) => void  — called with watermark options
    * @param {Function} deps.onCancel
    */
   constructor(container, deps) {

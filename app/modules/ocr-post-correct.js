@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Post-Correction ────────────────────────────────────────────────────
 // Dictionary-based correction, n-gram analysis, paragraph structure recovery.
 
@@ -254,7 +255,7 @@ export function recoverParagraphs(text, _options = {}) {
  * @returns {number}
  */
 export function computeQualityScore(text, dictionary) {
-  const words = text.match(/[\p{L}]{3,}/gu) || [];
+  const words = /** @type {string[]} */ (text.match(/[\p{L}]{3,}/gu) || []);
   if (words.length === 0) return 100;
   const found = words.filter(w => dictionary.has(w.toLowerCase())).length;
   return Math.round((found / words.length) * 100);

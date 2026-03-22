@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Annotations Overlay Sub-module ──────────────────────────────────────────
 // Annotation canvas overlay logic: watermarks, stamps, signatures,
 // image insertion, and safe URL creation.
@@ -24,7 +25,7 @@ export function safeCreateObjectURL(data) {
   }
   // Wrap raw data in a Blob as fallback
   if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
-    return URL.createObjectURL(new Blob([data]));
+    return URL.createObjectURL(new Blob([/** @type {any} */ (data)]));
   }
   if (typeof data === 'string') {
     return URL.createObjectURL(new Blob([data], { type: 'text/plain' }));
@@ -40,7 +41,7 @@ export function handleImageInsertion(file) {
 
   const reader = new FileReader();
   reader.onload = () => {
-    const dataUrl = reader.result;
+    const dataUrl = /** @type {string} */ (reader.result);
     const img = new Image();
     img.onload = () => {
       // Insert at center of visible area
@@ -64,7 +65,7 @@ export function handleImageInsertion(file) {
 
       blockEditor.addImageBlock(state.currentPage, x, y, dataUrl, w, h);
       blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
-      _deps.setOcrStatus?.('Изображение вставлено. Перемещайте и масштабируйте в режиме "Блоки".');
+      /** @type {any} */ (_deps).setOcrStatus?.('Изображение вставлено. Перемещайте и масштабируйте в режиме "Блоки".');
     };
     img.src = dataUrl;
   };
@@ -82,10 +83,10 @@ export function addWatermarkToPage(text, options = {}) {
   } = options;
 
   if (!els.annotationCanvas) return;
-  const ctx = els.annotationCanvas.getContext('2d');
+  const ctx = /** @type {any} */ (els.annotationCanvas).getContext('2d');
   if (!ctx) return;
-  const w = els.annotationCanvas.width;
-  const h = els.annotationCanvas.height;
+  const w = /** @type {any} */ (els.annotationCanvas).width;
+  const h = /** @type {any} */ (els.annotationCanvas).height;
   const dpr = Math.max(1, window.devicePixelRatio || 1);
 
   ctx.save();
@@ -112,10 +113,10 @@ export function addStampToPage(stampType) {
   };
 
   const stamp = stamps[stampType] || stamps.approved;
-  const ctx = els.annotationCanvas.getContext('2d');
+  const ctx = /** @type {any} */ (els.annotationCanvas).getContext('2d');
   if (!ctx) return;
   const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const w = els.annotationCanvas.width;
+  const w = /** @type {any} */ (els.annotationCanvas).width;
 
   const boxW = 300 * dpr;
   const boxH = 80 * dpr;
@@ -204,12 +205,12 @@ export function openSignaturePad() {
     const canvasH = parseFloat(els.canvas.style.height) || 600;
     blockEditor.addImageBlock(state.currentPage, canvasW * 0.5, canvasH * 0.75, dataUrl, 200, 100);
     blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
-    _deps.setOcrStatus?.('Подпись вставлена на canvas');
+    /** @type {any} */ (_deps).setOcrStatus?.('Подпись вставлена на canvas');
 
     // Also embed into actual PDF via pdf-lib
     if (state.adapter?.type === 'pdf' && state.file) {
       try {
-        _deps.setOcrStatus?.('Встраивание подписи в PDF...');
+        /** @type {any} */ (_deps).setOcrStatus?.('Встраивание подписи в PDF...');
         const pngBlob = await (await fetch(dataUrl)).blob();
         const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
         const arrayBuffer = await state.file.arrayBuffer();
@@ -226,9 +227,9 @@ export function openSignaturePad() {
         a.download = `${state.docName || 'document'}-signed.pdf`;
         a.click();
         URL.revokeObjectURL(url);
-        _deps.setOcrStatus?.('Подпись встроена в PDF и сохранена');
+        /** @type {any} */ (_deps).setOcrStatus?.('Подпись встроена в PDF и сохранена');
       } catch (err) {
-        _deps.setOcrStatus?.(`Подпись на canvas (PDF ошибка: ${err?.message || 'неизвестная'})`);
+        /** @type {any} */ (_deps).setOcrStatus?.(`Подпись на canvas (PDF ошибка: ${err?.message || 'неизвестная'})`);
       }
     }
     modal.remove();

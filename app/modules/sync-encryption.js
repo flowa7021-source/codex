@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Sync Encryption ────────────────────────────────────────────────────────
 // E2E encryption for cloud sync using Web Crypto API (AES-GCM).
 // Key is derived from a user passphrase via PBKDF2.
@@ -30,14 +31,14 @@ export async function deriveKey(passphrase, salt) {
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt,
+      salt: /** @type {any} */ (salt),
       iterations: PBKDF2_ITERATIONS,
       hash: 'SHA-256',
     },
     keyMaterial,
     { name: 'AES-GCM', length: AES_KEY_BITS },
     false,
-    ['encrypt', 'decrypt'],
+    /** @type {any} */ (['encrypt', 'decrypt']),
   );
 }
 
@@ -61,7 +62,7 @@ export async function encrypt(data, key) {
   const ciphertextBuffer = await crypto.subtle.encrypt(
     { name: 'AES-GCM', iv },
     key,
-    plaintext,
+    /** @type {any} */ (plaintext),
   );
   return { iv, ciphertext: new Uint8Array(ciphertextBuffer) };
 }
@@ -74,9 +75,9 @@ export async function encrypt(data, key) {
  */
 export async function decrypt(encrypted, key) {
   return crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: encrypted.iv },
+    { name: 'AES-GCM', iv: /** @type {any} */ (encrypted.iv) },
     key,
-    encrypted.ciphertext,
+    /** @type {any} */ (encrypted.ciphertext),
   );
 }
 

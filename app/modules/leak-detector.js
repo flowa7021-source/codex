@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Memory Leak Detector (dev mode) ────────────────────────────────────────
 // Activate by setting localStorage 'novareader-dev-mode' to '1'.
 // Usage: import { installLeakDetector, getLeakReport } from './leak-detector.js';
@@ -82,7 +83,7 @@ function patchCreateElement() {
  */
 export function installLeakDetector() {
   if (installed) return;
-  const isDev = (typeof import.meta !== 'undefined' && import.meta.env?.DEV) ||
+  const isDev = (typeof import.meta !== 'undefined' && /** @type {any} */ (import.meta).env?.DEV) ||
     (typeof localStorage !== 'undefined' && localStorage.getItem('novareader-dev-mode') === '1');
   if (!isDev) return;
   installed = true;

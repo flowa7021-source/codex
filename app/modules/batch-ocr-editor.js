@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module batch-ocr-editor
  * @description Phase 7 — Batch OCR + Edit pipeline.
@@ -22,9 +23,9 @@
  *   });
  *
  *   const result = await batch.run();
- *   // result.pdfBytes   – Uint8Array with embedded text layer
- *   // result.pages      – per-page OcrPageResult[]
- *   // result.stats      – { totalChars, correctedChars, avgConfidence }
+ *   // result.pdfBytes   - Uint8Array with embedded text layer
+ *   // result.pages      - per-page OcrPageResult[]
+ *   // result.stats      - { totalChars, correctedChars, avgConfidence }
  */
 
 import { getDocument } from 'pdfjs-dist/build/pdf.mjs';
@@ -36,24 +37,24 @@ import { PDFDocument } from 'pdf-lib';
 
 /**
  * @typedef {Object} BatchOcrOptions
- * @property {number[]}        [pages]         – 1-based page numbers to process (default: all)
- * @property {string}          [language='eng'] – Tesseract language code
+ * @property {number[]}        [pages]         - 1-based page numbers to process (default: all)
+ * @property {string}          [language='eng'] - Tesseract language code
  * @property {boolean}         [autoCorrect=true]
  * @property {Array<{find: string|RegExp, replace: string}>} [replacements=[]]
- * @property {number}          [dpi=300]        – target DPI for OCR render
- * @property {boolean}         [embedTextLayer=true] – bake invisible text into PDF
- * @property {Function}        [onProgress]     – (ProgressEvent) => void
- * @property {number}          [concurrency=2]  – parallel OCR workers
+ * @property {number}          [dpi=300]        - target DPI for OCR render
+ * @property {boolean}         [embedTextLayer=true] - bake invisible text into PDF
+ * @property {Function}        [onProgress]     - (ProgressEvent) => void
+ * @property {number}          [concurrency=2]  - parallel OCR workers
  */
 
 /**
  * @typedef {Object} OcrPageResult
- * @property {number}  page          – 1-based
- * @property {string}  rawText       – before corrections
- * @property {string}  correctedText – after corrections
- * @property {number}  confidence    – 0-100
- * @property {number}  corrections   – number of chars changed
- * @property {Object[]} charBoxes    – character-level bounding boxes
+ * @property {number}  page          - 1-based
+ * @property {string}  rawText       - before corrections
+ * @property {string}  correctedText - after corrections
+ * @property {number}  confidence    - 0-100
+ * @property {number}  corrections   - number of chars changed
+ * @property {Object[]} charBoxes    - character-level bounding boxes
  */
 
 /**
@@ -412,7 +413,7 @@ export class BatchOcrEditor {
  *
  * @param {OcrPageResult[]} pageResults
  * @param {Array<{find: string|RegExp, replace: string}>} replacements
- * @returns {OcrPageResult[]} – new array with updated correctedText
+ * @returns {OcrPageResult[]} - new array with updated correctedText
  */
 export function batchFindReplace(pageResults, replacements) {
   return pageResults.map(r => {

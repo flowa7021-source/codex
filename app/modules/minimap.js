@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Minimap Navigation ─────────────────────────────────────────────────────
 // A VS Code-style minimap showing tiny page thumbnails in a vertical strip
 // on the right side of the document viewport.
@@ -10,7 +11,7 @@ const BUFFER_PAGES = 5;
 const THUMB_GAP = 3;
 const DEBOUNCE_RENDER_MS = 150;
 
-/** @type {{ state: object, els: object, renderPage: Function } | null} */
+/** @type {{ state: any, els: any, renderPage?: Function, onPageChange?: Function } | null} */
 let _deps = null;
 
 /** @type {HTMLElement | null} */
@@ -47,7 +48,7 @@ let _rafId = 0;
 
 /**
  * Initialize the minimap with dependencies.
- * @param {{ state: object, els: object, renderPage?: Function }} deps
+ * @param {{ state: any, els: any, renderPage?: Function, onPageChange?: Function }} deps
  */
 export function initMinimap(deps) {
   _deps = deps;
@@ -302,7 +303,7 @@ async function _renderVisibleThumbs() {
   const containerRect = _container.getBoundingClientRect();
   const trackRect = _track.getBoundingClientRect();
   const visibleTop = containerRect.top - trackRect.top;
-  const visibleBottom = visibleTop + containerRect.clientHeight;
+  const visibleBottom = visibleTop + /** @type {any} */ (containerRect).clientHeight;
 
   // Determine visible page range
   let firstVisible = -1;

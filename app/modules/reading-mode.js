@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module reading-mode
  * @description Distraction-free reading mode with text reflow.
@@ -44,11 +45,11 @@ const DEFAULT_FONT        = "'Georgia', 'Times New Roman', serif";
 export class ReadingMode {
   /**
    * @param {Object} deps
-   * @param {Function} deps.getPageText    – (pageNum: number) => string | Promise<string>
-   * @param {Function} deps.getTotalPages  – () => number
-   * @param {Function} deps.getCurrentPage – () => number (1-based)
+   * @param {Function} deps.getPageText    - (pageNum: number) => string | Promise<string>
+   * @param {Function} deps.getTotalPages  - () => number
+   * @param {Function} deps.getCurrentPage - () => number (1-based)
    * @param {Function} [deps.onExit]
-   * @param {Function} [deps.onPageChange] – (pageNum: number) => void
+   * @param {Function} [deps.onPageChange] - (pageNum: number) => void
    */
   constructor(deps) {
     this._deps = deps;
@@ -260,7 +261,7 @@ export class ReadingMode {
 
     // Update page headers
     const headers = this._content.querySelectorAll('[data-page]');
-    headers.forEach(h => { h.style.color = theme.secondary; });
+    headers.forEach(h => { /** @type {any} */ (h).style.color = theme.secondary; });
   }
 
   // ── Progress ───────────────────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+// @ts-check
 // page-organizer-ui.js — Page Organizer modal UI, extracted from app.js
 import { state, els as _els } from './state.js';
 import { toastSuccess, toastError } from './toast.js';
@@ -167,7 +168,7 @@ export function initPageOrganizerUI(deps) {
     try {
       const newPdf = await reorderPages(orgPdfBytes, orgNewOrder);
       // Reload the document with new PDF bytes
-      const blob = new Blob([newPdf], { type: 'application/pdf' });
+      const blob = new Blob([/** @type {any} */ (newPdf)], { type: 'application/pdf' });
       const file = new File([blob], state.docName || 'reorganized.pdf', { type: 'application/pdf' });
       orgModal.style.display = 'none';
       orgModal.classList.remove('open');
@@ -219,7 +220,7 @@ export function initPageOrganizerUI(deps) {
     if (!orgPdfBytes || !orgState?.selected.size) return;
     const indices = [...orgState.selected].map(i => orgNewOrder[i]);
     const extracted = await extractPages(orgPdfBytes, indices);
-    const blob = new Blob([extracted], { type: 'application/pdf' });
+    const blob = new Blob([/** @type {any} */ (extracted)], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

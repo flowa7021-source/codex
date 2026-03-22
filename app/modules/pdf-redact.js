@@ -1,3 +1,4 @@
+// @ts-check
 // ═══════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — PDF Redaction Module
 // Permanently remove sensitive information from PDF documents
@@ -198,7 +199,7 @@ export class PdfRedactor {
 
     const savedBytes = await pdfDoc.save();
     return {
-      blob: new Blob([savedBytes], { type: 'application/pdf' }),
+      blob: new Blob([/** @type {any} */ (savedBytes)], { type: 'application/pdf' }),
       redactedCount: this.count,
       metadataCleaned: cleanMetadata,
     };

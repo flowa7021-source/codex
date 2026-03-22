@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module signature-pad
  * @description Digital signature pad for PDF documents.
@@ -46,12 +47,12 @@ const SIGNATURE_FONTS = [
  * Insert a signature PNG into a PDF page.
  *
  * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {number} pageNum – 1-based
+ * @param {number} pageNum - 1-based
  * @param {Object} signatureData
- * @param {Uint8Array}  signatureData.pngBytes – signature image as PNG
- * @param {{ x: number, y: number }} signatureData.position – PDF coords (bottom-left origin)
- * @param {number} [signatureData.width=150]  – target width in PDF pt
- * @param {number} [signatureData.height]     – auto-computed if omitted
+ * @param {Uint8Array}  signatureData.pngBytes - signature image as PNG
+ * @param {{ x: number, y: number }} signatureData.position - PDF coords (bottom-left origin)
+ * @param {number} [signatureData.width=150]  - target width in PDF pt
+ * @param {number} [signatureData.height]     - auto-computed if omitted
  * @returns {Promise<Blob>}
  */
 export async function insertSignatureIntoPdf(pdfBytes, pageNum, signatureData) {
@@ -73,7 +74,7 @@ export async function insertSignatureIntoPdf(pdfBytes, pageNum, signatureData) {
   });
 
   const saved = await pdfDoc.save();
-  return new Blob([saved], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -84,7 +85,7 @@ export class SignaturePad {
   /**
    * @param {HTMLElement} container
    * @param {Object} deps
-   * @param {Function} deps.onInsert – (signatureData: { pngBytes, position, width }) => void
+   * @param {Function} deps.onInsert - (signatureData: { pngBytes, position, width }) => void
    * @param {Function} [deps.onCancel]
    * @param {{ x: number, y: number }} [deps.defaultPosition={ x: 72, y: 72 }]
    * @param {number} [deps.defaultWidth=150]

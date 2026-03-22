@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR IndexedDB Storage Module ────────────────────────────────────────────
 // Replaces localStorage for OCR data with IndexedDB.
 // Handles large OCR datasets (hundreds of pages) without hitting
@@ -28,7 +29,7 @@ function openDb() {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onupgradeneeded = (e) => {
-        const db = e.target.result;
+        const db = /** @type {any} */ (e.target).result;
         if (!db.objectStoreNames.contains(STORE_NAME)) {
           const store = db.createObjectStore(STORE_NAME, { keyPath: 'id' });
           store.createIndex('docName', 'docName', { unique: false });
@@ -37,7 +38,7 @@ function openDb() {
       };
 
       request.onsuccess = (e) => {
-        _db = e.target.result;
+        _db = /** @type {any} */ (e.target).result;
         // Auto-recover if the connection is closed unexpectedly
         _db.onclose = () => { _db = null; };
         _db.onerror = () => { _db = null; };
@@ -143,12 +144,12 @@ export async function savePageOcrText(docName, pageNum, text) {
   const pagesText = existing?.pagesText ? [...existing.pagesText] : [];
   while (pagesText.length < pageNum) pagesText.push('');
   pagesText[pageNum - 1] = text;
-  await saveOcrData(docName, {
+  await saveOcrData(docName, /** @type {any} */ ({
     ...existing,
     pagesText,
     scannedPages: pagesText.filter(Boolean).length,
     updatedAt: new Date().toISOString(),
-  });
+  }));
 }
 
 /**

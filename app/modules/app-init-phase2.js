@@ -1,3 +1,4 @@
+// @ts-check
 // app-init-phase2.js — Phase 2+ module initialization, extracted from app.js
 import { safeInterval, safeTimeout } from './safe-timers.js';
 import { state, els } from './state.js';
@@ -33,7 +34,7 @@ export function initPhase2Modules(deps) {
       document.querySelectorAll('.sidebar-tabs button').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
-      const panel = document.querySelector(`.sidebar-panel[data-sidebar-panel="${btn.dataset.sidebarTab}"]`);
+      const panel = document.querySelector(`.sidebar-panel[data-sidebar-panel="${/** @type {HTMLElement} */ (btn).dataset.sidebarTab}"]`);
       if (panel) panel.classList.add('active');
     });
   });
@@ -44,7 +45,7 @@ export function initPhase2Modules(deps) {
       document.querySelectorAll('.bottom-tab-bar button').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.bottom-tab-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
-      const panel = document.querySelector(`.bottom-tab-panel[data-bottom-panel="${btn.dataset.bottomTab}"]`);
+      const panel = document.querySelector(`.bottom-tab-panel[data-bottom-panel="${/** @type {HTMLElement} */ (btn).dataset.bottomTab}"]`);
       if (panel) panel.classList.add('active');
     });
   });
@@ -55,7 +56,7 @@ export function initPhase2Modules(deps) {
       document.querySelectorAll('.modal-tabs button').forEach(b => b.classList.remove('active'));
       document.querySelectorAll('.modal-tab-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
-      const panel = document.querySelector(`.modal-tab-panel[data-modal-panel="${btn.dataset.modalTab}"]`);
+      const panel = document.querySelector(`.modal-tab-panel[data-modal-panel="${/** @type {HTMLElement} */ (btn).dataset.modalTab}"]`);
       if (panel) panel.classList.add('active');
     });
   });
@@ -114,7 +115,7 @@ export function initPhase2Modules(deps) {
 
       menu?.querySelectorAll('[data-view-mode]').forEach(btn => {
         btn.addEventListener('click', () => {
-          const mode = btn.dataset.viewMode;
+          const mode = /** @type {HTMLElement} */ (btn).dataset.viewMode;
           setViewMode(mode);
           menu.querySelectorAll('.dropdown-item').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
@@ -124,7 +125,7 @@ export function initPhase2Modules(deps) {
       });
 
       document.addEventListener('click', (e) => {
-        if (!dd.contains(e.target)) {
+        if (!dd.contains(/** @type {Node} */ (e.target))) {
           dd.classList.remove('open');
           trigger?.setAttribute('aria-expanded', 'false');
         }
@@ -156,7 +157,7 @@ export function initPhase2Modules(deps) {
     setZoom: (z) => { state.zoom = z; els.zoomStatus.textContent = `${Math.round(z * 100)}%`; },
     render: () => renderCurrentPage(),
     canvasWrap: els.canvasWrap,
-    canvas: els.canvas,
+    canvas: /** @type {any} */ (els.canvas),
   });
 
   // ─── Initialize Touch Gestures ───────────────────────────────────────────────
@@ -170,7 +171,7 @@ export function initPhase2Modules(deps) {
   // ─── Initialize Minimap ──────────────────────────────────────────────────────
   initMinimap(
     document.querySelector('.document-viewport'),
-    els.canvas,
+    /** @type {any} */ (els.canvas),
     els.canvasWrap
   );
 
@@ -291,7 +292,7 @@ export function initPhase2Modules(deps) {
   // ─── Initialize Memory Manager ────────────────────────────────────────────
   initMemoryManager();
   window.addEventListener('memory-warning', (e) => {
-    toastWarning(`\u0412\u044b\u0441\u043e\u043a\u043e\u0435 \u043f\u043e\u0442\u0440\u0435\u0431\u043b\u0435\u043d\u0438\u0435 \u043f\u0430\u043c\u044f\u0442\u0438: ${e.detail.usedMB} \u041c\u0411`);
+    toastWarning(`\u0412\u044b\u0441\u043e\u043a\u043e\u0435 \u043f\u043e\u0442\u0440\u0435\u0431\u043b\u0435\u043d\u0438\u0435 \u043f\u0430\u043c\u044f\u0442\u0438: ${/** @type {any} */ (e).detail.usedMB} \u041c\u0411`);
     forceCleanup();
   });
 
@@ -302,14 +303,14 @@ export function initPhase2Modules(deps) {
       const cloudBtns = [els.pushCloudSync, els.pullCloudSync, els.saveCloudSyncUrl];
       for (const btn of cloudBtns) {
         if (btn) {
-          btn.disabled = true;
+          /** @type {any} */ (btn).disabled = true;
           btn.title = '\u041e\u0431\u043b\u0430\u0447\u043d\u0430\u044f \u0438\u043d\u0442\u0435\u0433\u0440\u0430\u0446\u0438\u044f: \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 OAuth2';
         }
       }
       const cloudInput = document.getElementById('cloudSyncUrl');
       if (cloudInput) {
-        cloudInput.disabled = true;
-        cloudInput.placeholder = 'Cloud: \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 (stub)';
+        /** @type {any} */ (cloudInput).disabled = true;
+        /** @type {any} */ (cloudInput).placeholder = 'Cloud: \u0442\u0440\u0435\u0431\u0443\u0435\u0442\u0441\u044f \u043d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0430 (stub)';
       }
     }
     // AI features are partial (heuristic-only) — show notice
@@ -328,7 +329,7 @@ export function initPhase2Modules(deps) {
       if (input) {
         const dt = new DataTransfer();
         dt.items.add(file);
-        input.files = dt.files;
+        /** @type {any} */ (input).files = dt.files;
         input.dispatchEvent(new Event('change'));
       }
     },

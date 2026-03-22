@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Floating Search Panel ──────────────────────────────────────────────────
 // Ctrl+F style search panel with find, replace, navigation, and match highlighting.
 
@@ -25,7 +26,7 @@ import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
  * @param {Function} callbacks.onClose - () => void
  * @returns {{panel: HTMLElement, state: SearchState, show: Function, hide: Function, updateResults: Function}}
  */
-export function createFloatingSearch(callbacks = {}) {
+export function createFloatingSearch(callbacks = /** @type {any} */ ({})) {
   const state = {
     query: '',
     caseSensitive: false,
@@ -64,17 +65,17 @@ export function createFloatingSearch(callbacks = {}) {
   `;
 
   // Cache elements
-  const searchInput = panel.querySelector('.search-input');
+  const searchInput = /** @type {any} */ (panel.querySelector('.search-input'));
   const countLabel = panel.querySelector('.search-count');
   const prevBtn = panel.querySelector('.search-prev');
   const nextBtn = panel.querySelector('.search-next');
   const closeBtn = panel.querySelector('.search-close');
-  const caseOpt = panel.querySelector('.opt-case');
-  const wordOpt = panel.querySelector('.opt-word');
-  const regexOpt = panel.querySelector('.opt-regex');
+  const caseOpt = /** @type {any} */ (panel.querySelector('.opt-case'));
+  const wordOpt = /** @type {any} */ (panel.querySelector('.opt-word'));
+  const regexOpt = /** @type {any} */ (panel.querySelector('.opt-regex'));
   const toggleReplace = panel.querySelector('.search-toggle-replace');
-  const replaceRow = panel.querySelector('.search-replace-row');
-  const replaceInput = panel.querySelector('.replace-input');
+  const replaceRow = /** @type {any} */ (panel.querySelector('.search-replace-row'));
+  const replaceInput = /** @type {any} */ (panel.querySelector('.replace-input'));
   const replaceOneBtn = panel.querySelector('.replace-one');
   const replaceAllBtn = panel.querySelector('.replace-all');
 
@@ -158,7 +159,7 @@ export function createFloatingSearch(callbacks = {}) {
     searchDebounce = safeTimeout(doSearch, 150);
   });
 
-  searchInput.addEventListener('keydown', (e) => {
+  searchInput.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       navigate(e.shiftKey ? 'prev' : 'next');

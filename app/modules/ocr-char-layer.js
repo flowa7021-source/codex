@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module ocr-char-layer
  * @description Phase 4 — OCR Pipeline 2.0: Character-level bounding boxes.
@@ -484,7 +485,7 @@ const COMMON_FIXES = [
 export function postCorrectText(text) {
   if (!text) return '';
   let out = text;
-  for (const [pat, rep] of COMMON_FIXES) {
+  for (const [pat, rep] of /** @type {any} */ (COMMON_FIXES)) {
     out = out.replace(pat, rep);
   }
   return out.trim();
@@ -502,7 +503,7 @@ function _emptyResult(wasDeskewed, deskewAngle, wasUpscaled, upscaleFactor) {
 function _defaultWorkerFactory(lang) {
   return async () => {
     // Dynamic import of the existing Tesseract adapter
-    const { createTesseractWorker } = await import('./tesseract-adapter.js');
+    const { createTesseractWorker } = /** @type {any} */ (await import('./tesseract-adapter.js'));
     const worker = await createTesseractWorker(lang);
     return worker;
   };

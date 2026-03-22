@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module scan-decomposer
  * @description Phase 5 — Scan page decomposition + font synthesis.
@@ -38,7 +39,7 @@ import { detectBackgroundColor } from './erase-tool.js';
  * @property {boolean} isSerif
  * @property {number}  weight        400 or 700
  * @property {boolean} isItalic
- * @property {number}  xHeightRatio  x-height / cap-height (0–1)
+ * @property {number}  xHeightRatio  x-height / cap-height (0-1)
  * @property {number}  aspectRatio   average char width / height
  */
 
@@ -47,7 +48,7 @@ import { detectBackgroundColor } from './erase-tool.js';
  * @property {string}  family           CSS font-family string
  * @property {number}  weight           400 or 700
  * @property {string}  style            'normal' or 'italic'
- * @property {number}  score            Similarity score 0–1
+ * @property {number}  score            Similarity score 0-1
  * @property {FontCharacteristics} characteristics
  */
 
@@ -83,7 +84,7 @@ const SYSTEM_FONT_PROFILES = [
  *   - Italic from Tesseract word.fontAttributes
  *   - x-height from "x" characters in the OCR output
  *
- * @param {Object} ocrResult  – result from tesseract.js recognize()
+ * @param {Object} ocrResult  - result from tesseract.js recognize()
  * @returns {FontCharacteristics}
  */
 export function analyseOcrFontCharacteristics(ocrResult) {
@@ -177,7 +178,7 @@ export function matchFontFromOcr(ocrResult) {
 
 /**
  * @typedef {Object} DecomposedPage
- * @property {Uint8Array} backgroundImage    PNG bytes – the scan with text removed
+ * @property {Uint8Array} backgroundImage    PNG bytes - the scan with text removed
  * @property {string}     backgroundMime     'image/png' | 'image/jpeg'
  * @property {Array<DecomposedTextBlock>} textBlocks
  * @property {FontMatchResult} fontMatch
@@ -203,12 +204,12 @@ export function matchFontFromOcr(ocrResult) {
  *      and fill the bbox with that colour (removing the scanned text).
  *   3. Return the modified canvas as PNG bytes + text block descriptors.
  *
- * @param {HTMLImageElement|Uint8Array} pageImage  – The raw scan image.
- * @param {Object} ocrResult                       – Tesseract.js result.
- * @param {number} pageWidthPt                     – Page width in PDF points.
- * @param {number} pageHeightPt                    – Page height in PDF points.
+ * @param {HTMLImageElement|Uint8Array} pageImage  - The raw scan image.
+ * @param {Object} ocrResult                       - Tesseract.js result.
+ * @param {number} pageWidthPt                     - Page width in PDF points.
+ * @param {number} pageHeightPt                    - Page height in PDF points.
  * @param {Object} [opts]
- * @param {number} [opts.expandPx=2]               – Expand word bbox to cover anti-aliasing.
+ * @param {number} [opts.expandPx=2]               - Expand word bbox to cover anti-aliasing.
  * @param {string} [opts.outputMime='image/png']
  * @returns {Promise<DecomposedPage>}
  */
@@ -226,7 +227,7 @@ export async function decomposeScannedPage(pageImage, ocrResult, pageWidthPt, pa
   canvas.width  = imgEl.naturalWidth;
   canvas.height = imgEl.naturalHeight;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return [];
+  if (!ctx) return /** @type {any} */ ([]);
   ctx.drawImage(imgEl, 0, 0);
 
   // Scale factors: OCR bboxes are in image pixels; we need them in both
@@ -313,7 +314,7 @@ function _canvasToBytes(canvas, mimeType) {
     canvas.toBlob(blob => {
       if (!blob) { reject(new Error('canvas.toBlob returned null')); return; }
       const reader = new FileReader();
-      reader.onload  = () => resolve(new Uint8Array(reader.result));
+      reader.onload  = () => resolve(new Uint8Array(/** @type {ArrayBuffer} */ (reader.result)));
       reader.onerror = reject;
       reader.readAsArrayBuffer(blob);
     }, type, 0.90);

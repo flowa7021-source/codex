@@ -1,3 +1,4 @@
+// @ts-check
 // thumbnail-renderer.js — Single-column page thumbnail previews in sidebar
 import { state, els } from './state.js';
 
@@ -81,7 +82,7 @@ export async function renderPagePreviews() {
   observer = new IntersectionObserver((entries) => {
     for (const entry of entries) {
       if (entry.isIntersecting) {
-        const page = Number(entry.target.dataset.page);
+        const page = Number(/** @type {HTMLElement} */ (entry.target).dataset.page);
         if (page > 0) {
           const el = entry.target.querySelector('canvas');
           if (el) renderThumb(page, el);
@@ -147,8 +148,8 @@ export function highlightCurrentPage() {
 
   const wrappers = container.querySelectorAll('.thumb-wrapper');
   for (const w of wrappers) {
-    const page = Number(w.dataset.page);
-    w.style.borderColor = page === state.currentPage ? 'var(--accent, #3b82f6)' : 'transparent';
+    const page = Number(/** @type {HTMLElement} */ (w).dataset.page);
+    /** @type {any} */ (w).style.borderColor = page === state.currentPage ? 'var(--accent, #3b82f6)' : 'transparent';
   }
 
   // Scroll current page into view

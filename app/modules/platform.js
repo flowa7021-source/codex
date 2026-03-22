@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module platform
  * @description Platform abstraction layer: Tauri desktop / browser fallback.
@@ -25,7 +26,7 @@ let _tauriInvoke = null;
  */
 export async function initPlatform() {
   try {
-    if (window.__TAURI_INTERNALS__) {
+    if (/** @type {any} */ (window).__TAURI_INTERNALS__) {
       _isTauri = true;
       const { invoke } = await import('@tauri-apps/api/core');
       _tauriInvoke = invoke;
@@ -152,7 +153,7 @@ export async function writeFile(path, data) {
   }
 
   // Browser fallback: trigger download
-  downloadBlob(new Blob([data]), path.split('/').pop() || 'document');
+  downloadBlob(new Blob([/** @type {any} */ (data)]), path.split('/').pop() || 'document');
 }
 
 /**
