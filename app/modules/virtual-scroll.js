@@ -2,7 +2,7 @@
 // ─── Virtual Scroll ─────────────────────────────────────────────────────────
 // Virtualized rendering for continuous scroll mode. Only renders visible pages.
 
-import { safeTimeout } from './safe-timers.js';
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
 /**
  * @typedef {object} VirtualScrollOptions
@@ -32,6 +32,8 @@ export class VirtualScroll {
     this.renderedPages = new Map();
     /** @type {Set<number>} Pages currently being rendered */
     this.rendering = new Set();
+    /** Max concurrent renders to prevent memory pressure */
+    this._maxConcurrent = 3;
     /** @type {number[]} Cumulative Y offsets for each page */
     this.offsets = [];
 
@@ -62,10 +64,10 @@ export class VirtualScroll {
     this._scrollHandler = throttle(() => this._onScroll(), 16);
     this.container.addEventListener('scroll', this._scrollHandler, { passive: true });
 
-    // Resize observer
+    // Resize observer — use same throttled handler to avoid double-calls
     try {
       this._resizeObserver = new ResizeObserver(() => {
-        this._onScroll();
+        this._scrollHandler();
       });
       this._resizeObserver.observe(this.container);
     } catch (err) {
@@ -115,8 +117,9 @@ export class VirtualScroll {
       }
     }
 
-    // Render newly visible pages
+    // Render newly visible pages (limit concurrency to avoid memory pressure)
     for (const pageNum of visiblePages) {
+      if (this.rendering.size >= this._maxConcurrent) break;
       if (!this.renderedPages.has(pageNum) && !this.rendering.has(pageNum)) {
         this._renderPageElement(pageNum);
       }
@@ -209,6 +212,7 @@ export class VirtualScroll {
     this._destroyed = true;
     if (this._scrollHandler) {
       this.container.removeEventListener('scroll', this._scrollHandler);
+      this._scrollHandler.cancel?.();
     }
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
@@ -224,11 +228,14 @@ export class VirtualScroll {
   }
 }
 
-// Simple throttle utility
+/**
+ * Throttle utility that returns a function with a `.cancel()` method
+ * to clean up pending timers on destroy.
+ */
 function throttle(fn, ms) {
   let last = 0;
   let timer = null;
-  return function (...args) {
+  const throttled = function (...args) {
     const now = Date.now();
     if (now - last >= ms) {
       last = now;
@@ -241,4 +248,8 @@ function throttle(fn, ms) {
       }, ms - (now - last));
     }
   };
+  throttled.cancel = () => {
+    if (timer) { clearSafeTimeout(timer); timer = null; }
+  };
+  return throttled;
 }

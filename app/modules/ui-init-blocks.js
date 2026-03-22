@@ -87,13 +87,17 @@ function initContinuousScroll(deps) {
     // Use IntersectionObserver for lazy rendering
     if (scrollObserver) { scrollObserver.disconnect(); scrollObserver = null; }
     try {
+      let activeRenders = 0;
+      const MAX_CONCURRENT_RENDERS = 3;
       scrollObserver = new IntersectionObserver((entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
+            if (activeRenders >= MAX_CONCURRENT_RENDERS) break;
             const pageNum = parseInt(/** @type {HTMLElement} */ (entry.target).dataset.pageNum, 10);
             if (!renderedPages.has(pageNum)) {
               renderedPages.add(pageNum);
-              renderScrollPage(pageNum, entry.target);
+              activeRenders++;
+              renderScrollPage(pageNum, entry.target).finally(() => { activeRenders--; });
             }
           }
         }
@@ -124,6 +128,8 @@ function initContinuousScroll(deps) {
 
   function exitContinuousMode() {
     if (scrollObserver) { scrollObserver.disconnect(); scrollObserver = null; }
+    // Zero canvas dimensions to release GPU memory before removing from DOM
+    scrollContainer.querySelectorAll('canvas').forEach(c => { c.width = 0; c.height = 0; });
     scrollWrap.style.display = 'none';
     canvasWrap.style.display = '';
     scrollContainer.innerHTML = '';
