@@ -555,6 +555,8 @@ test.describe('F — Annotations toolbar flow', () => {
 test.describe('G — Export/print flow', () => {
   test('print button exists and is clickable', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     const printBtn = page.locator('#printPage');
     await expect(printBtn).toBeVisible();
     await expect(printBtn).toBeEnabled();
@@ -562,6 +564,8 @@ test.describe('G — Export/print flow', () => {
 
   test('clicking print opens print modal dialog', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     // Override window.print to prevent actual print dialog
     await page.evaluate(() => { window.print = () => {}; });
     await page.locator('#printPage').click();
@@ -577,6 +581,8 @@ test.describe('G — Export/print flow', () => {
 
   test('print modal has page range options', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     await page.evaluate(() => { window.print = () => {}; });
     await page.locator('#printPage').click();
     await page.waitForTimeout(500);
@@ -588,6 +594,8 @@ test.describe('G — Export/print flow', () => {
 
   test('print modal has scale and orientation selectors', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     await page.evaluate(() => { window.print = () => {}; });
     await page.locator('#printPage').click();
     await page.waitForTimeout(500);
@@ -597,6 +605,8 @@ test.describe('G — Export/print flow', () => {
 
   test('print modal can be closed with cancel button', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     await page.evaluate(() => { window.print = () => {}; });
     await page.locator('#printPage').click();
     await page.waitForTimeout(500);

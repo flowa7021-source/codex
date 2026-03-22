@@ -89,6 +89,8 @@ test.describe('04 — Zoom and rotation', () => {
 test.describe('05 — Sidebar sections', () => {
   test('bookmarks section exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="bookmarks-tab"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('[data-sidebar-section="bookmarks"]')).toBeVisible();
   });
 
@@ -99,6 +101,8 @@ test.describe('05 — Sidebar sections', () => {
 
   test('outline section exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="outline-tab"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('[data-sidebar-section="outline"]')).toBeVisible();
   });
 
@@ -112,11 +116,15 @@ test.describe('05 — Sidebar sections', () => {
 test.describe('06 — Bookmarks', () => {
   test('add bookmark button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="bookmarks-tab"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#addBookmark')).toBeVisible();
   });
 
   test('bookmark filter input exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="bookmarks-tab"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#bookmarkFilter')).toBeVisible();
   });
 });
@@ -125,11 +133,15 @@ test.describe('06 — Bookmarks', () => {
 test.describe('07 — Text tools', () => {
   test('text panel exists with textarea', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#pageText')).toBeVisible();
   });
 
   test('text action buttons exist', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#refreshText')).toBeVisible();
     await expect(page.locator('#copyText')).toBeVisible();
     await expect(page.locator('#exportText')).toBeVisible();
@@ -140,6 +152,8 @@ test.describe('07 — Text tools', () => {
 test.describe('08 — OCR controls', () => {
   test('OCR buttons exist', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#ocrCurrentPage')).toBeVisible();
     await expect(page.locator('#ocrRegionMode')).toBeVisible();
     await expect(page.locator('#copyOcrText')).toBeVisible();
@@ -148,6 +162,8 @@ test.describe('08 — OCR controls', () => {
 
   test('OCR status label exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     const status = page.locator('#ocrStatus');
     await expect(status).toBeVisible();
     await expect(status).toHaveText(/OCR/);
@@ -158,16 +174,22 @@ test.describe('08 — OCR controls', () => {
 test.describe('09 — Export features', () => {
   test('export DOCX button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportWord')).toBeVisible();
   });
 
   test('export OCR index button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportOcrIndex')).toBeVisible();
   });
 
   test('import DOCX input exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#importDocx')).toBeAttached();
   });
 });
@@ -176,17 +198,23 @@ test.describe('09 — Export features', () => {
 test.describe('10 — Text editing mode', () => {
   test('toggle text edit button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#toggleTextEdit')).toBeVisible();
   });
 
   test('undo/redo buttons exist', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#undoTextEdit')).toBeVisible();
     await expect(page.locator('#redoTextEdit')).toBeVisible();
   });
 
   test('save text edits button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#saveTextEdits')).toBeVisible();
   });
 });
@@ -238,6 +266,8 @@ test.describe('14 — Annotation tools', () => {
 test.describe('15 — Session health', () => {
   test('health report export button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportHealthReport')).toBeVisible();
   });
 
@@ -285,6 +315,8 @@ test.describe('18 — Advanced panels', () => {
 test.describe('19 — Workspace', () => {
   test('print page button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#printPage')).toBeVisible();
   });
 });
@@ -383,14 +415,14 @@ test.describe('23 — Drag-and-drop file opening', () => {
 test.describe('24 — Continuous scroll mode', () => {
   test('scroll mode toggle control exists', async ({ page }) => {
     await openApp(page);
-    const toggle = page.locator('#scrollModeToggle, [data-action="toggle-scroll-mode"], #continuousScroll');
+    const toggle = page.locator('#toggleContinuousScroll, #scrollModeToggle, [data-action="toggle-scroll-mode"], #continuousScroll');
     const count = await toggle.count();
     expect(count).toBeGreaterThanOrEqual(0);
   });
 
   test('viewer container is scrollable', async ({ page }) => {
     await openApp(page);
-    const viewer = page.locator('#viewer, .pdf-viewer, .page-container').first();
+    const viewer = page.locator('#viewerCanvas, #viewer, .pdf-viewer, .page-container').first();
     const overflow = await viewer.evaluate(el => getComputedStyle(el).overflowY);
     expect(['auto', 'scroll', 'visible']).toContain(overflow);
   });
@@ -400,6 +432,8 @@ test.describe('24 — Continuous scroll mode', () => {
 test.describe('25 — Print dialog', () => {
   test('print button exists and is clickable', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     const printBtn = page.locator('#printPage');
     await expect(printBtn).toBeVisible();
     await expect(printBtn).toBeEnabled();
@@ -407,6 +441,8 @@ test.describe('25 — Print dialog', () => {
 
   test('clicking print triggers window.print or print modal', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     const printCalled = await page.evaluate(() => {
       return new Promise(resolve => {
         window.print = () => resolve(true);
@@ -423,6 +459,8 @@ test.describe('25 — Print dialog', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     await page.evaluate(() => { window.print = () => {}; });
     await page.locator('#printPage').click();
     await page.waitForTimeout(500);
@@ -441,7 +479,7 @@ test.describe('26 — Tab bar', () => {
 
   test('new tab button exists if tab bar is present', async ({ page }) => {
     await openApp(page);
-    const newTabBtn = page.locator('#newTab, .new-tab-btn, [data-action="new-tab"]');
+    const newTabBtn = page.locator('#tabBarNewTab, #newTab, .new-tab-btn, [data-action="new-tab"]');
     const count = await newTabBtn.count();
     // structural check — tab bar may not be active without a document
     expect(count).toBeGreaterThanOrEqual(0);
@@ -451,7 +489,7 @@ test.describe('26 — Tab bar', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
-    const newTabBtn = page.locator('#newTab, .new-tab-btn, [data-action="new-tab"]').first();
+    const newTabBtn = page.locator('#tabBarNewTab, #newTab, .new-tab-btn, [data-action="new-tab"]').first();
     if (await newTabBtn.count() > 0) {
       await newTabBtn.click();
       await page.waitForTimeout(500);

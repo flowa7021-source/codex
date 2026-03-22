@@ -257,6 +257,8 @@ test.describe('D — Export flow', () => {
 
   test('print button exists and is visible', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#printPage')).toBeVisible();
   });
 
