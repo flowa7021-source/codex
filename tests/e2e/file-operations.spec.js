@@ -263,7 +263,7 @@ test.describe('D — Export flow', () => {
   test('download button exists and is visible', async ({ page }) => {
     await openApp(page);
     // Open utilities tool panel to see download button
-    await page.locator('[data-tool="utilities"]').click();
+    await page.locator('[data-tool="tools"]').click();
     await page.waitForTimeout(300);
     await expect(page.locator('#downloadFile')).toBeVisible();
   });
@@ -297,7 +297,7 @@ test.describe('D — Export flow', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
-    await page.locator('[data-tool="utilities"]').click();
+    await page.locator('[data-tool="tools"]').click();
     await page.waitForTimeout(300);
     await page.locator('#downloadFile').click();
     await page.waitForTimeout(500);

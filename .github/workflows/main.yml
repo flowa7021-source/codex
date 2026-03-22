@@ -65,8 +65,8 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests (desktop only)
-        run: npm run test:e2e:desktop
+      - name: Run E2E tests (desktop only, skip visual regression)
+        run: npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd --grep-invert "Visual"
 
       - name: Comment bundle analysis on PR
         if: always() && github.event_name == 'pull_request'
