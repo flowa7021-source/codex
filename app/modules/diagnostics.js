@@ -247,16 +247,54 @@ export function exportLogsAsJson() {
     entries: _logBuffer,
   };
   const json = JSON.stringify(payload, null, 2);
-  const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `novareader-logs-${Date.now()}.json`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+  try {
+    const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `novareader-logs-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (_err) {
+    // Fallback: copy to clipboard when download is blocked (Tauri WebView)
+    copyLogsToClipboard().catch(() => {});
+  }
   novaLog('diagnostics', 'logs.exported', { count: _logBuffer.length });
+}
+
+/**
+ * Copy all logs to clipboard as JSON text.
+ */
+export async function copyLogsToClipboard() {
+  const payload = {
+    app: 'NovaReader',
+    version: APP_VERSION,
+    exportedAt: new Date().toISOString(),
+    sessionId: state.diagnostics.sessionId,
+    docName: state.docName || null,
+    totalEntries: _logBuffer.length,
+    entries: _logBuffer,
+  };
+  const json = JSON.stringify(payload, null, 2);
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(json);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = json;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      ta.remove();
+    }
+    novaLog('diagnostics', 'logs.copied', { count: _logBuffer.length });
+  } catch (err) {
+    console.warn('[diagnostics] clipboard copy failed:', err?.message);
+  }
 }
 
 // ─── Log Viewer UI ──────────────────────────────────────────────────────────
@@ -409,6 +447,11 @@ export function initLogViewer() {
   const exportBtn = document.getElementById('exportLogsJson');
   if (exportBtn) {
     exportBtn.addEventListener('click', exportLogsAsJson);
+  }
+
+  const copyBtn = document.getElementById('copyLogsClipboard');
+  if (copyBtn) {
+    copyBtn.addEventListener('click', copyLogsToClipboard);
   }
 
   const clearBtn = document.getElementById('clearActivityLog');

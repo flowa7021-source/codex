@@ -74,15 +74,15 @@ function cleanupMode(mode) {
 
   vp.classList.remove('vmode-two-up', 'vmode-book', 'vmode-continuous', 'vmode-presentation');
 
-  // Clean up continuous scroll canvases
-  const scrollWrap = vp.querySelector('.continuous-scroll-wrap');
-  if (scrollWrap) scrollWrap.innerHTML = '';
-
-  // Disconnect continuous scroll observer
+  // Disconnect continuous scroll observer BEFORE clearing DOM to prevent stale callbacks
   if (continuousObserver) {
     continuousObserver.disconnect();
     continuousObserver = null;
   }
+
+  // Clean up continuous scroll canvases
+  const scrollWrap = vp.querySelector('.continuous-scroll-wrap');
+  if (scrollWrap) scrollWrap.innerHTML = '';
 
   // Clean up presentation mode listeners
   if (mode === VIEW_MODES.PRESENTATION) {
@@ -199,15 +199,19 @@ function setupContinuousScroll() {
 
 async function renderContinuousPage(slot, pageNum) {
   if (slot.dataset.rendered === 'true') return;
+  if (!deps?.renderPage) return;
   slot.dataset.rendered = 'true';
 
   const canvas = document.createElement('canvas');
   canvas.className = 'continuous-page-canvas';
   slot.appendChild(canvas);
 
-  if (deps.renderPage) {
+  try {
     await deps.renderPage(pageNum, canvas);
     slot.style.minHeight = ''; // Remove placeholder height
+  } catch (err) {
+    console.warn('[view-modes] error rendering page', pageNum, ':', err?.message);
+    slot.dataset.rendered = 'false'; // Allow retry
   }
 }
 

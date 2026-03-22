@@ -8,7 +8,7 @@ import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state
 import { ensurePdfJs, preloadPdfRuntime } from './modules/loaders.js';
 import { getCachedPage, clearPageRenderCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
 import { toolStateMachine, initToolModeDeps } from './modules/tool-modes.js';
-import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps, novaLog, exportLogsAsJson, clearActivityLog, getLogEntries } from './modules/diagnostics.js';
+import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps, novaLog, exportLogsAsJson, copyLogsToClipboard, clearActivityLog, getLogEntries } from './modules/diagnostics.js';
 import { setLanguage, getLanguage, loadLanguage, applyI18nToDOM } from './modules/i18n.js';
 import { blockEditor } from './modules/pdf-advanced-edit.js';
 import { formManager } from './modules/pdf-forms.js';
@@ -623,7 +623,10 @@ bindUndoRedoKeys();
 
 // Initialize view modes with app dependencies
 initViewModes({
-  renderPage: null, // Will be connected after full render pipeline is ready
+  renderPage: async (pageNum, canvas) => {
+    if (!state.adapter) return;
+    await state.adapter.renderPage(pageNum, canvas, { zoom: state.zoom, rotation: state.rotation });
+  },
   getPageCount: () => state.pageCount,
   getCurrentPage: () => state.currentPage,
   setCurrentPage: async (n) => { const p = Math.max(1, Math.min(n, state.pageCount)); state.currentPage = p; els.pageInput.value = String(p); await renderCurrentPage(); },
@@ -762,7 +765,7 @@ initAdvanced({
 // Global error handlers — registered by initErrorHandling() above
 
 // ─── Expose debugging globals ────────────────────────────────────────────────
-window._activityLog = { novaLog, exportLogsAsJson, clearActivityLog, getLogEntries };
+window._activityLog = { novaLog, exportLogsAsJson, copyLogsToClipboard, clearActivityLog, getLogEntries };
 window._minimap = { initMinimap, updateMinimap, showMinimap, hideMinimap, toggleMinimap };
 window._autoScroll = { startAutoScroll, stopAutoScroll, toggleAutoScroll, setAutoScrollSpeed, isAutoScrolling };
 window._autosave = { triggerAutosave, markCleanExit, checkForRecovery, clearRecoveryData, startAutosaveTimer, stopAutosaveTimer };

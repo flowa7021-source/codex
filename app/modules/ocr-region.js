@@ -135,7 +135,14 @@ export async function runOcrOnRect(rect, reason = 'manual') {
 
 export async function runOcrForCurrentPage() {
   if (!state.adapter) return;
-  await runOcrOnRect({ x: 0, y: 0, w: /** @type {any} */ (els.canvas).width, h: /** @type {any} */ (els.canvas).height }, 'full-page');
+  const cw = /** @type {any} */ (els.canvas).width;
+  const ch = /** @type {any} */ (els.canvas).height;
+  if (!cw || !ch) {
+    setOcrStatus('OCR: страница ещё не отрендерена');
+    pushDiagnosticEvent('ocr.skip.no-canvas-dims', { page: state.currentPage, width: cw, height: ch }, 'warn');
+    return;
+  }
+  await runOcrOnRect({ x: 0, y: 0, w: cw, h: ch }, 'full-page');
 }
 
 export async function extractTextForPage(pageNumber) {

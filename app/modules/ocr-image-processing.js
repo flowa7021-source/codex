@@ -470,11 +470,17 @@ export async function buildOcrSourceCanvas(pageNumber) {
     });
   }
 
-  const canvas = createOcrCanvas(1, 1);
+  // Use regular DOM canvas (not OffscreenCanvas) because adapter.renderPage
+  // sets canvas.style.width/height which OffscreenCanvas does not support.
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
   // Use adaptive DPI: render a small probe first, analyze text density, then render at optimal zoom
   let adaptiveZoom = state.settings?.ocrQualityMode === 'accurate' ? 1.7 : 1.35;
   try {
-    const probeCanvas = createOcrCanvas(1, 1);
+    const probeCanvas = document.createElement('canvas');
+    probeCanvas.width = 1;
+    probeCanvas.height = 1;
     await state.adapter.renderPage(pageNumber, probeCanvas, { zoom: 1.0, rotation: state.rotation || 0 });
     const analysis = analyzeTextDensity(probeCanvas);
     adaptiveZoom = computeOcrZoom(probeCanvas.width, probeCanvas.height, analysis, OCR_SOURCE_MAX_PIXELS);
