@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Persistence Facade ─────────────────────────────────────────────────────
 // Unified persistence API for NovaReader.
 // Provides a single interface for all storage needs.

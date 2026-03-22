@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Error Handling & Crash Telemetry Setup ─────────────────────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 

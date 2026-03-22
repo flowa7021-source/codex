@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Enhanced Zoom System ───────────────────────────────────────────────────
 // Zoom presets, smooth zoom, pinch-to-zoom, marquee zoom, per-document memory.
 

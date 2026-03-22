@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Touch & Mobile Gestures ────────────────────────────────────────────────
 // Swipe navigation, touch-friendly targets, haptic feedback.
 

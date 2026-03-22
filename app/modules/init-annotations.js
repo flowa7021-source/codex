@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Annotations & Drawing Tool Wiring ──────────────────────────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Intelligent Text Extraction ────────────────────────────────────────────
 // PDF→Plain Text with reading order, column detection, header/footer removal.
 

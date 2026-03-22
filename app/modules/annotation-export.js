@@ -1,3 +1,4 @@
+// @ts-check
 // ─── SVG/PDF Annotation Export Module ────────────────────────────────────────
 
 export function exportAnnotationsAsSvg(strokes, canvasWidth, canvasHeight) {

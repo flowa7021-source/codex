@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Auto-Scroll Reading Mode (Teleprompter) ────────────────────────────────
 // Smooth continuous scrolling at configurable speed for hands-free reading.
 

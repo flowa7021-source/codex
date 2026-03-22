@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Tile-Based Renderer ────────────────────────────────────────────────────
 // Splits very large pages into tiles and only renders tiles visible in the
 // current viewport.  This avoids allocating a single enormous canvas that

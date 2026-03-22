@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Export Controller (Orchestrator) ────────────────────────────────────────
 // Thin orchestrator that re-exports from focused sub-modules:
 //   - export-docx.js:  DOCX XML builders, styles, blob generation, import parsing

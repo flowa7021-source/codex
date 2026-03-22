@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Quick Actions Bar ──────────────────────────────────────────────────────
 // Floating toolbar that appears on text selection (like Notion/Google Docs).
 

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Annotations Core ───────────────────────────────────────────────────────
 // Centralized annotation management: strokes, comments, rendering, I/O.
 

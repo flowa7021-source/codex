@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Page Organizer ─────────────────────────────────────────────────────────
 // Fullscreen page management: reorder, insert, delete, rotate, extract pages.
 // Operates on PDF bytes via pdf-lib.

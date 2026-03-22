@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Enhanced Text Layer Builder ────────────────────────────────────────────
 // High-quality text layer overlay with CJK/RTL support, selection, and search highlight.
 

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Reactive State Store ────────────────────────────────────────────────────
 
 function createReactiveState(initial) {

@@ -1,3 +1,4 @@
+// @ts-check
 // ═══════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — PDF Document Comparison Module
 // Text-based and visual comparison of two PDF documents

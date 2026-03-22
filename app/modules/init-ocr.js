@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR & Text Processing Wiring ───────────────────────────────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 

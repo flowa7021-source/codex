@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module conversion-qa
  * @description Layer 5 – Quality Assurance for the PDF→DOCX conversion pipeline.

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Page Navigation & Zoom Controls ────────────────────────────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 

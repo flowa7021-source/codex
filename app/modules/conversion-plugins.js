@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Conversion Plugins Module ───────────────────────────────────────────────
 // Plugin system for complex tabular templates: invoices, reports, custom tables
 

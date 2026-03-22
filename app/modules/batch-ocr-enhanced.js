@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Enhanced Batch OCR ─────────────────────────────────────────────────────
 // Parallel workers, priority queue, pause/resume/cancel for batch OCR.
 

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── App Persistence ────────────────────────────────────────────────────────
 // Centralized state persistence: localStorage, session state, workspace bundles.
 

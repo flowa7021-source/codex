@@ -1,3 +1,4 @@
+// @ts-check
 // ─── ZIP Utilities ──────────────────────────────────────────────────────────
 // Shared ZIP extraction using fflate (supports DEFLATE + Store methods).
 // Used by epub-adapter.js and cbz-adapter.js.

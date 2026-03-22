@@ -1,3 +1,4 @@
+// @ts-check
 // ─── ePub Adapter ────────────────────────────────────────────────────────────
 // Lightweight ePub reader: parses OEBPS/OPF container, extracts XHTML chapters,
 // renders them as styled text on canvas.

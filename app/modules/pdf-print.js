@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF Print Module ───────────────────────────────────────────────────────
 // Advanced print dialog: page ranges, N-up, booklet, scaling.
 

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Confidence Map Overlay ──────────────────────────────────────────────
 // Renders a color-coded overlay on the annotation canvas to visualize
 // word-level OCR confidence. Green = high (>=90), yellow = medium (70-89),

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Enhanced DOCX Import with Formatting Preservation ──────────────────────
 
 function extractFileFromDocxZip(bytes, targetName) {

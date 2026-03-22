@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Adaptive DPI Module ─────────────────────────────────────────────────────
 // Analyzes page content to determine optimal OCR zoom/DPI.
 // Detects text density, average stroke width, and contrast to pick

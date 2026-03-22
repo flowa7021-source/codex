@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Error Boundary Fallback UI ──────────────────────────────────────────────
 // Provides visual fallback when critical errors occur.
 // Uses inline styles so it works even if CSS fails to load.

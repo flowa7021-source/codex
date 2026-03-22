@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR User Dictionary for Post-Correction ────────────────────────────────
 // Stores user-defined word corrections in localStorage so that recurring OCR
 // mistakes can be fixed automatically on subsequent recognitions.

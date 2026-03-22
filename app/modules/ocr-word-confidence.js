@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Word-Level Confidence Module ────────────────────────────────────────
 // Scores individual words from OCR output for quality/confidence.
 // Highlights suspicious words that likely contain OCR errors.

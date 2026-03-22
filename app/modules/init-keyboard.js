@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Global Keyboard Handlers ───────────────────────────────────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 

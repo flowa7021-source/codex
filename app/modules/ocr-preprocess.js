@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Image Preprocessing ────────────────────────────────────────────────
 // Deskew, denoise, binarization, border removal for better OCR quality.
 

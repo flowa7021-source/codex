@@ -1,3 +1,4 @@
+// @ts-check
 // convert-to-pdf.js — Convert images and DJVU to PDF
 import { PDFDocument } from 'pdf-lib';
 import { state } from './state.js';

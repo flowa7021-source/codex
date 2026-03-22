@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF Form Filling Module ─────────────────────────────────────────────────
 // Extract, fill, and export PDF form fields using PDF.js annotation API
 

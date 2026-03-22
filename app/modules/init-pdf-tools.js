@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF Operations (Forms, Stamps, Watermark, Block Editor) ────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 

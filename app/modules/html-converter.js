@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF → HTML Converter ───────────────────────────────────────────────────
 // Converts PDF pages to clean, responsive HTML with CSS positioning.
 
