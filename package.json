@@ -15,7 +15,7 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
     "test:e2e": "npx playwright test --config tests/e2e/playwright.config.js",
-    "test:e2e:desktop": "npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd",
+    "test:e2e:desktop": "npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd --grep-invert Visual",
     "test:e2e:mobile": "npx playwright test --config tests/e2e/playwright.config.js --project=mobile",
     "test:unit": "node --import ./tests/unit/setup-dom.js --test tests/unit/*.test.js",
     "test:benchmark": "node tests/benchmarks/ocr-quality-baseline.js",

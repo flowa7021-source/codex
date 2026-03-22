@@ -17,10 +17,12 @@ const isDebug = !!process.env.TAURI_ENV_DEBUG;
 // Run `npm run build` for obfuscated production build
 // Run `npm run build:dev` for unobfuscated development build
 
-// Remove <script type="importmap"> from production HTML — Vite bundles these deps
+// Remove <script type="importmap"> from production HTML — Vite bundles these deps.
+// Only applies during build; dev server needs the importmap for bare import resolution.
 function removeImportMapPlugin() {
   return {
     name: 'remove-importmap',
+    apply: 'build',
     transformIndexHtml(html) {
       return html.replace(/<script type="importmap">[\s\S]*?<\/script>\s*/g, '');
     },
