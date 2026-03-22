@@ -125,6 +125,7 @@ export default [
       'dist/**',
       'dist-vite/**',
       'app/vendor/**',
+      'app/public/vendor/**',
       '*.min.js',
     ],
   },
