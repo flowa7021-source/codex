@@ -38,17 +38,17 @@ jobs:
       - name: ESLint (zero warnings)
         run: npm run lint
 
-      - name: Unit tests (490+ tests, node:test runner)
+      - name: Unit tests (580+ tests, node:test runner)
         run: npm run test:unit
 
-      - name: Check code coverage (≥45% lines)
+      - name: Check code coverage (≥50% lines)
         run: |
           npm run test:coverage 2>&1 | tee /tmp/coverage.txt
           # Extract line coverage % and enforce minimum
           LINE_COV=$(grep 'All files' /tmp/coverage.txt | awk '{print $4}')
           echo "Line coverage: ${LINE_COV}%"
-          if [ "$(echo "$LINE_COV < 45" | bc -l)" = "1" ]; then
-            echo "ERROR: Line coverage ${LINE_COV}% is below 45% threshold"
+          if [ "$(echo "$LINE_COV < 50" | bc -l)" = "1" ]; then
+            echo "ERROR: Line coverage ${LINE_COV}% is below 50% threshold"
             exit 1
           fi
 

@@ -54,11 +54,13 @@ Located in `scripts/obfuscate-dist.js`. Key settings:
 
 ```
 app/
-  app.js              — Main entry point (wiring layer, 1740 lines)
+  app.js              — Main entry point (wiring layer, ~955 lines)
   index.html          — Single-page HTML with all UI elements
   sw.js               — Service Worker for PWA offline
   manifest.json       — PWA manifest
-  modules/            — 161 JS modules (source code)
+  locales/            — 10 i18n JSON files (ar, de, en, es, fr, ja, ko, pt, ru, zh)
+  modules/            — 168 JS modules (source code)
+    init-*.js         — 8 init modules extracted from app.js
   styles/             — 12 modular CSS files
   vendor/             — DjVu.js + Tesseract language data (LFS)
 dist/                 — Production build output (obfuscated)
@@ -66,7 +68,7 @@ scripts/
   obfuscate-dist.js   — Post-build obfuscation script
   check-bundle-size.js — Bundle budget checker
   analyze-bundle.js    — Bundle analysis with baseline
-tests/                — 27 test files (500+ tests)
+tests/                — 30+ test files (580+ tests)
 docs/                 — Release notes, backlog, architecture, components
 ```
 
@@ -74,12 +76,13 @@ docs/                 — Release notes, backlog, architecture, components
 
 ```bash
 npm run lint              # ESLint (0 warnings required)
-npm run test:unit         # 322 unit tests
+npm run test:unit         # 583+ unit tests
+npm run test:coverage     # Coverage report (≥50% lines enforced in CI)
 npm run test:benchmark    # OCR quality baseline
 npm run test:benchmark:ocr  # OCR corpus (16 languages)
 npm run test:benchmark:pdf  # PDF conversion
 npm run check:bundle      # Bundle size budget
-npm run typecheck         # TypeScript check (19 modules)
+npm run typecheck         # TypeScript check (86 modules with @ts-check)
 ```
 
 ## Key Architecture Decisions
@@ -90,3 +93,6 @@ npm run typecheck         # TypeScript check (19 modules)
 - **DjVu Document constructor** uses raw setTimeout (same reason)
 - **OCR pipeline** guards against 0-dimension canvas at 3 entry points
 - **Event bus** tracks all listeners (on/once/subscribe) for removeAll cleanup
+- **app.js decomposition** — 8 init-* modules handle error handling, navigation, OCR, annotations, PDF tools, keyboard, tabs, and advanced features
+- **i18n** — translations stored in `app/locales/*.json`, loaded via static imports in `i18n.js`
+- **CI bundle monitoring** — automatic size checks + PR comments with analysis
