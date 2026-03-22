@@ -67,7 +67,7 @@ import { AnnotationController } from './modules/annotations-core.js';
 import { getPageInfoList, reorderPages, deletePages, rotatePages, extractPages, insertPages, insertBlankPage, duplicatePages, reversePages, createOrganizerState, togglePageSelection, selectPageRange, computeReorderFromDrag } from './modules/page-organizer.js';
 import { initFloatingSearch } from './modules/floating-search.js';
 import { XpsAdapter } from './modules/xps-adapter.js';
-import { registerProvider, getProviders, authenticate, listFiles, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider } from './modules/cloud-integration.js';
+import { registerProvider, getProviders, authenticate, listFiles, openFile as cloudOpenFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider } from './modules/cloud-integration.js';
 import { summarizeText, extractTags, semanticSearch, generateToc } from './modules/ai-features.js';
 import { nrPrompt, nrConfirm } from './modules/modal-prompt.js';
 import * as SettingsController from './modules/settings-controller.js';
@@ -626,7 +626,7 @@ initViewModes({
   renderPage: null, // Will be connected after full render pipeline is ready
   getPageCount: () => state.pageCount,
   getCurrentPage: () => state.currentPage,
-  setCurrentPage: (n) => goToPage(n),
+  setCurrentPage: async (n) => { const p = Math.max(1, Math.min(n, state.pageCount)); state.currentPage = p; els.pageInput.value = String(p); await renderCurrentPage(); },
   getZoom: () => state.zoom,
   viewport: document.querySelector('.document-viewport'),
   canvas: els.canvas,
@@ -741,7 +741,7 @@ window._floatingSearch = initFloatingSearch(
   }
 );
 window._xpsAdapter = XpsAdapter;
-window._cloud = { registerProvider, getProviders, authenticate, listFiles, openFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider };
+window._cloud = { registerProvider, getProviders, authenticate, listFiles, openFile: cloudOpenFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider };
 window._ai = { summarizeText, extractTags, semanticSearch, generateToc };
 
 // Register cloud provider stubs
