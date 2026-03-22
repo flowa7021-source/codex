@@ -9,6 +9,12 @@ async function openApp(page) {
   await page.waitForSelector('.app-shell', { timeout: 10_000 });
 }
 
+async function openSettingsModal(page) {
+  await page.locator('[data-sidebar-tab="settings"]').click();
+  await page.waitForTimeout(300);
+  await openSettingsModal(page);
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // A. File Open & Navigation Flow
 // ═══════════════════════════════════════════════════════════════════════════
@@ -89,7 +95,7 @@ test.describe('A — File open & navigation flow', () => {
 test.describe('B — Settings & theme flow', () => {
   test('open settings modal and navigate to appearance tab', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
     // Click appearance tab
     const appearanceTab = page.locator('[data-modal-tab="appearance"]');
@@ -101,7 +107,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('change theme to light and verify class on body', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('[data-modal-tab="appearance"]').click();
     await page.locator('#cfgTheme').selectOption('light');
     await page.locator('#saveSettingsModal').click();
@@ -116,7 +122,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('change theme to dark and verify class on body', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('[data-modal-tab="appearance"]').click();
     await page.locator('#cfgTheme').selectOption('dark');
     await page.locator('#saveSettingsModal').click();
@@ -131,7 +137,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('change theme to sepia and verify class on body', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('[data-modal-tab="appearance"]').click();
     await page.locator('#cfgTheme').selectOption('sepia');
     await page.locator('#saveSettingsModal').click();
@@ -146,7 +152,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('change language to English and verify UI text updates', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('[data-modal-tab="appearance"]').click();
     await page.locator('#cfgAppLang').selectOption('en');
     await page.locator('#saveSettingsModal').click();
@@ -160,7 +166,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('close settings modal with close button', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
     await page.locator('#closeSettingsModal').click();
     await page.waitForTimeout(300);
@@ -169,7 +175,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('settings modal tabs are all clickable', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     const tabs = ['general', 'appearance', 'ocr', 'hotkeys', 'advanced'];
     for (const tab of tabs) {
       const tabBtn = page.locator(`[data-modal-tab="${tab}"]`);
@@ -275,7 +281,7 @@ test.describe('D — Keyboard shortcuts flow', () => {
 
   test('Escape closes settings modal', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
@@ -778,7 +784,7 @@ test.describe('I — Accessibility flow', () => {
 
   test('focus is moved into settings modal on open', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.waitForTimeout(500);
     // Focus should be inside the modal
     const focusInsideModal = await page.evaluate(() => {

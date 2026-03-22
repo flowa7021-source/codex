@@ -9,6 +9,12 @@ async function openApp(page) {
   await page.waitForSelector('.app-shell', { timeout: 10_000 });
 }
 
+async function openSettingsModal(page) {
+  await page.locator('[data-sidebar-tab="settings"]').click();
+  await page.waitForTimeout(300);
+  await page.locator('#openSettingsModal').click();
+}
+
 async function uploadTestFile(page, filePath) {
   const input = page.locator('#fileInput');
   await input.setInputFiles(filePath);
@@ -223,14 +229,13 @@ test.describe('10 — Text editing mode', () => {
 test.describe('11 — Settings modal', () => {
   test('open settings modal via button', async ({ page }) => {
     await openApp(page);
-    const openBtn = page.locator('#openSettingsModal');
-    await openBtn.click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
   });
 
   test('close settings modal', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('#closeSettingsModal').click();
     await expect(page.locator('#settingsModal')).not.toHaveClass(/open/);
   });
@@ -284,7 +289,7 @@ test.describe('15 — Session health', () => {
 test.describe('16 — Keyboard shortcuts', () => {
   test('Escape closes settings modal', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
@@ -307,6 +312,8 @@ test.describe('17 — Responsive layout', () => {
 test.describe('18 — Advanced panels', () => {
   test('toggle advanced panels button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="settings"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#toggleAdvancedPanels')).toBeVisible();
   });
 });
@@ -624,6 +631,8 @@ test.describe('31 — Right panel tool switching', () => {
 
   test('toggle advanced panels switches visible tools', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="settings"]').click();
+    await page.waitForTimeout(300);
     const toggle = page.locator('#toggleAdvancedPanels');
     if (await toggle.count() > 0) {
       await toggle.click();
@@ -918,7 +927,7 @@ test.describe('42 — Settings persistence', () => {
     await openApp(page);
     const before = await page.evaluate(() => JSON.stringify(localStorage));
     // Open and close settings to trigger any persistence
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.waitForTimeout(300);
     await page.locator('#closeSettingsModal').click();
     await page.waitForTimeout(300);
