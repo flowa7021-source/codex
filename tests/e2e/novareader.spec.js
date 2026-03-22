@@ -573,6 +573,8 @@ test.describe('29 — Batch OCR workflow', () => {
 
   test('cancel OCR button is present', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#cancelBackgroundOcr')).toBeVisible();
   });
 
@@ -580,6 +582,8 @@ test.describe('29 — Batch OCR workflow', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await page.locator('#cancelBackgroundOcr').click();
     await page.waitForTimeout(500);
     expect(errors.filter(e => !e.includes('net::ERR'))).toHaveLength(0);
@@ -611,8 +615,10 @@ test.describe('31 — Right panel tool switching', () => {
     expect(count).toBeGreaterThanOrEqual(0);
   });
 
-  test('text tools are visible by default in right area', async ({ page }) => {
+  test('text tools are visible after opening text-ocr panel', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#pageText')).toBeVisible();
   });
 
@@ -695,6 +701,8 @@ test.describe('34 — Page organization (reorder)', () => {
 test.describe('35 — PDF export and save-as', () => {
   test('export buttons are accessible', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportWord')).toBeVisible();
     await expect(page.locator('#exportOcrIndex')).toBeVisible();
   });
@@ -703,6 +711,8 @@ test.describe('35 — PDF export and save-as', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await page.locator('#exportWord').click();
     await page.waitForTimeout(500);
     // May show a toast or do nothing, but should not throw
@@ -728,6 +738,8 @@ test.describe('36 — Document info panel', () => {
 
   test('health report button provides document diagnostics', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportHealthReport')).toBeVisible();
     await expect(page.locator('#exportHealthReport')).toBeEnabled();
   });

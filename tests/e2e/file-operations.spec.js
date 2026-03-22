@@ -189,6 +189,8 @@ test.describe('B — Navigation after file load', () => {
 test.describe('C — OCR flow', () => {
   test('OCR button exists and is clickable', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     const ocrBtn = page.locator('#ocrCurrentPage');
     await expect(ocrBtn).toBeVisible();
     await expect(ocrBtn).toBeEnabled();
@@ -196,6 +198,8 @@ test.describe('C — OCR flow', () => {
 
   test('OCR region mode toggle exists and is clickable', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     const regionBtn = page.locator('#ocrRegionMode');
     await expect(regionBtn).toBeVisible();
     await expect(regionBtn).toBeEnabled();
@@ -203,6 +207,8 @@ test.describe('C — OCR flow', () => {
 
   test('clicking OCR region mode toggles its active state', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     const regionBtn = page.locator('#ocrRegionMode');
     const wasBefore = await regionBtn.evaluate(el =>
       el.classList.contains('active') || el.getAttribute('aria-pressed') === 'true'
@@ -218,6 +224,8 @@ test.describe('C — OCR flow', () => {
 
   test('OCR status label shows status text', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     const status = page.locator('#ocrStatus');
     await expect(status).toBeVisible();
     await expect(status).toHaveText(/OCR|—/);
@@ -227,6 +235,8 @@ test.describe('C — OCR flow', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await page.locator('#ocrCurrentPage').click();
     await page.waitForTimeout(500);
     expect(errors.filter(e => !e.includes('net::ERR'))).toHaveLength(0);
@@ -234,11 +244,15 @@ test.describe('C — OCR flow', () => {
 
   test('copy OCR text button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#copyOcrText')).toBeVisible();
   });
 
   test('cancel background OCR button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#cancelBackgroundOcr')).toBeVisible();
   });
 });
