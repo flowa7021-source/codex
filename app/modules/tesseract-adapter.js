@@ -47,11 +47,9 @@ function resolveVendorPath(relativePath) {
   }
 }
 
-// Worker and WASM core resolved from npm packages; lang-data stays in vendor.
+// Language data stays in vendor; worker/core paths are left undefined so
+// Tesseract.js resolves them from its own package (works in both dev and built modes).
 const PATHS = {
-  workerJs: resolveVendorPath('../../node_modules/tesseract.js/dist/worker.min.js'),
-  coreSimdLstm: resolveVendorPath('../../node_modules/tesseract.js-core/tesseract-core-simd-lstm.wasm.js'),
-  coreLstm: resolveVendorPath('../../node_modules/tesseract.js-core/tesseract-core-lstm.wasm.js'),
   langDataDir: resolveVendorPath('../vendor/tesseract/lang-data'),
 };
 
@@ -108,9 +106,9 @@ export async function isTesseractAvailable() {
     return true;
   } catch (err) { console.warn('[ocr] error:', err?.message); }
 
-  // Strategy 2: HTTP HEAD check (works on http/https only)
+  // Strategy 2: HTTP HEAD check for lang-data dir (works on http/https only)
   try {
-    const resp = await fetch(PATHS.workerJs, { method: 'HEAD', cache: 'force-cache' });
+    const resp = await fetch(PATHS.langDataDir, { method: 'HEAD', cache: 'force-cache' });
     if (resp.ok) { _available = true; return true; }
   } catch (err) { console.warn('[ocr] error:', err?.message); }
 
@@ -126,16 +124,17 @@ export async function isTesseractAvailable() {
 let _tesseractModule = null;
 async function loadTesseractModule() {
   if (_tesseractModule) return _tesseractModule;
-  // Load Tesseract.js ESM entry from the npm package (resolved by Vite).
-  const esmPath = resolveVendorPath('../../node_modules/tesseract.js/dist/tesseract.esm.min.js');
-  const mod = await import(/* webpackIgnore: true */ esmPath);
+  // Load Tesseract.js ESM entry via bare specifier (resolved by Vite to chunk).
+  const mod = await import('tesseract.js');
   // The ESM bundle wraps the CommonJS module as a default export:
   //   export { tesseract_min as default }
   // So mod = { default: { createWorker, createScheduler, ... } }
   // We need the default export to access createWorker.
+  // @ts-ignore — dynamic import may return { default: ... } wrapper
   const resolved = mod.default || mod;
   if (typeof resolved.createWorker !== 'function') {
     // Last resort: check if createWorker is nested one more level (e.g. mod.default.default)
+    // @ts-ignore
     const deeper = resolved.default || resolved;
     if (typeof deeper.createWorker === 'function') {
       _tesseractModule = deeper;
@@ -148,31 +147,13 @@ async function loadTesseractModule() {
 }
 
 /**
- * Detect SIMD support in the browser.
- */
-function hasSIMD() {
-  try {
-    return WebAssembly.validate(new Uint8Array([
-      0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123,
-      3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11
-    ]));
-  } catch (err) {
-    console.warn('[tesseract-adapter] error:', err?.message);
-    return false;
-  }
-}
-
-/**
  * Common worker creation options.
  */
 function _getWorkerOpts() {
   return {
-    workerPath: PATHS.workerJs,
-    corePath: hasSIMD() ? PATHS.coreSimdLstm : PATHS.coreLstm,
     langPath: PATHS.langDataDir,
     cacheMethod: 'none',
     gzip: false,
-    workerBlobURL: false,
   };
 }
 

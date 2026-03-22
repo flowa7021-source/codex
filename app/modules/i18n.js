@@ -1,16 +1,16 @@
 // @ts-check
 // ─── Internationalization Module ─────────────────────────────────────────────
 
-import ru from '../locales/ru.json';
-import en from '../locales/en.json';
-import de from '../locales/de.json';
-import fr from '../locales/fr.json';
-import es from '../locales/es.json';
-import pt from '../locales/pt.json';
-import zh from '../locales/zh.json';
-import ja from '../locales/ja.json';
-import ko from '../locales/ko.json';
-import ar from '../locales/ar.json';
+import ru from '../locales/ru.json' with { type: 'json' };
+import en from '../locales/en.json' with { type: 'json' };
+import de from '../locales/de.json' with { type: 'json' };
+import fr from '../locales/fr.json' with { type: 'json' };
+import es from '../locales/es.json' with { type: 'json' };
+import pt from '../locales/pt.json' with { type: 'json' };
+import zh from '../locales/zh.json' with { type: 'json' };
+import ja from '../locales/ja.json' with { type: 'json' };
+import ko from '../locales/ko.json' with { type: 'json' };
+import ar from '../locales/ar.json' with { type: 'json' };
 
 const translations = { ru, en, de, fr, es, pt, zh, ja, ko, ar };
 

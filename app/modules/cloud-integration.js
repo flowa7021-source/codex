@@ -273,6 +273,30 @@ function _notifyStatus() {
  * @param {object} [_config]
  * @returns {any}
  */
+export function createGoogleDriveProvider(_config = {}) {
+  let token = null;
+  return {
+    id: 'gdrive',
+    name: 'Google Drive',
+    authenticate: async () => {
+      console.info('[Cloud] Google Drive auth requires OAuth2 client ID configuration');
+      return false;
+    },
+    isAuthenticated: () => !!token,
+    listFiles: async () => [],
+    downloadFile: async () => new ArrayBuffer(0),
+    uploadFile: async (name) => ({ id: '', name, provider: 'gdrive' }),
+    getShareLink: async () => '',
+    signOut: async () => { token = null; },
+  };
+}
+
+/**
+ * Create a OneDrive provider stub.
+ * Requires MSAL configuration.
+ * @param {object} [_config]
+ * @returns {any}
+ */
 export function createOneDriveProvider(_config = {}) {
   let token = null;
   return {

@@ -9,7 +9,7 @@ const config = {
   workers: 1,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
-    baseURL: 'http://localhost:4173/app/',
+    baseURL: 'http://localhost:4173/',
     headless: true,
     viewport: { width: 1440, height: 900 },
     screenshot: 'only-on-failure',
@@ -17,7 +17,7 @@ const config = {
     actionTimeout: 15_000,
   },
   webServer: {
-    command: 'python3 ../../dev_server.py',
+    command: 'npx vite preview --port 4173 --host 127.0.0.1',
     port: 4173,
     timeout: 30_000,
     reuseExistingServer: true,
@@ -46,4 +46,4 @@ const config = {
   ],
 };
 
-module.exports = config;
+export default config;

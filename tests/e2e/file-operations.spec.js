@@ -1,8 +1,10 @@
 // @ts-check
-const { test, expect } = require('@playwright/test');
-const path = require('path');
+import { test, expect } from '@playwright/test';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const APP_URL = '/';
 const FIXTURES_DIR = path.join(__dirname, 'fixtures');
 const TEST_PDF = path.join(FIXTURES_DIR, 'test-2page.pdf');

@@ -5,7 +5,7 @@ export default [
   {
     files: ['app/**/*.js', 'src-tauri/**/*.js'],
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: 2025,
       sourceType: 'module',
       globals: {
         // Browser globals
@@ -91,7 +91,7 @@ export default [
     // Test files
     files: ['tests/**/*.js'],
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: 2025,
       sourceType: 'module',
       globals: {
         process: 'readonly',

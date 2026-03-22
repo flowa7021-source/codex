@@ -591,10 +591,8 @@ export function exportDiagnostics() {
 /** @returns {Promise<any>} */
 export async function verifyBundledAssets() {
   const assets = [
-    { key: 'pdfRuntime', url: new URL('../../node_modules/pdfjs-dist/build/pdf.mjs', import.meta.url).href },
-    { key: 'pdfWorker', url: new URL('../../node_modules/pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href },
     { key: 'djvuRuntime', url: new URL('../vendor/djvu.js', import.meta.url).href },
-    { key: 'ocrRuntime', url: new URL('../../node_modules/tesseract.js/dist/tesseract.esm.min.js', import.meta.url).href },
+    { key: 'ocrLangData', url: new URL('../vendor/tesseract/lang-data', import.meta.url).href },
   ];
 
   const report = {};
