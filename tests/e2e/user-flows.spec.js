@@ -12,7 +12,7 @@ async function openApp(page) {
 async function openSettingsModal(page) {
   await page.locator('[data-sidebar-tab="settings"]').click();
   await page.waitForTimeout(300);
-  await openSettingsModal(page);
+  await page.locator('#openSettingsModal').click();
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
