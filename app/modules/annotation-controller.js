@@ -1,3 +1,4 @@
+// @ts-check
 
 // ─── Annotation Controller ──────────────────────────────────────────────────
 // Drawing, annotation storage, comment management, and annotation import/export.
@@ -23,6 +24,7 @@ const _commentsCache = new Map();
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
+/** @type {Record<string, any>} */
 const _deps = {
   renderDocStats: () => {},
   renderReadingGoalStatus: () => {},
@@ -795,8 +797,8 @@ export async function importAnnotationsJson(file) {
 /** @returns {void} */
 export function showShortcutsHelp() {
   // Use the new shortcuts modal if available, else fallback
-  if (window._novaShortcuts?.openShortcuts) {
-    window._novaShortcuts.openShortcuts();
+  if (/** @type {any} */ (window)._novaShortcuts?.openShortcuts) {
+    /** @type {any} */ (window)._novaShortcuts.openShortcuts();
     return;
   }
   // Fallback: create inline modal

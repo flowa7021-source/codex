@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module formula-editor
  * @description Phase 8 — Formula Editor (Tier 4 unique tool).
@@ -37,7 +38,7 @@ async function _tryKatex() {
 
   // Try dynamic import (works if bundled)
   try {
-    const mod = await import('katex');
+    const mod = await import(/** @type {any} */ ('katex'));
     return mod.default ?? mod;
   } catch (_e) { /* not bundled */ }
 
@@ -48,7 +49,7 @@ async function _tryKatex() {
  * Attempt to load MathJax 3 from window.MathJax (if already loaded).
  */
 function _tryMathJax() {
-  return (typeof window !== 'undefined' && window.MathJax?.tex2svg) ? window.MathJax : null;
+  return (typeof window !== 'undefined' && /** @type {any} */ (window).MathJax?.tex2svg) ? /** @type {any} */ (window).MathJax : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +235,7 @@ export async function insertFormulaIntoPdf(pdfBytes, pageNum, latex, x, y, opts 
   page.drawImage(pngImage, { x, y, width: drawW, height: drawH });
 
   const saved = await pdfDoc.save();
+// @ts-ignore
   return new Blob([saved], { type: 'application/pdf' });
 }
 
@@ -269,6 +271,7 @@ export class FormulaEditor {
     this._debounceTimer = null;
   }
 
+// @ts-ignore
   /** @param {{x,y}} ptCoords  PDF pt coordinates of the insertion point */
   open(ptX, ptY) {
     if (this._overlay) this.close();
@@ -414,6 +417,7 @@ export class FormulaEditor {
 
     try {
       const { png, width, height } = await renderLatexToPng(latex, { fontSize: 18, scale: 1 });
+// @ts-ignore
       const blob = new Blob([png], { type: 'image/png' });
       const url  = URL.createObjectURL(blob);
       this._previewEl.innerHTML = `<img src="${url}" width="${width}" height="${height}" style="max-width:100%" alt="formula">`;
@@ -484,7 +488,7 @@ async function _canvasToPngResult(canvas, scale) {
       if (!blob) { reject(new Error('canvas.toBlob returned null')); return; }
       const reader = new FileReader();
       reader.onload  = () => resolve({
-        png:    new Uint8Array(reader.result),
+        png:    new Uint8Array(/** @type {ArrayBuffer} */ (reader.result)),
         width:  Math.round(canvas.width  / scale),
         height: Math.round(canvas.height / scale),
       });

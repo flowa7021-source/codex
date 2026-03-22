@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Diagnostics Module ─────────────────────────────────────────────────────
 // Self-contained diagnostics with dependency injection for app-level functions.
 // Comprehensive activity logger with ring buffer, localStorage persistence,
@@ -299,8 +300,11 @@ export function toggleLogViewer() {
  */
 export function renderLogViewer() {
   const list = document.getElementById('logViewerList');
+  /** @type {any} */
   const filterModule = document.getElementById('logFilterModule');
+  /** @type {any} */
   const filterLevel = document.getElementById('logFilterLevel');
+  /** @type {any} */
   const filterSearch = document.getElementById('logFilterSearch');
   if (!list) return;
 
@@ -481,11 +485,11 @@ export function collectPerfBaseline() {
   const nav = performance.getEntriesByType('navigation')?.[0] || null;
   const longTasks = performance.getEntriesByType('longtask') || [];
   const resources = performance.getEntriesByType('resource') || [];
-  const memory = performance?.memory
+  const memory = /** @type {any} */ (performance)?.memory
     ? {
-      usedJSHeapSize: Number(performance.memory.usedJSHeapSize || 0),
-      totalJSHeapSize: Number(performance.memory.totalJSHeapSize || 0),
-      jsHeapSizeLimit: Number(performance.memory.jsHeapSizeLimit || 0),
+      usedJSHeapSize: Number(/** @type {any} */ (performance).memory.usedJSHeapSize || 0),
+      totalJSHeapSize: Number(/** @type {any} */ (performance).memory.totalJSHeapSize || 0),
+      jsHeapSizeLimit: Number(/** @type {any} */ (performance).memory.jsHeapSizeLimit || 0),
     }
     : null;
 
@@ -494,9 +498,9 @@ export function collectPerfBaseline() {
     uptimeMs: Math.round(performance.now()),
     navigation: nav
       ? {
-        type: nav.type || 'navigate',
-        domContentLoadedMs: Math.round(nav.domContentLoadedEventEnd || 0),
-        loadEventMs: Math.round(nav.loadEventEnd || 0),
+        type: /** @type {any} */ (nav).type || 'navigate',
+        domContentLoadedMs: Math.round(/** @type {any} */ (nav).domContentLoadedEventEnd || 0),
+        loadEventMs: Math.round(/** @type {any} */ (nav).loadEventEnd || 0),
       }
       : null,
     longTask: {

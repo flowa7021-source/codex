@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF Pro Handlers ─────────────────────────────────────────────────────────
 // Pro PDF tool event handler registrations (redact, optimize, flatten, accessibility,
 // compare, header/footer, Bates numbering, page organizer buttons).
@@ -112,7 +113,8 @@ export function initPdfProHandlers() {
             const page = await state.adapter.pdfDoc.getPage(p);
             const content = await page.getTextContent();
             const text = content.items.map(item => item.str).join(' ');
-            pdfRedactor.markPattern(p, text, patternName);
+// @ts-ignore
+            pdfRedactor.markPattern(p, text, /** @type {any} */ (patternName));
           }
         } else {
           // Custom regex

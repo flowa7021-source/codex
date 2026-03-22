@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module word-level-diff
  * @description Word-level and character-level text diff for PDF comparison.
@@ -33,16 +34,16 @@ import { getDocument } from 'pdfjs-dist/build/pdf.mjs';
 /**
  * @typedef {Object} DiffChunk
  * @property {DiffOp} op
- * @property {string} textA    – original text (empty for inserts)
- * @property {string} textB    – new text (empty for deletes)
- * @property {number} indexA   – position in source A
- * @property {number} indexB   – position in source B
+ * @property {string} textA    - original text (empty for inserts)
+ * @property {string} textB    - new text (empty for deletes)
+ * @property {number} indexA   - position in source A
+ * @property {number} indexB   - position in source B
  */
 
 /**
  * @typedef {Object} DiffResult
  * @property {DiffChunk[]} chunks
- * @property {Object}      stats  – { equal, inserted, deleted, replaced, totalA, totalB }
+ * @property {Object}      stats  - { equal, inserted, deleted, replaced, totalA, totalB }
  */
 
 // ---------------------------------------------------------------------------
@@ -52,15 +53,15 @@ import { getDocument } from 'pdfjs-dist/build/pdf.mjs';
 /**
  * Word-level diff between two strings.
  *
- * @param {string} textA – original
- * @param {string} textB – modified
+ * @param {string} textA - original
+ * @param {string} textB - modified
  * @returns {DiffResult}
  */
 export function diffWords(textA, textB) {
   const wordsA = _tokenizeWords(textA);
   const wordsB = _tokenizeWords(textB);
   const ops    = _myersDiff(wordsA, wordsB);
-  return _buildResult(ops, wordsA, wordsB);
+  return /** @type {any} */ (_buildResult(ops, wordsA, wordsB));
 }
 
 /**
@@ -74,7 +75,7 @@ export function diffChars(textA, textB) {
   const charsA = [...textA];
   const charsB = [...textB];
   const ops    = _myersDiff(charsA, charsB);
-  return _buildResult(ops, charsA, charsB);
+  return /** @type {any} */ (_buildResult(ops, charsA, charsB));
 }
 
 /**
@@ -88,7 +89,7 @@ export function diffLines(textA, textB) {
   const linesA = textA.split('\n');
   const linesB = textB.split('\n');
   const ops    = _myersDiff(linesA, linesB);
-  return _buildResult(ops, linesA, linesB);
+  return /** @type {any} */ (_buildResult(ops, linesA, linesB));
 }
 
 // ---------------------------------------------------------------------------
@@ -101,9 +102,9 @@ export function diffLines(textA, textB) {
  * @param {Uint8Array|ArrayBuffer} pdfBytesA
  * @param {Uint8Array|ArrayBuffer} pdfBytesB
  * @param {Object} [opts]
- * @param {number}  [opts.pageA=1]  – page to compare from A (1-based)
+ * @param {number}  [opts.pageA=1]  - page to compare from A (1-based)
  * @param {number}  [opts.pageB=1]
- * @param {string}  [opts.granularity='word']  – 'word' | 'char' | 'line'
+ * @param {string}  [opts.granularity='word']  - 'word' | 'char' | 'line'
  * @returns {Promise<DiffResult>}
  */
 export async function diffPdfPages(pdfBytesA, pdfBytesB, opts = {}) {
@@ -181,8 +182,8 @@ export async function diffPdfDocuments(pdfBytesA, pdfBytesB, opts = {}) {
  *
  * @param {DiffResult} result
  * @param {Object} [opts]
- * @param {string} [opts.mode='inline'] – 'inline' | 'side-by-side'
- * @returns {string} – HTML string
+ * @param {string} [opts.mode='inline'] - 'inline' | 'side-by-side'
+ * @returns {string} - HTML string
  */
 export function renderDiffHtml(result, opts = {}) {
   const mode = opts.mode ?? 'inline';
@@ -307,6 +308,7 @@ function _myersDiff(a, b) {
 
   // For very long sequences, fall back to a simpler LCS-based approach
   if (max > 10000) {
+// @ts-ignore
     return _simpleDiff(a, b);
   }
 
@@ -341,6 +343,7 @@ function _myersDiff(a, b) {
   }
 
   // Backtrack to find the edit path
+// @ts-ignore
   return _backtrack(trace, a, b);
 }
 

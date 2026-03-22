@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Auto-save & Crash Recovery ─────────────────────────────────────────────
 // Periodic session snapshots to IndexedDB with recovery on unclean exit.
 
@@ -46,7 +47,7 @@ function _openDb() {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
-      const database = event.target.result;
+      const database = /** @type {any} */ (event.target).result;
       if (!database.objectStoreNames.contains(STORE_NAME)) {
         const store = database.createObjectStore(STORE_NAME, { keyPath: 'sessionId' });
         store.createIndex('timestamp', 'timestamp', { unique: false });
@@ -55,7 +56,7 @@ function _openDb() {
     };
 
     request.onsuccess = (event) => {
-      _db = event.target.result;
+      _db = /** @type {any} */ (event.target).result;
       resolve(_db);
     };
 
@@ -358,7 +359,7 @@ async function _markSnapshotClean(sessionId) {
  */
 export function initAutosave(deps) {
   _deps = deps;
-  _intervalMs = deps.intervalMs || DEFAULT_INTERVAL_MS;
+  _intervalMs = /** @type {any} */ (deps).intervalMs || DEFAULT_INTERVAL_MS;
   _sessionId = `as-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 
   // Try to open the DB early to detect availability

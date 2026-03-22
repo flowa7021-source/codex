@@ -1,3 +1,4 @@
+// @ts-check
 // ═══════════════════════════════════════════════════════════════════════════════
 // NovaReader 3.0 — UI Init Blocks (extracted from app.js)
 // Continuous Scroll, Batch OCR UI, Drag & Drop + Hotkeys, Tab Bar,
@@ -104,7 +105,7 @@ function initContinuousScroll(deps) {
     renderedPages.clear();
   }
 
-  window._novaContinuousScroll = { enterContinuousMode, exitContinuousMode };
+  /** @type {any} */ (window)._novaContinuousScroll = { enterContinuousMode, exitContinuousMode };
 }
 
 // ── Batch OCR UI Integration ────────────────────────────────────────────────
@@ -130,6 +131,7 @@ function initBatchOcrUI(deps) {
         return;
       }
 
+// @ts-ignore
       if (progressBar) { progressBar.style.display = ''; progressBar.value = 0; }
       setBatchStatus('Запуск пакетного OCR...');
 
@@ -149,6 +151,7 @@ function initBatchOcrUI(deps) {
           onProgress: (pageNum, total, status) => {
             setBatchStatus(status);
             if (progressBar && total > 0) {
+// @ts-ignore
               progressBar.value = Math.round((pageNum / total) * 100);
             }
           },
@@ -257,7 +260,7 @@ function initDragDropAndHotkeys(/* deps not needed */) {
         if (openInput) {
           const dt = new DataTransfer();
           dt.items.add(file);
-          openInput.files = dt.files;
+          /** @type {any} */ (openInput).files = dt.files;
           openInput.dispatchEvent(new Event('change', { bubbles: true }));
         }
       }
@@ -267,7 +270,7 @@ function initDragDropAndHotkeys(/* deps not needed */) {
   // ── Extended Hotkeys ──
   document.addEventListener('keydown', (e) => {
     // Skip if user is typing in input/textarea
-    if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+    if (/** @type {HTMLElement} */ (e.target).matches('input, textarea, select, [contenteditable]')) return;
 
     const ctrl = e.ctrlKey || e.metaKey;
 
@@ -320,7 +323,7 @@ function initTabBar(deps) {
     const id = nextTabId++;
     const tab = document.createElement('div');
     tab.className = 'doc-tab';
-    tab.dataset.tabId = id;
+    tab.dataset.tabId = String(id);
     const tabIcon = document.createElement('span');
     tabIcon.className = 'tab-icon';
     tabIcon.textContent = type === 'pdf' ? '📄' : type === 'djvu' ? '📘' : type === 'epub' ? '📗' : '🖼';
@@ -336,7 +339,7 @@ function initTabBar(deps) {
     tab.appendChild(tabClose);
 
     tab.addEventListener('click', (e) => {
-      if (e.target.closest('.tab-close')) return;
+      if (/** @type {HTMLElement} */ (e.target).closest('.tab-close')) return;
       switchToTab(id);
     });
 
@@ -355,7 +358,7 @@ function initTabBar(deps) {
   function switchToTab(id) {
     activeTabId = id;
     tabBarTabs.querySelectorAll('.doc-tab').forEach(t => {
-      t.classList.toggle('active', parseInt(t.dataset.tabId) === id);
+      t.classList.toggle('active', parseInt(/** @type {HTMLElement} */ (t).dataset.tabId) === id);
     });
     // Future: restore document state for this tab
   }
@@ -378,7 +381,7 @@ function initTabBar(deps) {
   const origFileInput = document.getElementById('fileInput');
   if (origFileInput) {
     origFileInput.addEventListener('change', () => {
-      const file = origFileInput.files?.[0];
+      const file = /** @type {any} */ (origFileInput).files?.[0];
       if (!file) return;
       const ext = file.name.split('.').pop()?.toLowerCase() || '';
       const type = ext === 'djvu' ? 'djvu' : ext === 'epub' ? 'epub' : ext === 'pdf' ? 'pdf' : 'image';
@@ -398,7 +401,7 @@ function initTabBar(deps) {
     createTab(state.docName, state.file, state.adapter?.type || 'pdf');
   }
 
-  window._novaTabs = { createTab, switchToTab, closeTab, tabs };
+  /** @type {any} */ (window)._novaTabs = { createTab, switchToTab, closeTab, tabs };
 }
 
 // ── Print Dialog ────────────────────────────────────────────────────────────
@@ -431,14 +434,14 @@ function initPrintDialog(deps) {
   // Range radio buttons
   modal.querySelectorAll('input[name="printRange"]').forEach(radio => {
     radio.addEventListener('change', () => {
-      if (customRange) customRange.disabled = radio.value !== 'custom';
+      if (customRange) /** @type {any} */ (customRange).disabled = /** @type {HTMLInputElement} */ (radio).value !== 'custom';
     });
   });
 
   // Scale select
   if (scaleSelect && customScale) {
     scaleSelect.addEventListener('change', () => {
-      customScale.disabled = scaleSelect.value !== 'custom';
+      /** @type {any} */ (customScale).disabled = /** @type {any} */ (scaleSelect).value !== 'custom';
     });
   }
 
@@ -460,15 +463,15 @@ function initPrintDialog(deps) {
       if (!state.adapter) return;
 
       const rangeRadio = modal.querySelector('input[name="printRange"]:checked');
-      const range = rangeRadio?.value || 'all';
-      const dpi = parseInt(document.getElementById('printDpi')?.value || '300', 10);
-      const _includeAnnotations = document.getElementById('printAnnotations')?.checked ?? true;
+      const range = /** @type {any} */ (rangeRadio)?.value || 'all';
+      const dpi = parseInt(/** @type {any} */ (document.getElementById('printDpi'))?.value || '300', 10);
+      const _includeAnnotations = /** @type {any} */ (document.getElementById('printAnnotations'))?.checked ?? true;
 
       let pages = [];
       if (range === 'current') {
         pages = [state.currentPage || 1];
-      } else if (range === 'custom' && customRange?.value) {
-        pages = parsePageRangeLib(customRange.value, state.pageCount);
+      } else if (range === 'custom' && /** @type {any} */ (customRange)?.value) {
+        pages = parsePageRangeLib(/** @type {any} */ (customRange).value, state.pageCount);
       } else {
         pages = Array.from({ length: state.pageCount }, (_, i) => i + 1);
       }
@@ -530,7 +533,7 @@ function initPrintDialog(deps) {
     }
   });
 
-  window._novaPrint = { openPrintDialog, closePrintDialog };
+  /** @type {any} */ (window)._novaPrint = { openPrintDialog, closePrintDialog };
 }
 
 // ── Shortcuts Quick Reference ───────────────────────────────────────────────
@@ -553,7 +556,7 @@ function initShortcutsRef(/* deps not needed */) {
 
   // Press "?" to show shortcuts reference
   document.addEventListener('keydown', (e) => {
-    if (e.target.matches('input, textarea, select, [contenteditable]')) return;
+    if (/** @type {HTMLElement} */ (e.target).matches('input, textarea, select, [contenteditable]')) return;
     if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
       if (modal.classList.contains('open')) closeShortcuts();
@@ -569,7 +572,7 @@ function initShortcutsRef(/* deps not needed */) {
     if (e.target === modal) closeShortcuts();
   });
 
-  window._novaShortcuts = { openShortcuts, closeShortcuts };
+  /** @type {any} */ (window)._novaShortcuts = { openShortcuts, closeShortcuts };
 }
 
 // ── Right Panel + Floating Search + Tool Switching ──────────────────────────
@@ -610,7 +613,7 @@ function initNovaReader3UI(/* deps not needed */) {
 
     // Update toolbar button states
     document.querySelectorAll('.cb-tool-btn[data-tool]').forEach(btn => {
-      btn.classList.toggle('active', btn.dataset.tool === toolName);
+      btn.classList.toggle('active', /** @type {HTMLElement} */ (btn).dataset.tool === toolName);
     });
   }
 
@@ -625,7 +628,7 @@ function initNovaReader3UI(/* deps not needed */) {
   // ── Tool buttons in command bar ──
   document.querySelectorAll('.cb-tool-btn[data-tool]').forEach(btn => {
     btn.addEventListener('click', () => {
-      const tool = btn.dataset.tool;
+      const tool = /** @type {HTMLElement} */ (btn).dataset.tool;
 
       // Search tool opens floating search bar instead of right panel
       if (tool === 'search') {
@@ -654,7 +657,7 @@ function initNovaReader3UI(/* deps not needed */) {
     searchFloating.classList.toggle('open', show);
     if (show) {
       const input = searchFloating.querySelector('#searchInput');
-      if (input) safeTimeout(() => input.focus(), 50);
+      if (input) safeTimeout(() => /** @type {HTMLElement} */ (input).focus(), 50);
     }
   }
 
@@ -695,13 +698,13 @@ function initNovaReader3UI(/* deps not needed */) {
       sidebar.querySelectorAll('.sidebar-panel').forEach(p => p.classList.remove('active'));
       btn.classList.add('active');
 
-      const panel = sidebar.querySelector(`.sidebar-panel[data-sidebar-panel="${btn.dataset.sidebarTab}"]`);
+      const panel = sidebar.querySelector(`.sidebar-panel[data-sidebar-panel="${/** @type {HTMLElement} */ (btn).dataset.sidebarTab}"]`);
       if (panel) panel.classList.add('active');
     });
   });
 
   // Expose for other modules
-  window._novaUI = { openRightPanel, closeRightPanel: closeRightPanelFn, toggleFloatingSearch };
+  /** @type {any} */ (window)._novaUI = { openRightPanel, closeRightPanel: closeRightPanelFn, toggleFloatingSearch };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -712,9 +715,9 @@ function initNovaReader3UI(/* deps not needed */) {
 export function initUiBlocks(deps) {
   initContinuousScroll(deps);
   initBatchOcrUI(deps);
-  initDragDropAndHotkeys(deps);
+  initDragDropAndHotkeys();
   initTabBar(deps);
   initPrintDialog(deps);
-  initShortcutsRef(deps);
-  initNovaReader3UI(deps);
+  initShortcutsRef();
+  initNovaReader3UI();
 }

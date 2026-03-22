@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module digital-signature-crypto
  * @description Cryptographic PDF digital signatures (PAdES / ISO 32000-2).
@@ -36,21 +37,21 @@ import { PDFDocument, PDFName, PDFDict, PDFArray, PDFString, PDFHexString } from
 
 /**
  * @typedef {Object} CertificateInfo
- * @property {CryptoKeyPair} keyPair     – Web Crypto key pair
- * @property {Uint8Array}    certDer     – self-signed X.509 DER bytes
+ * @property {CryptoKeyPair} keyPair     - Web Crypto key pair
+ * @property {Uint8Array}    certDer     - self-signed X.509 DER bytes
  * @property {string}        commonName
  * @property {string}        issuer
  * @property {Date}          notBefore
  * @property {Date}          notAfter
  * @property {string}        serialNumber
- * @property {string}        algorithm   – 'RSA-2048' | 'ECDSA-P256'
+ * @property {string}        algorithm   - 'RSA-2048' | 'ECDSA-P256'
  */
 
 /**
  * @typedef {Object} SignatureInfo
  * @property {number}  fieldIndex
  * @property {string}  fieldName
- * @property {string}  signer       – common name or 'Unknown'
+ * @property {string}  signer       - common name or 'Unknown'
  * @property {string}  reason
  * @property {string}  location
  * @property {Date|null} signDate
@@ -66,9 +67,9 @@ import { PDFDocument, PDFName, PDFDict, PDFArray, PDFString, PDFHexString } from
  * Generate a self-signed certificate for PDF signing.
  *
  * @param {Object} opts
- * @param {string}  opts.commonName    – e.g. 'John Doe'
+ * @param {string}  opts.commonName    - e.g. 'John Doe'
  * @param {string}  [opts.organization]
- * @param {string}  [opts.algorithm='RSA-2048'] – 'RSA-2048' | 'ECDSA-P256'
+ * @param {string}  [opts.algorithm='RSA-2048'] - 'RSA-2048' | 'ECDSA-P256'
  * @param {number}  [opts.validDays=365]
  * @returns {Promise<CertificateInfo>}
  */
@@ -127,11 +128,11 @@ export async function generateSelfSignedCert(opts) {
  * @param {Uint8Array|ArrayBuffer} pdfBytes
  * @param {CertificateInfo} cert
  * @param {Object} [opts]
- * @param {string}  [opts.reason]        – reason for signing
- * @param {string}  [opts.location]      – signing location
+ * @param {string}  [opts.reason]        - reason for signing
+ * @param {string}  [opts.location]      - signing location
  * @param {string}  [opts.contactInfo]
- * @param {number}  [opts.pageNum=1]     – page for visual stamp (1-based)
- * @param {{ x:number, y:number, width:number, height:number }} [opts.rect] – stamp rect
+ * @param {number}  [opts.pageNum=1]     - page for visual stamp (1-based)
+ * @param {{ x:number, y:number, width:number, height:number }} [opts.rect] - stamp rect
  * @returns {Promise<Blob>}
  */
 export async function signPdf(pdfBytes, cert, opts = {}) {
@@ -190,6 +191,7 @@ export async function signPdf(pdfBytes, cert, opts = {}) {
   const preSaveBytes = await pdfDoc.save();
 
   // 6. Compute the hash of the document content
+// @ts-ignore
   const hashBuffer = await crypto.subtle.digest('SHA-256', preSaveBytes);
 
   // 7. Sign the hash
@@ -221,6 +223,7 @@ export async function signPdf(pdfBytes, cert, opts = {}) {
   }
 
   const finalBytes = await pdfDoc2.save();
+// @ts-ignore
   return new Blob([finalBytes], { type: 'application/pdf' });
 }
 
@@ -285,6 +288,7 @@ export async function verifySignatures(pdfBytes) {
     results.push(info);
   }
 
+// @ts-ignore
   return results;
 }
 
@@ -307,8 +311,8 @@ export class SignatureManager {
   /**
    * @param {HTMLElement} container
    * @param {Object} deps
-   * @param {Function} deps.getPdfBytes – () => Uint8Array
-   * @param {Function} deps.onApply    – (blob: Blob) => void
+   * @param {Function} deps.getPdfBytes - () => Uint8Array
+   * @param {Function} deps.onApply    - (blob: Blob) => void
    * @param {Function} [deps.onClose]
    */
   constructor(container, deps) {

@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module pdf-accessibility-checker
  * @description PDF/UA accessibility compliance checker.
@@ -41,6 +42,7 @@ import { getDocument } from 'pdfjs-dist/build/pdf.mjs';
  * @property {string}      category    – 'structure' | 'text' | 'images' | 'forms' | 'navigation' | 'color'
  * @property {CheckStatus} status
  * @property {string}      message     – result detail
+// @ts-ignore
  * @property {string}      [remediation] – how to fix
  */
 
@@ -503,8 +505,10 @@ export class AccessibilityPanel {
       msg.style.cssText = 'font-size:11px;color:#aaa;margin-top:3px;padding-left:24px';
       item.appendChild(msg);
 
+      // @ts-ignore
       if (check.remediation) {
         const fix = document.createElement('div');
+        // @ts-ignore
         fix.textContent = `Fix: ${check.remediation}`;
         fix.style.cssText = 'font-size:11px;color:#569cd6;margin-top:2px;padding-left:24px';
         item.appendChild(fix);

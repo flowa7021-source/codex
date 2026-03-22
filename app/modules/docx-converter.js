@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF→DOCX Converter using 'docx' library ─────────────────────────────────
 // Main conversion pipeline: PDF structure extraction → DOCX document assembly.
 // Structure detection (fonts, columns, headings, images, blocks) is in
@@ -260,10 +261,10 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
             spacing: { before: 100, after: 100 },
           });
           // Insert at approximate Y position if available
-          if (img.y !== undefined && children.length > 0) {
+          if (/** @type {any} */ (img).y !== undefined && children.length > 0) {
             let insertIdx = children.length;
             for (let ci = 0; ci < children.length; ci++) {
-              if (children[ci]._blockY !== undefined && children[ci]._blockY > img.y) {
+              if (children[ci]._blockY !== undefined && children[ci]._blockY > /** @type {any} */ (img).y) {
                 insertIdx = ci;
                 break;
               }
@@ -320,7 +321,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
 
       // Store section properties for this page
       // (used below when building the section object)
-      children._sectionProperties = sectionProperties;
+      /** @type {any} */ (children)._sectionProperties = sectionProperties;
     }
 
     // Empty page fallback
@@ -328,7 +329,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
       children.push(new _docx.Paragraph({ text: '' }));
     }
 
-    const sectionProperties = children._sectionProperties || {
+    const sectionProperties = /** @type {any} */ (children)._sectionProperties || {
       page: {
         size: { width: 11906, height: 16838 },  // A4 default
         margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },

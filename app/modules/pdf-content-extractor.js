@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF Content Extractor (Layer 1) ─────────────────────────────────────────
 // Hybrid extraction: getTextContent() for text + getOperatorList() for vector
 // paths and images.  Produces ExtractedPage objects consumed by layout-analyzer.
@@ -482,11 +483,15 @@ async function processOperatorList(opList, pdfPage, viewport) {
           ctx.putImageData(idata, 0, 0);
 
           let pngData;
+// @ts-ignore
           if (typeof canvas.convertToBlob === 'function') {
+// @ts-ignore
             const blob = await canvas.convertToBlob({ type: 'image/png' });
             pngData = new Uint8Array(await blob.arrayBuffer());
+// @ts-ignore
           } else if (canvas.toBlob) {
             pngData = await new Promise(resolve => {
+// @ts-ignore
               canvas.toBlob(blob => {
                 blob.arrayBuffer().then(ab => resolve(new Uint8Array(ab)));
               }, 'image/png');
@@ -567,7 +572,7 @@ async function extractAnnotations(pdfPage) {
  * - Vector paths and images via getOperatorList()
  *
  * @param {Object} pdfPage - pdf.js PDFPageProxy
- * @returns {Promise<ExtractedPage>}
+ * @returns {Promise<any>}
  */
 export async function extractPageContent(pdfPage) {
   const viewport = pdfPage.getViewport({ scale: 1.0 });

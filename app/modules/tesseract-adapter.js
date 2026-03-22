@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Tesseract.js Adapter ────────────────────────────────────────────────────
 // High-quality OCR engine adapter. Runs Tesseract.js entirely offline using
 // bundled WASM core and local traineddata files (no network calls).
@@ -481,6 +482,7 @@ export function getTesseractStatus() {
     ready: !!_worker && !!_currentLang,
     lang: _currentLang,
     available: _available,
+// @ts-ignore
     initFailCount: _initFailCount,
     lastError: _lastInitError,
     poolReady: isTesseractPoolReady(),

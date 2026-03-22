@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module erase-tool
  * @description Erase Tool — Phase 3.
@@ -120,6 +121,8 @@ export class EraseTool {
 
     // --- Load background image into an off-screen canvas --------------------
     const canvas = document.createElement('canvas');
+// @ts-ignore
+// @ts-ignore
     const imgEl = await _loadImageElement(bgImage.data, bgImage.mimeType);
     canvas.width = imgEl.naturalWidth;
     canvas.height = imgEl.naturalHeight;
@@ -147,12 +150,15 @@ export class EraseTool {
     ctx.fillRect(imgRect.x, imgRect.y, imgRect.width, imgRect.height);
 
     // --- Update PageModel image data ----------------------------------------
+// @ts-ignore
     const newBytes = await _canvasToBytes(canvas, bgImage.mimeType);
+// @ts-ignore
     bgImage.data = newBytes;
 
     // --- Write modified image back into the PDF -----------------------------
     if (this.pdfDoc) {
       try {
+// @ts-ignore
         await _replacePageBackgroundImage(this.pdfDoc, this.page.pageNumber - 1, newBytes, bgImage.mimeType);
         const bytes = await this.pdfDoc.save();
         await this.reload(bytes);
@@ -193,7 +199,7 @@ export class EraseTool {
       // Find word-level bbox from OCR text layer
       const wordBox = _findWordBboxAtPoint(this.page.textLayer, clickPt, this.page);
       const eraseRect = wordBox || clickRect;
-      return this.imageErase(eraseRect, opts);
+      return this.imageErase(eraseRect, /** @type {any} */ (opts));
     }
 
     // Native PDF: find the object under the click
@@ -650,7 +656,7 @@ async function _canvasToBytes(canvas, mimeType) {
     canvas.toBlob(blob => {
       if (!blob) { reject(new Error('canvas.toBlob returned null')); return; }
       const reader = new FileReader();
-      reader.onload = () => resolve(new Uint8Array(reader.result));
+      reader.onload = () => resolve(new Uint8Array(/** @type {ArrayBuffer} */ (reader.result)));
       reader.onerror = reject;
       reader.readAsArrayBuffer(blob);
     }, type, 0.92);

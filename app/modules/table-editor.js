@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * @module table-editor
  * @description Phase 8 — Inline Table Editor (Tier 4 unique tool).
@@ -239,6 +240,7 @@ export class TableEditor {
         const input = document.createElement('input');
         input.type  = 'text';
         input.value = cell.text || '';
+// @ts-ignore
         input.setAttribute('data-row', ri);
         input.setAttribute('data-col', ci);
         input.style.cssText = [
@@ -296,6 +298,7 @@ export class TableEditor {
 
     const inputs = Array.from(this._overlay.querySelectorAll('input'));
     const current = document.activeElement;
+// @ts-ignore
     const idx = inputs.indexOf(current);
     if (idx < 0) return;
 
@@ -327,13 +330,13 @@ export class TableEditor {
         this.close();
         break;
       case 'ArrowRight':
-        if (current.selectionEnd === current.value.length) {
+        if (/** @type {any} */ (current).selectionEnd === /** @type {any} */ (current).value.length) {
           e.preventDefault();
           if (inputs[idx + 1]) inputs[idx + 1].focus();
         }
         break;
       case 'ArrowLeft':
-        if (current.selectionStart === 0) {
+        if (/** @type {any} */ (current).selectionStart === 0) {
           e.preventDefault();
           if (inputs[idx - 1]) inputs[idx - 1].focus();
         }

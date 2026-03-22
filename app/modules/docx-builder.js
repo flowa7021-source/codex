@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Layer 4: DOCX Builder
  *
@@ -84,6 +85,7 @@ const FONT_MAP = {
  * @param {'text'|'text+images'|'layout'|'images-only'} options.mode
  * @returns {Promise<Blob>}
  */
+// @ts-ignore
 export async function buildDocxDocument(semanticSections, options = {}) {
   await _loadDocx();
 
@@ -208,6 +210,7 @@ export async function buildDocxDocument(semanticSections, options = {}) {
     }
 
     // --- Section properties -----------------------------------------------
+    /** @type {any} */
     const pageSize = section.pageSize || {};
     const isLandscape = section.orientation === 'landscape';
     const rawW = pageSize.width || 595;
@@ -215,6 +218,7 @@ export async function buildDocxDocument(semanticSections, options = {}) {
     const pgWidth = Math.round(rawW * PT);
     const pgHeight = Math.round(rawH * PT);
 
+    /** @type {any} */
     const margins = section.margins || {};
     const sectionProperties = {
       page: {

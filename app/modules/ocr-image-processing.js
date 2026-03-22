@@ -1,3 +1,4 @@
+// @ts-check
 // ─── OCR Image Processing & Caching ─── Extracted from ocr-controller.js
 
 import { state } from './state.js';
@@ -389,7 +390,7 @@ export function updateOcrSourceCache(key, canvas) {
 }
 
 /** @param {any} canvas @param {any} maxPixels @returns {any} */
-export function constrainOcrSourceCanvasPixels(canvas, maxPixels = OCR_SOURCE_MAX_PIXELS) {
+export function constrainOcrSourceCanvasPixels(/** @type {any} */ canvas, maxPixels = OCR_SOURCE_MAX_PIXELS) {
   const totalPx = Math.max(1, canvas.width * canvas.height);
   const limitPx = Math.max(1, Number(maxPixels) || OCR_SOURCE_MAX_PIXELS);
   if (totalPx <= limitPx) {
@@ -478,6 +479,7 @@ export async function buildOcrSourceCanvas(pageNumber) {
     const analysis = analyzeTextDensity(probeCanvas);
     adaptiveZoom = computeOcrZoom(probeCanvas.width, probeCanvas.height, analysis, OCR_SOURCE_MAX_PIXELS);
     // Boost zoom for pages with very small text
+// @ts-ignore
     const smallText = hasSmallText(probeCanvas);
     if (smallText && adaptiveZoom < 3.0) adaptiveZoom = Math.min(3.0, adaptiveZoom * 1.4);
     probeCanvas.width = 0; probeCanvas.height = 0; // free memory
@@ -539,7 +541,7 @@ export function cropCanvasByRelativeRect(sourceCanvas, relativeRect) {
 }
 
 /** @param {any} inputCanvas @param {any} thresholdBias @param {any} mode @param {any} invert @param {any} extraScale @returns {any} */
-export function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean', invert = false, extraScale = 1) {
+export function preprocessOcrCanvas(/** @type {any} */ inputCanvas, thresholdBias = 0, mode = 'mean', invert = false, extraScale = 1) {
   const baseScale = getOcrScale() * Math.max(0.8, Math.min(1.8, extraScale));
   let targetWidth = Math.max(1, Math.floor(inputCanvas.width * baseScale));
   let targetHeight = Math.max(1, Math.floor(inputCanvas.height * baseScale));
@@ -598,6 +600,7 @@ export function preprocessOcrCanvas(inputCanvas, thresholdBias = 0, mode = 'mean
     // Enhanced preprocessing: use advanced Sauvola binarization + deskew
     try {
       ctx.putImageData(img, 0, 0);
+// @ts-ignore
       const enhanced = preprocessForOcr(canvas, { deskew: true, denoise: false, binarize: false, removeBorders: true });
       if (enhanced !== canvas && enhanced.width > 0 && enhanced.height > 0) {
         canvas.width = enhanced.width;

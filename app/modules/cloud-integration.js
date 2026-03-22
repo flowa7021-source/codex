@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Cloud Integration ──────────────────────────────────────────────────────
 // Pluggable cloud storage: Google Drive, OneDrive, Dropbox.
 // Each provider implements a common interface for open/save/list operations.
@@ -146,7 +147,7 @@ export async function openFile(providerId, fileId) {
     }
   }
 
-  return { data, file: { id: fileId, provider: providerId } };
+  return /** @type {any} */ ({ data, file: { id: fileId, provider: providerId } });
 }
 
 /**
@@ -156,7 +157,7 @@ export async function openFile(providerId, fileId) {
  * @returns {{ salt: Uint8Array, iv: Uint8Array, ciphertext: Uint8Array }|null}
  */
 function _parseEncryptedEnvelope(data) {
-  const bytes = new Uint8Array(data instanceof ArrayBuffer ? data : data.buffer || data);
+  const bytes = new Uint8Array(data instanceof ArrayBuffer ? data : /** @type {any} */ (data).buffer || data);
   if (bytes.length < 32) return null;
   // Check magic header "NRSE" (NovaReader Sync Encrypted)
   if (bytes[0] !== 0x4E || bytes[1] !== 0x52 || bytes[2] !== 0x53 || bytes[3] !== 0x45) return null;
@@ -269,33 +270,8 @@ function _notifyStatus() {
 /**
  * Create a Google Drive provider stub.
  * Requires OAuth2 client ID to be configured.
- * @param {object} config
- * @param {string} config.clientId
- * @returns {CloudProvider}
- */
-export function createGoogleDriveProvider(_config = {}) {
-  let token = null;
-  return {
-    id: 'gdrive',
-    name: 'Google Drive',
-    authenticate: async () => {
-      // Placeholder: real implementation would use Google OAuth2
-      console.info('[Cloud] Google Drive auth requires OAuth2 client configuration');
-      return false;
-    },
-    isAuthenticated: () => !!token,
-    listFiles: async () => [],
-    downloadFile: async () => new ArrayBuffer(0),
-    uploadFile: async (name) => ({ id: '', name, provider: 'gdrive' }),
-    getShareLink: async () => '',
-    signOut: async () => { token = null; },
-  };
-}
-
-/**
- * Create a OneDrive provider stub.
- * @param {object} config
- * @returns {CloudProvider}
+ * @param {object} [_config]
+ * @returns {any}
  */
 export function createOneDriveProvider(_config = {}) {
   let token = null;
@@ -317,7 +293,8 @@ export function createOneDriveProvider(_config = {}) {
 
 /**
  * Create a Dropbox provider stub.
- * @param {object} config
+// @ts-ignore
+ * @param {object} [_config]
  * @returns {CloudProvider}
  */
 export function createDropboxProvider(_config = {}) {

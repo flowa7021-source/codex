@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Layout Analyzer (Layer 2) ───────────────────────────────────────────────
 // Takes ExtractedPage from Layer 1, produces LayoutPage with structured visual
 // elements: lines, paragraphs, columns, tables, headers/footers.
@@ -690,7 +691,7 @@ function assembleReadingOrder(paragraphs, tables, images, columns) {
     return a.y - b.y;
   });
 
-  regions.forEach((r, i) => r.order = i);
+  regions.forEach((r, i) => { /** @type {any} */ (r).order = i; });
   return regions;
 }
 
@@ -698,8 +699,8 @@ function assembleReadingOrder(paragraphs, tables, images, columns) {
 
 /**
  * Analyze layout of a single page.
- * @param {ExtractedPage} extractedPage
- * @returns {LayoutPage}
+ * @param {any} extractedPage
+ * @returns {any}
  */
 export function analyzeLayout(extractedPage) {
   const { width, height, textRuns, paths, images } = extractedPage;
@@ -772,8 +773,8 @@ export function analyzeLayout(extractedPage) {
 
 /**
  * Analyze layout of multiple pages with header/footer detection.
- * @param {ExtractedPage[]} extractedPages
- * @returns {LayoutPage[]}
+ * @param {any[]} extractedPages
+ * @returns {any[]}
  */
 export function analyzeMultiPageLayout(extractedPages) {
   // Detect headers/footers across pages

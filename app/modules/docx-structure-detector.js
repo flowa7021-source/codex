@@ -1,3 +1,4 @@
+// @ts-check
 // ─── DOCX Structure Detector ─── Extracted from docx-converter.js
 
 import { AlignmentType, HeadingLevel } from 'docx';
@@ -317,10 +318,10 @@ async function extractPageImages(page, viewport) {
           ctx.putImageData(idata, 0, 0);
 
           let pngBlob;
-          if (typeof canvas.convertToBlob === 'function') {
-            pngBlob = await canvas.convertToBlob({ type: 'image/png' });
+          if (typeof /** @type {any} */ (canvas).convertToBlob === 'function') {
+            pngBlob = await /** @type {any} */ (canvas).convertToBlob({ type: 'image/png' });
           } else {
-            pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+            pngBlob = await new Promise(resolve => /** @type {any} */ (canvas).toBlob(resolve, 'image/png'));
           }
           if (!pngBlob) continue;
 
