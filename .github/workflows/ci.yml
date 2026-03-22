@@ -41,14 +41,14 @@ jobs:
       - name: Unit tests (580+ tests, node:test runner)
         run: npm run test:unit
 
-      - name: Check code coverage (≥55% lines)
+      - name: Check code coverage (≥60% lines)
         run: |
           npm run test:coverage 2>&1 | tee /tmp/coverage.txt
           # Extract line coverage % and enforce minimum
           LINE_COV=$(grep 'All files' /tmp/coverage.txt | awk '{print $4}')
           echo "Line coverage: ${LINE_COV}%"
-          if [ "$(echo "$LINE_COV < 55" | bc -l)" = "1" ]; then
-            echo "ERROR: Line coverage ${LINE_COV}% is below 55% threshold"
+          if [ "$(echo "$LINE_COV < 60" | bc -l)" = "1" ]; then
+            echo "ERROR: Line coverage ${LINE_COV}% is below 60% threshold"
             exit 1
           fi
 

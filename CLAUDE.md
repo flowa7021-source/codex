@@ -54,13 +54,13 @@ Located in `scripts/obfuscate-dist.js`. Key settings:
 
 ```
 app/
-  app.js              — Main entry point (wiring layer, ~955 lines)
+  app.js              — Main entry point (wiring layer, ~773 lines)
   index.html          — Single-page HTML with all UI elements
   sw.js               — Service Worker for PWA offline
   manifest.json       — PWA manifest
   locales/            — 10 i18n JSON files (ar, de, en, es, fr, ja, ko, pt, ru, zh)
   modules/            — 168 JS modules (source code)
-    init-*.js         — 8 init modules extracted from app.js
+    init-*.js         — 10 init modules extracted from app.js
   styles/             — 12 modular CSS files
   vendor/             — DjVu.js + Tesseract language data (LFS)
 dist/                 — Production build output (obfuscated)
@@ -68,7 +68,7 @@ scripts/
   obfuscate-dist.js   — Post-build obfuscation script
   check-bundle-size.js — Bundle budget checker
   analyze-bundle.js    — Bundle analysis with baseline
-tests/                — 30+ test files (580+ tests)
+tests/                — 40+ test files (950+ tests)
 docs/                 — Release notes, backlog, architecture, components
 ```
 
@@ -76,13 +76,13 @@ docs/                 — Release notes, backlog, architecture, components
 
 ```bash
 npm run lint              # ESLint (0 warnings required)
-npm run test:unit         # 583+ unit tests
-npm run test:coverage     # Coverage report (≥50% lines enforced in CI)
+npm run test:unit         # 950+ unit tests
+npm run test:coverage     # Coverage report (≥60% lines enforced in CI)
 npm run test:benchmark    # OCR quality baseline
 npm run test:benchmark:ocr  # OCR corpus (16 languages)
 npm run test:benchmark:pdf  # PDF conversion
 npm run check:bundle      # Bundle size budget
-npm run typecheck         # TypeScript check (86 modules with @ts-check)
+npm run typecheck         # TypeScript check (161/170 modules with @ts-check)
 ```
 
 ## Key Architecture Decisions
