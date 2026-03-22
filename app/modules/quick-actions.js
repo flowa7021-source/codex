@@ -85,6 +85,8 @@ export function initQuickActions(options) {
   // Listen for selection changes
   let selectionCheckTimer = null;
 
+  const sig = _quickActionsAbort.signal;
+
   container.addEventListener('mouseup', () => {
     // Delay to allow selection to finalize
     clearSafeTimeout(selectionCheckTimer);
@@ -92,21 +94,21 @@ export function initQuickActions(options) {
       if (!document.body.contains(container)) return;
       checkSelection(container);
     }, 200);
-  });
+  }, { signal: sig });
 
   container.addEventListener('mousedown', () => {
     hideQuickActions();
-  });
+  }, { signal: sig });
 
   // Hide on scroll
   container.addEventListener('scroll', () => {
     hideQuickActions();
-  }, { passive: true });
+  }, { passive: true, signal: sig });
 
   // Hide on Escape
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') hideQuickActions();
-  }, { signal: _quickActionsAbort.signal });
+  }, { signal: sig });
 }
 
 /**

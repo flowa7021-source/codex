@@ -392,17 +392,22 @@ export function initPdfProHandlers() {
             if (currentPage < maxPages) { currentPage++; await renderPage(); }
           });
           viewMode.addEventListener('change', () => renderPage());
-          overlay.querySelector('#closeCompare').addEventListener('click', () => overlay.remove());
-          overlay.addEventListener('click', (ev) => { if (ev.target === overlay) overlay.remove(); });
+          // Centralized overlay close helper — removes DOM and event listener
+          const closeOverlay = () => {
+            document.removeEventListener('keydown', keyHandler);
+            overlay.remove();
+          };
 
           // Keyboard navigation
           const keyHandler = (ev) => {
-            if (!document.body.contains(overlay)) { document.removeEventListener('keydown', keyHandler); return; }
-            if (ev.key === 'Escape') overlay.remove();
+            if (ev.key === 'Escape') { closeOverlay(); return; }
             if (ev.key === 'ArrowLeft' && currentPage > 1) { currentPage--; renderPage(); }
             if (ev.key === 'ArrowRight' && currentPage < maxPages) { currentPage++; renderPage(); }
           };
           document.addEventListener('keydown', keyHandler);
+
+          overlay.querySelector('#closeCompare').addEventListener('click', () => closeOverlay());
+          overlay.addEventListener('click', (ev) => { if (ev.target === overlay) closeOverlay(); });
 
           await renderPage();
           _deps.setOcrStatus(`Сравнение: ${result.summary.changePercent}% различий (${result.summary.addedLines}+, ${result.summary.removedLines}-)`);

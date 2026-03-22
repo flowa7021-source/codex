@@ -78,9 +78,23 @@ function cleanupMode(mode) {
   const scrollWrap = vp.querySelector('.continuous-scroll-wrap');
   if (scrollWrap) scrollWrap.innerHTML = '';
 
-  // Exit fullscreen for presentation
-  if (mode === VIEW_MODES.PRESENTATION && document.fullscreenElement) {
-    document.exitFullscreen().catch((err) => { console.warn('[view-modes] error:', err?.message); });
+  // Disconnect continuous scroll observer
+  if (continuousObserver) {
+    continuousObserver.disconnect();
+    continuousObserver = null;
+  }
+
+  // Clean up presentation mode listeners
+  if (mode === VIEW_MODES.PRESENTATION) {
+    if (presentationKeyHandler) {
+      document.removeEventListener('keydown', presentationKeyHandler);
+      presentationKeyHandler = null;
+    }
+    document.removeEventListener('fullscreenchange', onFullscreenChange);
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch((err) => { console.warn('[view-modes] error:', err?.message); });
+    }
   }
 }
 

@@ -9,6 +9,8 @@ const ZOOM_MAX = 10;
 const SMOOTH_ZOOM_DURATION = 200;
 
 let deps = null;
+/** @type {AbortController | null} */
+let _zoomAbort = null;
 let marqueeActive = false;
 let marqueeStart = null;
 let marqueeOverlay = null;
@@ -23,9 +25,24 @@ let marqueeOverlay = null;
  * @param {HTMLCanvasElement} d.canvas
  */
 export function initEnhancedZoom(d) {
+  // Abort previous listeners on re-init
+  if (_zoomAbort) _zoomAbort.abort();
+  _zoomAbort = new AbortController();
+
   deps = d;
   setupWheelZoom();
   setupPinchZoom();
+}
+
+/**
+ * Tear down all enhanced zoom listeners.
+ */
+export function destroyEnhancedZoom() {
+  if (_zoomAbort) {
+    _zoomAbort.abort();
+    _zoomAbort = null;
+  }
+  cancelMarqueeZoom();
 }
 
 // ─── Zoom Presets ────────────────────────────────────────────────────────────
@@ -94,7 +111,7 @@ export function smoothZoomTo(target) {
 // ─── Ctrl+Wheel Zoom ─────────────────────────────────────────────────────────
 
 function setupWheelZoom() {
-  if (!deps?.canvasWrap) return;
+  if (!deps?.canvasWrap || !_zoomAbort) return;
   deps.canvasWrap.addEventListener('wheel', (e) => {
     if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
@@ -103,7 +120,7 @@ function setupWheelZoom() {
     const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, current * (1 + delta)));
     deps.setZoom(Math.round(newZoom * 100) / 100);
     deps.render();
-  }, { passive: false });
+  }, { passive: false, signal: _zoomAbort.signal });
 }
 
 // ─── Pinch-to-Zoom ──────────────────────────────────────────────────────────
@@ -112,15 +129,16 @@ let pinchStartDist = 0;
 let pinchStartZoom = 1;
 
 function setupPinchZoom() {
-  if (!deps?.canvasWrap) return;
+  if (!deps?.canvasWrap || !_zoomAbort) return;
   const el = deps.canvasWrap;
+  const sig = _zoomAbort.signal;
 
   el.addEventListener('touchstart', (e) => {
     if (e.touches.length === 2) {
       pinchStartDist = getTouchDistance(e.touches);
       pinchStartZoom = deps.getZoom();
     }
-  }, { passive: true });
+  }, { passive: true, signal: sig });
 
   el.addEventListener('touchmove', (e) => {
     if (e.touches.length === 2) {
@@ -130,14 +148,14 @@ function setupPinchZoom() {
       const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, pinchStartZoom * scale));
       deps.setZoom(Math.round(newZoom * 100) / 100);
     }
-  }, { passive: false });
+  }, { passive: false, signal: sig });
 
   el.addEventListener('touchend', (e) => {
     if (e.touches.length < 2 && pinchStartDist > 0) {
       pinchStartDist = 0;
       deps.render();
     }
-  }, { passive: true });
+  }, { passive: true, signal: sig });
 }
 
 function getTouchDistance(touches) {

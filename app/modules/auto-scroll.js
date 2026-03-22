@@ -8,6 +8,8 @@ const MAX_SPEED = 10;
 
 /** @type {{ state: object, els: object, goToPage: Function } | null} */
 let deps = null;
+/** @type {AbortController | null} */
+let _scrollAbort = null;
 
 let scrollSpeed = 5;
 let isScrolling = false;
@@ -206,6 +208,11 @@ function onDragEnd() {
  * @param {{ state: object, els: object, goToPage: Function }} dependencies
  */
 export function initAutoScroll(dependencies) {
+  // Abort previous listeners on re-init
+  if (_scrollAbort) _scrollAbort.abort();
+  _scrollAbort = new AbortController();
+  const sig = _scrollAbort.signal;
+
   deps = dependencies;
   loadSpeed();
 
@@ -224,47 +231,58 @@ export function initAutoScroll(dependencies) {
     toggleBtnEl.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleAutoScroll();
-    });
+    }, { signal: sig });
   }
   if (slowerBtn) {
     slowerBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       setAutoScrollSpeed(scrollSpeed - 1);
-    });
+    }, { signal: sig });
   }
   if (fasterBtn) {
     fasterBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       setAutoScrollSpeed(scrollSpeed + 1);
-    });
+    }, { signal: sig });
   }
   if (closeBtn) {
     closeBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       stopAutoScroll();
-    });
+    }, { signal: sig });
   }
 
   // Draggable widget
   if (widgetEl) {
-    widgetEl.addEventListener('mousedown', onDragStart);
-    document.addEventListener('mousemove', onDragMove);
-    document.addEventListener('mouseup', onDragEnd);
+    widgetEl.addEventListener('mousedown', onDragStart, { signal: sig });
+    document.addEventListener('mousemove', onDragMove, { signal: sig });
+    document.addEventListener('mouseup', onDragEnd, { signal: sig });
   }
 
   // Global keyboard handler
-  document.addEventListener('keydown', onKeyDown);
+  document.addEventListener('keydown', onKeyDown, { signal: sig });
 
   // Cancel on manual scroll
   const container = deps.els.canvasWrap;
   if (container) {
-    container.addEventListener('wheel', onManualWheel, { passive: true });
+    container.addEventListener('wheel', onManualWheel, { passive: true, signal: sig });
   }
 
   // Cancel on click in document area
   const viewport = document.getElementById('documentViewport');
   if (viewport) {
-    viewport.addEventListener('click', onDocumentClick);
+    viewport.addEventListener('click', onDocumentClick, { signal: sig });
+  }
+}
+
+/**
+ * Tear down all auto-scroll listeners and stop scrolling.
+ */
+export function destroyAutoScroll() {
+  stopAutoScroll();
+  if (_scrollAbort) {
+    _scrollAbort.abort();
+    _scrollAbort = null;
   }
 }
 
