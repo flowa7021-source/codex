@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * text-nav-controller.js
  * ----------------------
@@ -6,9 +7,12 @@
  * Extracted from app.js to keep the main file manageable.
  */
 
-import { state, els } from './state.js';
+import { state, els as _els } from './state.js';
 import { ToolMode, toolStateMachine } from './tool-modes.js';
 import { enableInlineTextEditing, disableInlineTextEditing } from './render-controller.js';
+
+/** @type {any} - Cast to any to allow input/canvas element property access */
+const els = _els;
 
 /* ------------------------------------------------------------------ */
 /*  Late-bound cross-module dependencies (set via initTextNavDeps)     */
@@ -243,7 +247,7 @@ export async function exportCurrentDocToWord() {
     _deps.pushDiagnosticEvent('export.docx', { pages: maxPages, sizeKb: Math.round(blob.size / 1024), withImages: includeImages });
   } catch (error) {
     _deps.recordCrashEvent('export-error', error.message, 'docx');
-    _deps.setOcrStatus(`Экспорт DOCX: ошибка — ${error.message}`);
+    _deps.setOcrStatus(`Экспорт DOCX: ошибка - ${error.message}`);
     _deps.pushDiagnosticEvent('export.docx.error', { message: error.message }, 'error');
   }
 }

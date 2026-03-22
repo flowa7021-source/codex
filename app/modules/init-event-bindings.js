@@ -1,9 +1,10 @@
+// @ts-check
 // ─── Event Bindings (extracted from app.js) ──────────────────────────────────
 // Pure safeOn wiring with no complex inline logic.
 // Complex handlers (importDocx, conversion plugins, fileInput) remain in app.js.
 
 /**
- * @param {object} deps — all functions/objects needed by the bindings
+ * @param {object} deps - all functions/objects needed by the bindings
  */
 export function initEventBindings(deps) {
   const {

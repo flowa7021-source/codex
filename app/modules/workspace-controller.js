@@ -1,18 +1,23 @@
+// @ts-check
 // ─── Workspace Controller ────────────────────────────────────────────────────
 // Cloud sync, collaboration channel, workspace import/export, OCR text storage.
 // Extracted from app.js Phase 5 as part of Q1.1 decomposition.
 
-import { state, els, hotkeys, defaultHotkeys, setHotkeys } from './state.js';
+import { state, els as _els, hotkeys, defaultHotkeys, setHotkeys } from './state.js';
 import { APP_VERSION } from './constants.js';
 import { saveOcrData, loadOcrData } from './ocr-storage.js';
 import { nrConfirm } from './modal-prompt.js';
 import { createLogger } from './logger.js';
+
+/** @type {any} - Cast to any to allow input element property access */
+const els = _els;
 
 const log = createLogger('workspace');
 
 // ─── Dependency injection for app.js callbacks ──────────────────────────────
 // These are functions defined in app.js or other controllers that workspace
 // needs to call. They are registered via initWorkspaceDeps() during app init.
+/** @type {any} */
 const _deps = {
   loadStrokes: () => [],
   saveStrokes: () => {},

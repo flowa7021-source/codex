@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF Operations via pdf-lib ─────────────────────────────────────────────
 // Proper PDF merge/split/forms/annotations/watermarks without data loss.
 // Uses pdf-lib which operates on the PDF structure directly (no rasterization).
@@ -33,7 +34,7 @@ export async function mergePdfDocuments(files) {
   mergedPdf.setProducer('NovaReader + pdf-lib');
 
   const mergedBytes = await mergedPdf.save();
-  return new Blob([mergedBytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (mergedBytes)], { type: 'application/pdf' });
 }
 
 // ─── PDF Split ──────────────────────────────────────────────────────────────
@@ -54,7 +55,7 @@ export async function splitPdfDocument(pdfArrayBuffer, pageNumbers) {
   newPdf.setProducer('NovaReader + pdf-lib');
 
   const bytes = await newPdf.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 // Split into individual files (one page per PDF)
@@ -69,7 +70,7 @@ export async function splitPdfIntoIndividual(pdfArrayBuffer) {
     const bytes = await singlePdf.save();
     results.push({
       pageNum: i + 1,
-      blob: new Blob([bytes], { type: 'application/pdf' }),
+      blob: new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' }),
     });
     await yieldToUI();
   }
@@ -88,7 +89,7 @@ export async function reorderPdfPages(pdfArrayBuffer, newOrder) {
   copiedPages.forEach(page => newPdf.addPage(page));
 
   const bytes = await newPdf.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 // ─── PDF Forms ──────────────────────────────────────────────────────────────
@@ -102,11 +103,12 @@ export async function getPdfFormFields(pdfArrayBuffer) {
     const name = field.getName();
     let value = '';
     try {
-      if (type === 'PDFTextField') value = field.getText() || '';
-      else if (type === 'PDFCheckBox') value = field.isChecked();
-      else if (type === 'PDFDropdown') value = field.getSelected() || [];
-      else if (type === 'PDFRadioGroup') value = field.getSelected() || '';
-      else if (type === 'PDFOptionList') value = field.getSelected() || [];
+      const f = /** @type {any} */ (field);
+      if (type === 'PDFTextField') value = f.getText() || '';
+      else if (type === 'PDFCheckBox') value = f.isChecked();
+      else if (type === 'PDFDropdown') value = f.getSelected() || [];
+      else if (type === 'PDFRadioGroup') value = f.getSelected() || '';
+      else if (type === 'PDFOptionList') value = f.getSelected() || [];
     } catch (err) { console.warn('[pdf-ops] error:', err?.message); }
 
     return { name, type, value };
@@ -119,7 +121,7 @@ export async function fillPdfForm(pdfArrayBuffer, formData, flatten = false) {
 
   for (const [fieldName, value] of Object.entries(formData)) {
     try {
-      const field = form.getField(fieldName);
+      const field = /** @type {any} */ (form.getField(fieldName));
       const type = field.constructor.name;
 
       if (type === 'PDFTextField') {
@@ -139,7 +141,7 @@ export async function fillPdfForm(pdfArrayBuffer, formData, flatten = false) {
   if (flatten) form.flatten();
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 // ─── PDF Watermark ──────────────────────────────────────────────────────────
@@ -176,7 +178,7 @@ export async function addWatermarkToPdf(pdfArrayBuffer, text, options = {}) {
   }
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 // ─── PDF Stamp ──────────────────────────────────────────────────────────────
@@ -236,7 +238,7 @@ export async function addStampToPdf(pdfArrayBuffer, stampType, options = {}) {
   });
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 // ─── PDF Signature (embed image) ────────────────────────────────────────────
@@ -276,7 +278,7 @@ export async function addSignatureToPdf(pdfArrayBuffer, signatureImageBytes, opt
   });
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 // ─── PDF Annotations Export ─────────────────────────────────────────────────
@@ -385,7 +387,7 @@ export async function exportAnnotationsIntoPdf(pdfArrayBuffer, annotationStore, 
   }
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 // ─── PDF Page Rotation ──────────────────────────────────────────────────────
@@ -400,7 +402,7 @@ export async function rotatePdfPages(pdfArrayBuffer, pageNums, angleDeg) {
   }
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 // ─── PDF Metadata ───────────────────────────────────────────────────────────
@@ -431,7 +433,7 @@ export async function setPdfMetadata(pdfArrayBuffer, metadata) {
   if (metadata.subject) pdfDoc.setSubject(metadata.subject);
 
   const bytes = await pdfDoc.save();
-  return new Blob([bytes], { type: 'application/pdf' });
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

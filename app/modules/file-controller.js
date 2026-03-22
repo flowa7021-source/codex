@@ -1,3 +1,4 @@
+// @ts-check
 // ─── File Controller ─────────────────────────────────────────────────────────
 // File-opening logic, DjVu data persistence, and object URL management.
 // Extracted from app.js as part of module decomposition.
@@ -18,6 +19,7 @@ import { bumpRenderGeneration } from './render-controller.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
+/** @type {any} */
 const _deps = {
   withErrorBoundary: (fn, _ctx) => fn,
   renderCurrentPage: async () => {},
@@ -164,7 +166,7 @@ export async function reloadPdfFromBytes(bytes) {
   }
 
   // Update file object for consistency (so arrayBuffer() returns new data)
-  state.file = new File([bytes], state.docName || 'document.pdf', { type: 'application/pdf' });
+  state.file = new File([/** @type {any} */ (bytes)], state.docName || 'document.pdf', { type: 'application/pdf' });
 
   // Clear render caches and re-render
   clearPageRenderCache();
@@ -173,8 +175,8 @@ export async function reloadPdfFromBytes(bytes) {
   await _deps.renderOutline();
 
   // Re-bootstrap advanced tools with updated PDF bytes
-  if (typeof window._bootstrapAdvancedTools === 'function') {
-    try { window._bootstrapAdvancedTools(); } catch (_e) { /* non-critical */ }
+  if (typeof /** @type {any} */ (window)._bootstrapAdvancedTools === 'function') {
+    try { /** @type {any} */ (window)._bootstrapAdvancedTools(); } catch (_e) { /* non-critical */ }
   }
 }
 
@@ -223,7 +225,7 @@ const _openFileImpl = async function openFileImpl(file) {
   els.searchStatus.textContent = '';
   _deps.setWorkspaceStatus('');
   _deps.setBookmarksStatus('');
-  els.pageText.value = '';
+  /** @type {any} */ (els.pageText).value = '';
   _deps.ensureTextToolsVisible();
   state.djvuBinaryDetected = false;
   _deps.invalidateAnnotationCaches();
@@ -350,10 +352,10 @@ const _openFileImpl = async function openFileImpl(file) {
   state.readingTotalMs = _deps.loadReadingTime();
   state.readingStartedAt = null;
   state.readingGoalPage = _deps.loadReadingGoal();
-  els.pageInput.max = String(state.pageCount);
-  els.pageInput.value = String(state.currentPage);
+  /** @type {any} */ (els.pageInput).max = String(state.pageCount);
+  /** @type {any} */ (els.pageInput).value = String(state.currentPage);
   if (els.cloudSyncUrl) {
-    els.cloudSyncUrl.value = _deps.loadCloudSyncUrl();
+    /** @type {any} */ (els.cloudSyncUrl).value = _deps.loadCloudSyncUrl();
   }
   if (state.collabEnabled) {
     _deps.toggleCollaborationChannel();
@@ -392,8 +394,8 @@ const _openFileImpl = async function openFileImpl(file) {
   try { announce(`Документ ${state.docName} открыт, ${state.pageCount} страниц`); } catch (err) { console.warn('[a11y] announce failed:', err?.message); }
 
   // Bootstrap advanced tools (Phase 0-8 + Pro modules) for the loaded PDF
-  if (typeof window._bootstrapAdvancedTools === 'function') {
-    try { window._bootstrapAdvancedTools(); } catch (err) { console.warn('[advanced-tools] bootstrap failed:', err?.message); }
+  if (typeof /** @type {any} */ (window)._bootstrapAdvancedTools === 'function') {
+    try { /** @type {any} */ (window)._bootstrapAdvancedTools(); } catch (err) { console.warn('[advanced-tools] bootstrap failed:', err?.message); }
   }
 
   try {

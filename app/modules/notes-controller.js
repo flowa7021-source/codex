@@ -1,4 +1,5 @@
-// notes-controller.js — Notes management for NovaReader
+// @ts-check
+// notes-controller.js - Notes management for NovaReader
 import { state, els } from './state.js';
 import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
@@ -19,17 +20,17 @@ function saveNotesData(data) {
 
 export function loadNotesIntoUI() {
   const data = loadNotes();
-  if (els.notesTitle) els.notesTitle.value = data.title || '';
-  if (els.notesTags) els.notesTags.value = data.tags || '';
-  if (els.notes) els.notes.value = data.text || '';
+  if (els.notesTitle) /** @type {any} */ (els.notesTitle).value = data.title || '';
+  if (els.notesTags) /** @type {any} */ (els.notesTags).value = data.tags || '';
+  if (els.notes) /** @type {any} */ (els.notes).value = data.text || '';
   updateNotesStatus('Заметки загружены');
 }
 
 export function saveNotesFromUI() {
   const data = {
-    title: els.notesTitle?.value || '',
-    tags: els.notesTags?.value || '',
-    text: els.notes?.value || '',
+    title: /** @type {any} */ (els.notesTitle)?.value || '',
+    tags: /** @type {any} */ (els.notesTags)?.value || '',
+    text: /** @type {any} */ (els.notes)?.value || '',
     updatedAt: Date.now(),
   };
   saveNotesData(data);
@@ -92,7 +93,7 @@ export function importNotesJson(file, mode) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      const imported = JSON.parse(reader.result);
+      const imported = JSON.parse(/** @type {string} */ (reader.result));
       if (mode === 'replace') {
         saveNotesData({ title: imported.title || '', tags: imported.tags || '', text: imported.text || '' });
       } else {
@@ -115,10 +116,11 @@ export function insertTimestamp() {
   if (!els.notes) return;
   const now = new Date();
   const ts = `[${now.toLocaleDateString('ru-RU')} ${now.toLocaleTimeString('ru-RU')}]`;
-  const pos = els.notes.selectionStart || els.notes.value.length;
-  els.notes.value = els.notes.value.slice(0, pos) + ts + ' ' + els.notes.value.slice(pos);
-  els.notes.focus();
-  els.notes.selectionStart = els.notes.selectionEnd = pos + ts.length + 1;
+  const notesEl = /** @type {any} */ (els.notes);
+  const pos = notesEl.selectionStart || notesEl.value.length;
+  notesEl.value = notesEl.value.slice(0, pos) + ts + ' ' + notesEl.value.slice(pos);
+  notesEl.focus();
+  notesEl.selectionStart = notesEl.selectionEnd = pos + ts.length + 1;
 }
 
 export function initNotesController() {
@@ -140,9 +142,9 @@ export function initNotesController() {
 
   if (els.importNotesJson) {
     els.importNotesJson.addEventListener('change', (e) => {
-      const mode = els.notesImportMode?.value || 'append';
-      importNotesJson(e.target.files?.[0], mode);
-      e.target.value = '';
+      const mode = /** @type {any} */ (els.notesImportMode)?.value || 'append';
+      importNotesJson(/** @type {any} */ (e.target).files?.[0], mode);
+      /** @type {any} */ (e.target).value = '';
     });
   }
 

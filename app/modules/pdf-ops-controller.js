@@ -1,3 +1,4 @@
+// @ts-check
 // ─── PDF Ops Controller ─────────────────────────────────────────────────────
 // PDF merge, split, page-range operations.
 // Extracted from app.js as part of module decomposition.
@@ -6,6 +7,7 @@ import { state } from './state.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
+/** @type {any} */
 const _deps = {
   setOcrStatus: () => {},
   safeCreateObjectURL: (blob) => URL.createObjectURL(blob),
@@ -24,7 +26,7 @@ export function initPdfOpsDeps(deps) {
   Object.assign(_deps, deps);
 }
 
-// ─── PDF Merge (via pdf-lib — preserves text, fonts, links, forms) ─────────
+// ─── PDF Merge (via pdf-lib - preserves text, fonts, links, forms) ─────────
 export async function mergePdfFiles() {
   const input = document.createElement('input');
   input.type = 'file';
@@ -74,7 +76,7 @@ export async function buildMergedPdfFromCanvases(pages) {
   return _deps.mergePdfDocuments(files);
 }
 
-// ─── PDF Split (via pdf-lib — preserves all content) ────────────────────────
+// ─── PDF Split (via pdf-lib - preserves all content) ────────────────────────
 export async function splitPdfPages() {
   if (!state.adapter || state.adapter.type !== 'pdf') {
     _deps.setOcrStatus('Разделение доступно только для PDF');

@@ -1,3 +1,4 @@
+// @ts-check
 // ─── Accessibility Module ───────────────────────────────────────────────────
 // ARIA attributes, focus management, reduced-motion, screen reader announcements
 
@@ -106,7 +107,7 @@ export function applyAriaAttributes() {
     const isCollapsed = section.classList.contains('collapsed');
     head.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
     head.setAttribute('role', 'button');
-    head.tabIndex = head.tabIndex >= 0 ? head.tabIndex : 0;
+    /** @type {any} */ (head).tabIndex = /** @type {any} */ (head).tabIndex >= 0 ? /** @type {any} */ (head).tabIndex : 0;
   });
 
   // ─── Modals → role dialog ─────────────────────────────
@@ -161,7 +162,7 @@ export function observeTabChanges() {
   const observer = new MutationObserver(mutations => {
     for (const m of mutations) {
       if (m.type === 'attributes' && m.attributeName === 'class') {
-        const el = m.target;
+        const el = /** @type {HTMLElement} */ (m.target);
         if (el.getAttribute('role') === 'tab') {
           el.setAttribute('aria-selected', el.classList.contains('active') ? 'true' : 'false');
         }
@@ -202,7 +203,7 @@ export function initA11y() {
 
   // Listen for section collapse changes (both .section-head and .section-toggle)
   document.addEventListener('click', (e) => {
-    const head = e.target.closest('.section-head, .section-toggle');
+    const head = /** @type {HTMLElement} */ (e.target).closest('.section-head, .section-toggle');
     if (head) {
       requestAnimationFrame(() => {
         const section = head.closest('section');
@@ -215,7 +216,7 @@ export function initA11y() {
 
   // Listen for dropdown toggle
   document.addEventListener('click', (e) => {
-    const trigger = e.target.closest('.dropdown-trigger, [aria-haspopup]');
+    const trigger = /** @type {HTMLElement} */ (e.target).closest('.dropdown-trigger, [aria-haspopup]');
     if (trigger) {
       requestAnimationFrame(() => {
         const dd = trigger.closest('.dropdown');
@@ -238,10 +239,10 @@ export function initA11y() {
 /** Arrow key navigation within tablists */
 function setupTablistKeyboard() {
   document.querySelectorAll('[role="tablist"]').forEach(tablist => {
-    tablist.addEventListener('keydown', (e) => {
-      const tabs = [...tablist.querySelectorAll('[role="tab"]')];
+    tablist.addEventListener('keydown', (/** @type {KeyboardEvent} */ e) => {
+      const tabs = /** @type {HTMLElement[]} */ ([...tablist.querySelectorAll('[role="tab"]')]);
       if (tabs.length === 0) return;
-      const current = tabs.indexOf(document.activeElement);
+      const current = tabs.indexOf(/** @type {HTMLElement} */ (document.activeElement));
       if (current === -1) return;
 
       let next = -1;
@@ -268,10 +269,10 @@ function setupTablistKeyboard() {
 function setupModalEscape() {
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    const modal = e.target.closest('.modal[role="dialog"]');
+    const modal = /** @type {HTMLElement} */ (e.target).closest('.modal[role="dialog"]');
     if (!modal) return;
     modal.setAttribute('aria-hidden', 'true');
-    if (modal.style) modal.style.display = 'none';
+    if (/** @type {any} */ (modal).style) /** @type {any} */ (modal).style.display = 'none';
     modal.classList.remove('open');
   });
 }

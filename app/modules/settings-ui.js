@@ -1,10 +1,14 @@
+// @ts-check
 /**
  * settings-ui.js
  * Settings modal UI functions extracted from app.js.
  */
 
-import { state, els } from './state.js';
+import { state, els as _els } from './state.js';
 import { SIDEBAR_SECTION_CONFIG, TOOLBAR_SECTION_CONFIG } from './constants.js';
+
+/** @type {any} - Cast to any to allow input element property access (.value, .checked, etc.) */
+const els = _els;
 
 /* Late-bound cross-module dependencies */
 const _deps = {
@@ -53,7 +57,7 @@ export function applyAppLanguage() {
   if (els.ocrCurrentPage) els.ocrCurrentPage.textContent = t.ocrPage;
   if (els.copyOcrText) els.copyOcrText.textContent = t.copyOcr;
   if (els.searchBtn) els.searchBtn.textContent = t.searchBtn;
-  // Icon buttons (↑↓↔⊡⬇🖨) — not overridden by language
+  // Icon buttons - not overridden by language
   if (els.pageText) els.pageText.placeholder = t.pageTextPlaceholder;
   if (els.saveSettingsModal) els.saveSettingsModal.textContent = t.saveSettings;
   const modalTitle = document.querySelector('#settingsModal .modal-head h3');
@@ -103,13 +107,13 @@ export function applySectionVisibilitySettings() {
   const toolbar = state.settings?.toolbarSections || {};
 
   document.querySelectorAll('[data-sidebar-section]').forEach((node) => {
-    const key = node.dataset.sidebarSection;
+    const key = /** @type {HTMLElement} */ (node).dataset.sidebarSection;
     const visible = sidebar[key] ?? true;
     node.classList.toggle('section-hidden', !visible);
   });
 
   document.querySelectorAll('[data-toolbar-section]').forEach((node) => {
-    const key = node.dataset.toolbarSection;
+    const key = /** @type {HTMLElement} */ (node).dataset.toolbarSection;
     const visible = toolbar[key] ?? true;
     node.classList.toggle('section-hidden', !visible);
   });
@@ -235,8 +239,8 @@ export function previewUiSizeFromModal() {
   const values = readUiSizeSettingsFromModal();
   document.documentElement.style.setProperty('--ui-toolbar-scale', String(values.toolbarScale));
   document.documentElement.style.setProperty('--ui-text-min-height', `${Math.round(values.textMin)}px`);
-  document.querySelector('.app-shell')?.style.setProperty('--sidebar-width', `${Math.round(values.sidebar)}px`);
-  document.querySelector('.viewer-area')?.style.setProperty('--page-area-height', `${Math.round(values.pageArea)}px`);
+  /** @type {any} */ (document.querySelector('.app-shell'))?.style.setProperty('--sidebar-width', `${Math.round(values.sidebar)}px`);
+  /** @type {any} */ (document.querySelector('.viewer-area'))?.style.setProperty('--page-area-height', `${Math.round(values.pageArea)}px`);
   document.documentElement.style.setProperty('--ui-toolbar-top-height', `${Math.round(values.topToolbar)}px`);
   document.documentElement.style.setProperty('--ui-toolbar-bottom-height', `${Math.round(values.bottomToolbar)}px`);
   document.documentElement.style.setProperty('--ui-text-panel-height', `${Math.round(values.textPanel)}px`);
@@ -277,10 +281,12 @@ export function saveSettingsFromModal() {
   if (!state.settings.sidebarSections) state.settings.sidebarSections = {};
   if (!state.settings.toolbarSections) state.settings.toolbarSections = {};
   document.querySelectorAll('#cfgSidebarSections input[data-section-key]').forEach((input) => {
-    state.settings.sidebarSections[input.dataset.sectionKey] = !!input.checked;
+    const el = /** @type {HTMLInputElement} */ (input);
+    state.settings.sidebarSections[el.dataset.sectionKey] = !!el.checked;
   });
   document.querySelectorAll('#cfgToolbarSections input[data-section-key]').forEach((input) => {
-    state.settings.toolbarSections[input.dataset.sectionKey] = !!input.checked;
+    const el = /** @type {HTMLInputElement} */ (input);
+    state.settings.toolbarSections[el.dataset.sectionKey] = !!el.checked;
   });
 
   _deps.saveAppSettings();
