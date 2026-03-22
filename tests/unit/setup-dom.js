@@ -164,13 +164,110 @@ if (typeof globalThis.fetch === 'undefined') {
 }
 
 if (typeof globalThis.indexedDB === 'undefined') {
+  // In-memory IndexedDB mock that supports basic CRUD via object stores
+  const _idbDatabases = new Map();
+
+  class MockObjectStore {
+    constructor(name, keyPath) {
+      this.name = name;
+      this.keyPath = keyPath;
+      this._data = new Map();
+      this._indexes = new Map();
+    }
+    createIndex(name, keyPath, opts) { this._indexes.set(name, { keyPath, ...opts }); return { name, keyPath }; }
+    index(name) {
+      const idx = this._indexes.get(name);
+      return {
+        openCursor: () => {
+          const req = { result: null, onsuccess: null, onerror: null };
+          queueMicrotask(() => { if (req.onsuccess) req.onsuccess({ target: { result: null } }); });
+          return req;
+        },
+      };
+    }
+    put(value) {
+      const key = value[this.keyPath];
+      this._data.set(key, structuredClone(value));
+      const req = { result: key, onsuccess: null, onerror: null };
+      queueMicrotask(() => { if (req.onsuccess) req.onsuccess({ target: req }); });
+      return req;
+    }
+    get(key) {
+      const req = { result: this._data.has(key) ? structuredClone(this._data.get(key)) : undefined, onsuccess: null, onerror: null };
+      queueMicrotask(() => { if (req.onsuccess) req.onsuccess({ target: req }); });
+      return req;
+    }
+    delete(key) {
+      this._data.delete(key);
+      const req = { result: undefined, onsuccess: null, onerror: null };
+      queueMicrotask(() => { if (req.onsuccess) req.onsuccess({ target: req }); });
+      return req;
+    }
+    clear() {
+      this._data.clear();
+      const req = { result: undefined, onsuccess: null, onerror: null };
+      queueMicrotask(() => { if (req.onsuccess) req.onsuccess({ target: req }); });
+      return req;
+    }
+    getAll() {
+      const req = { result: [...this._data.values()].map(v => structuredClone(v)), onsuccess: null, onerror: null };
+      queueMicrotask(() => { if (req.onsuccess) req.onsuccess({ target: req }); });
+      return req;
+    }
+    count() {
+      const req = { result: this._data.size, onsuccess: null, onerror: null };
+      queueMicrotask(() => { if (req.onsuccess) req.onsuccess({ target: req }); });
+      return req;
+    }
+  }
+
+  class MockDatabase {
+    constructor(name) {
+      this.name = name;
+      this.objectStoreNames = { contains: (n) => this._stores.has(n) };
+      this._stores = new Map();
+      this.version = 1;
+    }
+    createObjectStore(name, opts = {}) {
+      const store = new MockObjectStore(name, opts.keyPath || 'id');
+      this._stores.set(name, store);
+      return store;
+    }
+    transaction(storeNames, mode) {
+      const names = Array.isArray(storeNames) ? storeNames : [storeNames];
+      const tx = {
+        objectStore: (name) => this._stores.get(name),
+        oncomplete: null, onerror: null, onabort: null,
+        _completeCbs: [],
+      };
+      queueMicrotask(() => { if (tx.oncomplete) tx.oncomplete({}); });
+      return tx;
+    }
+    close() {}
+  }
+
   globalThis.indexedDB = {
-    open: () => {
+    open: (name, version) => {
       const req = { result: null, onerror: null, onsuccess: null, onupgradeneeded: null };
-      // Simulate async failure so modules fall back to localStorage
       queueMicrotask(() => {
-        if (req.onerror) req.onerror(new Event('error'));
+        let db = _idbDatabases.get(name);
+        const isNew = !db;
+        if (!db) {
+          db = new MockDatabase(name);
+          _idbDatabases.set(name, db);
+        }
+        req.result = db;
+        if (isNew && req.onupgradeneeded) {
+          req.onupgradeneeded({ target: { result: db } });
+        }
+        if (req.onsuccess) req.onsuccess({ target: { result: db } });
       });
+      return req;
+    },
+    deleteDatabase: (name) => {
+      _idbDatabases.delete(name);
+      const req = { result: undefined, onsuccess: null, onerror: null };
+      queueMicrotask(() => { if (req.onsuccess) req.onsuccess({}); });
       return req;
     },
   };
