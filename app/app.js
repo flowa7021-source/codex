@@ -97,66 +97,16 @@ import { bootstrapAdvancedTools } from './modules/integration-wiring.js';
 import { initPageOrganizerUI } from './modules/page-organizer-ui.js';
 import { initMinimap, updateMinimap, showMinimap, hideMinimap, toggleMinimap } from './modules/minimap.js';
 import { initCommandPalette, showCommandPalette, hideCommandPalette, registerCommand } from './modules/command-palette.js';
+import { initErrorHandling } from './modules/init-error-handling.js';
+import { initNavigation } from './modules/init-navigation.js';
+import { initOcr } from './modules/init-ocr.js';
+import { initAnnotations } from './modules/init-annotations.js';
 
-// ─── Phase 0: Unified Error Boundary ───────────────────────────────────────
-function withErrorBoundary(fn, context, options = {}) {
-  const { silent = false, fallback = null, rethrow = false } = options;
-  return async function boundaryWrapped(...args) {
-    const startedAt = performance.now();
-    try {
-      return await fn.apply(this, args);
-    } catch (error) {
-      const ms = Math.round(performance.now() - startedAt);
-      const message = String(error?.message || 'unknown error');
-      const errorType = classifyAppError(message);
-      pushDiagnosticEvent(`error-boundary.${context}`, { message, errorType, ms, context }, 'error');
-      if (typeof recordCrashEvent === 'function') recordCrashEvent(errorType, message, context);
-      if (!silent) {
-        showUserError(context, errorType, message);
-      }
-      if (rethrow) throw error;
-      return typeof fallback === 'function' ? fallback(error) : fallback;
-    }
-  };
-}
-
-function classifyAppError(message) {
-  const m = String(message || '').toLowerCase();
-  if (m.includes('runtime') || m.includes('module')) return 'runtime';
-  if (m.includes('fetch') || m.includes('http') || m.includes('load') || m.includes('network')) return 'asset-load';
-  if (m.includes('memory') || m.includes('out of memory') || m.includes('allocation')) return 'memory';
-  if (m.includes('timeout') || m.includes('timed out')) return 'timeout';
-  if (m.includes('parse') || m.includes('json') || m.includes('syntax')) return 'parse';
-  if (m.includes('permission') || m.includes('security') || m.includes('cors')) return 'security';
-  if (m.includes('storage') || m.includes('quota')) return 'storage';
-  return 'processing';
-}
-
-function showUserError(context, errorType, message) {
-  const contextLabels = {
-    'file-open': 'Открытие файла',
-    'page-render': 'Рендер страницы',
-    'export-word': 'Экспорт в Word',
-    'export-png': 'Экспорт PNG',
-    'export-annotations': 'Экспорт аннотаций',
-    'import-annotations': 'Импорт аннотаций',
-    'search': 'Поиск',
-    'ocr': 'Распознавание',
-    'workspace-export': 'Экспорт рабочей области',
-    'workspace-import': 'Импорт рабочей области',
-  };
-  const label = contextLabels[context] || context;
-  const statusEl = els.searchStatus || els.ocrStatus || els.workspaceStatus;
-  if (statusEl) {
-    statusEl.textContent = `Ошибка [${label}]: ${errorType} — ${message}`;
-  }
-  // Also show a toast notification for visibility
-  try { toastError(`${label}: ${message}`); } catch (err) { console.warn('[app] toast in error boundary failed:', err?.message); }
-  // Show error fallback banner for visibility
-  try { showErrorFallback(label, message); } catch (err) { console.warn('[app] error fallback banner failed:', err?.message); }
-}
-
-initCrashTelemetry();
+// ─── Phase 0: Error Handling (delegated to init-error-handling.js) ───────────
+const { withErrorBoundary } = initErrorHandling({
+  pushDiagnosticEvent, recordCrashEvent, initCrashTelemetry,
+  showErrorFallback, showCriticalErrorScreen, toastError, els, state,
+});
 
 // Pre-warm PDF.js worker during idle time so first PDF open is faster
 preloadPdfRuntime();
@@ -316,61 +266,11 @@ if (els.fileInput) {
 safeOn(els.historyBack, 'click', navigateHistoryBack);
 safeOn(els.historyForward, 'click', navigateHistoryForward);
 
-safeOn(els.prevPage, 'click', async () => {
-  if (!state.adapter || state.currentPage <= 1) return;
-  state.currentPage -= 1;
-  await renderCurrentPage();
-});
-
-safeOn(els.nextPage, 'click', async () => {
-  if (!state.adapter || state.currentPage >= state.pageCount) return;
-  state.currentPage += 1;
-  await renderCurrentPage();
-});
-
-safeOn(els.goToPage, 'click', goToPage);
-safeOn(els.pageInput, 'keydown', async (e) => {
-  if (e.key === 'Enter') await goToPage();
-});
-
-// Debounced render for rapid zoom clicks — avoids queueing 10+ renders in a row
-const debouncedZoomRender = debounce(async () => {
-  await renderCurrentPage();
-}, 120);
-
-safeOn(els.zoomIn, 'click', () => {
-  state.zoom = Math.min(4, +(state.zoom + 0.1).toFixed(2));
-  if (els.zoomStatus) els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
-  debouncedZoomRender();
-});
-
-safeOn(els.zoomOut, 'click', () => {
-  state.zoom = Math.max(0.3, +(state.zoom - 0.1).toFixed(2));
-  if (els.zoomStatus) els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
-  debouncedZoomRender();
-});
-
-safeOn(els.fitWidth, 'click', fitWidth);
-safeOn(els.fitPage, 'click', fitPage);
-
-safeOn(els.rotate, 'click', async () => {
-  state.rotation = (state.rotation + 90) % 360;
-  clearOcrRuntimeCaches('rotation-changed');
-  // Recalculate auto-zoom for new dimensions after rotation
-  if (state.adapter) {
-    try {
-      const vp = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);
-      const scrollbarW = els.canvasWrap.offsetWidth - els.canvasWrap.clientWidth;
-      const available = Math.max(200, els.canvasWrap.clientWidth - Math.max(16, scrollbarW + 16));
-      const autoZoom = available / vp.width;
-      if (autoZoom > 0.3 && autoZoom < 4) {
-        state.zoom = Math.round(autoZoom * 100) / 100;
-      }
-    } catch (_e) { /* keep current zoom */ }
-  }
-  await renderPagePreviews();
-  await renderCurrentPage();
-  if (state.settings?.backgroundOcr) scheduleBackgroundOcrScan('save-settings', 600);
+// ─── Navigation & Zoom (delegated to init-navigation.js) ─────────────────────
+initNavigation({
+  state, els, debounce, safeOn,
+  renderCurrentPage, renderPagePreviews, goToPage, fitWidth, fitPage,
+  clearOcrRuntimeCaches, scheduleBackgroundOcrScan,
 });
 
 // Notes event bindings moved to notes-controller.js (initNotesController)
@@ -503,204 +403,23 @@ safeOn(els.importDocx, 'change', async (e) => {
   e.target.value = '';
 });
 safeOn(els.exportOcrIndex, 'click', downloadOcrTextExport);
-safeOn(els.undoTextEdit, 'click', () => {
-  const action = undoPageEdit();
-  if (action && els.pageText) {
-    els.pageText.value = action.text;
-    setOcrStatus(`Отмена: страница ${action.page}`);
-  }
-});
-safeOn(els.redoTextEdit, 'click', () => {
-  const action = redoPageEdit();
-  if (action && els.pageText) {
-    els.pageText.value = action.text;
-    setOcrStatus(`Повтор: страница ${action.page}`);
-  }
-});
-safeOn(els.exportHealthReport, 'click', exportSessionHealthReport);
-safeOn(els.toggleTextEdit, 'click', () => setTextEditMode(!state.textEditMode));
-safeOn(els.saveTextEdits, 'click', saveCurrentPageTextEdits);
-safeOn(els.ocrCurrentPage, 'click', async () => {
-  await runOcrForCurrentPage();
-});
-safeOn(els.ocrRegionMode, 'click', () => {
-  setOcrRegionMode(!state.ocrRegionMode);
-});
-safeOn(els.copyOcrText, 'click', async () => {
-  if (!els.pageText?.value) return;
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(els.pageText.value);
-      setOcrStatus('OCR: текст скопирован');
-    }
-  } catch (err) {
-    console.warn('[ocr] error:', err?.message);
-    setOcrStatus('OCR: не удалось скопировать текст');
-  }
-});
-safeOn(els.cancelBackgroundOcr, 'click', () => {
-  cancelAllOcrWork('manual-button');
+// ─── OCR & Text Processing (delegated to init-ocr.js) ────────────────────────
+const { refreshOcrStorageInfo } = initOcr({
+  state, els, safeOn, setOcrStatus, getOcrLang,
+  runOcrForCurrentPage, setOcrRegionMode, cancelAllOcrWork,
+  markLowConfidenceWords, getPageQualitySummary,
+  listOcrDocuments, getOcrStorageSize, deleteOcrData,
+  undoPageEdit, redoPageEdit, setTextEditMode, saveCurrentPageTextEdits,
+  exportSessionHealthReport,
 });
 
-// ─── OCR Confidence Overlay Toggle ──────────────────────────────────────────
-safeOn(els.toggleOcrConfidence, 'click', () => {
-  state.ocrConfidenceMode = !state.ocrConfidenceMode;
-  if (els.toggleOcrConfidence) {
-    els.toggleOcrConfidence.classList.toggle('active', state.ocrConfidenceMode);
-    els.toggleOcrConfidence.textContent = state.ocrConfidenceMode ? 'Качество: on' : 'Качество';
-  }
-  // Re-render text with or without confidence markers
-  const currentText = els.pageText?.value || '';
-  if (state.ocrConfidenceMode && currentText) {
-    const lang = getOcrLang();
-    const marked = markLowConfidenceWords(currentText, lang);
-    els.pageText.value = marked;
-    const summary = getPageQualitySummary(currentText, lang);
-    setOcrStatus(`Качество: ${summary.quality} | avg ${summary.avgScore}% | low: ${summary.lowCount} | medium: ${summary.mediumCount}`);
-  } else if (!state.ocrConfidenceMode && currentText) {
-    // Remove [?...?] markers
-    els.pageText.value = currentText.replace(/\[\?/g, '').replace(/\?\]/g, '');
-    setOcrStatus('OCR: idle');
-  }
-});
-
-// ─── OCR Storage Management ─────────────────────────────────────────────────
-async function refreshOcrStorageInfo() {
-  try {
-    const docs = await listOcrDocuments();
-    const sizeBytes = await getOcrStorageSize();
-    const sizeMb = (sizeBytes / (1024 * 1024)).toFixed(2);
-    if (els.ocrStorageInfo) {
-      els.ocrStorageInfo.textContent = `${docs.length} документ(ов) | ~${sizeMb} MB`;
-    }
-    if (els.ocrDocumentsList) {
-      els.ocrDocumentsList.innerHTML = '';
-      for (const docName of docs) {
-        const li = document.createElement('li');
-        li.textContent = docName;
-        const delBtn = document.createElement('button');
-        delBtn.className = 'btn-ghost btn-xs';
-        delBtn.textContent = '✕';
-        delBtn.addEventListener('click', async () => {
-          await deleteOcrData(docName);
-          await refreshOcrStorageInfo();
-        });
-        li.appendChild(delBtn);
-        els.ocrDocumentsList.appendChild(li);
-      }
-    }
-  } catch (err) {
-    console.warn('[ocr] error:', err?.message);
-    if (els.ocrStorageInfo) els.ocrStorageInfo.textContent = 'Ошибка чтения хранилища';
-  }
-}
-
-safeOn(els.refreshOcrStorage, 'click', refreshOcrStorageInfo);
-
-safeOn(els.clearCurrentOcrData, 'click', async () => {
-  if (!state.docName) return;
-  await deleteOcrData(state.docName);
-  await refreshOcrStorageInfo();
-  setOcrStatus('OCR: данные текущего документа очищены');
-});
-
-safeOn(els.clearAllOcrData, 'click', async () => {
-  const docs = await listOcrDocuments();
-  for (const doc of docs) {
-    await deleteOcrData(doc);
-  }
-  await refreshOcrStorageInfo();
-  setOcrStatus('OCR: все данные OCR очищены');
-});
-
-safeOn(els.annotateToggle, 'click', () => setDrawMode(!state.drawEnabled));
-safeOn(els.drawTool, 'change', () => { if (!state.drawEnabled) setDrawMode(true); });
-safeOn(els.undoStroke, 'click', undoStroke);
-safeOn(els.clearStrokes, 'click', clearStrokes);
-safeOn(els.clearComments, 'click', clearComments);
-safeOn(els.exportAnnotated, 'click', exportAnnotatedPng);
-safeOn(els.exportAnnJson, 'click', exportAnnotationsJson);
-safeOn(els.importAnnJson, 'change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importAnnotationsJson(file);
-  e.target.value = '';
-});
-safeOn(els.exportAnnBundle, 'click', exportAnnotationBundleJson);
-safeOn(els.importAnnBundle, 'change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importAnnotationBundleJson(file);
-  e.target.value = '';
-});
-
-// ─── Annotation SVG/PDF export ──────────────────────────────────────────────
-safeOn(els.exportAnnSvg, 'click', () => {
-  if (!state.adapter) return;
-  const strokes = loadStrokes();
-  const blob = exportAnnotationsAsSvg(strokes, els.annotationCanvas.width, els.annotationCanvas.height);
-  if (!blob) { setOcrStatus('Ошибка экспорта SVG'); return; }
-  const url = safeCreateObjectURL(blob);
-  if (!url) return;
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotations.svg`;
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-safeOn(els.exportAnnPdf, 'click', async () => {
-  if (!state.adapter) return;
-
-  // If we have the original PDF file, use pdf-lib to embed annotations directly
-  if (state.adapter?.type === 'pdf' && state.file) {
-    try {
-      setOcrStatus('Экспорт PDF с аннотациями (pdf-lib)...');
-      const arrayBuffer = await state.file.arrayBuffer();
-      // Build annotation store from all pages
-      const annotStore = new Map();
-      for (let p = 1; p <= state.pageCount; p++) {
-        const key = `annotations_${state.docName}_page_${p}`;
-        try {
-          const stored = localStorage.getItem(key);
-          if (stored) {
-            const data = JSON.parse(stored);
-            if (data?.strokes?.length) annotStore.set(p, data.strokes);
-          }
-        } catch (err) { console.warn('[app] skipped:', err?.message); }
-      }
-      if (annotStore.size === 0) {
-        setOcrStatus('Нет аннотаций для экспорта');
-        return;
-      }
-      const canvasSize = { width: els.canvas.width, height: els.canvas.height };
-      const blob = await exportAnnotationsIntoPdf(arrayBuffer, annotStore, canvasSize);
-      const url = safeCreateObjectURL(blob);
-      if (!url) return;
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${state.docName || 'document'}-annotated.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setOcrStatus(`PDF с аннотациями: ${annotStore.size} страниц, ${Math.round(blob.size / 1024)} КБ`);
-      return;
-    } catch (err) {
-      console.warn('pdf-lib annotation export failed, falling back:', err);
-    }
-  }
-
-  // Legacy fallback: single page raster export
-  const strokes = loadStrokes();
-  const pageImageDataUrl = els.canvas.toDataURL('image/png');
-  const blob = exportAnnotationsAsPdf(strokes, els.annotationCanvas.width, els.annotationCanvas.height, pageImageDataUrl);
-  if (!blob) { setOcrStatus('Ошибка экспорта PDF'); return; }
-  const url = safeCreateObjectURL(blob);
-  if (!url) return;
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotations.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
+// ─── Annotations & Drawing (delegated to init-annotations.js) ────────────────
+initAnnotations({
+  state, els, safeOn, setDrawMode, undoStroke, clearStrokes, clearComments,
+  exportAnnotatedPng, exportAnnotationsJson, importAnnotationsJson,
+  exportAnnotationBundleJson, importAnnotationBundleJson,
+  exportAnnotationsAsSvg, exportAnnotationsAsPdf, exportAnnotationsIntoPdf,
+  loadStrokes, safeCreateObjectURL, setOcrStatus,
 });
 
 // ─── PDF Forms (pdf-lib: fills and saves actual PDF) ────────────────────────
@@ -1008,29 +727,7 @@ safeOn(els.toggleSearchTools, 'click', () => toggleLayoutState('searchToolsHidde
 safeOn(els.toggleAnnotTools, 'click', () => toggleLayoutState('annotToolsHidden'));
 safeOn(els.toggleTextToolsInline, 'click', () => toggleLayoutState('textHidden'));
 
-safeOn(els.fullscreen, 'click', async () => {
-  if (!document.fullscreenElement) {
-    await document.documentElement.requestFullscreen();
-  } else {
-    await document.exitFullscreen();
-  }
-});
-
-let _wheelZoomPending = false;
-safeOn(els.canvasWrap, 'wheel', (e) => {
-  if (!e.ctrlKey) return;
-  e.preventDefault();
-  const step = e.deltaY < 0 ? 0.08 : -0.08;
-  state.zoom = Math.min(4, Math.max(0.3, state.zoom + step));
-  if (els.zoomStatus) els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
-  if (!_wheelZoomPending) {
-    _wheelZoomPending = true;
-    requestAnimationFrame(async () => {
-      _wheelZoomPending = false;
-      await renderCurrentPage();
-    });
-  }
-}, { passive: false });
+// Fullscreen & Ctrl+wheel zoom — handled by initNavigation() above
 
 
 function setSettingsStatus(message) {
