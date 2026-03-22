@@ -178,6 +178,11 @@ export function downloadBlob(blob, filename) {
  * @param {string} url
  */
 export async function openExternal(url) {
+  // Only allow http(s) URLs to prevent javascript: / data: XSS vectors
+  if (typeof url !== 'string' || !/^https?:\/\//i.test(url)) {
+    console.warn('[platform] blocked openExternal for non-http URL:', url);
+    return;
+  }
   if (_isTauri) {
     await _tauriShell.open(url);
     return;

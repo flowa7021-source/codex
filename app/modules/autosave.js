@@ -98,7 +98,7 @@ function _lsFallbackSave(snapshot) {
     try {
       const raw = localStorage.getItem(LS_FALLBACK_KEY);
       if (raw) snapshots = JSON.parse(raw);
-    } catch (_e) { /* ignore */ }
+    } catch (_e) { console.warn('[autosave] failed to parse localStorage fallback:', _e?.message); }
 
     // Replace existing or append
     const idx = snapshots.findIndex(s => s.sessionId === snapshot.sessionId);
@@ -144,13 +144,13 @@ function _lsFallbackMarkClean(sessionId) {
       target.wasCleanExit = true;
       localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify(snapshots));
     }
-  } catch (_e) { /* ignore */ }
+  } catch (_e) { console.warn('[autosave] failed to mark clean in localStorage:', _e?.message); }
 }
 
 function _lsFallbackClear() {
   try {
     localStorage.removeItem(LS_FALLBACK_KEY);
-  } catch (_e) { /* ignore */ }
+  } catch (_e) { console.warn('[autosave] failed to clear localStorage fallback:', _e?.message); }
 }
 
 // ─── Snapshot Building ──────────────────────────────────────────────────────
@@ -169,13 +169,13 @@ function _buildSnapshot() {
   let annotations = null;
   try {
     annotations = getAnnotations();
-  } catch (_e) { /* annotations may not be available */ }
+  } catch (_e) { console.warn('[autosave] annotations not available:', _e?.message); }
 
   let bookmarks = [];
   try {
     const raw = localStorage.getItem(`novareader-bookmarks-${state.docName}`);
     if (raw) bookmarks = JSON.parse(raw);
-  } catch (_e) { /* ignore */ }
+  } catch (_e) { console.warn('[autosave] failed to read bookmarks:', _e?.message); }
 
   const ocrPages = [];
   try {
@@ -185,7 +185,7 @@ function _buildSnapshot() {
         ocrPages.push(p);
       }
     }
-  } catch (_e) { /* ignore */ }
+  } catch (_e) { console.warn('[autosave] failed to enumerate OCR pages:', _e?.message); }
 
   return {
     sessionId: _sessionId,
@@ -425,6 +425,7 @@ export async function checkForRecovery() {
       snapshot = unclean[0] || null;
     }
   } catch (_e) {
+    console.warn('[autosave] IndexedDB recovery check failed:', _e?.message);
     _useIndexedDB = false;
   }
 
@@ -455,7 +456,7 @@ export async function clearRecoveryData() {
       tx.objectStore(STORE_NAME).clear();
       await _txComplete(tx);
     }
-  } catch (_e) { /* ignore */ }
+  } catch (_e) { console.warn('[autosave] failed to clear IndexedDB recovery data:', _e?.message); }
 
   _lsFallbackClear();
 }

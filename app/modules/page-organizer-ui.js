@@ -152,15 +152,18 @@ export function initPageOrganizerUI(deps) {
 
   document.getElementById('openPageOrganizer')?.addEventListener('click', openPageOrganizer);
 
-  document.getElementById('pageOrgClose')?.addEventListener('click', () => {
+  function closeOrganizer() {
     orgModal.style.display = 'none';
     orgModal.classList.remove('open');
-  });
+    // Release references to allow GC of PDF bytes and organizer state
+    orgPdfBytes = null;
+    orgState = null;
+    orgNewOrder = null;
+    if (orgGrid) orgGrid.innerHTML = '';
+  }
 
-  document.getElementById('pageOrgCancel')?.addEventListener('click', () => {
-    orgModal.style.display = 'none';
-    orgModal.classList.remove('open');
-  });
+  document.getElementById('pageOrgClose')?.addEventListener('click', closeOrganizer);
+  document.getElementById('pageOrgCancel')?.addEventListener('click', closeOrganizer);
 
   document.getElementById('pageOrgApply')?.addEventListener('click', async () => {
     if (!orgPdfBytes || !orgNewOrder) return;
@@ -170,8 +173,7 @@ export function initPageOrganizerUI(deps) {
       // Reload the document with new PDF bytes
       const blob = new Blob([/** @type {any} */ (newPdf)], { type: 'application/pdf' });
       const file = new File([blob], state.docName || 'reorganized.pdf', { type: 'application/pdf' });
-      orgModal.style.display = 'none';
-      orgModal.classList.remove('open');
+      closeOrganizer();
       // Re-open the file
       await openFile(file);
       toastSuccess('Страницы реорганизованы');

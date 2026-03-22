@@ -10,6 +10,31 @@ import { safeTimeout } from './safe-timers.js';
 /** @type {any} */
 const _win = window;
 
+// ── Tracked document listeners for cleanup ──────────────────────────────────
+/** @type {Array<{el: EventTarget, type: string, handler: EventListener}>} */
+const _uiListeners = [];
+
+/**
+ * addEventListener with automatic tracking for later cleanup.
+ * @param {EventTarget} el
+ * @param {string} type
+ * @param {any} handler
+ * @param {AddEventListenerOptions} [opts]
+ */
+function _trackOn(el, type, handler, opts) {
+  if (!el) return;
+  el.addEventListener(type, handler, opts);
+  _uiListeners.push({ el, type, handler });
+}
+
+/** Remove all tracked listeners registered via _trackOn. */
+export function cleanupUiBlockListeners() {
+  for (const { el, type, handler } of _uiListeners) {
+    try { el.removeEventListener(type, handler); } catch (_e) { /* */ }
+  }
+  _uiListeners.length = 0;
+}
+
 // ── Continuous Scroll Mode ──────────────────────────────────────────────────
 function initContinuousScroll(deps) {
   const { state } = deps;
@@ -268,7 +293,7 @@ function initDragDropAndHotkeys(/* deps not needed */) {
   }
 
   // ── Extended Hotkeys ──
-  document.addEventListener('keydown', (e) => {
+  _trackOn(document, 'keydown', (e) => {
     // Skip if user is typing in input/textarea
     if (/** @type {HTMLElement} */ (e.target).matches('input, textarea, select, [contenteditable]')) return;
 
@@ -526,7 +551,7 @@ function initPrintDialog(deps) {
   if (cancelBtn) cancelBtn.addEventListener('click', closePrintDialog);
 
   // Ctrl+P opens print dialog
-  document.addEventListener('keydown', (e) => {
+  _trackOn(document, 'keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
       e.preventDefault();
       openPrintDialog();
@@ -555,7 +580,7 @@ function initShortcutsRef(/* deps not needed */) {
   if (closeBtn) closeBtn.addEventListener('click', closeShortcuts);
 
   // Press "?" to show shortcuts reference
-  document.addEventListener('keydown', (e) => {
+  _trackOn(document, 'keydown', (e) => {
     if (/** @type {HTMLElement} */ (e.target).matches('input, textarea, select, [contenteditable]')) return;
     if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
       e.preventDefault();
@@ -568,7 +593,7 @@ function initShortcutsRef(/* deps not needed */) {
   });
 
   // Close on backdrop click
-  modal.addEventListener('click', (e) => {
+  _trackOn(modal, 'click', (e) => {
     if (e.target === modal) closeShortcuts();
   });
 
@@ -666,7 +691,7 @@ function initNovaReader3UI(/* deps not needed */) {
   }
 
   // Ctrl+F opens floating search
-  document.addEventListener('keydown', (e) => {
+  _trackOn(document, 'keydown', (e) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
       e.preventDefault();
       toggleFloatingSearch(true);
