@@ -3,3 +3,5 @@ dist/
 dist-vite/
 src-tauri/target/
 coverage/
+test-results/
+playwright-report/
