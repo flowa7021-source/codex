@@ -1,0 +1,196 @@
+// @ts-check
+// ─── Quick Actions Bar ──────────────────────────────────────────────────────
+// Floating toolbar that appears on text selection (like Notion/Google Docs).
+
+import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+
+let actionBar = null;
+
+/**
+ * @typedef {object} QuickAction
+ * @property {string} id
+ * @property {string} label
+ * @property {string} icon
+ * @property {Function} action - (selectedText: string, selection: Selection) => void
+ */
+
+const DEFAULT_ACTIONS = [
+  { id: 'copy', label: 'Копировать', icon: '📋', action: (text) => navigator.clipboard?.writeText(text) },
+  { id: 'highlight', label: 'Выделить', icon: '🖍', action: null },
+  { id: 'underline', label: 'Подчеркнуть', icon: '̲U', action: null },
+  { id: 'comment', label: 'Комментарий', icon: '💬', action: null },
+  { id: 'ocr', label: 'OCR', icon: '🔍', action: null },
+  { id: 'search', label: 'Искать', icon: '🔎', action: null },
+];
+
+/**
+ * Initialize the quick actions bar.
+ * @param {object} options
+ * @param {HTMLElement} options.container - Element to observe for text selection
+ * @param {QuickAction[]} [options.actions] - Custom actions
+ * @param {Function} [options.onAction] - Global action handler (id, text) => void
+ */
+/** AbortController for global listeners, allows cleanup */
+let _quickActionsAbort = null;
+
+export function initQuickActions(options) {
+  const { container, actions = DEFAULT_ACTIONS, onAction } = options;
+  if (!container) return;
+
+  // Abort previous global listeners if re-initialized
+  if (_quickActionsAbort) _quickActionsAbort.abort();
+  _quickActionsAbort = new AbortController();
+
+  // Create action bar element
+  actionBar = document.createElement('div');
+  actionBar.className = 'quick-actions-bar';
+  actionBar.setAttribute('role', 'toolbar');
+  actionBar.setAttribute('aria-label', 'Быстрые действия');
+
+  for (const action of actions) {
+    const btn = document.createElement('button');
+    btn.className = 'quick-action-btn';
+    btn.dataset.actionId = action.id;
+    btn.title = action.label;
+    const iconSpan = document.createElement('span');
+    iconSpan.className = 'qa-icon';
+    iconSpan.textContent = action.icon;
+    const labelSpan = document.createElement('span');
+    labelSpan.className = 'qa-label';
+    labelSpan.textContent = action.label;
+    btn.appendChild(iconSpan);
+    btn.appendChild(labelSpan);
+
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const selection = window.getSelection();
+      const text = selection?.toString() || '';
+
+      if (action.action) {
+        action.action(text, selection);
+      }
+      if (onAction) {
+        onAction(action.id, text, selection);
+      }
+
+      hideQuickActions();
+    });
+
+    actionBar.appendChild(btn);
+  }
+
+  document.body.appendChild(actionBar);
+
+  // Listen for selection changes
+  let selectionCheckTimer = null;
+
+  const sig = _quickActionsAbort.signal;
+
+  container.addEventListener('mouseup', () => {
+    // Delay to allow selection to finalize
+    clearSafeTimeout(selectionCheckTimer);
+    selectionCheckTimer = safeTimeout(() => {
+      if (!document.body.contains(container)) return;
+      checkSelection(container);
+    }, 200);
+  }, { signal: sig });
+
+  container.addEventListener('mousedown', () => {
+    hideQuickActions();
+  }, { signal: sig });
+
+  // Hide on scroll
+  container.addEventListener('scroll', () => {
+    hideQuickActions();
+  }, { passive: true, signal: sig });
+
+  // Hide on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hideQuickActions();
+  }, { signal: sig });
+}
+
+/**
+ * Check if there's a text selection and show/hide the bar.
+ */
+function checkSelection(container) {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || !selection.toString().trim()) {
+    hideQuickActions();
+    return;
+  }
+
+  // Verify selection is within our container
+  if (!container.contains(selection.anchorNode)) {
+    hideQuickActions();
+    return;
+  }
+
+  showQuickActions(selection);
+}
+
+/**
+ * Show the quick actions bar near the selection.
+ */
+function showQuickActions(selection) {
+  if (!actionBar) return;
+
+  const range = selection.getRangeAt(0);
+  const rect = range.getBoundingClientRect();
+
+  // Position above the selection
+  const barWidth = 300;
+  const barHeight = 36;
+  let x = rect.left + (rect.width - barWidth) / 2;
+  let y = rect.top - barHeight - 8;
+
+  // Keep within viewport
+  x = Math.max(8, Math.min(x, window.innerWidth - barWidth - 8));
+  if (y < 8) {
+    y = rect.bottom + 8; // Show below if no room above
+  }
+
+  actionBar.style.left = `${x}px`;
+  actionBar.style.top = `${y}px`;
+  actionBar.classList.add('visible');
+}
+
+/**
+ * Hide the quick actions bar.
+ */
+export function hideQuickActions() {
+  if (!actionBar) return;
+  actionBar.classList.remove('visible');
+}
+
+/**
+ * Add a custom action to the bar.
+ * @param {QuickAction} action
+ */
+export function addQuickAction(action) {
+  if (!actionBar) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'quick-action-btn';
+  btn.dataset.actionId = action.id;
+  btn.title = action.label;
+  const iconSpan = document.createElement('span');
+  iconSpan.className = 'qa-icon';
+  iconSpan.textContent = action.icon;
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'qa-label';
+  labelSpan.textContent = action.label;
+  btn.appendChild(iconSpan);
+  btn.appendChild(labelSpan);
+
+  btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    const text = window.getSelection()?.toString() || '';
+    if (action.action) action.action(text);
+    hideQuickActions();
+  });
+
+  // Insert before last button
+  actionBar.appendChild(btn);
+}

@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "baseUrl": ".",
+    "paths": {
+      "@modules/*": ["app/modules/*"]
+    }
+  },
+  "include": ["app/**/*.js", "app/**/*.ts", "app/**/*.d.ts"],
+  "exclude": ["node_modules", "dist", "app/vendor"]
+}

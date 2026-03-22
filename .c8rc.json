@@ -1,0 +1,4 @@
+{
+  "include": ["app/modules/**/*.js"],
+  "exclude": ["app/vendor/**", "app/modules/types.d.ts"]
+}

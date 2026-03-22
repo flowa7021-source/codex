@@ -1,0 +1,27 @@
+{
+  "timestamp": "2026-03-22T00:00:00.000Z",
+  "totalRaw": 3145728,
+  "totalGzip": 819200,
+  "files": [
+    {
+      "file": "js/index-main.js",
+      "raw": 1048576,
+      "gzip": 307200
+    },
+    {
+      "file": "chunks/pdf-lib-vendor.js",
+      "raw": 1048576,
+      "gzip": 204800
+    },
+    {
+      "file": "chunks/docx-vendor.js",
+      "raw": 716800,
+      "gzip": 102400
+    },
+    {
+      "file": "js/index-main.css",
+      "raw": 51200,
+      "gzip": 10240
+    }
+  ]
+}
