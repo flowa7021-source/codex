@@ -105,6 +105,8 @@ import { initPdfTools } from './modules/init-pdf-tools.js';
 import { initKeyboard } from './modules/init-keyboard.js';
 import { initTabs } from './modules/init-tabs.js';
 import { initAdvanced } from './modules/init-advanced.js';
+import { initSettings } from './modules/init-settings.js';
+import { initEventBindings } from './modules/init-event-bindings.js';
 
 // ─── Phase 0: Error Handling (delegated to init-error-handling.js) ───────────
 const { withErrorBoundary } = initErrorHandling({
@@ -115,96 +117,59 @@ const { withErrorBoundary } = initErrorHandling({
 // Pre-warm PDF.js worker during idle time so first PDF open is faster
 preloadPdfRuntime();
 
-// ─── Settings proxy wrappers (delegate to SettingsController) ────────────────
-function defaultSettings() { return SettingsController.defaultSettings(); }
-function loadAppSettings() { SettingsController.loadAppSettings(); }
-function saveAppSettings() { SettingsController.saveAppSettings(); }
-function applyUiSizeSettings() { SettingsController.applyUiSizeSettings(uiLayoutKey); }
-function getOcrLang() { return SettingsController.getOcrLang(); }
-
-async function importDjvuDataJson(file) {
-  if (!state.adapter || state.adapter.type !== 'djvu') {
-    els.searchStatus.textContent = 'Импорт DjVu data доступен только для DjVu';
-    return;
-  }
-
-  try {
-    const raw = await file.text();
-    const payload = JSON.parse(raw);
-    state.adapter.setData(payload);
-    saveDjvuData(state.adapter.exportData());
-    state.pageCount = state.adapter.getPageCount();
-    els.pageInput.max = String(state.pageCount);
-    if (state.currentPage > state.pageCount) {
-      state.currentPage = state.pageCount;
-      els.pageInput.value = String(state.currentPage);
-    }
-    await renderOutline();
-    await renderPagePreviews();
-    await renderCurrentPage();
-    els.searchStatus.textContent = 'DjVu data JSON импортирован';
-  } catch (err) {
-    console.warn('[app] error:', err?.message);
-    els.searchStatus.textContent = 'Ошибка импорта DjVu data JSON';
-  }
-}
-
-// ─── Theme ───────────────────────────────────────────────────────────────────
-const THEME_CLASSES = ['light', 'sepia', 'high-contrast', 'theme-auto'];
-
-function applyTheme(theme) {
-  THEME_CLASSES.forEach(c => document.body.classList.remove(c));
-  if (theme === 'light') document.body.classList.add('light');
-  else if (theme === 'sepia') document.body.classList.add('sepia');
-  else if (theme === 'high-contrast') document.body.classList.add('high-contrast');
-  else if (theme === 'auto') document.body.classList.add('theme-auto');
-  // 'dark' is the default — no class needed
-
-  // Set data-theme attribute on <html> for CSS custom property theming
-  const effectiveTheme = (theme === 'light' || theme === 'sepia') ? 'light' : 'dark';
-  document.documentElement.dataset.theme = effectiveTheme;
-
-  localStorage.setItem('novareader-theme', theme);
-}
-
-function loadTheme() {
-  const theme = localStorage.getItem('novareader-theme') || 'dark';
-  applyTheme(theme);
-}
-
-function toggleTheme() { SettingsController.toggleTheme(applyTheme); }
-
-function getNotesModel() { return SettingsController.getNotesModel(); }
-function normalizeImportedNotes(payload) { return SettingsController.normalizeImportedNotes(payload); }
-function loadNotes() { SettingsController.loadNotes(noteKey); }
-function saveNotes(source = 'manual') { SettingsController.saveNotes(noteKey, source); }
-function _queueNotesAutosave() { SettingsController.queueNotesAutosave(noteKey); }
-function _exportNotes() { SettingsController.exportNotes(); }
-function _exportNotesMarkdown() { SettingsController.exportNotesMarkdown(); }
-function _exportNotesJson() { SettingsController.exportNotesJson(); }
-async function _importNotesJson(file) { await SettingsController.importNotesJson(file, noteKey); }
-function _insertTimestamp() { SettingsController.insertTimestamp(noteKey); }
-function normalizeHotkey(value, fallback) { return SettingsController.normalizeHotkey(value, fallback); }
-function setHotkeysStatus(message, type = '') { SettingsController.setHotkeysStatus(message, type); }
-function setHotkeysInputErrors(fields = [], details = {}) { SettingsController.setHotkeysInputErrors(fields, details); }
-function validateHotkeys(nextHotkeys) { return SettingsController.validateHotkeys(nextHotkeys); }
-function renderHotkeyInputs() { SettingsController.renderHotkeyInputs(); }
-function saveHotkeys() { SettingsController.saveHotkeys(); }
-function loadHotkeys() { SettingsController.loadHotkeys(); }
-function resetHotkeys() { SettingsController.resetHotkeys(); }
-function stringifyHotkeyEvent(e) { return SettingsController.stringifyHotkeyEvent(e); }
-function bindHotkeyCapture() { SettingsController.bindHotkeyCapture(); }
-function autoFixHotkeys() { SettingsController.autoFixHotkeys(); }
-
-
-function setBookmarksStatus(message, type = '') { SettingsController.setBookmarksStatus(message, type); }
-function _exportBookmarksJson() { SettingsController.exportBookmarksJson(bookmarkKey, loadBookmarks); }
-async function _importBookmarksJson(file) { await SettingsController.importBookmarksJson(file, saveBookmarks, renderBookmarks); }
-function loadBookmarks() { return SettingsController.loadBookmarks(bookmarkKey); }
-function saveBookmarks(next) { SettingsController.saveBookmarks(next, bookmarkKey, renderDocStats, renderEtaStatus); }
-function renderBookmarks() { SettingsController.renderBookmarks(bookmarkKey, saveBookmarks, renderCurrentPage); }
-async function addBookmark() { await SettingsController.addBookmark(bookmarkKey, saveBookmarks, renderBookmarks); }
-function _clearBookmarks() { SettingsController.clearBookmarks(saveBookmarks, renderBookmarks); }
+// ─── Settings proxy wrappers (delegated to init-settings.js) ─────────────────
+const {
+  defaultSettings,
+  loadAppSettings,
+  saveAppSettings,
+  applyUiSizeSettings,
+  getOcrLang,
+  importDjvuDataJson,
+  loadTheme,
+  toggleTheme,
+  getNotesModel,
+  normalizeImportedNotes,
+  loadNotes,
+  saveNotes,
+  _queueNotesAutosave,
+  _exportNotes,
+  _exportNotesMarkdown,
+  _exportNotesJson,
+  _importNotesJson,
+  _insertTimestamp,
+  normalizeHotkey,
+  setHotkeysStatus,
+  setHotkeysInputErrors,
+  validateHotkeys,
+  renderHotkeyInputs,
+  saveHotkeys,
+  loadHotkeys,
+  resetHotkeys,
+  stringifyHotkeyEvent,
+  bindHotkeyCapture,
+  autoFixHotkeys,
+  setBookmarksStatus,
+  _exportBookmarksJson,
+  _importBookmarksJson,
+  loadBookmarks,
+  saveBookmarks,
+  renderBookmarks,
+  addBookmark,
+  _clearBookmarks,
+} = initSettings({
+  SettingsController,
+  noteKey,
+  bookmarkKey,
+  uiLayoutKey,
+  state,
+  els,
+  saveDjvuData,
+  renderOutline,
+  renderPagePreviews,
+  renderCurrentPage,
+  renderDocStats,
+  renderEtaStatus,
+});
 
 // ─── Event Listener Cleanup Registry ─────────────────────────────────────────
 /** @type {Array<{el: EventTarget, type: string, handler: Function}>} */
@@ -235,25 +200,29 @@ function cleanupAllListeners() {
 window._listenerRegistry = _listenerRegistry;
 window._cleanupAllListeners = cleanupAllListeners;
 
-// ─── Event Bindings ──────────────────────────────────────────────────────────
-safeOn(els.clearRecent, 'click', clearRecent);
-safeOn(els.toggleAdvancedPanels, 'click', toggleAdvancedPanelsState);
-safeOn(els.openSettingsModal, 'click', openSettingsModal);
-safeOn(els.closeSettingsModal, 'click', closeSettingsModal);
-safeOn(els.saveSettingsModal, 'click', saveSettingsFromModal);
-safeOn(els.resetUiSizeDefaults, 'click', resetUiSizeToDefaults);
-safeOn(els.exportDiagnostics, 'click', exportDiagnostics);
-safeOn(els.clearDiagnostics, 'click', clearDiagnostics);
-safeOn(els.runRuntimeSelfCheck, 'click', () => { runRuntimeSelfCheck(); });
-safeOn(els.cfgSidebarWidth, 'input', previewUiSizeFromModal);
-safeOn(els.cfgToolbarScale, 'input', previewUiSizeFromModal);
-safeOn(els.cfgTextMinHeight, 'input', previewUiSizeFromModal);
-safeOn(els.cfgPageAreaHeight, 'input', previewUiSizeFromModal);
-safeOn(els.cfgTopToolbarHeight, 'input', previewUiSizeFromModal);
-safeOn(els.cfgBottomToolbarHeight, 'input', previewUiSizeFromModal);
-safeOn(els.cfgTextPanelHeight, 'input', previewUiSizeFromModal);
-safeOn(els.cfgAnnotationCanvasScale, 'input', previewUiSizeFromModal);
-safeOn(els.settingsModal, 'click', (e) => { if (e.target === els.settingsModal) closeSettingsModal(); });
+// ─── Event Bindings (delegated to init-event-bindings.js) ────────────────────
+initEventBindings({
+  els, safeOn, debounce, state,
+  openSettingsModal, closeSettingsModal, saveSettingsFromModal, resetUiSizeToDefaults, previewUiSizeFromModal,
+  exportDiagnostics, clearDiagnostics, runRuntimeSelfCheck,
+  navigateHistoryBack, navigateHistoryForward,
+  saveHotkeys, resetHotkeys, autoFixHotkeys, applyCommonHotkeys, setSettingsStatus,
+  setSidebarCompactMode, setSidebarSectionsCollapsed,
+  toggleAdvancedPanelsState, toggleLayoutState, updateSearchToolbarRows,
+  exportWorkspaceBundleJson, importWorkspaceBundleJson, importOcrJson,
+  saveCloudSyncUrl, pushWorkspaceToCloud, pullWorkspaceFromCloud, setStage4Status,
+  toggleCollaborationChannel, broadcastWorkspaceSnapshot,
+  resetReadingProgress, resetReadingTime, clearVisitTrail, saveReadingGoal, clearReadingGoal,
+  clearSearchHistory, exportSearchHistoryJson, exportSearchHistoryTxt, copySearchHistory, importSearchHistoryJson,
+  clearSearchResults, exportSearchResultsJson, exportSearchResultsCsv, exportSearchResultsSummaryTxt,
+  importSearchResultsJson, importSearchResultsCsv, copySearchResultsSummary,
+  toggleTheme,
+  downloadCurrentFile, printCanvasPage, refreshPageText, copyPageText, exportPageText,
+  exportCurrentDocToWord, downloadOcrTextExport,
+  searchInPdf, jumpToSearchResult, saveSearchScope,
+  mergePdfFiles, splitPdfPages,
+  importDjvuDataJson, showShortcutsHelp, clearRecent,
+});
 
 // File input handler — will be overridden by tab manager integration below
 const _fileInputChangeHandler = async (e) => {
@@ -267,9 +236,6 @@ if (els.fileInput) {
   safeOn(els.fileInput, 'change', _fileInputChangeHandler);
 }
 
-safeOn(els.historyBack, 'click', navigateHistoryBack);
-safeOn(els.historyForward, 'click', navigateHistoryForward);
-
 // ─── Navigation & Zoom (delegated to init-navigation.js) ─────────────────────
 initNavigation({
   state, els, debounce, safeOn,
@@ -277,108 +243,7 @@ initNavigation({
   clearOcrRuntimeCaches, scheduleBackgroundOcrScan,
 });
 
-// Notes event bindings moved to notes-controller.js (initNotesController)
-safeOn(els.saveHotkeys, 'click', saveHotkeys);
-safeOn(els.resetHotkeys, 'click', resetHotkeys);
-safeOn(els.autoFixHotkeys, 'click', autoFixHotkeys);
-safeOn(els.applyCommonHotkeys, 'click', () => {
-  applyCommonHotkeys();
-  setSettingsStatus('Применены стандартные hotkeys.');
-});
-safeOn(els.toggleSidebarCompact, 'click', () => {
-  const enabled = !document.body.classList.contains('sidebar-compact');
-  setSidebarCompactMode(enabled);
-  setSettingsStatus(enabled ? 'Включён компактный режим панели.' : 'Компактный режим отключён.');
-});
-safeOn(els.collapseSidebarSections, 'click', () => {
-  setSidebarSectionsCollapsed(true);
-  setSettingsStatus('Разделы панели свернуты.');
-});
-safeOn(els.expandSidebarSections, 'click', () => {
-  setSidebarSectionsCollapsed(false);
-  setSettingsStatus('Разделы панели развернуты.');
-});
-safeOn(els.exportWorkspace, 'click', exportWorkspaceBundleJson);
-safeOn(els.importWorkspace, 'change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importWorkspaceBundleJson(file);
-  e.target.value = '';
-});
-safeOn(els.importOcrJson, 'change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importOcrJson(file);
-  e.target.value = '';
-});
-safeOn(els.saveCloudSyncUrl, 'click', saveCloudSyncUrl);
-safeOn(els.pushCloudSync, 'click', async () => {
-  try {
-    await pushWorkspaceToCloud();
-  } catch (err) {
-    console.warn('[ocr] error:', err?.message);
-    setStage4Status('Ошибка cloud push.', 'error');
-  }
-});
-safeOn(els.pullCloudSync, 'click', async () => {
-  try {
-    await pullWorkspaceFromCloud();
-  } catch (err) {
-    console.warn('[app] error:', err?.message);
-    setStage4Status('Ошибка cloud pull.', 'error');
-  }
-});
-safeOn(els.toggleCollab, 'click', toggleCollaborationChannel);
-safeOn(els.broadcastCollab, 'click', () => broadcastWorkspaceSnapshot('manual'));
-safeOn(els.resetProgress, 'click', async () => {
-  await resetReadingProgress();
-});
-safeOn(els.resetReadingTime, 'click', async () => {
-  await resetReadingTime();
-});
-safeOn(els.clearVisitTrail, 'click', clearVisitTrail);
-safeOn(els.clearSearchHistory, 'click', clearSearchHistory);
-safeOn(els.exportSearchHistory, 'click', exportSearchHistoryJson);
-safeOn(els.exportSearchHistoryTxt, 'click', exportSearchHistoryTxt);
-safeOn(els.copySearchHistory, 'click', async () => {
-  await copySearchHistory();
-});
-safeOn(els.importSearchHistoryJson, 'change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importSearchHistoryJson(file);
-  e.target.value = '';
-});
-safeOn(els.clearSearchResults, 'click', clearSearchResults);
-safeOn(els.exportSearchResults, 'click', exportSearchResultsJson);
-safeOn(els.exportSearchResultsCsv, 'click', exportSearchResultsCsv);
-safeOn(els.exportSearchSummaryTxt, 'click', exportSearchResultsSummaryTxt);
-safeOn(els.importSearchResultsJson, 'change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importSearchResultsJson(file);
-  e.target.value = '';
-});
-safeOn(els.importSearchResultsCsv, 'change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importSearchResultsCsv(file);
-  e.target.value = '';
-});
-safeOn(els.copySearchResults, 'click', async () => {
-  await copySearchResultsSummary();
-});
-safeOn(els.saveReadingGoal, 'click', saveReadingGoal);
-safeOn(els.clearReadingGoal, 'click', clearReadingGoal);
-safeOn(els.themeToggle, 'click', toggleTheme);
-// Bookmark event bindings moved to bookmark-controller.js (initBookmarkController)
-safeOn(els.downloadFile, 'click', downloadCurrentFile);
-safeOn(els.printPage, 'click', printCanvasPage);
-safeOn(els.importDjvuDataQuick, 'click', () => els.importDjvuDataJson?.click());
-safeOn(els.refreshText, 'click', refreshPageText);
-safeOn(els.copyText, 'click', copyPageText);
-safeOn(els.exportText, 'click', exportPageText);
-safeOn(els.exportWord, 'click', exportCurrentDocToWord);
+// ─── Complex handlers kept in app.js ─────────────────────────────────────────
 safeOn(els.importDocx, 'change', async (e) => {
   const file = e.target?.files?.[0];
   if (!file) { e.target.value = ''; return; }
@@ -406,7 +271,6 @@ safeOn(els.importDocx, 'change', async (e) => {
   }
   e.target.value = '';
 });
-safeOn(els.exportOcrIndex, 'click', downloadOcrTextExport);
 // ─── OCR & Text Processing (delegated to init-ocr.js) ────────────────────────
 const { refreshOcrStorageInfo } = initOcr({
   state, els, safeOn, setOcrStatus, getOcrLang,
@@ -435,10 +299,6 @@ initPdfTools({
 
 // ─── Page Organizer UI (extracted to modules/page-organizer-ui.js) ───────────
 initPageOrganizerUI({ openFile });
-
-// ─── Merge / Split ──────────────────────────────────────────────────────────
-safeOn(els.mergePages, 'click', () => mergePdfFiles());
-safeOn(els.splitPages, 'click', () => splitPdfPages());
 
 // ─── Conversion Plugins ─────────────────────────────────────────────────────
 function exportPluginResult(pluginId, result) {
@@ -489,48 +349,6 @@ safeOn(els.conversionTable, 'click', async () => {
     exportPluginResult('custom-table', result);
   }
 });
-
-safeOn(els.importDjvuDataJson, 'change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await importDjvuDataJson(file);
-  e.target.value = '';
-});
-safeOn(els.searchBtn, 'click', async () => {
-  await searchInPdf(els.searchInput?.value);
-});
-safeOn(els.searchInput, 'keydown', async (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    await searchInPdf(els.searchInput?.value);
-  }
-});
-safeOn(els.searchScope, 'change', () => {
-  saveSearchScope();
-});
-
-safeOn(els.searchPrev, 'click', async () => {
-  await jumpToSearchResult(state.searchCursor - 1);
-});
-
-safeOn(els.searchNext, 'click', async () => {
-  await jumpToSearchResult(state.searchCursor + 1);
-});
-
-const debouncedUpdateSearchToolbarRows = debounce(updateSearchToolbarRows, 150);
-window.addEventListener('resize', debouncedUpdateSearchToolbarRows);
-safeOn(els.searchInput, 'input', debouncedUpdateSearchToolbarRows);
-safeOn(els.searchScope, 'change', debouncedUpdateSearchToolbarRows);
-
-safeOn(els.shortcutsHelp, 'click', showShortcutsHelp);
-safeOn(els.toggleSidebar, 'click', () => toggleLayoutState('sidebarHidden'));
-safeOn(els.toggleToolsBar, 'click', () => toggleLayoutState('toolsHidden'));
-safeOn(els.toggleTextTools, 'click', () => toggleLayoutState('textHidden'));
-safeOn(els.toggleSearchTools, 'click', () => toggleLayoutState('searchToolsHidden'));
-safeOn(els.toggleAnnotTools, 'click', () => toggleLayoutState('annotToolsHidden'));
-safeOn(els.toggleTextToolsInline, 'click', () => toggleLayoutState('textHidden'));
-
-// Fullscreen & Ctrl+wheel zoom — handled by initNavigation() above
 
 
 function setSettingsStatus(message) {
