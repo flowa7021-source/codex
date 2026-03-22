@@ -34,6 +34,7 @@ import { ToolMode, toolStateMachine } from './tool-modes.js';
 import { DocumentModel }              from './page-model.js';
 import { PermissionEnforcer, getSecurityInfo } from './pdf-security.js';
 // EraseTool is activated via tool-modes.js deps, not directly imported here
+import { novaLog }                     from './diagnostics.js';
 import { InlineTextEditor }            from './inline-text-editor.js';
 import { ClipboardController }         from './cross-format-paste.js';
 import { smartCropPage }                from './smart-crop.js';
@@ -236,7 +237,7 @@ function _addToolbarButtons(ctx, handles) {
 
     // Log report
     const report = generateBatchReport(result);
-    console.log(report);
+    novaLog('info', 'integration-wiring', report);
   });
   toolbar.appendChild(batchBtn);
 

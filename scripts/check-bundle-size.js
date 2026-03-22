@@ -16,6 +16,10 @@ const BUDGETS = {
   // Vendor chunks (gzipped)
   'chunks/pdf-lib-*.js': { maxGzip: 220_000, label: 'pdf-lib chunk' },
   'chunks/docx-*.js': { maxGzip: 120_000, label: 'docx chunk' },
+  // Lazy-loaded chunks (should stay small for fast TTI)
+  'chunks/tesseract-*.js': { maxGzip: 80_000, label: 'tesseract chunk' },
+  'chunks/pdfjs-*.js': { maxGzip: 350_000, label: 'pdfjs chunk' },
+  'chunks/fflate-*.js': { maxGzip: 15_000, label: 'fflate chunk' },
 };
 
 let failures = 0;

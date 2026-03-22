@@ -341,7 +341,7 @@ export async function initTesseractPool(lang = 'eng', size) {
       _lastInitError = '';
       _lastFailTime = 0;
 
-      console.log(`Tesseract pool initialized: ${targetSize} workers, lang="${tessLang}"`);
+      console.info(`[tesseract] Pool initialized: ${targetSize} workers, lang="${tessLang}"`);
       return true;
     } catch (err) {
       _initFailCount++;
