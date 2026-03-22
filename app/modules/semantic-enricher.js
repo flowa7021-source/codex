@@ -1,3 +1,5 @@
+// @ts-check
+
 /**
  * Layer 3: Semantic Enricher
  *
@@ -9,6 +11,17 @@
  *         pdfOutline    – optional PDF bookmark tree
  *
  * Output: SemanticSection[]
+ */
+
+/**
+ * @typedef {{ type: string, level: number, marker: string, format: string }} ListInfo
+ * @typedef {{ x: number, y: number, w: number, h: number } | number[]} BBox
+ * @typedef {{ lines?: Array<{ runs?: Array<{ text?: string, fontSize?: number, bold?: boolean, fontWeight?: string, fontName?: string, superscript?: boolean, subscript?: boolean }> }>, text?: string, alignment?: string, indent?: number, imageRef?: any, rows?: any[] }} RegionContent
+ * @typedef {{ type: string, content?: RegionContent, bbox?: BBox, alignment?: string, indent?: number, x?: number, y?: number, height?: number, text?: string, order?: number, columnIndex?: number, headingLevel?: number, listInfo?: ListInfo, footnoteId?: string, formulaScore?: number, imageRef?: any, altText?: string|null, rows?: any[], tableCaption?: string|null, parentType?: string, _insideTable?: boolean, _headingDetected?: boolean, _cachedText?: string }} Region
+ * @typedef {{ pageNumber?: number, width?: number, height?: number, pageSize?: { width: number, height: number }, body?: Region[], header?: any, footer?: any, columns?: number, columnCount?: number, margins?: { top: number, right: number, bottom: number, left: number } }} LayoutPage
+ * @typedef {{ title: string, level: number, dest: any }} OutlineEntry
+ * @typedef {{ startPage: number, endPage: number, columns: number, margins: { top: number, right: number, bottom: number, left: number }, orientation: string, pageSize: { width: number, height: number }, header: any, footer: any, blocks: Array<SemanticBlock> }} SemanticSection
+ * @typedef {{ type: string, pageNumber: number, order?: number, columnIndex?: number, content?: RegionContent, headingLevel?: number, listInfo?: ListInfo, footnoteId?: string, formulaScore?: number, imageRef?: any, altText?: string|null, rows?: any[], tableCaption?: string|null, bbox?: BBox }} SemanticBlock
  */
 
 // ---------------------------------------------------------------------------
@@ -53,6 +66,8 @@ const CAPTION_PATTERN =
 /**
  * Statistical mode of a numeric array.
  * Returns the most frequent value; falls back to the first element.
+ * @param {number[]} arr
+ * @returns {number | undefined}
  */
 export function mode(arr) {
   if (!arr || arr.length === 0) {
@@ -85,6 +100,8 @@ export function mode(arr) {
  *
  * Destination pages are 0-based in many PDF libs, so we store both the
  * raw value and a 1-based value to be safe when matching.
+ * @param {any} outline
+ * @returns {Map<number, OutlineEntry[]> | null}
  */
 export function buildOutlineMap(outline) {
   if (!outline) return null;
@@ -142,6 +159,9 @@ function resolveOutlinePage(item) {
  * Collapses whitespace, strips punctuation, and does a case-insensitive
  * comparison.  Returns true when the normalised strings are identical or
  * one is a prefix of the other (with ≥80 % overlap).
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
  */
 export function fuzzyMatch(a, b) {
   if (!a || !b) return false;
@@ -381,6 +401,11 @@ function computeBaseIndent(regions) {
  *   A – PDF outline matching
  *   B – Font-size / bold analysis
  *   C – Semantic pattern matching
+ * @param {Region[]} regions
+ * @param {number} bodyFontSize
+ * @param {Map<number, OutlineEntry[]> | null} pdfOutline
+ * @param {number} pageNumber
+ * @returns {void}
  */
 export function detectHeadings(regions, bodyFontSize, pdfOutline, pageNumber) {
   if (!regions || regions.length === 0) return;
@@ -472,6 +497,8 @@ function isInsideTable(region) {
 
 /**
  * List detection (mutates regions in-place).
+ * @param {Region[]} regions
+ * @returns {void}
  */
 export function detectLists(regions) {
   if (!regions || regions.length === 0) return;
@@ -543,6 +570,10 @@ export function detectLists(regions) {
  * 2. Find small paragraphs near the page bottom whose text begins with the
  *    same number.
  * 3. Pair them.
+ * @param {Region[]} regions
+ * @param {number} pageHeight
+ * @param {number} bodyFontSize
+ * @returns {void}
  */
 export function detectFootnotes(regions, pageHeight, bodyFontSize) {
   if (!regions || regions.length === 0) return;
@@ -601,6 +632,8 @@ export function detectFootnotes(regions, pageHeight, bodyFontSize) {
  * Formula detection (mutates regions in-place).
  *
  * Scores each paragraph on math-related signals.
+ * @param {Region[]} regions
+ * @returns {void}
  */
 export function detectFormulas(regions) {
   if (!regions || regions.length === 0) return;
@@ -647,6 +680,8 @@ export function detectFormulas(regions) {
  *
  * Marks sequences of ≥ 3 consecutive paragraphs that look like table-of-
  * contents entries (text + leader dots + page number).
+ * @param {Region[]} regions
+ * @returns {void}
  */
 export function detectTocEntries(regions) {
   if (!regions || regions.length === 0) return;
@@ -702,6 +737,8 @@ export function detectTocEntries(regions) {
  *
  * A caption is a short paragraph immediately adjacent to an image or table
  * region that matches a caption pattern.
+ * @param {Region[]} regions
+ * @returns {void}
  */
 export function detectCaptions(regions) {
   if (!regions || regions.length === 0) return;
@@ -742,6 +779,8 @@ export function detectCaptions(regions) {
  *   - Orientation changes (portrait ↔ landscape)
  *   - Margin changes significantly (> 10pt)
  *   - Column count changes
+ * @param {LayoutPage[]} layoutPages
+ * @returns {SemanticSection[]}
  */
 export function detectSections(layoutPages) {
   if (!layoutPages || layoutPages.length === 0) return [];

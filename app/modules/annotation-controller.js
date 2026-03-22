@@ -1,6 +1,15 @@
+// @ts-check
+
 // ─── Annotation Controller ──────────────────────────────────────────────────
 // Drawing, annotation storage, comment management, and annotation import/export.
 // Extracted from app.js as part of module decomposition.
+
+/**
+ * @typedef {{ x: number, y: number }} NormalizedPoint
+ * @typedef {{ tool: string, color: string, size: number, points: NormalizedPoint[] }} Stroke
+ * @typedef {{ point: NormalizedPoint, text: string }} Comment
+ * @typedef {{ renderDocStats: () => void, renderReadingGoalStatus: () => void, renderEtaStatus: () => void, setOcrStatus: (msg: string) => void, runOcrOnRect: (rect: any, mode: string) => Promise<void>, drawOcrSelectionPreview: () => void, nrPrompt: (msg: string) => Promise<string|null>, toastError: (msg: string) => void }} AnnotationDeps
+ */
 
 import { state, hotkeys, els } from './state.js';
 import { annotationManager, ANNOTATION_TYPES } from './pdf-annotations-pro.js';
@@ -26,6 +35,8 @@ const _deps = {
 /**
  * Inject runtime dependencies that live in app.js.
  * Must be called once during startup before any annotation functions are used.
+ * @param {Partial<AnnotationDeps>} deps
+ * @returns {void}
  */
 export function initAnnotationControllerDeps(deps) {
   Object.assign(_deps, deps);
@@ -33,19 +44,23 @@ export function initAnnotationControllerDeps(deps) {
 
 // ─── Annotation Key Helpers ─────────────────────────────────────────────────
 
+/** @param {number} page @returns {string} */
 export function annotationKey(page) {
   return `novareader-annotations:${state.docName || 'global'}:${page}`;
 }
 
+/** @param {number} page @returns {string} */
 export function commentKey(page) {
   return `novareader-comments:${state.docName || 'global'}:${page}`;
 }
 
+/** @returns {void} */
 export function invalidateAnnotationCaches() {
   _strokesCache.clear();
   _commentsCache.clear();
 }
 
+/** @returns {CanvasRenderingContext2D | null} */
 export function getCurrentAnnotationCtx() {
   const ctx = els.annotationCanvas.getContext('2d');
   if (!ctx) return null;
@@ -56,6 +71,7 @@ export function getCurrentAnnotationCtx() {
  * Returns the DPR scale factor used for the annotation canvas.
  * Annotation canvas is sized at displayWidth*dpr x displayHeight*dpr
  * while CSS size is displayWidth x displayHeight.
+ * @returns {number}
  */
 export function getAnnotationDpr() {
   return Math.max(1, window.devicePixelRatio || 1);
