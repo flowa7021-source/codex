@@ -492,7 +492,7 @@ test.describe('F — Annotations toolbar flow', () => {
     await page.waitForTimeout(300);
     const drawTool = page.locator('#drawTool');
     await expect(drawTool).toBeVisible();
-    const options = await drawTool.locator('option').allValues();
+    const options = await drawTool.locator('option').evaluateAll(els => els.map(el => el.value));
     expect(options).toContain('pen');
     expect(options).toContain('highlighter');
     expect(options).toContain('eraser');
