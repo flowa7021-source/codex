@@ -101,6 +101,10 @@ import { initErrorHandling } from './modules/init-error-handling.js';
 import { initNavigation } from './modules/init-navigation.js';
 import { initOcr } from './modules/init-ocr.js';
 import { initAnnotations } from './modules/init-annotations.js';
+import { initPdfTools } from './modules/init-pdf-tools.js';
+import { initKeyboard } from './modules/init-keyboard.js';
+import { initTabs } from './modules/init-tabs.js';
+import { initAdvanced } from './modules/init-advanced.js';
 
 // ─── Phase 0: Error Handling (delegated to init-error-handling.js) ───────────
 const { withErrorBoundary } = initErrorHandling({
@@ -422,212 +426,11 @@ initAnnotations({
   loadStrokes, safeCreateObjectURL, setOcrStatus,
 });
 
-// ─── PDF Forms (pdf-lib: fills and saves actual PDF) ────────────────────────
-safeOn(els.pdfFormFill, 'click', async () => {
-  if (!state.adapter || state.adapter.type !== 'pdf') {
-    setOcrStatus('Формы доступны только для PDF');
-    return;
-  }
-  await formManager.loadFromAdapter(state.adapter);
-  const fctx = els.annotationCanvas.getContext('2d');
-  formManager.renderFormOverlay(fctx, state.currentPage, state.zoom);
-  const totalFields = formManager.getAllFields().length;
-  setOcrStatus(`Формы: ${totalFields} полей найдено`);
-});
-
-safeOn(els.pdfFormExport, 'click', async () => {
-  // Export as JSON (data only)
-  const data = formManager.exportFormData();
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${state.docName || 'document'}-form-data.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-
-  // Also save filled form as PDF via pdf-lib
-  if (state.adapter?.type === 'pdf' && state.file) {
-    try {
-      const formData = {};
-      for (const field of formManager.getAllFields()) {
-        if (field.value !== '' && field.value !== field.defaultValue) {
-          formData[field.name] = field.value;
-        }
-      }
-      if (Object.keys(formData).length === 0) {
-        setOcrStatus('Форма экспортирована (JSON). Нет заполненных полей для PDF.');
-        return;
-      }
-      setOcrStatus('Сохранение заполненной формы в PDF...');
-      const arrayBuffer = await state.file.arrayBuffer();
-      const pdfBlob = await fillPdfForm(arrayBuffer, formData, false);
-      const pdfUrl = safeCreateObjectURL(pdfBlob);
-      const a2 = document.createElement('a');
-      a2.href = pdfUrl;
-      a2.download = `${state.docName || 'document'}-filled.pdf`;
-      a2.click();
-      URL.revokeObjectURL(pdfUrl);
-      setOcrStatus('Форма сохранена: JSON + заполненный PDF');
-    } catch (err) {
-      setOcrStatus(`JSON экспортирован (PDF ошибка: ${err?.message || 'неизвестная'})`);
-    }
-  }
-});
-
-safeOn(els.pdfFormImport, 'change', async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  try {
-    const text = await file.text();
-    const data = JSON.parse(text);
-    formManager.importFormData(data);
-    const fctx = els.annotationCanvas.getContext('2d');
-    formManager.renderFormOverlay(fctx, state.currentPage, state.zoom);
-    setOcrStatus('Данные формы импортированы');
-  } catch (err) {
-    setOcrStatus(`Ошибка импорта формы: ${err?.message || 'неизвестная'}`);
-  }
-  e.target.value = '';
-});
-
-safeOn(els.pdfFormClear, 'click', () => {
-  formManager.clearAll();
-  setOcrStatus('Формы очищены');
-});
-
-// ─── PDF Block Editor (with snap guides & pdf-lib export) ───────────────────
-safeOn(els.pdfBlockEdit, 'click', () => {
-  if (!state.adapter || state.adapter.type !== 'pdf') {
-    setOcrStatus('Редактор блоков доступен только для PDF');
-    return;
-  }
-  const isActive = els.pdfBlockEdit.classList.toggle('active');
-  if (isActive) {
-    blockEditor.enable(els.canvasWrap, els.canvas);
-    setOcrStatus('Редактор блоков: ВКЛ (привязка к сетке активна)');
-  } else {
-    blockEditor.clearGuides();
-    blockEditor.disable();
-    setOcrStatus('Редактор блоков: ВЫКЛ');
-  }
-});
-
-// Export block edits into PDF via pdf-lib (double-click pdfBlockEdit or Ctrl+Shift+E when editor active)
-async function exportBlockEditsToPdf() {
-  if (!state.adapter || state.adapter.type !== 'pdf' || !state.file) {
-    setOcrStatus('Экспорт блоков: нужен открытый PDF');
-    return;
-  }
-  const allBlocks = blockEditor.exportAllBlocks();
-  if (!Object.keys(allBlocks).length) {
-    setOcrStatus('Нет блоков для экспорта');
-    return;
-  }
-  try {
-    setOcrStatus('Экспорт блоков в PDF...');
-    const arrayBuffer = await state.file.arrayBuffer();
-    const canvasW = parseFloat(els.canvas.style.width) || els.canvas.width;
-    const canvasH = parseFloat(els.canvas.style.height) || els.canvas.height;
-    const pdfBlob = await blockEditor.exportBlocksToPdf(arrayBuffer, { width: canvasW, height: canvasH });
-    const url = safeCreateObjectURL(pdfBlob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${state.docName || 'document'}-edited.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setOcrStatus('Блоки экспортированы в PDF');
-  } catch (err) {
-    setOcrStatus(`Ошибка экспорта блоков: ${err?.message || 'неизвестная'}`);
-  }
-}
-
-safeOn(els.pdfBlockEdit, 'dblclick', exportBlockEditsToPdf);
-document.addEventListener('keydown', (e) => {
-  if (e.ctrlKey && e.shiftKey && e.key === 'E' && blockEditor.active) {
-    e.preventDefault();
-    exportBlockEditsToPdf();
-  }
-});
-
-// ─── Image Insertion ─────────────────────────────────────────────────────────
-safeOn(els.insertImageInput, 'change', (e) => {
-  const file = e.target.files?.[0];
-  if (file) handleImageInsertion(file);
-  e.target.value = '';
-});
-
-// ─── Watermark (pdf-lib: saves into actual PDF) ────────────────────────────
-safeOn(els.addWatermark, 'click', async () => {
-  if (!state.adapter) return;
-  const text = await nrPrompt('Текст водяного знака:', 'КОНФИДЕНЦИАЛЬНО');
-  if (!text) return;
-
-  // Visual preview on canvas
-  addWatermarkToPage(text);
-
-  // If PDF, also save into PDF file via pdf-lib
-  if (state.adapter?.type === 'pdf' && state.file) {
-    try {
-      setOcrStatus('Добавление водяного знака в PDF...');
-      const arrayBuffer = await state.file.arrayBuffer();
-      const blob = await addWatermarkToPdf(arrayBuffer, text, {
-        fontSize: 60,
-        opacity: 0.25,
-        rotation: -45,
-      });
-      const url = safeCreateObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${state.docName || 'document'}-watermark.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setOcrStatus(`Водяной знак "${text}" — PDF сохранён`);
-    } catch (err) {
-      setOcrStatus(`Водяной знак "${text}" добавлен на canvas (PDF ошибка: ${err.message})`);
-    }
-  } else {
-    setOcrStatus(`Водяной знак "${text}" добавлен`);
-  }
-});
-
-// ─── Stamps (pdf-lib: saves into actual PDF) ────────────────────────────────
-safeOn(els.addStamp, 'click', async () => {
-  if (!state.adapter) return;
-  const types = ['approved', 'rejected', 'draft', 'confidential', 'copy'];
-  const labels = ['УТВЕРЖДЕНО', 'ОТКЛОНЕНО', 'ЧЕРНОВИК', 'КОНФИДЕНЦИАЛЬНО', 'КОПИЯ'];
-  const choice = await nrPrompt(`Выберите штамп (1-5):\n${labels.map((l, i) => `${i + 1}. ${l}`).join('\n')}`, '1');
-  const idx = parseInt(choice, 10) - 1;
-  if (idx >= 0 && idx < types.length) {
-    // Visual preview on canvas
-    addStampToPage(types[idx]);
-
-    // If PDF, save into PDF via pdf-lib
-    if (state.adapter?.type === 'pdf' && state.file) {
-      try {
-        const arrayBuffer = await state.file.arrayBuffer();
-        const blob = await addStampToPdf(arrayBuffer, types[idx], { pageNum: state.currentPage });
-        const url = safeCreateObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-stamp.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setOcrStatus(`Штамп "${labels[idx]}" — PDF сохранён`);
-      } catch (err) {
-        console.warn('[ocr] error:', err?.message);
-        setOcrStatus(`Штамп "${labels[idx]}" добавлен на canvas`);
-      }
-    } else {
-      setOcrStatus(`Штамп "${labels[idx]}" добавлен`);
-    }
-  }
-});
-
-// ─── Signature ──────────────────────────────────────────────────────────────
-safeOn(els.addSignature, 'click', () => {
-  if (!state.adapter) return;
-  openSignaturePad();
+// ─── PDF Tools: Forms, Block Editor, Watermark, Stamps (delegated to init-pdf-tools.js)
+initPdfTools({
+  state, els, safeOn, setOcrStatus, formManager, blockEditor,
+  fillPdfForm, addWatermarkToPdf, addStampToPdf, safeCreateObjectURL,
+  handleImageInsertion, addWatermarkToPage, addStampToPage, openSignaturePad, nrPrompt,
 });
 
 // ─── Page Organizer UI (extracted to modules/page-organizer-ui.js) ───────────
@@ -789,83 +592,12 @@ window.addEventListener('beforeunload', () => {
   markCleanExit();
 });
 
-document.addEventListener('keydown', async (e) => {
-  const key = e.key.toLowerCase();
-  const combo = stringifyHotkeyEvent(e);
-
-  if (combo && Object.values(hotkeys).includes(combo) && (e.ctrlKey || e.metaKey)) {
-    e.preventDefault();
-  }
-  if (e.altKey && key === 'arrowleft') {
-    e.preventDefault();
-    await navigateHistoryBack();
-    return;
-  }
-  if (e.altKey && key === 'arrowright') {
-    e.preventDefault();
-    await navigateHistoryForward();
-    return;
-  }
-
-  if (combo && combo === hotkeys.next) els.nextPage?.click();
-  if (combo && combo === hotkeys.prev) els.prevPage?.click();
-  if (combo && combo === hotkeys.zoomIn) els.zoomIn?.click();
-  if (combo && combo === hotkeys.zoomOut) els.zoomOut?.click();
-  if (combo && combo === hotkeys.fitWidth) els.fitWidth?.click();
-  if (combo && combo === hotkeys.fitPage) els.fitPage?.click();
-  if (combo && combo === hotkeys.ocrPage) {
-    e.preventDefault();
-    els.ocrCurrentPage?.click();
-  }
-  if (combo && combo === hotkeys.searchFocus) {
-    e.preventDefault();
-    els.searchInput?.focus();
-  }
-  if (key === 'b' && (e.ctrlKey || e.metaKey)) {
-    e.preventDefault();
-    addBookmark();
-  }
-  if ((e.ctrlKey || e.metaKey) && key === 'f' && hotkeys.searchFocus === 'ctrl+f') {
-    e.preventDefault();
-    els.searchInput?.focus();
-  }
-  if ((e.ctrlKey || e.metaKey) && key === 'z') {
-    if (state.drawEnabled) {
-      e.preventDefault();
-      undoStroke();
-    } else if (state.textEditMode && !e.shiftKey) {
-      e.preventDefault();
-      const action = undoPageEdit();
-      if (action && els.pageText) {
-        els.pageText.value = action.text;
-        setOcrStatus(`Отмена: страница ${action.page}`);
-      }
-    }
-  }
-  if ((e.ctrlKey || e.metaKey) && key === 'y') {
-    if (state.textEditMode) {
-      e.preventDefault();
-      const action = redoPageEdit();
-      if (action && els.pageText) {
-        els.pageText.value = action.text;
-        setOcrStatus(`Повтор: страница ${action.page}`);
-      }
-    }
-  }
-  if (combo && combo === hotkeys.annotate) {
-    e.preventDefault();
-    setDrawMode(!state.drawEnabled);
-  }
-  if (e.key === 'Escape' && state.drawEnabled) {
-    setDrawMode(false);
-  }
-  if (e.key === 'Escape' && state.ocrRegionMode) {
-    setOcrRegionMode(false);
-  }
-  if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
-    e.preventDefault();
-    showShortcutsHelp();
-  }
+// ─── Global Keyboard Handlers (delegated to init-keyboard.js) ────────────────
+initKeyboard({
+  state, els, hotkeys, stringifyHotkeyEvent,
+  navigateHistoryBack, navigateHistoryForward, addBookmark,
+  setDrawMode, setOcrRegionMode, setOcrStatus,
+  undoStroke, undoPageEdit, redoPageEdit, showShortcutsHelp,
 });
 
 document.addEventListener('visibilitychange', syncReadingTimerWithVisibility);
@@ -1111,110 +843,10 @@ window._bootstrapAdvancedTools = () => {
   });
 };
 
-// ─── Tab Manager Integration ──────────────────────────────────────────────
-const tabBarEl = document.getElementById('tabBarTabs');
-const tabManager = new TabManager({
-  tabBar: tabBarEl,
-  onActivate: async (tab) => {
-    if (!tab.bytes) return;
-    const type = tab.type || 'pdf';
-    const file = new File([tab.bytes], tab.name, {
-      type: type === 'pdf' ? 'application/pdf' : 'application/octet-stream',
-    });
-    await openFile(file);
-    // Restore saved view state
-    if (tab.state?.currentPage) {
-      state.currentPage = Math.min(tab.state.currentPage, state.pageCount);
-    }
-    if (tab.state?.zoom) state.zoom = tab.state.zoom;
-    if (tab.state?.rotation != null) state.rotation = tab.state.rotation;
-    await renderCurrentPage();
-    if (tab.state?.scrollY && els.canvasWrap) {
-      els.canvasWrap.scrollTop = tab.state.scrollY;
-    }
-  },
-  onClose: (tab) => {
-    if (tab.modified) {
-      return confirm(`Файл "${tab.name}" изменён. Закрыть без сохранения?`);
-    }
-    return true;
-  },
-  maxTabs: 10,
+// ─── Tab Manager (delegated to init-tabs.js) ─────────────────────────────────
+initTabs({
+  state, els, safeOn, openFile, renderCurrentPage, TabManager,
 });
-
-// Save state when deactivating a tab
-tabManager.onDeactivate = (tab) => {
-  tab.state = {
-    currentPage: state.currentPage,
-    zoom: state.zoom,
-    rotation: state.rotation,
-    scrollY: els.canvasWrap?.scrollTop || 0,
-  };
-  // Update bytes if PDF was modified in-place
-  if (state.pdfBytes && tab.type === 'pdf') {
-    tab.bytes = state.pdfBytes;
-  }
-};
-
-// Hook into file opening to register tabs
-const openFileWithTabs = async (file) => {
-  const data = await file.arrayBuffer();
-  const bytes = new Uint8Array(data);
-  const lower = file.name.toLowerCase();
-  const type = lower.endsWith('.pdf') ? 'pdf'
-    : (lower.endsWith('.djvu') || lower.endsWith('.djv')) ? 'djvu'
-    : lower.endsWith('.epub') ? 'epub'
-    : /\.(png|jpe?g|webp|gif|bmp)$/i.test(lower) ? 'image'
-    : 'unknown';
-  tabManager.open(file.name, type, bytes);
-};
-
-// Override fileInput handler: remove original, add tab-aware one
-if (els.fileInput._nrChangeHandler) {
-  els.fileInput.removeEventListener('change', els.fileInput._nrChangeHandler);
-}
-els.fileInput._nrChangeHandler = async (e) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  await openFileWithTabs(file);
-  e.target.value = '';
-};
-safeOn(els.fileInput, 'change', els.fileInput._nrChangeHandler);
-
-// Tab bar new tab button
-document.getElementById('tabBarNewTab')?.addEventListener('click', () => {
-  els.fileInput?.click();
-});
-
-// Persist tab metadata to sessionStorage for session recovery
-function saveTabsToSession() {
-  try {
-    const tabs = tabManager.getAllTabs().map(t => ({
-      name: t.name, type: t.type, activeTabId: tabManager.activeTabId === t.id,
-      state: t.state, modified: t.modified,
-      // Only store bytes for files < 5MB
-      bytes: t.bytes && t.bytes.length < 5 * 1024 * 1024 ? Array.from(t.bytes) : null,
-    }));
-    window.sessionStorage.setItem('novareader-tabs', JSON.stringify(tabs));
-  } catch (e) { /* quota exceeded or unavailable */ void e; }
-}
-
-// Auto-save tabs on visibility change / before unload
-window.addEventListener('visibilitychange', () => { if (document.hidden) saveTabsToSession(); });
-window.addEventListener('beforeunload', saveTabsToSession);
-
-// Restore tabs from session on startup
-try {
-  const savedTabs = JSON.parse(window.sessionStorage.getItem('novareader-tabs') || '[]');
-  for (const t of savedTabs) {
-    if (t.bytes && t.name) {
-      const bytes = new Uint8Array(t.bytes);
-      tabManager.open(t.name, t.type || 'pdf', bytes, t.state || {});
-    }
-  }
-} catch (e) { /* invalid or no session data */ void e; }
-
-window._tabManagerInstance = tabManager;
 
 // ─── Bookmark & Notes Controllers ────────────────────────────────────────
 initBookmarkController();
@@ -1299,137 +931,23 @@ registerProvider(createGoogleDriveProvider());
 registerProvider(createOneDriveProvider());
 registerProvider(createDropboxProvider());
 
-// ─── Initialize Quick Actions ─────────────────────────────────────────────
-initQuickActions({
-  container: document.querySelector('.document-viewport') || document.body,
-  onAction: (id, text) => {
-    if (id === 'search' && text) {
-      const searchInput = document.getElementById('searchInput');
-      if (searchInput) { searchInput.value = text; searchInput.dispatchEvent(new Event('input')); }
-    }
-  },
+// ─── Advanced Features (delegated to init-advanced.js) ───────────────────────
+initAdvanced({
+  state, els, safeOn, debounce, renderCurrentPage, goToPage, nrPrompt,
+  pushDiagnosticEvent, toastSuccess, loadStrokes, saveStrokes,
+  initQuickActions, initHotkeys, registerHotkeyHandlers,
+  initAutoScroll, startAutoScroll, stopAutoScroll, isAutoScrolling,
+  initAutosave, checkForRecovery, applyRecoveredSnapshot, startAutosaveTimer,
+  initMinimap, updateMinimap, initCommandPalette,
 });
 
-// ─── Initialize Extended Hotkeys ──────────────────────────────────────────
-initHotkeys();
-registerHotkeyHandlers({
-  goToPage: async () => {
-    const page = await nrPrompt('Перейти к странице:');
-    if (page) { const n = parseInt(page, 10); if (n >= 1 && n <= state.pageCount) { state.currentPage = n; renderCurrentPage(); } }
-  },
-  firstPage: () => { state.currentPage = 1; renderCurrentPage(); },
-  lastPage: () => { state.currentPage = state.pageCount; renderCurrentPage(); },
-  prevPage: () => els.prevPage?.click(),
-  nextPage: () => els.nextPage?.click(),
-  zoomIn: () => els.zoomIn?.click(),
-  zoomOut: () => els.zoomOut?.click(),
-  search: () => { const toggle = document.getElementById('searchToggle'); if (toggle) toggle.click(); },
-  fullscreen: () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); },
-  print: () => window.print(),
-});
+// Global error handlers — registered by initErrorHandling() above
 
-// ─── Global Error Handlers ───────────────────────────────────────────────
-window.addEventListener('unhandledrejection', (event) => {
-  const msg = event.reason?.message || String(event.reason);
-  pushDiagnosticEvent('unhandled-rejection', { message: msg }, 'error');
-  if (typeof recordCrashEvent === 'function') recordCrashEvent('unhandled-rejection', msg, 'global');
-  // If the app hasn't finished initializing, show critical error screen
-  if (!state.initComplete) {
-    try { showCriticalErrorScreen(msg); } catch (_) { /* last resort */ }
-  }
-});
-
-window.addEventListener('error', (event) => {
-  const msg = event.message || 'Unknown error';
-  pushDiagnosticEvent('uncaught-error', { message: msg, filename: event.filename, line: event.lineno }, 'error');
-  if (typeof recordCrashEvent === 'function') recordCrashEvent('uncaught-error', msg, 'global');
-  // If the app hasn't finished initializing, show critical error screen
-  if (!state.initComplete) {
-    try { showCriticalErrorScreen(msg); } catch (_) { /* last resort */ }
-  }
-});
-
-// ─── Expose Activity Log for E2E and debugging ──────────────────────────────
+// ─── Expose debugging globals ────────────────────────────────────────────────
 window._activityLog = { novaLog, exportLogsAsJson, clearActivityLog, getLogEntries };
-
-// ─── Minimap Navigation ────────────────────────────────────────────────────
-initMinimap({
-  state,
-  els,
-  onPageChange: () => renderCurrentPage(),
-});
-
-// Update minimap on scroll
-const _debouncedMinimapUpdate = debounce(() => updateMinimap(), 60);
-safeOn(els.canvasWrap, 'scroll', _debouncedMinimapUpdate, { passive: true });
-
-// Update minimap when page is rendered
-window.addEventListener('page-rendered', () => updateMinimap());
-
-// Expose minimap controls
 window._minimap = { initMinimap, updateMinimap, showMinimap, hideMinimap, toggleMinimap };
-
-// ─── Auto-Scroll Reading Mode ────────────────────────────────────────────
-initAutoScroll({ state, els, goToPage });
-safeOn(document.getElementById('autoScrollBtn'), 'click', () => {
-  if (isAutoScrolling()) {
-    stopAutoScroll();
-  } else {
-    startAutoScroll();
-  }
-});
 window._autoScroll = { startAutoScroll, stopAutoScroll, toggleAutoScroll, setAutoScrollSpeed, isAutoScrolling };
-
-// ─── Auto-save & Crash Recovery ──────────────────────────────────────────
-initAutosave({
-  state,
-  els,
-  getAnnotations: () => {
-    try { return loadStrokes(); } catch (_e) { return null; }
-  },
-  setAnnotations: (data) => {
-    try { saveStrokes(data); } catch (_e) { /* ignore */ }
-  },
-  showToast: (msg) => {
-    try { toastSuccess(msg); } catch (_e) { /* ignore */ }
-  },
-});
-
-// Check for crash recovery on startup
-checkForRecovery().then((snapshot) => {
-  if (snapshot) {
-    applyRecoveredSnapshot(snapshot);
-    pushDiagnosticEvent('autosave.recovery-applied', {
-      fileName: snapshot.fileName,
-      page: snapshot.currentPage,
-      age: Date.now() - snapshot.timestamp,
-    });
-  }
-}).catch((err) => {
-  console.warn('[autosave] recovery check failed:', err?.message);
-});
-
-// Hook into file opening to start autosave timer
-window.addEventListener('page-rendered', () => {
-  if (state.adapter && state.docName) {
-    startAutosaveTimer();
-  }
-}, { once: true });
-
-// Expose autosave for debugging
 window._autosave = { triggerAutosave, markCleanExit, checkForRecovery, clearRecoveryData, startAutosaveTimer, stopAutosaveTimer };
-
-// ─── Command Palette (Ctrl+K) ────────────────────────────────────────────
-initCommandPalette({
-  state,
-  els,
-  goToPage: (n) => {
-    if (n >= 1 && n <= state.pageCount) {
-      state.currentPage = n;
-      renderCurrentPage();
-    }
-  },
-});
 window._commandPalette = { showCommandPalette, hideCommandPalette, registerCommand };
 
 // ─── Mark initialization complete ────────────────────────────────────────
