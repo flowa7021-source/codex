@@ -59,8 +59,9 @@ app/
   sw.js               — Service Worker for PWA offline
   manifest.json       — PWA manifest
   locales/            — 10 i18n JSON files (ar, de, en, es, fr, ja, ko, pt, ru, zh)
-  modules/            — 168 JS modules (source code)
+  modules/            — 170 JS modules (source code, 100% @ts-check)
     init-*.js         — 10 init modules extracted from app.js
+  types.d.ts          — TypeScript declarations (NovaEls, Window globals, Performance.memory)
   styles/             — 12 modular CSS files
   vendor/             — DjVu.js + Tesseract language data (LFS)
 dist/                 — Production build output (obfuscated)
@@ -68,7 +69,7 @@ scripts/
   obfuscate-dist.js   — Post-build obfuscation script
   check-bundle-size.js — Bundle budget checker
   analyze-bundle.js    — Bundle analysis with baseline
-tests/                — 40+ test files (950+ tests)
+tests/                — 75+ test files (1594+ tests, 75%+ coverage)
 docs/                 — Release notes, backlog, architecture, components
 ```
 
@@ -76,13 +77,13 @@ docs/                 — Release notes, backlog, architecture, components
 
 ```bash
 npm run lint              # ESLint (0 warnings required)
-npm run test:unit         # 950+ unit tests
-npm run test:coverage     # Coverage report (≥60% lines enforced in CI)
+npm run test:unit         # 1594+ unit tests
+npm run test:coverage     # Coverage report (≥70% lines enforced in CI)
 npm run test:benchmark    # OCR quality baseline
 npm run test:benchmark:ocr  # OCR corpus (16 languages)
 npm run test:benchmark:pdf  # PDF conversion
-npm run check:bundle      # Bundle size budget
-npm run typecheck         # TypeScript check (161/170 modules with @ts-check)
+npm run check:bundle      # Bundle size budget (7 chunk budgets)
+npm run typecheck         # TypeScript check (170/170 modules with @ts-check)
 ```
 
 ## Key Architecture Decisions
