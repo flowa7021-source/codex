@@ -69,7 +69,7 @@ scripts/
   obfuscate-dist.js   — Post-build obfuscation script
   check-bundle-size.js — Bundle budget checker
   analyze-bundle.js    — Bundle analysis with baseline
-tests/                — 75+ test files (1594+ tests, 75%+ coverage)
+tests/                — 80+ test files (1900+ tests, 83%+ coverage)
 docs/                 — Release notes, backlog, architecture, components
 ```
 
@@ -77,8 +77,8 @@ docs/                 — Release notes, backlog, architecture, components
 
 ```bash
 npm run lint              # ESLint (0 warnings required)
-npm run test:unit         # 1594+ unit tests
-npm run test:coverage     # Coverage report (≥70% lines enforced in CI)
+npm run test:unit         # 1900+ unit tests
+npm run test:coverage     # Coverage report (≥80% lines enforced in CI)
 npm run test:benchmark    # OCR quality baseline
 npm run test:benchmark:ocr  # OCR corpus (16 languages)
 npm run test:benchmark:pdf  # PDF conversion
