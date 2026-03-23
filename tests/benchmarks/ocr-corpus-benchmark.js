@@ -53,15 +53,31 @@ function wordErrorRate(groundTruth, ocrResult) {
   return dist / gtWords.length;
 }
 
+// ─── Seeded PRNG (mulberry32) for deterministic benchmarks ──────────────────
+
+function mulberry32(seed) {
+  let s = seed | 0;
+  return function () {
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // ─── Simulated OCR engine ───────────────────────────────────────────────────
 // Simulates OCR output by introducing language-appropriate error patterns.
 // In production this would be replaced with actual Tesseract.js calls.
+// Uses a seeded PRNG so results are deterministic across runs.
 
 function simulateOcr(text, lang, errorRate = 0.02) {
+  // Seed based on text length + lang hash for per-sample determinism
+  const seed = [...lang].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 0) + text.length;
+  const rand = mulberry32(seed);
   const chars = [...text];
   const result = [];
   for (let i = 0; i < chars.length; i++) {
-    if (Math.random() < errorRate && chars[i] !== ' ' && chars[i] !== '\n') {
+    if (rand() < errorRate && chars[i] !== ' ' && chars[i] !== '\n') {
       // Simulate common OCR errors per script family
       const code = chars[i].codePointAt(0);
       if (code >= 0x0400 && code <= 0x04FF) {
