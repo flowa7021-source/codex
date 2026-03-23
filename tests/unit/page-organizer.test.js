@@ -39,10 +39,10 @@ describe('togglePageSelection', () => {
     assert.strictEqual(newState.selected.size, 1);
   });
 
-  it('deselects if already selected', () => {
+  it('deselects if already selected with multiSelect', () => {
     let state = createOrganizerState(samplePages);
-    state = togglePageSelection(state, 2);
-    state = togglePageSelection(state, 2);
+    state = togglePageSelection(state, 2, true);
+    state = togglePageSelection(state, 2, true);
     assert.strictEqual(state.selected.size, 0);
   });
 

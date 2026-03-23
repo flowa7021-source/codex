@@ -150,6 +150,13 @@ describe('SmartCropPreview', () => {
 
   it('show stores the crop rect', () => {
     const canvas = document.createElement('canvas');
+    // Override getContext to provide setLineDash
+    const origGetContext = canvas.getContext;
+    canvas.getContext = (type) => {
+      const ctx = origGetContext.call(canvas, type);
+      ctx.setLineDash = () => {};
+      return ctx;
+    };
     const preview = new SmartCropPreview(canvas, 612, 792);
     const rect = { x: 10, y: 10, width: 500, height: 700, marginTop: 5, marginBottom: 5 };
     preview.show(rect);
