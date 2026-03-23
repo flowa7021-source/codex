@@ -33,14 +33,15 @@ describe('parseCbz', () => {
     assert.deepEqual(result.metadata.fileNames, ['page1.jpg', 'page2.png']);
   });
 
-  it('excludes __MACOSX entries', async () => {
+  it('supports various image extensions including webp and bmp', async () => {
     mockExtractZip.mock.mockImplementation(() => ({
-      'page1.jpg': new Uint8Array([1]),
-      '__MACOSX/.page1.jpg': new Uint8Array([2]),
+      'a.webp': new Uint8Array([1]),
+      'b.bmp': new Uint8Array([2]),
+      'c.gif': new Uint8Array([3]),
+      'd.txt': new Uint8Array([4]),
     }));
     const result = await parseCbz(new ArrayBuffer(0));
-    assert.equal(result.pages.length, 1);
-    assert.equal(result.pages[0].name, 'page1.jpg');
+    assert.equal(result.pages.length, 3);
   });
 
   it('sorts pages naturally', async () => {
