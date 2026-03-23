@@ -326,6 +326,33 @@ if (typeof globalThis.EventTarget === 'undefined') {
   // Node 18+ has EventTarget, but just in case
 }
 
+// Promise.withResolvers polyfill (required by pdfjs-dist, native in Node 22+)
+if (typeof Promise.withResolvers === 'undefined') {
+  Promise.withResolvers = function () {
+    let resolve, reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  };
+}
+
+// ResizeObserver mock (not available in Node.js)
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
+// Worker mock (not available in Node.js — prevents "[ocr] Worker is not defined" noise)
+if (typeof globalThis.Worker === 'undefined') {
+  globalThis.Worker = class Worker {
+    constructor() { this.onmessage = null; this.onerror = null; }
+    postMessage() {}
+    terminate() {}
+  };
+}
+
 if (typeof globalThis.fetch === 'undefined') {
   globalThis.fetch = () => Promise.reject(new Error('fetch not available in tests'));
 }
