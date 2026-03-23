@@ -65,51 +65,12 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Verify dist before E2E
-        run: |
-          echo "=== dist/ contents ==="
-          ls -la dist/
-          echo "=== dist/index.html first 5 lines ==="
-          head -5 dist/index.html
-          echo "=== Quick server test ==="
-          npx vite preview --port 4174 --host 127.0.0.1 &
-          sleep 3
-          curl -s -o /dev/null -w "HTTP %{http_code}, size %{size_download}" http://127.0.0.1:4174/
-          echo ""
-          curl -s http://127.0.0.1:4174/ | grep -c 'app-shell' || echo "app-shell NOT FOUND in response"
-          kill %1 2>/dev/null || true
-          sleep 1
-          pkill -f "vite preview" 2>/dev/null || true
-
-      - name: Pre-check vite preview startup
-        run: |
-          echo "Testing vite preview startup..."
-          npx vite preview --port 4175 --host 127.0.0.1 &
-          VITE_PID=$!
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4175/ 2>/dev/null | grep -q "200"; then
-              echo "Vite preview responded after ${i}s"
-              break
-            fi
-            sleep 1
-          done
-          curl -s -o /dev/null -w "HTTP %{http_code}" http://127.0.0.1:4175/ || echo "FAILED to reach vite preview"
-          echo ""
-          kill $VITE_PID 2>/dev/null || true
-          sleep 1
-          pkill -f "vite preview" 2>/dev/null || true
-          echo "Pre-check complete, all vite processes cleaned up"
-
       - name: Run E2E tests (desktop only, skip visual regression)
         run: |
-          # Ensure no leftover vite preview processes from pre-checks
-          pkill -f "vite preview" 2>/dev/null || true
-          sleep 2
-          # Start vite preview manually — Playwright's webServer spawning
-          # fails to connect in CI, but reuseExistingServer works fine
+          # Start vite preview — Playwright's webServer config has
+          # reuseExistingServer: true, so pre-starting avoids spawn issues in CI
           npx vite preview --port 4173 --host 127.0.0.1 &
           VITE_PID=$!
-          # Wait for server to be ready
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:4173/ > /dev/null 2>&1; then
               echo "Vite preview ready after ${i}s"
@@ -117,10 +78,12 @@ jobs:
             fi
             sleep 1
           done
-          curl -sf http://127.0.0.1:4173/ > /dev/null || { echo "ERROR: vite preview not responding"; exit 1; }
-          set -o pipefail
+          curl -sf http://127.0.0.1:4173/ > /dev/null || { echo "ERROR: vite preview not responding"; kill $VITE_PID 2>/dev/null; exit 1; }
+          # Disable -e so we can capture the exit code and clean up
+          set +e
           npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd --grep-invert "Visual" 2>&1 | tee /tmp/e2e-output.txt
-          TEST_EXIT=$?
+          TEST_EXIT=${PIPESTATUS[0]}
+          set -e
           kill $VITE_PID 2>/dev/null || true
           exit $TEST_EXIT
 
