@@ -36,7 +36,7 @@ describe('parseCbz', () => {
   it('excludes __MACOSX entries', async () => {
     mockExtractZip.mock.mockImplementation(() => ({
       'page1.jpg': new Uint8Array([1]),
-      '__MACOSX/page1.jpg': new Uint8Array([2]),
+      '__MACOSX/.page1.jpg': new Uint8Array([2]),
     }));
     const result = await parseCbz(new ArrayBuffer(0));
     assert.equal(result.pages.length, 1);
