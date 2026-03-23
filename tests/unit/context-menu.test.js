@@ -2,6 +2,18 @@ import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
+// Patch createElement to add getBoundingClientRect, focus, closest, hasAttribute, removeAttribute
+const _origCreate = document.createElement;
+document.createElement = function (tag) {
+  const el = _origCreate(tag);
+  el.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0 });
+  el.focus = el.focus || (() => {});
+  el.closest = el.closest || (() => null);
+  el.hasAttribute = el.hasAttribute || ((k) => el.getAttribute(k) != null);
+  el.removeAttribute = el.removeAttribute || ((k) => el.setAttribute(k, undefined));
+  return el;
+};
+
 // Provide a minimal document.body.contains and track children
 const _bodyChildren = [];
 document.body.appendChild = function (child) {
@@ -17,7 +29,7 @@ const { showContextMenu, initContextMenu } = await import('../../app/modules/con
 
 describe('context-menu', () => {
   beforeEach(() => {
-    _bodyChildren.length = 0;
+    // Don't clear _bodyChildren since the menu persists across calls
   });
 
   it('showContextMenu creates a menu element appended to body', () => {

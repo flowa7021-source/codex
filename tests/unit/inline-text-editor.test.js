@@ -1,4 +1,22 @@
 import './setup-dom.js';
+
+// Patch DOM mock with missing methods needed by InlineTextEditor
+const _origCreateElement = document.createElement;
+document.createElement = function(tag) {
+  const el = _origCreateElement(tag);
+  if (!el.focus) el.focus = () => {};
+  if (!el.select) el.select = () => {};
+  if (!el.getBoundingClientRect) el.getBoundingClientRect = () => ({ left: 0, top: 0, width: 0, height: 0 });
+  if (!el.replaceWith) el.replaceWith = function(other) { if (el.parentNode) { el.parentNode.appendChild(other); } };
+  return el;
+};
+if (!window.getSelection) {
+  window.getSelection = () => ({ removeAllRanges() {}, addRange() {} });
+}
+if (!document.createRange) {
+  document.createRange = () => ({ selectNodeContents() {} });
+}
+
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
