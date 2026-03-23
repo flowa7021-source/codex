@@ -102,6 +102,9 @@ jobs:
 
       - name: Run E2E tests (desktop only, skip visual regression)
         run: |
+          # Ensure no leftover vite preview processes from pre-checks
+          pkill -f "vite preview" 2>/dev/null || true
+          sleep 2
           set -o pipefail
           npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd --grep-invert "Visual" 2>&1 | tee /tmp/e2e-output.txt
 
