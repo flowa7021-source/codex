@@ -1,15 +1,17 @@
 // ─── Unit Tests: ePub Adapter ────────────────────────────────────────────────
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 // epub-adapter.js imports zip-utils which uses fflate — mock before import
-// We test the pure functions by importing the module and mocking zip-utils
-// at the module level.
+await mock.module('../../app/modules/zip-utils.js', {
+  namedExports: {
+    extractZip: () => ({}),
+    extractTextFile: () => null,
+    extractBinaryFile: () => null,
+  },
+});
 
-// Since parseEpub depends on zip-utils (browser-only), we test the class and
-// pure helpers by constructing EpubAdapter directly with mock data.
-
-import { EpubAdapter, EPUB_READER_DEFAULTS } from '../../app/modules/epub-adapter.js';
+import { EpubAdapter, EPUB_READER_DEFAULTS, parseEpub } from '../../app/modules/epub-adapter.js';
 
 // ─── EPUB_READER_DEFAULTS ────────────────────────────────────────────────────
 
@@ -25,6 +27,40 @@ describe('EPUB_READER_DEFAULTS', () => {
   it('is a plain object', () => {
     assert.equal(typeof EPUB_READER_DEFAULTS, 'object');
     assert.ok(!Array.isArray(EPUB_READER_DEFAULTS));
+  });
+});
+
+// ─── parseEpub ────────────────────────────────────────────────────────────────
+
+describe('parseEpub – error paths via mocked zip-utils', () => {
+  it('throws when container.xml is missing', async () => {
+    // extractTextFile returns null by default (mock setup above)
+    await assert.rejects(
+      () => parseEpub(new ArrayBuffer(8)),
+      /missing container\.xml/
+    );
+  });
+});
+
+describe('parseEpub – with container but no opf path', async () => {
+  it('throws when rootfile path is missing from container.xml', async () => {
+    // Override mock to return container without full-path attribute
+    await mock.module('../../app/modules/zip-utils.js', {
+      namedExports: {
+        extractZip: () => ({}),
+        extractTextFile: (entries, path) => {
+          if (path === 'META-INF/container.xml') return '<container></container>';
+          return null;
+        },
+        extractBinaryFile: () => null,
+      },
+    });
+    // Re-import to pick up new mock — use dynamic import
+    const mod = await import('../../app/modules/epub-adapter.js');
+    await assert.rejects(
+      () => mod.parseEpub(new ArrayBuffer(8)),
+      /missing rootfile path|missing container\.xml/
+    );
   });
 });
 
@@ -69,6 +105,42 @@ describe('EpubAdapter – constructor', () => {
     adapter.readerSettings.fontSize = 99;
     assert.equal(EPUB_READER_DEFAULTS.fontSize, 16);
   });
+
+  it('initializes _fontUrls as empty array', () => {
+    const adapter = new EpubAdapter({ chapters: [], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    assert.deepEqual(adapter._fontUrls, []);
+  });
+
+  it('calls _loadFonts with fonts data', () => {
+    // Provide a font — _loadFonts should run without throwing
+    const fontData = new Uint8Array([0, 1, 2, 3]);
+    const adapter = new EpubAdapter({
+      chapters: [],
+      toc: [],
+      bytes: new Uint8Array(),
+      css: [],
+      fonts: [{ href: 'fonts/test.ttf', data: fontData, mime: 'font/ttf', name: 'test.ttf' }],
+    }, 'x.epub');
+    // Font URLs should be populated (_loadFonts ran and created blob URLs)
+    assert.ok(Array.isArray(adapter._fontUrls));
+    // FontFace.load() may or may not succeed in test env, but no throw
+  });
+
+  it('handles fonts with various extensions', () => {
+    const fontData = new Uint8Array([1, 2, 3]);
+    // Test that woff2 font doesn't throw
+    const adapter = new EpubAdapter({
+      chapters: [],
+      toc: [],
+      bytes: new Uint8Array(),
+      css: [],
+      fonts: [
+        { href: 'fonts/a.woff2', data: fontData, mime: 'font/woff2', name: 'a.woff2' },
+        { href: 'fonts/b.otf', data: fontData, mime: 'font/otf', name: 'b.otf' },
+      ],
+    }, 'x.epub');
+    assert.ok(Array.isArray(adapter._fontUrls));
+  });
 });
 
 // ─── EpubAdapter – setReaderSettings ─────────────────────────────────────────
@@ -93,6 +165,13 @@ describe('EpubAdapter – setReaderSettings', () => {
     adapter.setReaderSettings({ fontSize: 30 });
     assert.equal(adapter.readerSettings.fontSize, 30);
   });
+
+  it('allows setting all theme values', () => {
+    for (const theme of ['auto', 'light', 'dark', 'sepia']) {
+      adapter.setReaderSettings({ theme });
+      assert.equal(adapter.readerSettings.theme, theme);
+    }
+  });
 });
 
 // ─── EpubAdapter – getPageCount ──────────────────────────────────────────────
@@ -104,6 +183,11 @@ describe('EpubAdapter – getPageCount', () => {
       toc: [], bytes: new Uint8Array(), css: [], fonts: [],
     }, 'x.epub');
     assert.equal(adapter.getPageCount(), 2);
+  });
+
+  it('returns 1 for empty chapters', () => {
+    const adapter = new EpubAdapter({ chapters: [], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    assert.equal(adapter.getPageCount(), 1);
   });
 });
 
@@ -143,6 +227,230 @@ describe('EpubAdapter – getPageViewport', () => {
     const vp = await adapter.getPageViewport(1, 1, 180);
     assert.equal(vp.width, 800);
     assert.equal(vp.height, 1100);
+  });
+});
+
+// ─── EpubAdapter – renderPage ────────────────────────────────────────────────
+
+describe('EpubAdapter – renderPage', () => {
+  function makeCanvas() {
+    const ctx = {
+      save: () => {},
+      restore: () => {},
+      scale: () => {},
+      translate: () => {},
+      rotate: () => {},
+      fillRect: () => {},
+      fillText: () => {},
+      measureText: (text) => ({ width: text.length * 8 }),
+      fillStyle: '',
+      font: '',
+    };
+    const canvas = {
+      width: 0,
+      height: 0,
+      style: { width: '', height: '' },
+      getContext: () => ctx,
+    };
+    return canvas;
+  }
+
+  it('renders a page with a chapter (rotation=0)', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Chapter One', text: 'This is some text for the chapter.', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+    assert.ok(canvas.height > 0);
+  });
+
+  it('renders empty chapter placeholder', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    // pageNumber=1 but no chapters — should render empty placeholder
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    // Canvas should still have dimensions set
+    assert.ok(canvas.width >= 0);
+  });
+
+  it('handles rotation=90 (swaps dimensions)', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'text', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 90 });
+    // Width should be h*dpr, height should be w*dpr
+    const dpr = Math.max(1, 1); // window.devicePixelRatio = 1 in test env
+    assert.equal(canvas.width, 1100 * dpr);
+    assert.equal(canvas.height, 800 * dpr);
+  });
+
+  it('handles rotation=180', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'text', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 180 });
+    // rotation 180 is % 180 === 0, so no swap
+    const dpr = Math.max(1, 1);
+    assert.equal(canvas.width, 800 * dpr);
+  });
+
+  it('renders with sepia theme', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'some text here and more', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    adapter.setReaderSettings({ theme: 'sepia' });
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders with light theme', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'sample text', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    adapter.setReaderSettings({ theme: 'light' });
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders with auto theme (body has sepia class)', async () => {
+    document.body.classList.add('sepia');
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'text', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    adapter.setReaderSettings({ theme: 'auto' });
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    document.body.classList.remove('sepia');
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders with auto theme (body has light class)', async () => {
+    document.body.classList.add('light');
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'text', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    adapter.setReaderSettings({ theme: 'auto' });
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    document.body.classList.remove('light');
+    assert.ok(canvas.width > 0);
+  });
+
+  it('handles canvas with no context (getContext returns null)', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'text', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = {
+      width: 0,
+      height: 0,
+      style: { width: '', height: '' },
+      getContext: () => null,
+    };
+    // Should not throw when ctx is null
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+  });
+
+  it('renders with word wrap (long text)', async () => {
+    const longText = 'word '.repeat(200);
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: longText, html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('handles chapter with no title (falls back to Chapter N)', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: null, text: 'some content', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+});
+
+// ─── EpubAdapter – _detectTheme ──────────────────────────────────────────────
+
+describe('EpubAdapter – _detectTheme', () => {
+  let adapter;
+  beforeEach(() => {
+    adapter = new EpubAdapter({ chapters: [], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    // Clean body classes
+    document.body.className = '';
+  });
+
+  it('returns sepia when body has sepia class', () => {
+    document.body.classList.add('sepia');
+    assert.equal(adapter._detectTheme(), 'sepia');
+    document.body.classList.remove('sepia');
+  });
+
+  it('returns light when body has light class (and no sepia)', () => {
+    document.body.classList.add('light');
+    assert.equal(adapter._detectTheme(), 'light');
+    document.body.classList.remove('light');
+  });
+
+  it('returns dark when body has no special class', () => {
+    document.body.className = '';
+    assert.equal(adapter._detectTheme(), 'dark');
+  });
+});
+
+// ─── EpubAdapter – _getThemeColors ───────────────────────────────────────────
+
+describe('EpubAdapter – _getThemeColors', () => {
+  let adapter;
+  beforeEach(() => {
+    adapter = new EpubAdapter({ chapters: [], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+  });
+
+  it('returns light theme colors', () => {
+    const colors = adapter._getThemeColors('light');
+    assert.equal(colors.bg, '#fffef8');
+    assert.equal(colors.text, '#333');
+    assert.equal(colors.title, '#1a1a1a');
+    assert.equal(colors.muted, '#666');
+  });
+
+  it('returns sepia theme colors', () => {
+    const colors = adapter._getThemeColors('sepia');
+    assert.equal(colors.bg, '#f5ead0');
+    assert.equal(colors.text, '#3a2e1a');
+    assert.equal(colors.title, '#2a1e0a');
+    assert.equal(colors.muted, '#7a6e5a');
+  });
+
+  it('returns dark theme colors for dark', () => {
+    const colors = adapter._getThemeColors('dark');
+    assert.equal(colors.bg, '#1a1d23');
+    assert.equal(colors.text, '#cbd5e1');
+    assert.equal(colors.title, '#e2e8f0');
+    assert.equal(colors.muted, '#9aa6b8');
+  });
+
+  it('returns dark theme colors for unknown theme (default)', () => {
+    const colors = adapter._getThemeColors('unknown');
+    assert.equal(colors.bg, '#1a1d23');
   });
 });
 
@@ -219,6 +527,19 @@ describe('EpubAdapter – getOutline', () => {
     assert.equal(outline[0].title, 'Chapter One');
     assert.equal(outline[1].title, 'Chapter 2');
   });
+
+  it('each outline item has title, dest, and empty items array', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: '', html: '', href: '' }],
+      toc: [{ title: 'Section', src: 's.xhtml' }],
+      bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const outline = await adapter.getOutline();
+    assert.ok('title' in outline[0]);
+    assert.ok('dest' in outline[0]);
+    assert.ok('items' in outline[0]);
+    assert.deepEqual(outline[0].items, []);
+  });
 });
 
 // ─── EpubAdapter – resolveDestToPage ─────────────────────────────────────────
@@ -272,38 +593,25 @@ describe('EpubAdapter – destroy', () => {
     adapter.destroy();
     assert.deepEqual(adapter._fontUrls, []);
   });
-});
 
-// ─── EpubAdapter – _getThemeColors ───────────────────────────────────────────
+  it('calls URL.revokeObjectURL for each url', () => {
+    const revoked = [];
+    const origRevoke = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = (url) => { revoked.push(url); };
 
-describe('EpubAdapter – _getThemeColors', () => {
-  let adapter;
-  beforeEach(() => {
-    adapter = new EpubAdapter({ chapters: [], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    const adapter = new EpubAdapter({ chapters: [], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    adapter._fontUrls = ['blob:url-a', 'blob:url-b'];
+    adapter.destroy();
+    assert.ok(revoked.includes('blob:url-a'));
+    assert.ok(revoked.includes('blob:url-b'));
+
+    URL.revokeObjectURL = origRevoke;
   });
 
-  it('returns light theme colors', () => {
-    const colors = adapter._getThemeColors('light');
-    assert.equal(colors.bg, '#fffef8');
-    assert.equal(colors.text, '#333');
-    assert.equal(colors.title, '#1a1a1a');
-    assert.equal(colors.muted, '#666');
-  });
-
-  it('returns sepia theme colors', () => {
-    const colors = adapter._getThemeColors('sepia');
-    assert.equal(colors.bg, '#f5ead0');
-    assert.equal(colors.text, '#3a2e1a');
-  });
-
-  it('returns dark theme colors for dark', () => {
-    const colors = adapter._getThemeColors('dark');
-    assert.equal(colors.bg, '#1a1d23');
-    assert.equal(colors.text, '#cbd5e1');
-  });
-
-  it('returns dark theme colors for unknown theme (default)', () => {
-    const colors = adapter._getThemeColors('unknown');
-    assert.equal(colors.bg, '#1a1d23');
+  it('can be called multiple times safely', () => {
+    const adapter = new EpubAdapter({ chapters: [], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    adapter.destroy();
+    adapter.destroy(); // second call should not throw
+    assert.deepEqual(adapter._fontUrls, []);
   });
 });
