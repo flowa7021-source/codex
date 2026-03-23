@@ -88,7 +88,7 @@ describe('buildDocxXml', () => {
   });
 
   it('preserves indentation via w:ind', () => {
-    const xml = buildDocxXml('Doc', ['    Indented line']);
+    const xml = buildDocxXml('Doc', ['First line\n    Indented line']);
     assert.ok(xml.includes('w:ind'));
   });
 

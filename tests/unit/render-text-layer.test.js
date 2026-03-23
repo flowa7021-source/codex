@@ -43,8 +43,10 @@ function makeContainer() {
   return div;
 }
 
+const _origCreateDocumentFragment = document.createDocumentFragment.bind(document);
+
 function makeDocFragment() {
-  const frag = document.createDocumentFragment();
+  const frag = _origCreateDocumentFragment();
   frag._children = [];
   frag.appendChild = function (child) {
     frag._children.push(child);

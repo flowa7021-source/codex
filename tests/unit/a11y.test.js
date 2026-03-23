@@ -2,6 +2,19 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
+// ─── Ensure browser globals exist (when running without --import setup-dom) ─
+import './setup-dom.js';
+
+// ─── MutationObserver mock ──────────────────────────────────────────────────
+if (typeof globalThis.MutationObserver === 'undefined') {
+  globalThis.MutationObserver = class MutationObserver {
+    constructor(cb) { this._cb = cb; }
+    observe() {}
+    disconnect() {}
+    takeRecords() { return []; }
+  };
+}
+
 // ─── DOM mock enhancements ──────────────────────────────────────────────────
 
 let rafCallbacks = [];

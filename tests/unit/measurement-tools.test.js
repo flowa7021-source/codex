@@ -1,6 +1,87 @@
 // ─── Unit Tests: Measurement Tools ────────────────────────────────────────
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+
+// ─── DOM / Canvas mocks ─────────────────────────────────────────────────────
+
+const _docListeners = {};
+
+function makeCtx() {
+  return {
+    clearRect() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    arc() {},
+    closePath() {},
+    stroke() {},
+    fill() {},
+    fillRect() {},
+    strokeRect() {},
+    fillText() {},
+    setLineDash() {},
+    measureText() { return { width: 40 }; },
+    fillStyle: '',
+    strokeStyle: '',
+    lineWidth: 1,
+    font: '',
+  };
+}
+
+function makeMockElement(tag) {
+  const _children = [];
+  const _listeners = {};
+  const el = {
+    tagName: (tag || 'DIV').toUpperCase(),
+    style: {},
+    width: 0,
+    height: 0,
+    parentNode: null,
+    appendChild(child) { _children.push(child); child.parentNode = el; return child; },
+    remove() {
+      const idx = el.parentNode ? el.parentNode._children.indexOf(el) : -1;
+      if (idx >= 0) el.parentNode._children.splice(idx, 1);
+      el.parentNode = null;
+    },
+    addEventListener(ev, fn) {
+      if (!_listeners[ev]) _listeners[ev] = [];
+      _listeners[ev].push(fn);
+    },
+    removeEventListener(ev, fn) {
+      if (_listeners[ev]) _listeners[ev] = _listeners[ev].filter(f => f !== fn);
+    },
+    getContext() { return makeCtx(); },
+    getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 100 }; },
+    querySelector(sel) {
+      if (sel === 'canvas') return _children.find(c => c.tagName === 'CANVAS') || null;
+      return null;
+    },
+    _children,
+  };
+  return el;
+}
+
+globalThis.document = {
+  createElement(tag) { return makeMockElement(tag); },
+  addEventListener(ev, fn) {
+    if (!_docListeners[ev]) _docListeners[ev] = [];
+    _docListeners[ev].push(fn);
+  },
+  removeEventListener(ev, fn) {
+    if (_docListeners[ev]) _docListeners[ev] = _docListeners[ev].filter(f => f !== fn);
+  },
+  dispatchEvent(ev) {
+    (_docListeners[ev.type] || []).forEach(fn => fn(ev));
+  },
+};
+
+globalThis.KeyboardEvent = class KeyboardEvent {
+  constructor(type, opts = {}) {
+    this.type = type;
+    this.key = opts.key || '';
+  }
+};
+
 import {
   measureDistance,
   measurePolylineLength,
