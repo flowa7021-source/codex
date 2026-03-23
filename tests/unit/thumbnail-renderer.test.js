@@ -2,18 +2,7 @@ import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Mock state and els before importing module
-const mockState = {
-  adapter: null,
-  docName: null,
-  currentPage: 1,
-  pageCount: 0,
-  rotation: 0,
-};
-
-const mockEls = {
-  pagePreviewList: null,
-};
+import { state, els } from '../../app/modules/state.js';
 
 // Provide IntersectionObserver stub
 if (typeof globalThis.IntersectionObserver === 'undefined') {
@@ -25,11 +14,6 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
   };
 }
 
-// Mock state module
-mock.module('../../app/modules/state.js', {
-  namedExports: { state: mockState, els: mockEls },
-});
-
 const {
   invalidateThumbnailCache,
   renderPagePreviews,
@@ -39,11 +23,12 @@ const {
 
 describe('thumbnail-renderer', () => {
   beforeEach(() => {
-    mockState.adapter = null;
-    mockState.docName = null;
-    mockState.currentPage = 1;
-    mockState.pageCount = 0;
-    mockEls.pagePreviewList = null;
+    state.adapter = null;
+    state.docName = null;
+    state.currentPage = 1;
+    state.pageCount = 0;
+    state.rotation = 0;
+    els.pagePreviewList = null;
   });
 
   describe('invalidateThumbnailCache', () => {
@@ -54,41 +39,41 @@ describe('thumbnail-renderer', () => {
 
   describe('renderPagePreviews', () => {
     it('returns early when no container', async () => {
-      mockEls.pagePreviewList = null;
+      els.pagePreviewList = null;
       await assert.doesNotReject(() => renderPagePreviews());
     });
 
     it('returns early when no adapter', async () => {
-      mockEls.pagePreviewList = document.createElement('div');
-      mockState.adapter = null;
+      els.pagePreviewList = document.createElement('div');
+      state.adapter = null;
       await assert.doesNotReject(() => renderPagePreviews());
     });
 
     it('returns early when pageCount is 0', async () => {
       const container = document.createElement('div');
-      mockEls.pagePreviewList = container;
-      mockState.adapter = { renderPage: async () => {} };
-      mockState.pageCount = 0;
+      els.pagePreviewList = container;
+      state.adapter = { renderPage: async () => {} };
+      state.pageCount = 0;
       await renderPagePreviews();
       assert.equal(container.children.length, 0);
     });
 
     it('creates placeholders for each page', async () => {
       const container = document.createElement('div');
-      mockEls.pagePreviewList = container;
-      mockState.adapter = { renderPage: async () => {} };
-      mockState.pageCount = 3;
-      mockState.docName = 'test.pdf';
+      els.pagePreviewList = container;
+      state.adapter = { renderPage: async () => {} };
+      state.pageCount = 3;
+      state.docName = 'test.pdf';
       await renderPagePreviews();
       assert.equal(container.children.length, 3);
     });
 
     it('sets data-page attribute on wrappers', async () => {
       const container = document.createElement('div');
-      mockEls.pagePreviewList = container;
-      mockState.adapter = { renderPage: async () => {} };
-      mockState.pageCount = 2;
-      mockState.docName = 'test2.pdf';
+      els.pagePreviewList = container;
+      state.adapter = { renderPage: async () => {} };
+      state.pageCount = 2;
+      state.docName = 'test2.pdf';
       await renderPagePreviews();
       assert.equal(container.children[0].dataset.page, '1');
       assert.equal(container.children[1].dataset.page, '2');
@@ -97,20 +82,19 @@ describe('thumbnail-renderer', () => {
 
   describe('highlightCurrentPage', () => {
     it('does nothing when container is null', () => {
-      mockEls.pagePreviewList = null;
+      els.pagePreviewList = null;
       assert.doesNotThrow(() => highlightCurrentPage());
     });
 
     it('highlights the current page wrapper', async () => {
       const container = document.createElement('div');
-      mockEls.pagePreviewList = container;
-      mockState.adapter = { renderPage: async () => {} };
-      mockState.pageCount = 2;
-      mockState.docName = 'hl.pdf';
-      mockState.currentPage = 2;
+      els.pagePreviewList = container;
+      state.adapter = { renderPage: async () => {} };
+      state.pageCount = 2;
+      state.docName = 'hl.pdf';
+      state.currentPage = 2;
       await renderPagePreviews();
       highlightCurrentPage();
-      // Current page (2) should have accent border
       const w2 = container.children[1];
       assert.ok(w2.style.borderColor.includes('accent') || w2.style.borderColor !== 'transparent');
     });

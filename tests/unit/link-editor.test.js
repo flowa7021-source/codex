@@ -1,4 +1,19 @@
 import './setup-dom.js';
+
+// Patch DOM mock: add setLineDash to canvas context
+const _origCreateElement = document.createElement;
+document.createElement = function(tag) {
+  const el = _origCreateElement(tag);
+  if (!el.focus) el.focus = () => {};
+  const _origGetContext = el.getContext;
+  el.getContext = function(...args) {
+    const ctx = _origGetContext.call(el, ...args);
+    if (ctx && !ctx.setLineDash) ctx.setLineDash = () => {};
+    return ctx;
+  };
+  return el;
+};
+
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 

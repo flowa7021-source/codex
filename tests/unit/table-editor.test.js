@@ -1,4 +1,14 @@
 import './setup-dom.js';
+
+// Patch DOM mock with missing methods
+const _origCreateElement = document.createElement;
+document.createElement = function(tag) {
+  const el = _origCreateElement(tag);
+  if (!el.focus) el.focus = () => {};
+  if (!el.select) el.select = () => {};
+  return el;
+};
+
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 

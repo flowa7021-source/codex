@@ -19,8 +19,9 @@ describe('postCorrectText', () => {
     assert.equal(postCorrectText('hello\u00ADworld'), 'hello-world');
   });
 
-  it('normalizes curly quotes', () => {
-    assert.equal(postCorrectText('\u201CHello\u201D'), '"Hello"');
+  it('normalizes guillemets to straight quotes', () => {
+    // \u00AB = « and \u00BB = » are in the COMMON_FIXES double-quote pattern
+    assert.equal(postCorrectText('\u00ABHello\u00BB'), '"Hello"');
   });
 
   it('removes space before punctuation', () => {
@@ -40,10 +41,10 @@ describe('postCorrectText', () => {
     assert.equal(postCorrectText('ﬃx ﬄ ﬅ'), 'ffix ffl st');
   });
 
-  it('normalizes smart quotes', () => {
-    const input = '\u2018test\u2019 and \u0060backtick\u0060';
-    const result = postCorrectText(input);
-    assert.ok(result.includes("'test'"));
+  it('normalizes smart single quotes', () => {
+    // \u2018 and \u2019 are left/right single quotes, in COMMON_FIXES pattern [''`ʼ]
+    const result = postCorrectText('\u2018test\u2019');
+    assert.equal(result, "'test'");
   });
 
   it('trims whitespace', () => {

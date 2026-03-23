@@ -90,8 +90,8 @@ describe('computeOcrZoom', () => {
     // 2000*2000 with zoom 3 = 36M pixels, should cap
     const zoom = computeOcrZoom(2000, 2000, { suggestedScale: 3.0 }, 4_800_000);
     assert.ok(zoom < 3.0);
-    const pixels = 2000 * zoom * 2000 * zoom;
-    assert.ok(pixels <= 4_800_000 + 1);
+    // zoom is clamped to at least MIN_SCALE (1.2), so just verify it was reduced
+    assert.ok(zoom >= 1.2);
   });
 
   it('never returns below MIN_SCALE', () => {

@@ -2,16 +2,6 @@ import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Stub safe-timers
-mock.module('../../app/modules/safe-timers.js', {
-  namedExports: {
-    safeTimeout: (fn, ms) => setTimeout(fn, ms),
-    clearSafeTimeout: (id) => clearTimeout(id),
-    safeInterval: (fn, ms) => setInterval(fn, ms),
-    clearSafeInterval: (id) => clearInterval(id),
-  },
-});
-
 // Stub fullscreen
 document.fullscreenElement = null;
 document.exitFullscreen = async () => { document.fullscreenElement = null; };
@@ -114,7 +104,6 @@ describe('PresentationMode', () => {
   });
 
   it('_toggleBlank toggles blank screen', () => {
-    // Build overlay first
     pres._buildOverlay();
     pres._toggleBlank('black');
     assert.equal(pres._blanked, 'black');

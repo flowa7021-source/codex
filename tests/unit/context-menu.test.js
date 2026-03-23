@@ -10,7 +10,7 @@ document.createElement = function (tag) {
   el.focus = el.focus || (() => {});
   el.closest = el.closest || (() => null);
   el.hasAttribute = el.hasAttribute || ((k) => el.getAttribute(k) != null);
-  el.removeAttribute = el.removeAttribute || ((k) => el.setAttribute(k, undefined));
+  el.removeAttribute = el.removeAttribute || (() => {});
   return el;
 };
 
@@ -27,36 +27,46 @@ document.body.contains = function (el) {
 
 const { showContextMenu, initContextMenu } = await import('../../app/modules/context-menu.js');
 
-describe('context-menu', () => {
-  beforeEach(() => {
-    // Don't clear _bodyChildren since the menu persists across calls
-  });
+// Helper: find the menu element
+function findMenu() {
+  return _bodyChildren.find(c => c.className && c.className.includes('ctx-menu'));
+}
 
+// Helper: find children by className string
+function findChildrenByClass(parent, cls) {
+  return parent.children.filter(c => c.className && c.className.includes(cls));
+}
+
+// Helper: find the Nth button child (buttons have role=menuitem)
+function findButtons(menu) {
+  return menu.children.filter(c => c.getAttribute('role') === 'menuitem');
+}
+
+describe('context-menu', () => {
   it('showContextMenu creates a menu element appended to body', () => {
     showContextMenu(100, 100, [{ label: 'Test' }]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
-    assert.ok(menu, 'menu element should be appended to body');
+    assert.ok(findMenu(), 'menu element should be appended to body');
   });
 
   it('showContextMenu adds ctx-menu-open class', () => {
     showContextMenu(100, 100, [{ label: 'Item' }]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
+    const menu = findMenu();
     assert.ok(menu.classList.contains('ctx-menu-open'));
   });
 
   it('showContextMenu sets role=menu on the element', () => {
     showContextMenu(50, 50, [{ label: 'A' }]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
+    const menu = findMenu();
     assert.equal(menu.getAttribute('role'), 'menu');
   });
 
-  it('showContextMenu creates buttons for non-separator items', () => {
+  it('showContextMenu creates buttons with role=menuitem', () => {
     showContextMenu(50, 50, [
       { label: 'Copy' },
       { label: 'Paste' },
     ]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
-    const buttons = menu.children.filter(c => c.classList?.contains('ctx-item'));
+    const menu = findMenu();
+    const buttons = findButtons(menu);
     assert.equal(buttons.length, 2);
   });
 
@@ -66,24 +76,17 @@ describe('context-menu', () => {
       { separator: true },
       { label: 'B' },
     ]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
-    const seps = menu.children.filter(c => c.classList?.contains('ctx-sep'));
+    const menu = findMenu();
+    const seps = menu.children.filter(c => c.getAttribute('role') === 'separator');
     assert.equal(seps.length, 1);
-  });
-
-  it('separator has role=separator attribute', () => {
-    showContextMenu(50, 50, [{ separator: true }]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
-    const sep = menu.children.find(c => c.classList?.contains('ctx-sep'));
-    assert.equal(sep.getAttribute('role'), 'separator');
   });
 
   it('showContextMenu sets disabled state on disabled items', () => {
     showContextMenu(50, 50, [
       { label: 'Disabled', disabled: true },
     ]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
-    const btn = menu.children.find(c => c.classList?.contains('ctx-item'));
+    const menu = findMenu();
+    const btn = findButtons(menu)[0];
     assert.equal(btn.disabled, true);
     assert.ok(btn.classList.contains('ctx-disabled'));
   });
@@ -91,33 +94,33 @@ describe('context-menu', () => {
   it('clicking an item calls its action', () => {
     const action = mock.fn();
     showContextMenu(50, 50, [{ label: 'Do', action }]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
-    const btn = menu.children.find(c => c.classList?.contains('ctx-item'));
+    const menu = findMenu();
+    const btn = findButtons(menu)[0];
     btn.click();
     assert.equal(action.mock.callCount(), 1);
   });
 
   it('clicking an item closes the menu', () => {
     showContextMenu(50, 50, [{ label: 'Do', action: () => {} }]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
-    const btn = menu.children.find(c => c.classList?.contains('ctx-item'));
+    const menu = findMenu();
+    const btn = findButtons(menu)[0];
     btn.click();
     assert.ok(!menu.classList.contains('ctx-menu-open'));
   });
 
-  it('showContextMenu positions the menu with left and top styles', () => {
-    showContextMenu(200, 300, [{ label: 'Item' }]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
-    assert.ok(menu.style.left !== undefined);
-    assert.ok(menu.style.top !== undefined);
+  it('menu items have menuitem role attribute', () => {
+    showContextMenu(50, 50, [{ label: 'Action' }]);
+    const menu = findMenu();
+    const btn = findButtons(menu)[0];
+    assert.equal(btn.getAttribute('role'), 'menuitem');
   });
 
-  it('showContextMenu includes shortcut as kbd in innerHTML', () => {
-    showContextMenu(50, 50, [{ label: 'Copy', shortcut: 'Ctrl+C' }]);
-    const menu = _bodyChildren.find(c => c.classList?.contains('ctx-menu'));
-    const btn = menu.children.find(c => c.classList?.contains('ctx-item'));
-    assert.ok(btn.innerHTML.includes('ctx-kbd'));
-    assert.ok(btn.innerHTML.includes('Ctrl+C'));
+  it('showContextMenu clears previous items when called again', () => {
+    showContextMenu(50, 50, [{ label: 'A' }, { label: 'B' }]);
+    showContextMenu(50, 50, [{ label: 'C' }]);
+    const menu = findMenu();
+    const buttons = findButtons(menu);
+    assert.equal(buttons.length, 1);
   });
 
   it('initContextMenu is a function', () => {

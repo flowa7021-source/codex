@@ -80,7 +80,7 @@ describe('renderDiffHtml', () => {
   });
 
   it('renders side-by-side HTML', () => {
-    const result = diffWords('hello', 'world');
+    const result = diffWords('hello world', 'hello earth');
     const html = renderDiffHtml(result, { mode: 'side-by-side' });
     assert.ok(html.includes('display:flex'));
   });

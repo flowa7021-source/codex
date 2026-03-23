@@ -12,6 +12,21 @@ import {
   initLayoutControllerDeps,
 } from '../../app/modules/layout-controller.js';
 
+// Ensure document.body has classList
+if (!document.body.classList) {
+  const _bodyClasses = new Set();
+  document.body.classList = {
+    add(...cls) { cls.forEach(c => _bodyClasses.add(c)); },
+    remove(...cls) { cls.forEach(c => _bodyClasses.delete(c)); },
+    toggle(c, force) {
+      if (force !== undefined) { force ? _bodyClasses.add(c) : _bodyClasses.delete(c); }
+      else if (_bodyClasses.has(c)) { _bodyClasses.delete(c); }
+      else { _bodyClasses.add(c); }
+    },
+    contains(c) { return _bodyClasses.has(c); },
+  };
+}
+
 function resetState() {
   localStorage.clear();
   state.settings = null;
