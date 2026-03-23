@@ -78,6 +78,27 @@ jobs:
           echo ""
           curl -s http://127.0.0.1:4174/ | grep -c 'app-shell' || echo "app-shell NOT FOUND in response"
           kill %1 2>/dev/null || true
+          sleep 1
+          pkill -f "vite preview" 2>/dev/null || true
+
+      - name: Pre-check vite preview startup
+        run: |
+          echo "Testing vite preview startup..."
+          node_modules/.bin/vite preview --port 4175 --host 127.0.0.1 &
+          VITE_PID=$!
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:4175/ 2>/dev/null | grep -q "200"; then
+              echo "Vite preview responded after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -s -o /dev/null -w "HTTP %{http_code}" http://127.0.0.1:4175/ || echo "FAILED to reach vite preview"
+          echo ""
+          kill $VITE_PID 2>/dev/null || true
+          sleep 1
+          pkill -f "vite preview" 2>/dev/null || true
+          echo "Pre-check complete, all vite processes cleaned up"
 
       - name: Run E2E tests (desktop only, skip visual regression)
         run: |
