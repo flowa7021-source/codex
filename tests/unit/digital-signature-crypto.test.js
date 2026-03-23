@@ -237,11 +237,95 @@ describe('hasSig', () => {
 
 // ─── SignatureManager ───────────────────────────────────────────────────────
 
+/**
+ * Minimal DOM element mock that supports appendChild, remove, children,
+ * querySelector, aggregated textContent, click(), and addEventListener.
+ */
+function createMockElement(tag) {
+  const listeners = {};
+  const el = {
+    tagName: tag.toUpperCase(),
+    style: { cssText: '' },
+    _children: [],
+    _parent: null,
+    _textContent: '',
+    disabled: false,
+    dataset: {},
+    get children() { return this._children; },
+    get textContent() {
+      if (this._children.length === 0) return this._textContent;
+      return this._textContent + this._children.map(c => c.textContent).join('');
+    },
+    set textContent(v) { this._textContent = v; this._children.length = 0; },
+    set innerHTML(v) {
+      // Minimal: just store raw HTML as textContent for content checks
+      this._textContent = v.replace(/<[^>]*>/g, '');
+      this._children.length = 0;
+    },
+    get innerHTML() { return this._textContent; },
+    appendChild(child) {
+      child._parent = el;
+      el._children.push(child);
+      return child;
+    },
+    remove() {
+      if (this._parent) {
+        const idx = this._parent._children.indexOf(this);
+        if (idx !== -1) this._parent._children.splice(idx, 1);
+        this._parent = null;
+      }
+    },
+    querySelector(sel) {
+      const target = sel.toUpperCase();
+      for (const child of el._children) {
+        if (child.tagName === target) return child;
+        const found = child.querySelector(sel);
+        if (found) return found;
+      }
+      return null;
+    },
+    addEventListener(evt, fn) {
+      if (!listeners[evt]) listeners[evt] = [];
+      listeners[evt].push(fn);
+    },
+    removeEventListener(evt, fn) {
+      if (listeners[evt]) listeners[evt] = listeners[evt].filter(f => f !== fn);
+    },
+    click() {
+      (listeners['click'] || []).forEach(fn => fn());
+    },
+    setAttribute() {},
+    getAttribute() { return null; },
+    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+  };
+  return el;
+}
+
+// Install a minimal global document if not present (e.g. when running without setup-dom)
+const _origDocument = globalThis.document;
+if (typeof globalThis.document === 'undefined' || !globalThis.document._hasMockElement) {
+  const prev = globalThis.document || {};
+  globalThis.document = {
+    ...prev,
+    _hasMockElement: true,
+    createElement: (tag) => createMockElement(tag),
+    getElementById: prev.getElementById || (() => null),
+    querySelector: prev.querySelector || (() => null),
+    querySelectorAll: prev.querySelectorAll || (() => []),
+    createDocumentFragment: prev.createDocumentFragment || (() => ({ appendChild() {}, children: [] })),
+    body: prev.body || { appendChild() {}, style: {} },
+    head: prev.head || { appendChild() {} },
+    documentElement: prev.documentElement || { style: {} },
+    addEventListener: prev.addEventListener || (() => {}),
+    removeEventListener: prev.removeEventListener || (() => {}),
+  };
+}
+
 describe('SignatureManager', () => {
   let container;
 
   beforeEach(() => {
-    container = document.createElement('div');
+    container = createMockElement('div');
   });
 
   it('constructs without errors', () => {

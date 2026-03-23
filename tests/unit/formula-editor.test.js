@@ -1,15 +1,113 @@
 // ─── Unit Tests: Formula Editor ────────────────────────────────────────────
+// DOM globals provided by setup-dom.js (loaded via --import)
+import './setup-dom.js';
+
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { FormulaEditor } from '../../app/modules/formula-editor.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
+/**
+ * Build a minimal DOM-like container that supports querySelector and
+ * tracks children so the FormulaEditor overlay lifecycle is testable.
+ */
 function makeContainer() {
-  const el = document.createElement('div');
-  el.style.position = 'relative';
+  const children = [];
+  const el = {
+    tagName: 'DIV',
+    style: { position: '' },
+    children,
+    appendChild(child) {
+      child.parentNode = el;
+      children.push(child);
+    },
+    removeChild(child) {
+      const idx = children.indexOf(child);
+      if (idx !== -1) children.splice(idx, 1);
+      child.parentNode = null;
+    },
+    querySelector(sel) {
+      // Support simple class selector ".formula-editor-overlay"
+      const cls = sel.startsWith('.') ? sel.slice(1) : sel;
+      return _findByClass(children, cls);
+    },
+    remove() {},
+    parentNode: null,
+  };
   return el;
 }
+
+/**
+ * Recursively search children (mock elements) for a given className.
+ */
+function _findByClass(nodes, cls) {
+  for (const n of nodes) {
+    if (n.className === cls) return n;
+    if (n._children) {
+      const found = _findByClass(n._children, cls);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// Patch document.createElement to produce richer mock elements that the
+// FormulaEditor can work with (child tracking, value, focus, remove, etc.)
+const _origCreate = globalThis.document.createElement;
+globalThis.document.createElement = (tag) => {
+  const kids = [];
+  const el = {
+    tagName: tag.toUpperCase(),
+    className: '',
+    style: { cssText: '', left: '', top: '' },
+    textContent: '',
+    placeholder: '',
+    innerHTML: '',
+    value: '',
+    dataset: {},
+    parentNode: null,
+    _children: kids,
+    children: kids,
+    classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+    setAttribute() {},
+    getAttribute() { return null; },
+    addEventListener() {},
+    removeEventListener() {},
+    appendChild(child) {
+      if (child && typeof child === 'object') {
+        child.parentNode = el;
+        kids.push(child);
+      }
+    },
+    remove() {
+      if (el.parentNode && el.parentNode.removeChild) {
+        el.parentNode.removeChild(el);
+      }
+    },
+    querySelector(sel) {
+      const cls = sel.startsWith('.') ? sel.slice(1) : sel;
+      return _findByClass(kids, cls);
+    },
+    focus() {},
+    getContext() {
+      return {
+        drawImage() {}, fillRect() {}, clearRect() {}, strokeRect() {},
+        getImageData: () => ({ data: new Uint8Array(0), width: 0, height: 0 }),
+        putImageData() {}, createImageData: () => ({ data: new Uint8Array(0) }),
+        measureText: () => ({ width: 0 }), fillText() {}, strokeText() {},
+        font: '', fillStyle: '', textBaseline: '',
+        beginPath() {}, closePath() {}, moveTo() {}, lineTo() {}, arc() {},
+        fill() {}, stroke() {}, save() {}, restore() {}, translate() {},
+        rotate() {}, scale() {}, setTransform() {}, resetTransform() {},
+        canvas: el,
+      };
+    },
+    toDataURL: () => 'data:image/png;base64,',
+    toBlob: (cb) => cb(new Blob()),
+  };
+  return el;
+};
 
 // ─── FormulaEditor constructor ────────────────────────────────────────────
 
