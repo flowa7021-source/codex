@@ -2,6 +2,22 @@ import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
+// Add dispatchEvent to document mock
+if (!document.dispatchEvent) {
+  const _docListeners = {};
+  document.addEventListener = (type, fn) => {
+    if (!_docListeners[type]) _docListeners[type] = [];
+    _docListeners[type].push(fn);
+  };
+  document.removeEventListener = (type, fn) => {
+    if (_docListeners[type]) _docListeners[type] = _docListeners[type].filter(f => f !== fn);
+  };
+  document.dispatchEvent = (evt) => {
+    const fns = _docListeners[evt.type] || [];
+    for (const fn of fns) fn(evt);
+  };
+}
+
 // Stub fullscreen API on elements
 const origCreateElement = document.createElement;
 document.createElement = function (tag) {
@@ -109,8 +125,10 @@ describe('view-modes', () => {
       assert.deepEqual(getTwoUpPages(2, 10, true), [2, 3]);
     });
 
-    it('returns null for right page when at last page', () => {
-      const result = getTwoUpPages(10, 10, false);
+    it('returns null for right page when left is last page (odd)', () => {
+      // Page 9 in standard two-up: left=9, right=10; page 11 of 11: left=11, right=null
+      const result = getTwoUpPages(11, 11, false);
+      assert.equal(result[0], 11);
       assert.equal(result[1], null);
     });
   });
