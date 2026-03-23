@@ -6,13 +6,13 @@ const APP_URL = '/';
 
 async function openApp(page) {
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-  // Wait for JS initialization to complete
-  await page.waitForTimeout(500);
+  // Wait for app JS initialization to fully complete (all UI handlers registered)
+  await page.waitForFunction(() => !!window._novaUI, { timeout: 15_000 });
 }
 
 async function openSettingsModal(page) {
   await page.locator('[data-sidebar-tab="settings"]').click();
-  await page.waitForTimeout(300);
+  await page.locator('#openSettingsModal').waitFor({ state: 'visible', timeout: 5_000 });
   await page.locator('#openSettingsModal').click();
 }
 
@@ -390,8 +390,11 @@ test.describe('22 — Memory management', () => {
 test.describe('23 — Drag-and-drop file opening', () => {
   test('drop zone overlay appears on dragenter', async ({ page }) => {
     await openApp(page);
-    const shell = page.locator('.app-shell');
-    await shell.dispatchEvent('dragenter', { dataTransfer: {} });
+    await page.evaluate(() => {
+      const shell = document.querySelector('.app-shell');
+      const event = new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() });
+      shell?.dispatchEvent(event);
+    });
     await page.waitForTimeout(300);
     const overlay = page.locator('.drop-zone-overlay, .drag-overlay, [data-drop-zone]');
     // The app should show some visual indicator for drag
@@ -401,10 +404,15 @@ test.describe('23 — Drag-and-drop file opening', () => {
 
   test('dragleave hides the drop zone overlay', async ({ page }) => {
     await openApp(page);
-    const shell = page.locator('.app-shell');
-    await shell.dispatchEvent('dragenter', { dataTransfer: {} });
+    await page.evaluate(() => {
+      const shell = document.querySelector('.app-shell');
+      shell?.dispatchEvent(new DragEvent('dragenter', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
+    });
     await page.waitForTimeout(200);
-    await shell.dispatchEvent('dragleave', { dataTransfer: {} });
+    await page.evaluate(() => {
+      const shell = document.querySelector('.app-shell');
+      shell?.dispatchEvent(new DragEvent('dragleave', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
+    });
     await page.waitForTimeout(300);
     const overlay = page.locator('.drop-zone-overlay.active, .drag-overlay.active');
     await expect(overlay).toHaveCount(0);
@@ -414,8 +422,10 @@ test.describe('23 — Drag-and-drop file opening', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
-    const shell = page.locator('.app-shell');
-    await shell.dispatchEvent('drop', { dataTransfer: {} });
+    await page.evaluate(() => {
+      const shell = document.querySelector('.app-shell');
+      shell?.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: new DataTransfer() }));
+    });
     await page.waitForTimeout(500);
     expect(errors.filter(e => !e.includes('net::ERR'))).toHaveLength(0);
   });

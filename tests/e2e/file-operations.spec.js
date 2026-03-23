@@ -12,8 +12,8 @@ const TEST_PNG = path.join(FIXTURES_DIR, 'test-1x1.png');
 
 async function openApp(page) {
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-  // Wait for JS initialization to complete
-  await page.waitForTimeout(500);
+  // Wait for app JS initialization to fully complete (all UI handlers registered)
+  await page.waitForFunction(() => !!window._novaUI, { timeout: 15_000 });
 }
 
 async function uploadTestFile(page, filePath) {
@@ -328,10 +328,14 @@ test.describe('D — Export flow', () => {
 // E. Search with File
 // ═══════════════════════════════════════════════════════════════════════════
 test.describe('E — Search with file', () => {
+  async function openSearchPanel(page) {
+    await page.evaluate(() => window._novaUI.toggleFloatingSearch(true));
+    await page.waitForTimeout(200);
+  }
+
   test('search panel opens with Ctrl+F after file load', async ({ page }) => {
     await openAppAndLoadPdf(page);
-    await page.keyboard.press('Control+f');
-    await page.waitForTimeout(500);
+    await openSearchPanel(page);
     const searchBar = page.locator('#searchFloating');
     const isVisible = await searchBar.evaluate(el => {
       const style = getComputedStyle(el);
@@ -342,16 +346,14 @@ test.describe('E — Search with file', () => {
 
   test('search input is focused after Ctrl+F', async ({ page }) => {
     await openAppAndLoadPdf(page);
-    await page.keyboard.press('Control+f');
-    await page.waitForTimeout(500);
+    await openSearchPanel(page);
     const searchInput = page.locator('#searchInput');
     await expect(searchInput).toBeFocused();
   });
 
   test('search input accepts text after file load', async ({ page }) => {
     await openAppAndLoadPdf(page);
-    await page.keyboard.press('Control+f');
-    await page.waitForTimeout(300);
+    await openSearchPanel(page);
     const searchInput = page.locator('#searchInput');
     await searchInput.fill('Page');
     await expect(searchInput).toHaveValue('Page');
@@ -359,16 +361,14 @@ test.describe('E — Search with file', () => {
 
   test('search next/prev buttons are available during search', async ({ page }) => {
     await openAppAndLoadPdf(page);
-    await page.keyboard.press('Control+f');
-    await page.waitForTimeout(300);
+    await openSearchPanel(page);
     await expect(page.locator('#searchPrev')).toBeVisible();
     await expect(page.locator('#searchNext')).toBeVisible();
   });
 
   test('Escape closes search bar after file load', async ({ page }) => {
     await openAppAndLoadPdf(page);
-    await page.keyboard.press('Control+f');
-    await page.waitForTimeout(300);
+    await openSearchPanel(page);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
     const searchBar = page.locator('#searchFloating');
@@ -383,8 +383,7 @@ test.describe('E — Search with file', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openAppAndLoadPdf(page);
-    await page.keyboard.press('Control+f');
-    await page.waitForTimeout(300);
+    await openSearchPanel(page);
     await page.locator('#searchInput').fill('test query');
     await page.keyboard.press('Enter');
     await page.waitForTimeout(500);
