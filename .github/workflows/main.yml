@@ -80,7 +80,15 @@ jobs:
           kill %1 2>/dev/null || true
 
       - name: Run E2E tests (desktop only, skip visual regression)
-        run: npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd --grep-invert "Visual"
+        run: |
+          set -o pipefail
+          npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd --grep-invert "Visual" 2>&1 | tee /tmp/e2e-output.txt
+
+      - name: Show E2E failures summary
+        if: always()
+        run: |
+          echo "=== E2E Test Results (last 80 lines) ==="
+          tail -80 /tmp/e2e-output.txt 2>/dev/null || echo "No output file found"
 
       - name: Upload Playwright report on failure
         if: failure()
