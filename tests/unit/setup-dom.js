@@ -24,6 +24,7 @@ if (typeof globalThis.document === 'undefined') {
         innerHTML: '',
         textContent: '',
         children: [],
+        dataset: {},
         parentNode: null,
         getContext() {
           return {
