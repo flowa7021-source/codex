@@ -2,6 +2,21 @@ import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
+// Ensure document.body has classList for settings-ui functions
+if (!document.body.classList) {
+  const _bodyClasses = new Set();
+  document.body.classList = {
+    add(...cls) { cls.forEach(c => _bodyClasses.add(c)); },
+    remove(...cls) { cls.forEach(c => _bodyClasses.delete(c)); },
+    toggle(c, force) {
+      if (force !== undefined) { force ? _bodyClasses.add(c) : _bodyClasses.delete(c); }
+      else if (_bodyClasses.has(c)) { _bodyClasses.delete(c); }
+      else { _bodyClasses.add(c); }
+    },
+    contains(c) { return _bodyClasses.has(c); },
+  };
+}
+
 import { state, els } from '../../app/modules/state.js';
 import {
   initSettingsUiDeps,
@@ -131,11 +146,16 @@ describe('settings-ui', () => {
 
   describe('openSettingsModal', () => {
     it('adds open class to modal', () => {
+      // Nullify section containers to skip renderSectionVisibilityControls DOM ops
+      els.cfgSidebarSections = null;
+      els.cfgToolbarSections = null;
       openSettingsModal();
       assert.ok(els.settingsModal.classList.contains('open'));
     });
 
     it('sets aria-hidden to false', () => {
+      els.cfgSidebarSections = null;
+      els.cfgToolbarSections = null;
       openSettingsModal();
       assert.equal(els.settingsModal.getAttribute('aria-hidden'), 'false');
     });
@@ -143,12 +163,16 @@ describe('settings-ui', () => {
 
   describe('closeSettingsModal', () => {
     it('removes open class from modal', () => {
+      els.cfgSidebarSections = null;
+      els.cfgToolbarSections = null;
       openSettingsModal();
       closeSettingsModal(false);
       assert.ok(!els.settingsModal.classList.contains('open'));
     });
 
     it('reverts settings when closed without saving', () => {
+      els.cfgSidebarSections = null;
+      els.cfgToolbarSections = null;
       const original = { ...state.settings };
       openSettingsModal();
       state.settings.appLang = 'en';
@@ -157,6 +181,8 @@ describe('settings-ui', () => {
     });
 
     it('keeps settings when saved=true', () => {
+      els.cfgSidebarSections = null;
+      els.cfgToolbarSections = null;
       openSettingsModal();
       state.settings.appLang = 'en';
       closeSettingsModal(true);

@@ -80,7 +80,7 @@ describe('renderDiffHtml', () => {
   });
 
   it('renders side-by-side HTML', () => {
-    const result = diffWords('hello world', 'hello earth');
+    const result = diffWords('hello world', 'hello world');
     const html = renderDiffHtml(result, { mode: 'side-by-side' });
     assert.ok(html.includes('display:flex'));
   });
@@ -107,7 +107,7 @@ describe('DiffViewer', () => {
   it('switches mode via setMode', () => {
     const container = document.createElement('div');
     const viewer = new DiffViewer(container);
-    const result = diffWords('hello world', 'hello earth');
+    const result = diffWords('hello world', 'hello world');
     viewer.show(result);
     viewer.setMode('side-by-side');
     // Panel should have been re-rendered

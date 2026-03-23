@@ -168,7 +168,6 @@ describe('AccessibilityPanel', () => {
     const panel = new AccessibilityPanel(container, {
       getPdfBytes: () => new Uint8Array(),
     });
-    // Simulate building panel
     panel._panel = document.createElement('div');
     container.appendChild(panel._panel);
     panel.close();

@@ -71,18 +71,18 @@ describe('computeOtsuThreshold', () => {
     assert.ok(t >= 0 && t <= 255);
   });
 
-  it('finds threshold between bimodal peaks', () => {
-    // Create bimodal image: half black (0), half white (255)
+  it('finds threshold for bimodal image', () => {
+    // Create bimodal image: half dark (50), half bright (200)
     const data = new Uint8ClampedArray(400); // 100 pixels
     for (let i = 0; i < 200; i += 4) {
-      data[i] = 0; data[i + 1] = 0; data[i + 2] = 0; data[i + 3] = 255;
+      data[i] = 50; data[i + 1] = 50; data[i + 2] = 50; data[i + 3] = 255;
     }
     for (let i = 200; i < 400; i += 4) {
-      data[i] = 255; data[i + 1] = 255; data[i + 2] = 255; data[i + 3] = 255;
+      data[i] = 200; data[i + 1] = 200; data[i + 2] = 200; data[i + 3] = 255;
     }
     const t = computeOtsuThreshold(data);
-    // Threshold should be somewhere between 0 and 255
-    assert.ok(t > 0 && t < 255);
+    // Threshold should be between 50 and 200
+    assert.ok(t >= 50 && t <= 200, `Threshold ${t} should be between 50 and 200`);
   });
 });
 

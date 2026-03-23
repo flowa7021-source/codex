@@ -2,21 +2,8 @@ import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Mock pdfjs-dist since it's not available in test env
-mock.module('pdfjs-dist/build/pdf.mjs', {
-  namedExports: {
-    getDocument: () => ({
-      promise: Promise.resolve({
-        getPage: async () => ({
-          getViewport: () => ({ width: 100, height: 100 }),
-          render: () => ({ promise: Promise.resolve() }),
-        }),
-        destroy: () => {},
-      }),
-    }),
-  },
-});
-
+// Import directly -- pdfjs-dist is installed; computePixelDiff and VisualDiff
+// don't call into pdfjs at construction/test time.
 const { computePixelDiff, VisualDiff } = await import('../../app/modules/visual-diff.js');
 
 describe('computePixelDiff', () => {
@@ -58,7 +45,6 @@ describe('computePixelDiff', () => {
     const a = makeCanvas(10, 10);
     const b = makeCanvas(5, 5);
     const result = computePixelDiff(a, b);
-    // Should use the larger dimension
     assert.equal(result.totalPixels, 100);
   });
 
