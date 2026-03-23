@@ -1,4 +1,5 @@
 // ─── Unit Tests: Bates Numbering ────────────────────────────────────────────
+import './setup-dom.js';
 import { describe, it, before, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';

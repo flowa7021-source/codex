@@ -1,4 +1,5 @@
 // ─── Unit Tests: BookmarkController ────────────────────────────────────────
+import './setup-dom.js';
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 

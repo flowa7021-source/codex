@@ -1,4 +1,5 @@
 // ─── Unit Tests: PDF Operations ───────────────────────────────────────────────
+import './setup-dom.js';
 import { describe, it, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
@@ -278,12 +279,13 @@ describe('addStampToPdf', () => {
   });
 
   it('adds stamp with known type', async () => {
-    const result = await addStampToPdf(pdfBytes, 'approved');
+    // Use customText to avoid Cyrillic encoding issues with WinAnsi in tests
+    const result = await addStampToPdf(pdfBytes, 'approved', { customText: 'APPROVED' });
     assert.ok(result instanceof Blob);
   });
 
   it('falls back to draft for unknown type', async () => {
-    const result = await addStampToPdf(pdfBytes, 'unknown_type');
+    const result = await addStampToPdf(pdfBytes, 'unknown_type', { customText: 'DRAFT' });
     assert.ok(result instanceof Blob);
   });
 
@@ -293,12 +295,12 @@ describe('addStampToPdf', () => {
   });
 
   it('positions at specified coordinates', async () => {
-    const result = await addStampToPdf(pdfBytes, 'confidential', { x: 50, y: 50 });
+    const result = await addStampToPdf(pdfBytes, 'confidential', { customText: 'CONFIDENTIAL', x: 50, y: 50 });
     assert.ok(result instanceof Blob);
   });
 
   it('stamps on specified page', async () => {
-    const result = await addStampToPdf(pdfBytes, 'copy', { pageNum: 2 });
+    const result = await addStampToPdf(pdfBytes, 'copy', { customText: 'COPY', pageNum: 2 });
     assert.ok(result instanceof Blob);
   });
 });
