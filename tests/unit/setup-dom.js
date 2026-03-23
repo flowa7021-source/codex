@@ -176,9 +176,26 @@ if (typeof globalThis.document === 'undefined') {
 }
 
 if (typeof globalThis.window === 'undefined') {
+  const _winListeners = {};
   globalThis.window = {
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type, fn, opts) {
+      if (!_winListeners[type]) _winListeners[type] = [];
+      _winListeners[type].push({ fn, once: !!(opts && opts.once) });
+    },
+    removeEventListener(type, fn) {
+      if (_winListeners[type]) _winListeners[type] = _winListeners[type].filter(e => e.fn !== fn);
+    },
+    dispatchEvent(evt) {
+      const entries = (_winListeners[evt.type] || []).slice();
+      for (const entry of entries) {
+        entry.fn(evt);
+        if (entry.once) {
+          const arr = _winListeners[evt.type];
+          const idx = arr.indexOf(entry);
+          if (idx !== -1) arr.splice(idx, 1);
+        }
+      }
+    },
     getComputedStyle: () => ({}),
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     innerWidth: 1920,
@@ -249,6 +266,32 @@ if (typeof globalThis.URL === 'undefined' || !URL.createObjectURL) {
 
 if (typeof globalThis.Blob === 'undefined') {
   globalThis.Blob = class Blob { constructor() {} };
+}
+
+if (typeof globalThis.FileReader === 'undefined') {
+  globalThis.FileReader = class FileReader {
+    constructor() {
+      this.result = null;
+      this.onload = null;
+      this.onerror = null;
+    }
+    readAsText(blob) {
+      blob.text().then((text) => {
+        this.result = text;
+        if (this.onload) this.onload({ target: this });
+      }).catch((err) => {
+        if (this.onerror) this.onerror(err);
+      });
+    }
+    readAsArrayBuffer(blob) {
+      blob.arrayBuffer().then((buf) => {
+        this.result = buf;
+        if (this.onload) this.onload({ target: this });
+      }).catch((err) => {
+        if (this.onerror) this.onerror(err);
+      });
+    }
+  };
 }
 
 if (typeof globalThis.Image === 'undefined') {
