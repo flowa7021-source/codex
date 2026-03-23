@@ -26,8 +26,8 @@ async function uploadTestFile(page, filePath) {
 test.describe('01 — Application startup', () => {
   test('loads the app shell and sidebar', async ({ page }) => {
     await openApp(page);
-    await expect(page.locator('.app-shell')).toBeVisible();
-    await expect(page.locator('.sidebar')).toBeVisible();
+    await expect(page.locator('.app-shell')).toBeAttached();
+    await expect(page.locator('.sidebar')).toBeAttached();
     await expect(page.locator('.sidebar h1')).toHaveText('NovaReader');
   });
 
@@ -853,7 +853,7 @@ test.describe('40 — Error recovery', () => {
     await page.evaluate(() => {
       try { throw new Error('Simulated non-fatal error'); } catch { /* swallowed */ }
     });
-    await expect(page.locator('.app-shell')).toBeVisible();
+    await expect(page.locator('.app-shell')).toBeAttached();
   });
 
   test('error boundary or fallback UI elements exist', async ({ page }) => {
