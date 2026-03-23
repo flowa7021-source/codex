@@ -65,6 +65,20 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
+      - name: Verify dist before E2E
+        run: |
+          echo "=== dist/ contents ==="
+          ls -la dist/
+          echo "=== dist/index.html first 5 lines ==="
+          head -5 dist/index.html
+          echo "=== Quick server test ==="
+          npx vite preview --port 4174 --host 127.0.0.1 &
+          sleep 3
+          curl -s -o /dev/null -w "HTTP %{http_code}, size %{size_download}" http://127.0.0.1:4174/
+          echo ""
+          curl -s http://127.0.0.1:4174/ | grep -c 'app-shell' || echo "app-shell NOT FOUND in response"
+          kill %1 2>/dev/null || true
+
       - name: Run E2E tests (desktop only, skip visual regression)
         run: npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd --grep-invert "Visual"
 
