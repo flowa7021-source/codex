@@ -18,7 +18,7 @@ const config = {
   },
   webServer: {
     command: 'npx vite preview --port 4173 --host 127.0.0.1',
-    port: 4173,
+    url: 'http://127.0.0.1:4173/',
     timeout: 30_000,
     reuseExistingServer: true,
   },
