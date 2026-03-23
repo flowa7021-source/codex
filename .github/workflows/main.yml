@@ -105,8 +105,24 @@ jobs:
           # Ensure no leftover vite preview processes from pre-checks
           pkill -f "vite preview" 2>/dev/null || true
           sleep 2
+          # Start vite preview manually — Playwright's webServer spawning
+          # fails to connect in CI, but reuseExistingServer works fine
+          npx vite preview --port 4173 --host 127.0.0.1 &
+          VITE_PID=$!
+          # Wait for server to be ready
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:4173/ > /dev/null 2>&1; then
+              echo "Vite preview ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:4173/ > /dev/null || { echo "ERROR: vite preview not responding"; exit 1; }
           set -o pipefail
           npx playwright test --config tests/e2e/playwright.config.js --project=desktop-hd --grep-invert "Visual" 2>&1 | tee /tmp/e2e-output.txt
+          TEST_EXIT=$?
+          kill $VITE_PID 2>/dev/null || true
+          exit $TEST_EXIT
 
       - name: Show E2E failures summary
         if: always()
