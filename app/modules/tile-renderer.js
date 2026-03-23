@@ -120,9 +120,11 @@ export async function renderTiles(adapter, page, canvas, { zoom, rotation }, scr
   const cols = Math.ceil(fullW / tileSize);
   const rows = Math.ceil(fullH / tileSize);
 
-  const renderPromises = [];
   let tilesRendered = 0;
   let tilesCached = 0;
+
+  // Collect tiles that need rendering (not in cache)
+  const tilesToRender = [];
 
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
@@ -146,25 +148,41 @@ export async function renderTiles(adapter, page, canvas, { zoom, rotation }, scr
         continue;
       }
 
-      // Render this tile asynchronously
-      renderPromises.push(
-        _renderSingleTile(adapter, page, zoom, rotation, col, row, tileSize, fullW, fullH)
-          .then((tileCanvas) => {
-            if (!tileCanvas) return;
-            ctx.drawImage(tileCanvas, tx, ty);
-            _evictTileCacheIfNeeded();
-            _tileCache.set(key, { canvas: tileCanvas, col, row, zoom, rotation, page });
-            tilesRendered++;
-          })
-          .catch((err) => {
-            console.warn('[tile-renderer] tile render error:', err?.message);
-          })
-      );
+      tilesToRender.push({ col, row, tx, ty, tw, th, key });
     }
   }
 
-  if (renderPromises.length > 0) {
-    await Promise.all(renderPromises);
+  // Render the full page ONCE and extract all uncached tiles from it
+  if (tilesToRender.length > 0) {
+    const genBefore = _getRenderGeneration();
+    const tmpCanvas = document.createElement('canvas');
+    try {
+      await adapter.renderPage(page, tmpCanvas, { zoom, rotation });
+      // If a newer render started while we were waiting, discard
+      if (_getRenderGeneration() !== genBefore) return;
+
+      for (const tile of tilesToRender) {
+        const tileCanvas = (typeof OffscreenCanvas !== 'undefined')
+          ? new OffscreenCanvas(tile.tw, tile.th)
+          : document.createElement('canvas');
+        if (!(tileCanvas instanceof OffscreenCanvas)) {
+          tileCanvas.width = tile.tw;
+          tileCanvas.height = tile.th;
+        }
+        const tileCtx = tileCanvas.getContext('2d');
+        if (!tileCtx) continue;
+        tileCtx.drawImage(tmpCanvas, tile.tx, tile.ty, tile.tw, tile.th, 0, 0, tile.tw, tile.th);
+        ctx.drawImage(tileCanvas, tile.tx, tile.ty);
+        _evictTileCacheIfNeeded();
+        _tileCache.set(tile.key, { canvas: tileCanvas, col: tile.col, row: tile.row, zoom, rotation, page });
+        tilesRendered++;
+      }
+    } catch (err) {
+      console.warn('[tile-renderer] tile render error:', err?.message);
+    } finally {
+      tmpCanvas.width = 0;
+      tmpCanvas.height = 0;
+    }
   }
 
   pushDiagnosticEvent('tile-renderer.render', {
@@ -277,58 +295,3 @@ function _rectsOverlap(ax, ay, aw, ah, bx, by, bw, bh) {
   return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
 }
 
-/**
- * Render a single tile by rendering the full page to an off-screen canvas
- * and then extracting the tile region.
- *
- * For adapters that support partial rendering this could be optimized
- * further, but this approach works with all adapter types.
- *
- * @param {object} adapter
- * @param {number} page
- * @param {number} zoom
- * @param {number} rotation
- * @param {number} col
- * @param {number} row
- * @param {number} tileSize
- * @param {number} fullW
- * @param {number} fullH
- * @returns {Promise<HTMLCanvasElement|OffscreenCanvas|null>}
- */
-async function _renderSingleTile(adapter, page, zoom, rotation, col, row, tileSize, fullW, fullH) {
-  const tx = col * tileSize;
-  const ty = row * tileSize;
-  const tw = Math.min(tileSize, fullW - tx);
-  const th = Math.min(tileSize, fullH - ty);
-
-  // Capture the render generation before the async work
-  const genBefore = _getRenderGeneration();
-
-  // Render the full page to a temporary canvas
-  const tmpCanvas = document.createElement('canvas');
-  try {
-    await adapter.renderPage(page, tmpCanvas, { zoom, rotation });
-
-    // If a newer render started while we were waiting, discard this stale tile
-    if (_getRenderGeneration() !== genBefore) return null;
-
-    // Extract the tile region
-    const tileCanvas = (typeof OffscreenCanvas !== 'undefined')
-      ? new OffscreenCanvas(tw, th)
-      : document.createElement('canvas');
-    if (!(tileCanvas instanceof OffscreenCanvas)) {
-      tileCanvas.width = tw;
-      tileCanvas.height = th;
-    }
-
-    const tileCtx = tileCanvas.getContext('2d');
-    if (!tileCtx) return null;
-    tileCtx.drawImage(tmpCanvas, tx, ty, tw, th, 0, 0, tw, th);
-
-    return tileCanvas;
-  } finally {
-    // Free the temporary full-page canvas even if an error occurred
-    tmpCanvas.width = 0;
-    tmpCanvas.height = 0;
-  }
-}

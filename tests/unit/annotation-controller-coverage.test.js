@@ -209,10 +209,26 @@ describe('showShortcutsHelp', () => {
     let appendedChild = null;
     document.body.appendChild = (child) => { appendedChild = child; };
 
+    // Mock querySelector on created elements to return a mock button
+    const origCreateElement = document.createElement;
+    document.createElement = (tag) => {
+      const el = origCreateElement(tag);
+      const origQS = el.querySelector.bind(el);
+      el.querySelector = (sel) => {
+        const found = origQS(sel);
+        if (found) return found;
+        // Return a mock element for #closeShortcutsHelp
+        if (sel === '#closeShortcutsHelp') return origCreateElement('button');
+        return null;
+      };
+      return el;
+    };
+
     // Ensure _novaShortcuts is not set
     /** @type {any} */ (window)._novaShortcuts = undefined;
 
     showShortcutsHelp();
+    document.createElement = origCreateElement;
 
     assert.ok(appendedChild, 'Should append overlay to body');
   });

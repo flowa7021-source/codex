@@ -392,13 +392,21 @@ export class DjVuNativeAdapter {
     this.pageSizes = [];
   }
 
-  _ensurePageSizes() {
+  /**
+   * Lazily load page sizes. Wraps the synchronous getPagesSizes() call
+   * in a microtask yield so it doesn't block the main thread on large files.
+   * Returns a promise; callers must await it.
+   */
+  async _ensurePageSizes() {
     if (this._pageSizesLoaded) return;
+    // Yield to the event loop before heavy synchronous decompression
+    await new Promise((r) => setTimeout(r, 0));
     try {
       const sizes = this.doc?.getPagesSizes?.();
       this.pageSizes = Array.isArray(sizes) ? sizes : [];
     } catch (err) {
       console.warn('[DjVuNativeAdapter] getPagesSizes failed:', err?.message);
+      pushDiagnosticEvent('djvu.getPagesSizes.error', { message: err?.message });
       this.pageSizes = [];
     }
     this._pageSizesLoaded = true;
@@ -409,7 +417,7 @@ export class DjVuNativeAdapter {
   }
 
   async getPageViewport(pageNumber, scale, rotation) {
-    this._ensurePageSizes();
+    await this._ensurePageSizes();
     const size = this.pageSizes[pageNumber - 1] || {};
     const baseW = Number(size.width) > 0 ? Number(size.width) : 1200;
     const baseH = Number(size.height) > 0 ? Number(size.height) : 1600;
@@ -427,6 +435,7 @@ export class DjVuNativeAdapter {
       page.reset?.();
     } catch (err) {
       // If page decompression fails, render a fallback placeholder
+      pushDiagnosticEvent('djvu.render.decompress-error', { page: pageNumber, message: err?.message });
       const dpr = Math.max(1, window.devicePixelRatio || 1);
       canvas.width = Math.ceil(1200 * dpr);
       canvas.height = Math.ceil(1600 * dpr);
@@ -438,6 +447,23 @@ export class DjVuNativeAdapter {
       ctx.fillStyle = '#ff8b8b';
       ctx.font = '20px sans-serif';
       ctx.fillText(`Ошибка рендера страницы ${pageNumber}: ${err?.message || 'unknown'}`, 40, 80);
+      return;
+    }
+
+    // Guard against zero-dimension imageData from corrupted DjVu pages
+    if (!imageData || !imageData.width || !imageData.height) {
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.ceil(1200 * dpr);
+      canvas.height = Math.ceil(1600 * dpr);
+      canvas.style.width = '1200px';
+      canvas.style.height = '1600px';
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.fillStyle = '#10141b';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#ff8b8b';
+      ctx.font = '20px sans-serif';
+      ctx.fillText(`Страница ${pageNumber}: пустые данные изображения`, 40, 80);
+      pushDiagnosticEvent('djvu.render.zero-dimension', { page: pageNumber });
       return;
     }
 

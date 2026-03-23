@@ -4,45 +4,169 @@
 // at top-level scope don't crash in Node.js.
 
 if (typeof globalThis.document === 'undefined') {
+  // Helper: recursively collect all descendants of an element
+  function _descendants(el) {
+    const result = [];
+    for (const child of el.children) {
+      result.push(child);
+      result.push(..._descendants(child));
+    }
+    return result;
+  }
+
+  // Helper: check if an element matches a simple CSS selector
+  function _matches(el, selector) {
+    // tag selector
+    if (/^[a-zA-Z]+$/.test(selector)) {
+      return el.tagName === selector.toUpperCase();
+    }
+    // .className
+    if (selector.startsWith('.')) {
+      const cls = selector.slice(1);
+      return el.className === cls || (el.classList && el.classList.contains(cls));
+    }
+    // #id
+    if (selector.startsWith('#')) {
+      return el.id === selector.slice(1);
+    }
+    // attribute selector e.g. input[type="text"], div[style*="monospace"]
+    const attrMatch = selector.match(/^([a-zA-Z]*)\[([a-z]+)([~|^$*]?)="?([^"\]]*)"?\]$/);
+    if (attrMatch) {
+      const [, tagPart, attr, op, val] = attrMatch;
+      if (tagPart && el.tagName !== tagPart.toUpperCase()) return false;
+      let attrVal;
+      if (attr === 'style') {
+        attrVal = typeof el.style === 'object' && el.style.cssText ? el.style.cssText : '';
+      } else if (attr === 'type') {
+        attrVal = el.type ?? '';
+      } else if (attr === 'class') {
+        attrVal = el.className ?? '';
+      } else {
+        attrVal = el.getAttribute?.(attr) ?? '';
+      }
+      if (op === '*') return attrVal.includes(val);
+      if (op === '^') return attrVal.startsWith(val);
+      if (op === '$') return attrVal.endsWith(val);
+      return attrVal === val;
+    }
+    return false;
+  }
+
+  function _createElement(tag) {
+    const _listeners = {};
+    const _attributes = {};
+    const _classList = new Set();
+    const _children = [];
+    let _innerHTML = '';
+
+    const el = {
+      tagName: tag.toUpperCase(),
+      style: { cssText: '' },
+      width: 0,
+      height: 0,
+      className: '',
+      id: '',
+      type: undefined,
+      value: '',
+      min: '',
+      max: '',
+      checked: false,
+      classList: {
+        add(...cls) { cls.forEach(c => _classList.add(c)); el.className = [..._classList].join(' '); },
+        remove(...cls) { cls.forEach(c => _classList.delete(c)); el.className = [..._classList].join(' '); },
+        toggle(c, force) {
+          if (force !== undefined) { force ? _classList.add(c) : _classList.delete(c); }
+          else if (_classList.has(c)) { _classList.delete(c); }
+          else { _classList.add(c); }
+          el.className = [..._classList].join(' ');
+        },
+        contains(c) { return _classList.has(c); },
+      },
+      setAttribute(k, v) { _attributes[k] = String(v); if (k === 'class') { el.className = v; } },
+      getAttribute(k) { if (k === 'class') return el.className; return _attributes[k] ?? null; },
+      addEventListener(type, fn) {
+        if (!_listeners[type]) _listeners[type] = [];
+        _listeners[type].push(fn);
+      },
+      removeEventListener(type, fn) {
+        if (_listeners[type]) _listeners[type] = _listeners[type].filter(f => f !== fn);
+      },
+      dispatchEvent(evt) {
+        const fns = _listeners[evt.type] || [];
+        for (const fn of fns) fn(evt);
+      },
+      click() {
+        el.dispatchEvent(new Event('click'));
+      },
+      appendChild(child) {
+        if (child && !_children.includes(child)) {
+          _children.push(child);
+          child.parentNode = el;
+          if (el.tagName === 'SELECT' && child.tagName === 'OPTION' && _children.length === 1) {
+            el.value = child.value;
+          }
+        }
+        return child;
+      },
+      append(...nodes) {
+        for (const node of nodes) {
+          if (node != null) el.appendChild(node);
+        }
+      },
+      removeChild(child) {
+        const idx = _children.indexOf(child);
+        if (idx !== -1) {
+          _children.splice(idx, 1);
+          child.parentNode = null;
+        }
+        return child;
+      },
+      remove() {
+        if (el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      },
+      querySelector(selector) {
+        const all = _descendants(el);
+        return all.find(c => _matches(c, selector)) ?? null;
+      },
+      querySelectorAll(selector) {
+        const all = _descendants(el);
+        return all.filter(c => _matches(c, selector));
+      },
+      get innerHTML() { return _innerHTML; },
+      set innerHTML(val) { _innerHTML = val; _children.length = 0; },
+      textContent: '',
+      get children() { return _children; },
+      dataset: {},
+      parentNode: null,
+      getContext() {
+        return {
+          drawImage() {}, fillRect() {}, clearRect() {}, strokeRect() {},
+          getImageData: () => ({ data: new Uint8Array(0), width: 0, height: 0 }),
+          putImageData() {}, createImageData: () => ({ data: new Uint8Array(0) }),
+          measureText: () => ({ width: 0 }), fillText() {}, strokeText() {},
+          beginPath() {}, closePath() {}, moveTo() {}, lineTo() {}, arc() {},
+          fill() {}, stroke() {}, save() {}, restore() {}, translate() {},
+          rotate() {}, scale() {}, setTransform() {}, resetTransform() {},
+          canvas: el,
+        };
+      },
+      toDataURL: () => 'data:image/png;base64,',
+      toBlob: (cb) => cb(new Blob()),
+    };
+    return el;
+  }
+
   globalThis.document = {
     getElementById: () => null,
     querySelector: () => null,
     querySelectorAll: () => [],
-    createElement: (tag) => {
-      const el = {
-        tagName: tag.toUpperCase(),
-        style: {},
-        width: 0,
-        height: 0,
-        classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
-        setAttribute() {},
-        getAttribute() { return null; },
-        addEventListener() {},
-        removeEventListener() {},
-        appendChild() {},
-        remove() {},
-        innerHTML: '',
-        textContent: '',
-        children: [],
-        parentNode: null,
-        getContext() {
-          return {
-            drawImage() {}, fillRect() {}, clearRect() {}, strokeRect() {},
-            getImageData: () => ({ data: new Uint8Array(0), width: 0, height: 0 }),
-            putImageData() {}, createImageData: () => ({ data: new Uint8Array(0) }),
-            measureText: () => ({ width: 0 }), fillText() {}, strokeText() {},
-            beginPath() {}, closePath() {}, moveTo() {}, lineTo() {}, arc() {},
-            fill() {}, stroke() {}, save() {}, restore() {}, translate() {},
-            rotate() {}, scale() {}, setTransform() {}, resetTransform() {},
-            canvas: el,
-          };
-        },
-        toDataURL: () => 'data:image/png;base64,',
-        toBlob: (cb) => cb(new Blob()),
-      };
-      return el;
+    createElement: _createElement,
+    createDocumentFragment: () => {
+      const frag = { children: [], appendChild(child) { frag.children.push(child); return child; }, append(...nodes) { for (const n of nodes) if (n != null) frag.appendChild(n); } };
+      return frag;
     },
-    createDocumentFragment: () => ({ appendChild() {}, children: [] }),
     body: { appendChild() {}, style: {} },
     head: { appendChild() {} },
     documentElement: { style: {} },
@@ -52,9 +176,26 @@ if (typeof globalThis.document === 'undefined') {
 }
 
 if (typeof globalThis.window === 'undefined') {
+  const _winListeners = {};
   globalThis.window = {
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type, fn, opts) {
+      if (!_winListeners[type]) _winListeners[type] = [];
+      _winListeners[type].push({ fn, once: !!(opts && opts.once) });
+    },
+    removeEventListener(type, fn) {
+      if (_winListeners[type]) _winListeners[type] = _winListeners[type].filter(e => e.fn !== fn);
+    },
+    dispatchEvent(evt) {
+      const entries = (_winListeners[evt.type] || []).slice();
+      for (const entry of entries) {
+        entry.fn(evt);
+        if (entry.once) {
+          const arr = _winListeners[evt.type];
+          const idx = arr.indexOf(entry);
+          if (idx !== -1) arr.splice(idx, 1);
+        }
+      }
+    },
     getComputedStyle: () => ({}),
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     innerWidth: 1920,
@@ -125,6 +266,32 @@ if (typeof globalThis.URL === 'undefined' || !URL.createObjectURL) {
 
 if (typeof globalThis.Blob === 'undefined') {
   globalThis.Blob = class Blob { constructor() {} };
+}
+
+if (typeof globalThis.FileReader === 'undefined') {
+  globalThis.FileReader = class FileReader {
+    constructor() {
+      this.result = null;
+      this.onload = null;
+      this.onerror = null;
+    }
+    readAsText(blob) {
+      blob.text().then((text) => {
+        this.result = text;
+        if (this.onload) this.onload({ target: this });
+      }).catch((err) => {
+        if (this.onerror) this.onerror(err);
+      });
+    }
+    readAsArrayBuffer(blob) {
+      blob.arrayBuffer().then((buf) => {
+        this.result = buf;
+        if (this.onload) this.onload({ target: this });
+      }).catch((err) => {
+        if (this.onerror) this.onerror(err);
+      });
+    }
+  };
 }
 
 if (typeof globalThis.Image === 'undefined') {

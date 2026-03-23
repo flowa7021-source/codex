@@ -221,14 +221,17 @@ export async function renderCurrentPage() {
 
   els.emptyState.style.display = 'none';
 
-  // ── Trigger page transition animation ──
+  // ── Trigger page transition animation (without forced reflow) ──
   els.canvas.classList.remove('page-transitioning');
-  // Force reflow so re-adding the class restarts the animation
-  void els.canvas.offsetWidth;
-  els.canvas.classList.add('page-transitioning');
-  els.canvas.addEventListener('animationend', () => {
-    els.canvas.classList.remove('page-transitioning');
-  }, { once: true });
+  requestAnimationFrame(() => {
+    // Only apply transition if this is still the current render generation
+    if (_renderGeneration === generation) {
+      els.canvas.classList.add('page-transitioning');
+      els.canvas.addEventListener('animationend', () => {
+        els.canvas.classList.remove('page-transitioning');
+      }, { once: true });
+    }
+  });
 
   // ── Fast path: exact cache hit (same zoom & rotation) -> instant display ──
   const cached = getCachedPage(page);

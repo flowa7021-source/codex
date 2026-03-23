@@ -1,0 +1,119 @@
+import './setup-dom.js';
+import { describe, it, beforeEach, mock } from 'node:test';
+import assert from 'node:assert/strict';
+import { PDFDocument } from 'pdf-lib';
+
+const {
+  listAttachments,
+  addAttachment,
+  extractAttachment,
+  deleteAttachment,
+  AttachmentPanel,
+} = await import('../../app/modules/attachment-manager.js');
+
+async function makeBlankPdf() {
+  const doc = await PDFDocument.create();
+  doc.addPage([200, 200]);
+  return doc.save();
+}
+
+describe('attachment-manager', () => {
+  it('listAttachments returns empty array for a blank PDF', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const result = await listAttachments(pdfBytes);
+    assert.ok(Array.isArray(result));
+    assert.equal(result.length, 0);
+  });
+
+  it('addAttachment embeds a file and returns a Blob', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const fileData = new Uint8Array([1, 2, 3, 4]);
+    const blob = await addAttachment(pdfBytes, 'test.txt', fileData, 'text/plain', 'A test file');
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('listAttachments finds an added attachment', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const fileData = new Uint8Array([10, 20, 30]);
+    const blob = await addAttachment(pdfBytes, 'data.bin', fileData, 'application/octet-stream');
+    const modifiedBytes = new Uint8Array(await blob.arrayBuffer());
+    const attachments = await listAttachments(modifiedBytes);
+    assert.equal(attachments.length, 1);
+    assert.equal(attachments[0].name, 'data.bin');
+    assert.equal(attachments[0].index, 0);
+  });
+
+  it('addAttachment can add multiple attachments', async () => {
+    let pdfBytes = await makeBlankPdf();
+    const blob1 = await addAttachment(pdfBytes, 'a.txt', new Uint8Array([1]));
+    const bytes1 = new Uint8Array(await blob1.arrayBuffer());
+    const blob2 = await addAttachment(bytes1, 'b.txt', new Uint8Array([2]));
+    const bytes2 = new Uint8Array(await blob2.arrayBuffer());
+    const list = await listAttachments(bytes2);
+    assert.equal(list.length, 2);
+  });
+
+  it('extractAttachment retrieves embedded file data', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const fileData = new Uint8Array([42, 43, 44]);
+    const blob = await addAttachment(pdfBytes, 'extract-me.bin', fileData);
+    const modifiedBytes = new Uint8Array(await blob.arrayBuffer());
+    const result = await extractAttachment(modifiedBytes, 0);
+    assert.ok(result !== null);
+    assert.equal(result.name, 'extract-me.bin');
+    assert.ok(result.data instanceof Uint8Array);
+    assert.ok(result.data.length > 0);
+  });
+
+  it('extractAttachment returns null for out-of-range index', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const result = await extractAttachment(pdfBytes, 99);
+    assert.equal(result, null);
+  });
+
+  it('deleteAttachment removes an attachment', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const blob1 = await addAttachment(pdfBytes, 'del.txt', new Uint8Array([1, 2]));
+    const bytes1 = new Uint8Array(await blob1.arrayBuffer());
+    // Confirm it exists
+    const before = await listAttachments(bytes1);
+    assert.equal(before.length, 1);
+    // Delete it
+    const blob2 = await deleteAttachment(bytes1, 0);
+    const bytes2 = new Uint8Array(await blob2.arrayBuffer());
+    const after = await listAttachments(bytes2);
+    assert.equal(after.length, 0);
+  });
+
+  it('deleteAttachment with invalid index returns unchanged PDF', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const blob = await deleteAttachment(pdfBytes, 999);
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('listAttachments accepts ArrayBuffer input', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const ab = pdfBytes.buffer.slice(pdfBytes.byteOffset, pdfBytes.byteOffset + pdfBytes.byteLength);
+    const result = await listAttachments(ab);
+    assert.ok(Array.isArray(result));
+  });
+
+  it('AttachmentPanel constructor initializes', () => {
+    const container = globalThis.document.createElement('div');
+    const panel = new AttachmentPanel(container, {
+      getPdfBytes: () => new Uint8Array(0),
+      onApply: () => {},
+    });
+    assert.ok(panel);
+    assert.equal(panel._panel, null);
+  });
+
+  it('AttachmentPanel close is safe when not open', () => {
+    const container = globalThis.document.createElement('div');
+    const panel = new AttachmentPanel(container, {
+      getPdfBytes: () => new Uint8Array(0),
+      onApply: () => {},
+    });
+    assert.doesNotThrow(() => panel.close());
+  });
+});
