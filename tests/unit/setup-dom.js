@@ -56,6 +56,8 @@ if (typeof globalThis.document === 'undefined') {
     const _listeners = {};
     const _attributes = {};
     const _classList = new Set();
+    const _children = [];
+    let _innerHTML = '';
 
     const el = {
       tagName: tag.toUpperCase(),
@@ -97,11 +99,10 @@ if (typeof globalThis.document === 'undefined') {
         el.dispatchEvent(new Event('click'));
       },
       appendChild(child) {
-        if (child && !el.children.includes(child)) {
-          el.children.push(child);
+        if (child && !_children.includes(child)) {
+          _children.push(child);
           child.parentNode = el;
-          // Auto-select first option for SELECT elements (mimics browser behavior)
-          if (el.tagName === 'SELECT' && child.tagName === 'OPTION' && el.children.length === 1) {
+          if (el.tagName === 'SELECT' && child.tagName === 'OPTION' && _children.length === 1) {
             el.value = child.value;
           }
         }
@@ -113,9 +114,9 @@ if (typeof globalThis.document === 'undefined') {
         }
       },
       removeChild(child) {
-        const idx = el.children.indexOf(child);
+        const idx = _children.indexOf(child);
         if (idx !== -1) {
-          el.children.splice(idx, 1);
+          _children.splice(idx, 1);
           child.parentNode = null;
         }
         return child;
@@ -133,9 +134,10 @@ if (typeof globalThis.document === 'undefined') {
         const all = _descendants(el);
         return all.filter(c => _matches(c, selector));
       },
-      innerHTML: '',
+      get innerHTML() { return _innerHTML; },
+      set innerHTML(val) { _innerHTML = val; _children.length = 0; },
       textContent: '',
-      children: [],
+      get children() { return _children; },
       dataset: {},
       parentNode: null,
       getContext() {
