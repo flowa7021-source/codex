@@ -9,6 +9,12 @@ async function openApp(page) {
   await page.waitForSelector('.app-shell', { timeout: 10_000 });
 }
 
+async function openSettingsModal(page) {
+  await page.locator('[data-sidebar-tab="settings"]').click();
+  await page.waitForTimeout(300);
+  await page.locator('#openSettingsModal').click();
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // A. File Open & Navigation Flow
 // ═══════════════════════════════════════════════════════════════════════════
@@ -89,7 +95,7 @@ test.describe('A — File open & navigation flow', () => {
 test.describe('B — Settings & theme flow', () => {
   test('open settings modal and navigate to appearance tab', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
     // Click appearance tab
     const appearanceTab = page.locator('[data-modal-tab="appearance"]');
@@ -101,7 +107,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('change theme to light and verify class on body', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('[data-modal-tab="appearance"]').click();
     await page.locator('#cfgTheme').selectOption('light');
     await page.locator('#saveSettingsModal').click();
@@ -116,7 +122,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('change theme to dark and verify class on body', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('[data-modal-tab="appearance"]').click();
     await page.locator('#cfgTheme').selectOption('dark');
     await page.locator('#saveSettingsModal').click();
@@ -131,7 +137,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('change theme to sepia and verify class on body', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('[data-modal-tab="appearance"]').click();
     await page.locator('#cfgTheme').selectOption('sepia');
     await page.locator('#saveSettingsModal').click();
@@ -146,7 +152,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('change language to English and verify UI text updates', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('[data-modal-tab="appearance"]').click();
     await page.locator('#cfgAppLang').selectOption('en');
     await page.locator('#saveSettingsModal').click();
@@ -160,7 +166,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('close settings modal with close button', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
     await page.locator('#closeSettingsModal').click();
     await page.waitForTimeout(300);
@@ -169,7 +175,7 @@ test.describe('B — Settings & theme flow', () => {
 
   test('settings modal tabs are all clickable', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     const tabs = ['general', 'appearance', 'ocr', 'hotkeys', 'advanced'];
     for (const tab of tabs) {
       const tabBtn = page.locator(`[data-modal-tab="${tab}"]`);
@@ -275,7 +281,7 @@ test.describe('D — Keyboard shortcuts flow', () => {
 
   test('Escape closes settings modal', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
@@ -486,7 +492,7 @@ test.describe('F — Annotations toolbar flow', () => {
     await page.waitForTimeout(300);
     const drawTool = page.locator('#drawTool');
     await expect(drawTool).toBeVisible();
-    const options = await drawTool.locator('option').allValues();
+    const options = await drawTool.locator('option').evaluateAll(els => els.map(el => el.value));
     expect(options).toContain('pen');
     expect(options).toContain('highlighter');
     expect(options).toContain('eraser');
@@ -555,21 +561,21 @@ test.describe('F — Annotations toolbar flow', () => {
 test.describe('G — Export/print flow', () => {
   test('print button exists and is clickable', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     const printBtn = page.locator('#printPage');
     await expect(printBtn).toBeVisible();
     await expect(printBtn).toBeEnabled();
   });
 
-  test('clicking print opens print modal dialog', async ({ page }) => {
+  test('Ctrl+P opens print modal dialog', async ({ page }) => {
     await openApp(page);
-    // Override window.print to prevent actual print dialog
-    await page.evaluate(() => { window.print = () => {}; });
-    await page.locator('#printPage').click();
+    // Ctrl+P triggers the print dialog modal (not #printPage click which uses printCanvasPage)
+    await page.keyboard.press('Control+p');
     await page.waitForTimeout(500);
     const printModal = page.locator('#printModal');
     const isOpen = await printModal.evaluate(el =>
       el.classList.contains('open') ||
-      el.style.display !== 'none' ||
       el.getAttribute('aria-hidden') === 'false'
     );
     expect(isOpen).toBe(true);
@@ -577,10 +583,8 @@ test.describe('G — Export/print flow', () => {
 
   test('print modal has page range options', async ({ page }) => {
     await openApp(page);
-    await page.evaluate(() => { window.print = () => {}; });
-    await page.locator('#printPage').click();
+    await page.keyboard.press('Control+p');
     await page.waitForTimeout(500);
-    // Check for range radio buttons
     const rangeOptions = page.locator('input[name="printRange"]');
     const count = await rangeOptions.count();
     expect(count).toBeGreaterThanOrEqual(2);
@@ -588,8 +592,7 @@ test.describe('G — Export/print flow', () => {
 
   test('print modal has scale and orientation selectors', async ({ page }) => {
     await openApp(page);
-    await page.evaluate(() => { window.print = () => {}; });
-    await page.locator('#printPage').click();
+    await page.keyboard.press('Control+p');
     await page.waitForTimeout(500);
     await expect(page.locator('#printScale')).toBeVisible();
     await expect(page.locator('#printOrientation')).toBeVisible();
@@ -597,15 +600,13 @@ test.describe('G — Export/print flow', () => {
 
   test('print modal can be closed with cancel button', async ({ page }) => {
     await openApp(page);
-    await page.evaluate(() => { window.print = () => {}; });
-    await page.locator('#printPage').click();
+    await page.keyboard.press('Control+p');
     await page.waitForTimeout(500);
     await page.locator('#printCancel').click();
     await page.waitForTimeout(300);
     const printModal = page.locator('#printModal');
     const isClosed = await printModal.evaluate(el =>
       !el.classList.contains('open') ||
-      el.style.display === 'none' ||
       el.getAttribute('aria-hidden') === 'true'
     );
     expect(isClosed).toBe(true);
@@ -768,7 +769,7 @@ test.describe('I — Accessibility flow', () => {
 
   test('focus is moved into settings modal on open', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.waitForTimeout(500);
     // Focus should be inside the modal
     const focusInsideModal = await page.evaluate(() => {

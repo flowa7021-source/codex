@@ -9,7 +9,7 @@ const config = {
   workers: 1,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
-    baseURL: 'http://localhost:4173/',
+    baseURL: 'http://127.0.0.1:4173/',
     headless: true,
     viewport: { width: 1440, height: 900 },
     screenshot: 'only-on-failure',

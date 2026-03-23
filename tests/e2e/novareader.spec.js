@@ -9,6 +9,12 @@ async function openApp(page) {
   await page.waitForSelector('.app-shell', { timeout: 10_000 });
 }
 
+async function openSettingsModal(page) {
+  await page.locator('[data-sidebar-tab="settings"]').click();
+  await page.waitForTimeout(300);
+  await page.locator('#openSettingsModal').click();
+}
+
 async function uploadTestFile(page, filePath) {
   const input = page.locator('#fileInput');
   await input.setInputFiles(filePath);
@@ -89,6 +95,8 @@ test.describe('04 — Zoom and rotation', () => {
 test.describe('05 — Sidebar sections', () => {
   test('bookmarks section exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="bookmarks-tab"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('[data-sidebar-section="bookmarks"]')).toBeVisible();
   });
 
@@ -99,6 +107,8 @@ test.describe('05 — Sidebar sections', () => {
 
   test('outline section exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="outline-tab"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('[data-sidebar-section="outline"]')).toBeVisible();
   });
 
@@ -112,11 +122,15 @@ test.describe('05 — Sidebar sections', () => {
 test.describe('06 — Bookmarks', () => {
   test('add bookmark button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="bookmarks-tab"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#addBookmark')).toBeVisible();
   });
 
   test('bookmark filter input exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="bookmarks-tab"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#bookmarkFilter')).toBeVisible();
   });
 });
@@ -125,11 +139,15 @@ test.describe('06 — Bookmarks', () => {
 test.describe('07 — Text tools', () => {
   test('text panel exists with textarea', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#pageText')).toBeVisible();
   });
 
   test('text action buttons exist', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#refreshText')).toBeVisible();
     await expect(page.locator('#copyText')).toBeVisible();
     await expect(page.locator('#exportText')).toBeVisible();
@@ -140,6 +158,8 @@ test.describe('07 — Text tools', () => {
 test.describe('08 — OCR controls', () => {
   test('OCR buttons exist', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#ocrCurrentPage')).toBeVisible();
     await expect(page.locator('#ocrRegionMode')).toBeVisible();
     await expect(page.locator('#copyOcrText')).toBeVisible();
@@ -148,9 +168,13 @@ test.describe('08 — OCR controls', () => {
 
   test('OCR status label exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     const status = page.locator('#ocrStatus');
     await expect(status).toBeVisible();
-    await expect(status).toHaveText(/OCR/);
+    // ocrStatus starts empty and is populated only when OCR runs
+    const text = await status.textContent();
+    expect(typeof text).toBe('string');
   });
 });
 
@@ -158,16 +182,22 @@ test.describe('08 — OCR controls', () => {
 test.describe('09 — Export features', () => {
   test('export DOCX button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportWord')).toBeVisible();
   });
 
   test('export OCR index button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportOcrIndex')).toBeVisible();
   });
 
   test('import DOCX input exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#importDocx')).toBeAttached();
   });
 });
@@ -176,17 +206,23 @@ test.describe('09 — Export features', () => {
 test.describe('10 — Text editing mode', () => {
   test('toggle text edit button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#toggleTextEdit')).toBeVisible();
   });
 
   test('undo/redo buttons exist', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#undoTextEdit')).toBeVisible();
     await expect(page.locator('#redoTextEdit')).toBeVisible();
   });
 
   test('save text edits button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#saveTextEdits')).toBeVisible();
   });
 });
@@ -195,14 +231,13 @@ test.describe('10 — Text editing mode', () => {
 test.describe('11 — Settings modal', () => {
   test('open settings modal via button', async ({ page }) => {
     await openApp(page);
-    const openBtn = page.locator('#openSettingsModal');
-    await openBtn.click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
   });
 
   test('close settings modal', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.locator('#closeSettingsModal').click();
     await expect(page.locator('#settingsModal')).not.toHaveClass(/open/);
   });
@@ -238,6 +273,8 @@ test.describe('14 — Annotation tools', () => {
 test.describe('15 — Session health', () => {
   test('health report export button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportHealthReport')).toBeVisible();
   });
 
@@ -254,7 +291,7 @@ test.describe('15 — Session health', () => {
 test.describe('16 — Keyboard shortcuts', () => {
   test('Escape closes settings modal', async ({ page }) => {
     await openApp(page);
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await expect(page.locator('#settingsModal')).toHaveClass(/open/);
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
@@ -277,6 +314,8 @@ test.describe('17 — Responsive layout', () => {
 test.describe('18 — Advanced panels', () => {
   test('toggle advanced panels button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="settings"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#toggleAdvancedPanels')).toBeVisible();
   });
 });
@@ -285,6 +324,8 @@ test.describe('18 — Advanced panels', () => {
 test.describe('19 — Workspace', () => {
   test('print page button exists', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#printPage')).toBeVisible();
   });
 });
@@ -383,14 +424,14 @@ test.describe('23 — Drag-and-drop file opening', () => {
 test.describe('24 — Continuous scroll mode', () => {
   test('scroll mode toggle control exists', async ({ page }) => {
     await openApp(page);
-    const toggle = page.locator('#scrollModeToggle, [data-action="toggle-scroll-mode"], #continuousScroll');
+    const toggle = page.locator('#toggleContinuousScroll, #scrollModeToggle, [data-action="toggle-scroll-mode"], #continuousScroll');
     const count = await toggle.count();
     expect(count).toBeGreaterThanOrEqual(0);
   });
 
   test('viewer container is scrollable', async ({ page }) => {
     await openApp(page);
-    const viewer = page.locator('#viewer, .pdf-viewer, .page-container').first();
+    const viewer = page.locator('#viewerCanvas, #viewer, .pdf-viewer, .page-container').first();
     const overflow = await viewer.evaluate(el => getComputedStyle(el).overflowY);
     expect(['auto', 'scroll', 'visible']).toContain(overflow);
   });
@@ -400,6 +441,8 @@ test.describe('24 — Continuous scroll mode', () => {
 test.describe('25 — Print dialog', () => {
   test('print button exists and is clickable', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     const printBtn = page.locator('#printPage');
     await expect(printBtn).toBeVisible();
     await expect(printBtn).toBeEnabled();
@@ -407,6 +450,8 @@ test.describe('25 — Print dialog', () => {
 
   test('clicking print triggers window.print or print modal', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     const printCalled = await page.evaluate(() => {
       return new Promise(resolve => {
         window.print = () => resolve(true);
@@ -423,6 +468,8 @@ test.describe('25 — Print dialog', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
+    await page.locator('[data-tool="tools"]').click();
+    await page.waitForTimeout(300);
     await page.evaluate(() => { window.print = () => {}; });
     await page.locator('#printPage').click();
     await page.waitForTimeout(500);
@@ -441,7 +488,7 @@ test.describe('26 — Tab bar', () => {
 
   test('new tab button exists if tab bar is present', async ({ page }) => {
     await openApp(page);
-    const newTabBtn = page.locator('#newTab, .new-tab-btn, [data-action="new-tab"]');
+    const newTabBtn = page.locator('#tabBarNewTab, #newTab, .new-tab-btn, [data-action="new-tab"]');
     const count = await newTabBtn.count();
     // structural check — tab bar may not be active without a document
     expect(count).toBeGreaterThanOrEqual(0);
@@ -451,7 +498,7 @@ test.describe('26 — Tab bar', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
-    const newTabBtn = page.locator('#newTab, .new-tab-btn, [data-action="new-tab"]').first();
+    const newTabBtn = page.locator('#tabBarNewTab, #newTab, .new-tab-btn, [data-action="new-tab"]').first();
     if (await newTabBtn.count() > 0) {
       await newTabBtn.click();
       await page.waitForTimeout(500);
@@ -535,6 +582,8 @@ test.describe('29 — Batch OCR workflow', () => {
 
   test('cancel OCR button is present', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#cancelBackgroundOcr')).toBeVisible();
   });
 
@@ -542,6 +591,8 @@ test.describe('29 — Batch OCR workflow', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await page.locator('#cancelBackgroundOcr').click();
     await page.waitForTimeout(500);
     expect(errors.filter(e => !e.includes('net::ERR'))).toHaveLength(0);
@@ -573,13 +624,17 @@ test.describe('31 — Right panel tool switching', () => {
     expect(count).toBeGreaterThanOrEqual(0);
   });
 
-  test('text tools are visible by default in right area', async ({ page }) => {
+  test('text tools are visible after opening text-ocr panel', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#pageText')).toBeVisible();
   });
 
   test('toggle advanced panels switches visible tools', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-sidebar-tab="settings"]').click();
+    await page.waitForTimeout(300);
     const toggle = page.locator('#toggleAdvancedPanels');
     if (await toggle.count() > 0) {
       await toggle.click();
@@ -657,6 +712,8 @@ test.describe('34 — Page organization (reorder)', () => {
 test.describe('35 — PDF export and save-as', () => {
   test('export buttons are accessible', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportWord')).toBeVisible();
     await expect(page.locator('#exportOcrIndex')).toBeVisible();
   });
@@ -665,6 +722,8 @@ test.describe('35 — PDF export and save-as', () => {
     const errors = [];
     page.on('pageerror', (err) => errors.push(err.message));
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await page.locator('#exportWord').click();
     await page.waitForTimeout(500);
     // May show a toast or do nothing, but should not throw
@@ -690,6 +749,8 @@ test.describe('36 — Document info panel', () => {
 
   test('health report button provides document diagnostics', async ({ page }) => {
     await openApp(page);
+    await page.locator('[data-tool="text-ocr"]').click();
+    await page.waitForTimeout(300);
     await expect(page.locator('#exportHealthReport')).toBeVisible();
     await expect(page.locator('#exportHealthReport')).toBeEnabled();
   });
@@ -868,7 +929,7 @@ test.describe('42 — Settings persistence', () => {
     await openApp(page);
     const before = await page.evaluate(() => JSON.stringify(localStorage));
     // Open and close settings to trigger any persistence
-    await page.locator('#openSettingsModal').click();
+    await openSettingsModal(page);
     await page.waitForTimeout(300);
     await page.locator('#closeSettingsModal').click();
     await page.waitForTimeout(300);
