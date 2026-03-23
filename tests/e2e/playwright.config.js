@@ -19,7 +19,7 @@ const config = {
   webServer: {
     command: 'npx vite preview --port 4173 --host 127.0.0.1',
     url: 'http://127.0.0.1:4173/',
-    timeout: 60_000,
+    timeout: 120_000,
     stdout: 'pipe',
     stderr: 'pipe',
     reuseExistingServer: true,
