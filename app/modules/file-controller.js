@@ -374,9 +374,11 @@ const _openFileImpl = async function openFileImpl(file) {
   _deps.renderSearchHistory();
   _deps.renderSearchResultsList();
   _deps.renderDocStats();
-  await _deps.renderOutline();
-  await _deps.renderPagePreviews();
+  // Render current page FIRST so the user sees content immediately,
+  // then outline and thumbnails in background (non-blocking).
+  _deps.renderOutline().catch((err) => { console.warn('[file-controller] outline error:', err?.message); });
   await _deps.renderCurrentPage();
+  _deps.renderPagePreviews().catch((err) => { console.warn('[file-controller] previews error:', err?.message); });
   try {
     performance.mark('file-parsed');
     performance.measure('file-parse', 'file-loaded', 'file-parsed');
