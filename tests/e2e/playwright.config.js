@@ -17,7 +17,7 @@ const config = {
     actionTimeout: 15_000,
   },
   webServer: {
-    command: 'node_modules/.bin/vite preview --port 4173 --host 127.0.0.1',
+    command: 'npx vite preview --port 4173 --host 127.0.0.1',
     url: 'http://127.0.0.1:4173/',
     timeout: 60_000,
     stdout: 'pipe',
