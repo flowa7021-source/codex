@@ -2,15 +2,49 @@ import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
-// Patch createElement to add missing methods
+// We need querySelector to work after innerHTML is set.
+// The mock doesn't parse HTML, so we override createElement to make
+// panel.querySelector return mock elements created on demand from innerHTML.
 const _origCreate = document.createElement;
-document.createElement = function (tag) {
+
+function createEnhancedElement(tag) {
   const el = _origCreate(tag);
-  el.getBoundingClientRect = el.getBoundingClientRect || (() => ({ top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0 }));
   el.focus = el.focus || (() => {});
   el.select = el.select || (() => {});
+  el.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0 });
+
+  // Enhanced querySelector: if no children match but innerHTML contains the class, create a mock
+  const origQS = el.querySelector.bind(el);
+  el.querySelector = function (selector) {
+    const result = origQS(selector);
+    if (result) return result;
+
+    // Fallback: check innerHTML for the class name and return a mock element
+    const html = el.innerHTML || '';
+    // Extract class from selector like '.search-input'
+    const classMatch = selector.match(/^\.([a-zA-Z0-9_-]+)$/);
+    if (classMatch && html.includes(classMatch[1])) {
+      const mockChild = createEnhancedElement('div');
+      mockChild.className = classMatch[1];
+      // Determine if it's an input
+      if (html.includes(`class="${classMatch[1]}"`) || html.includes(`class="` + classMatch[1] + `"`)) {
+        if (html.includes('type="text"') && html.includes(classMatch[1])) {
+          mockChild.value = '';
+          mockChild.checked = false;
+        }
+        if (html.includes('type="checkbox"') && html.includes(classMatch[1])) {
+          mockChild.checked = false;
+        }
+      }
+      return mockChild;
+    }
+    return null;
+  };
+
   return el;
-};
+}
+
+document.createElement = createEnhancedElement;
 
 // Provide body.contains
 document.body.contains = () => true;
@@ -90,20 +124,20 @@ describe('floating-search', () => {
   });
 
   it('initFloatingSearch appends panel to container', () => {
-    const container = document.createElement('div');
+    const container = createEnhancedElement('div');
     const result = initFloatingSearch(container);
     assert.ok(result.panel);
     assert.ok(container.children.length > 0);
   });
 
   it('initFloatingSearch returns toggle function', () => {
-    const container = document.createElement('div');
+    const container = createEnhancedElement('div');
     const result = initFloatingSearch(container);
     assert.equal(typeof result.toggle, 'function');
   });
 
   it('toggle shows and hides', () => {
-    const container = document.createElement('div');
+    const container = createEnhancedElement('div');
     const result = initFloatingSearch(container);
     result.toggle(); // show
     assert.equal(result.state.visible, true);

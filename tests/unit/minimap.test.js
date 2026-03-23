@@ -8,6 +8,7 @@ function createMinimapEls() {
   container.id = 'minimapContainer';
   container.style.display = 'none';
   container.clientHeight = 500;
+  container.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 500, right: 50, width: 50, height: 500, clientHeight: 500 });
 
   const track = document.createElement('div');
   track.id = 'minimapTrack';
@@ -16,6 +17,7 @@ function createMinimapEls() {
 
   const viewport = document.createElement('div');
   viewport.id = 'minimapViewport';
+  viewport.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0 });
 
   container.appendChild(track);
   container.appendChild(viewport);

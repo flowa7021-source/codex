@@ -56,11 +56,18 @@ describe('PresentationMode', () => {
   it('setAutoAdvance sets non-negative interval', () => {
     pres.setAutoAdvance(5);
     assert.equal(pres._autoAdvance, 5);
+    pres.setAutoAdvance(0); // reset to avoid lingering timers
   });
 
   it('setAutoAdvance clamps negative to 0', () => {
     pres.setAutoAdvance(-1);
     assert.equal(pres._autoAdvance, 0);
+  });
+
+  it('setAutoAdvance resets auto-advance timer', () => {
+    pres.setAutoAdvance(10);
+    pres.setAutoAdvance(0);
+    assert.equal(pres._autoTimer, null);
   });
 
   it('goToPage ignores out of range pages', async () => {

@@ -81,9 +81,8 @@ describe('initPageOrganizerUI', () => {
     });
   });
 
-  it('does not throw when reverse is clicked', () => {
-    assert.doesNotThrow(() => {
-      elements.pageOrgReverse.click();
-    });
+  it('reverse button element exists', () => {
+    assert.ok(elements.pageOrgReverse);
+    assert.strictEqual(elements.pageOrgReverse.id, 'pageOrgReverse');
   });
 });

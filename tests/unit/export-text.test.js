@@ -1,7 +1,7 @@
 import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { initExportTextDeps } from '../../app/modules/export-text.js';
+import { initExportTextDeps, importDocxEdits, exportSessionHealthReport } from '../../app/modules/export-text.js';
 
 describe('initExportTextDeps', () => {
   it('is a function', () => {
@@ -24,5 +24,26 @@ describe('initExportTextDeps', () => {
     assert.doesNotThrow(() => {
       initExportTextDeps({ setOcrStatus: () => {} });
     });
+  });
+});
+
+describe('importDocxEdits', () => {
+  it('is an async function', () => {
+    assert.equal(typeof importDocxEdits, 'function');
+  });
+
+  it('returns early for null file', async () => {
+    // Should not throw
+    await importDocxEdits(null);
+  });
+
+  it('returns early for undefined file', async () => {
+    await importDocxEdits(undefined);
+  });
+});
+
+describe('exportSessionHealthReport', () => {
+  it('is a function', () => {
+    assert.equal(typeof exportSessionHealthReport, 'function');
   });
 });

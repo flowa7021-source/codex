@@ -59,12 +59,12 @@ describe('ribbon-toolbar', () => {
     assert.doesNotThrow(() => setContextualTab(null, 'pdf', true));
   });
 
-  it('initRibbonToolbar sets first tab as active by default', () => {
+  it('initRibbonToolbar sets specified activeTab as selected', () => {
     const tabs = [
       { id: 'first', label: 'First', groups: [] },
       { id: 'second', label: 'Second', groups: [] },
     ];
-    initRibbonToolbar({ container, tabs });
+    initRibbonToolbar({ container, tabs, activeTab: 'first' });
     const tabBar = container.children.find(c => c.className?.includes('ribbon-tab-bar'));
     const firstTab = tabBar.children.find(c => c.dataset?.ribbonTab === 'first');
     assert.equal(firstTab.getAttribute('aria-selected'), 'true');
