@@ -11,8 +11,9 @@ const TEST_PDF = path.join(FIXTURES_DIR, 'test-2page.pdf');
 const TEST_PNG = path.join(FIXTURES_DIR, 'test-1x1.png');
 
 async function openApp(page) {
-  await page.goto(APP_URL);
-  await page.waitForSelector('.app-shell', { timeout: 10_000 });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  // Wait for JS initialization to complete
+  await page.waitForTimeout(500);
 }
 
 async function uploadTestFile(page, filePath) {

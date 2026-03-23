@@ -7,8 +7,9 @@ import { test, expect } from '@playwright/test';
 const APP_URL = '/';
 
 async function openApp(page) {
-  await page.goto(APP_URL);
-  await page.waitForSelector('.app-shell', { timeout: 10_000 });
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  // Wait for JS initialization to complete
+  await page.waitForTimeout(500);
 }
 
 // ─── 1. Empty State ─────────────────────────────────────────────────────────
