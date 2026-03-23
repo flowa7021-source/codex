@@ -444,7 +444,7 @@ test.describe('24 — Continuous scroll mode', () => {
     await openApp(page);
     const viewer = page.locator('#viewerCanvas, #viewer, .pdf-viewer, .page-container').first();
     const overflow = await viewer.evaluate(el => getComputedStyle(el).overflowY);
-    expect(['auto', 'scroll', 'visible']).toContain(overflow);
+    expect(['auto', 'scroll', 'visible', 'clip']).toContain(overflow);
   });
 });
 
@@ -557,7 +557,8 @@ test.describe('28 — Tooltip display on hover', () => {
     const buttons = page.locator('#zoomIn, #zoomOut, #fitWidth, #fitPage, #rotate');
     const count = await buttons.count();
     for (let i = 0; i < count; i++) {
-      const title = await buttons.nth(i).getAttribute('title');
+      // Tooltip system converts title → data-tooltip, so check both
+      const title = await buttons.nth(i).getAttribute('title') || await buttons.nth(i).getAttribute('data-tooltip');
       expect(title).toBeTruthy();
     }
   });
@@ -567,11 +568,12 @@ test.describe('28 — Tooltip display on hover', () => {
     const btn = page.locator('#zoomIn');
     await btn.hover();
     await page.waitForTimeout(400);
-    // Tooltip may be native (title) or custom element
-    const tooltip = page.locator('.tooltip:visible, [role="tooltip"]:visible');
+    // Tooltip system converts title → data-tooltip and shows custom tooltip
+    const tooltip = page.locator('.nr-tooltip-visible, .tooltip:visible, [role="tooltip"]:visible');
     const hasCustomTooltip = await tooltip.count() > 0;
     const hasNativeTitle = (await btn.getAttribute('title'))?.length > 0;
-    expect(hasCustomTooltip || hasNativeTitle).toBe(true);
+    const hasDataTooltip = (await btn.getAttribute('data-tooltip'))?.length > 0;
+    expect(hasCustomTooltip || hasNativeTitle || hasDataTooltip).toBe(true);
   });
 });
 

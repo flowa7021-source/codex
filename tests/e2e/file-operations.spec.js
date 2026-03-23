@@ -45,18 +45,21 @@ test.describe('A — File open flow', () => {
     await openApp(page);
     const input = page.locator('#fileInput');
     // Should not throw when setting a PDF file
+    // Note: the change handler clears input.value after reading the file,
+    // so we verify acceptance by checking no errors are thrown and the
+    // viewer canvas becomes visible (file was processed).
     await input.setInputFiles(TEST_PDF);
-    // The input should now have files
-    const fileCount = await input.evaluate(el => el.files?.length ?? 0);
-    expect(fileCount).toBe(1);
+    await expect(page.locator('#viewerCanvas')).toBeVisible({ timeout: 3000 });
   });
 
   test('file input accepts image files via setInputFiles', async ({ page }) => {
     await openApp(page);
     const input = page.locator('#fileInput');
+    // Note: the change handler clears input.value after reading the file,
+    // so we verify acceptance by checking no errors are thrown and the
+    // viewer canvas becomes visible (file was processed).
     await input.setInputFiles(TEST_PNG);
-    const fileCount = await input.evaluate(el => el.files?.length ?? 0);
-    expect(fileCount).toBe(1);
+    await expect(page.locator('#viewerCanvas')).toBeVisible({ timeout: 3000 });
   });
 
   test('viewer area changes after file selection — canvas becomes visible', async ({ page }) => {

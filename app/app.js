@@ -416,6 +416,7 @@ initKeyboard({
   navigateHistoryBack, navigateHistoryForward, addBookmark,
   setDrawMode, setOcrRegionMode, setOcrStatus,
   undoStroke, undoPageEdit, redoPageEdit, showShortcutsHelp,
+  closeSettingsModal,
 });
 
 document.addEventListener('visibilitychange', syncReadingTimerWithVisibility);

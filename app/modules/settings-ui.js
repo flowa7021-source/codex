@@ -155,7 +155,7 @@ export function openSettingsModal() {
   if (els.cfgShowSearch) els.cfgShowSearch.checked = !searchHidden;
   if (els.cfgShowAnnot) els.cfgShowAnnot.checked = !annotHidden;
   if (els.cfgShowText) els.cfgShowText.checked = !textHidden;
-  if (els.cfgTheme) els.cfgTheme.value = document.body.classList.contains('light') ? 'light' : 'dark';
+  if (els.cfgTheme) els.cfgTheme.value = localStorage.getItem('novareader-theme') || 'dark';
   if (els.cfgAppLang) els.cfgAppLang.value = state.settings?.appLang || 'ru';
   if (els.cfgOcrLang) els.cfgOcrLang.value = state.settings?.ocrLang || 'auto';
   if (els.cfgOcrCyrillicOnly) els.cfgOcrCyrillicOnly.checked = state.settings?.ocrCyrillicOnly !== false;
@@ -193,6 +193,12 @@ export function openSettingsModal() {
 
   // Populate OCR storage info when modal opens
   if (typeof _deps.refreshOcrStorageInfo === 'function') _deps.refreshOcrStorageInfo();
+
+  // Move focus into the modal for accessibility
+  requestAnimationFrame(() => {
+    const firstFocusable = els.settingsModal.querySelector('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (firstFocusable) /** @type {HTMLElement} */ (firstFocusable).focus();
+  });
 }
 
 export function closeSettingsModal(saved = false) {
@@ -255,8 +261,16 @@ export function saveSettingsFromModal() {
   if (els.cfgShowText) setHidden('textHidden', els.cfgShowText.checked);
 
   if (els.cfgTheme) {
-    document.body.classList.toggle('light', els.cfgTheme.value === 'light');
-    localStorage.setItem('novareader-theme', els.cfgTheme.value === 'light' ? 'light' : 'dark');
+    const theme = els.cfgTheme.value || 'dark';
+    const THEME_CLASSES = ['light', 'sepia', 'high-contrast', 'theme-auto'];
+    THEME_CLASSES.forEach(c => document.body.classList.remove(c));
+    if (theme === 'light') document.body.classList.add('light');
+    else if (theme === 'sepia') document.body.classList.add('sepia');
+    else if (theme === 'high-contrast') document.body.classList.add('high-contrast');
+    else if (theme === 'auto') document.body.classList.add('theme-auto');
+    const effectiveTheme = (theme === 'light' || theme === 'sepia') ? 'light' : 'dark';
+    document.documentElement.dataset.theme = effectiveTheme;
+    localStorage.setItem('novareader-theme', theme);
   }
 
   state.settings = state.settings || _deps.defaultSettings();

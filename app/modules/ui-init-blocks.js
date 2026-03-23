@@ -709,16 +709,9 @@ function initNovaReader3UI(/* deps not needed */) {
     }
   });
 
-  // ── Sidebar toggle (Acrobat Pro style) ──
-  const toggleSidebarBtn = document.getElementById('toggleSidebar');
-  if (toggleSidebarBtn) {
-    toggleSidebarBtn.addEventListener('click', () => {
-      if (appShell) {
-        appShell.classList.toggle('sidebar-hidden');
-        toggleSidebarBtn.classList.toggle('active', !appShell.classList.contains('sidebar-hidden'));
-      }
-    });
-  }
+  // ── Sidebar toggle ──
+  // Note: sidebar toggle is wired in init-event-bindings.js via toggleLayoutState('sidebarHidden')
+  // which handles both localStorage persistence and DOM class updates via applyLayoutState().
 
   // ── Make sidebar tabs work with new left panel layout ──
   document.querySelectorAll('.lp-tabs button[data-sidebar-tab], .sidebar-tabs button[data-sidebar-tab]').forEach(btn => {

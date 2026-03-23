@@ -99,6 +99,9 @@ export function initKeyboard(deps) {
     if (e.key === 'Escape' && state.ocrRegionMode) {
       setOcrRegionMode(false);
     }
+    if (e.key === 'Escape' && els.settingsModal?.classList.contains('open')) {
+      deps.closeSettingsModal();
+    }
     if (e.key === '?' && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
       e.preventDefault();
       showShortcutsHelp();
