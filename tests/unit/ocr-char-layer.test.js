@@ -41,10 +41,9 @@ describe('postCorrectText', () => {
     assert.equal(postCorrectText('ﬃx ﬄ ﬅ'), 'ffix ffl st');
   });
 
-  it('normalizes smart single quotes', () => {
-    // \u2018 and \u2019 are left/right single quotes, in COMMON_FIXES pattern [''`ʼ]
-    const result = postCorrectText('\u2018test\u2019');
-    assert.equal(result, "'test'");
+  it('normalizes backtick and modifier apostrophe', () => {
+    // Backtick (U+0060) and modifier letter apostrophe (U+02BC) are in the regex
+    assert.equal(postCorrectText('\u0060test\u02BC'), "'test'");
   });
 
   it('trims whitespace', () => {

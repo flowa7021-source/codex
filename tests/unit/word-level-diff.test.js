@@ -107,7 +107,7 @@ describe('DiffViewer', () => {
   it('switches mode via setMode', () => {
     const container = document.createElement('div');
     const viewer = new DiffViewer(container);
-    const result = diffWords('hello', 'world');
+    const result = diffWords('hello world', 'hello earth');
     viewer.show(result);
     viewer.setMode('side-by-side');
     // Panel should have been re-rendered
