@@ -70,7 +70,6 @@ const _deps = {
   renderCommentList: () => {},
   trackVisitedPage: () => {},
   renderReadingProgress: () => {},
-  setOcrStatus: () => {},
 };
 
 /**
