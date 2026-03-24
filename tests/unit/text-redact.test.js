@@ -334,7 +334,7 @@ describe('RedactionEditor – cancel button', () => {
 // RedactionEditor – scan button with real PDF
 // ---------------------------------------------------------------------------
 describe('RedactionEditor – scan button', () => {
-  it('scan button shows "No sensitive data found." for empty PDF', async () => {
+  it('scan button shows "No sensitive data found." for clean PDF', async () => {
     const pdfBytes = await makePdf('Hello World');
     const container = document.createElement('div');
     const deps = {
@@ -348,14 +348,10 @@ describe('RedactionEditor – scan button', () => {
     const buttons = panel.querySelectorAll('button');
     const scanBtn = buttons[0];
 
-    // Click scan and wait for async
     scanBtn.click();
-    // Wait for the scan to complete
     await new Promise(r => setTimeout(r, 500));
 
-    // Find status element (div with font-size:12px)
     const allDivs = panel.querySelectorAll('div');
-    // The status element has text about results
     let statusText = '';
     for (const d of allDivs) {
       if (d.textContent === 'No sensitive data found.' || d.textContent.includes('match')) {
@@ -364,6 +360,35 @@ describe('RedactionEditor – scan button', () => {
       }
     }
     assert.equal(statusText, 'No sensitive data found.');
+  });
+
+  it('scan button shows match counts when sensitive data is found', async () => {
+    // Create PDF with an email address (will be detected by the email pattern)
+    const pdfBytes = await makePdf('test@email.com 192.168.1.1', { pages: 1 });
+    const container = document.createElement('div');
+    const deps = {
+      getPdfBytes: () => pdfBytes,
+      onApply: mock.fn(),
+    };
+    const editor = new RedactionEditor(container, deps);
+    editor.open();
+
+    const panel = container.children[0];
+    const buttons = panel.querySelectorAll('button');
+    const scanBtn = buttons[0];
+
+    scanBtn.click();
+    await new Promise(r => setTimeout(r, 500));
+
+    const allDivs = panel.querySelectorAll('div');
+    let statusText = '';
+    for (const d of allDivs) {
+      if (d.textContent.includes('match')) {
+        statusText = d.textContent;
+        break;
+      }
+    }
+    assert.ok(statusText.includes('match'), `Expected match info, got: "${statusText}"`);
   });
 });
 
@@ -466,7 +491,7 @@ describe('RedactionEditor – apply button (pattern mode)', () => {
 // RedactionEditor – apply button in scan-all mode
 // ---------------------------------------------------------------------------
 describe('RedactionEditor – apply button (scan-all mode)', () => {
-  it('scans all patterns and calls onApply', async () => {
+  it('scans all patterns with no matches and calls onApply', async () => {
     const pdfBytes = await makePdf('Hello World');
     const container = document.createElement('div');
     const onApply = mock.fn();
@@ -477,18 +502,41 @@ describe('RedactionEditor – apply button (scan-all mode)', () => {
     const editor = new RedactionEditor(container, deps);
     editor.open();
 
-    // Switch to scan mode
     const modeSelect = panel_selects(container)[0];
     modeSelect.value = 'scan';
     modeSelect.dispatchEvent(new Event('change'));
 
     const applyBtn = panel_buttons(container)[2];
     applyBtn.click();
-    // Scan-all processes every pattern sequentially, allow more time
     await new Promise(r => setTimeout(r, 2000));
 
     assert.equal(onApply.mock.calls.length, 1);
     const result = onApply.mock.calls[0].arguments[0];
     assert.ok(typeof result.count === 'number');
+  });
+
+  it('scan-all with sensitive data redacts matches', async () => {
+    // PDF with an IP address that the ipv4 pattern will match
+    const pdfBytes = await makePdf('Contact 192.168.1.1 now', { pages: 1 });
+    const container = document.createElement('div');
+    const onApply = mock.fn();
+    const deps = {
+      getPdfBytes: () => pdfBytes,
+      onApply,
+    };
+    const editor = new RedactionEditor(container, deps);
+    editor.open();
+
+    const modeSelect = panel_selects(container)[0];
+    modeSelect.value = 'scan';
+    modeSelect.dispatchEvent(new Event('change'));
+
+    const applyBtn = panel_buttons(container)[2];
+    applyBtn.click();
+    await new Promise(r => setTimeout(r, 3000));
+
+    assert.equal(onApply.mock.calls.length, 1);
+    const result = onApply.mock.calls[0].arguments[0];
+    assert.ok(result.count >= 1, `Expected at least 1 redaction, got ${result.count}`);
   });
 });
