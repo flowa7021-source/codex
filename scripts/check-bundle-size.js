@@ -12,7 +12,7 @@ const BUDGETS = {
   // Main JS entry (gzipped)
   'js/index-*.js': { maxGzip: 400_000, label: 'Main JS bundle' },
   // CSS
-  'assets/index-*.css': { maxGzip: 15_000, label: 'Main CSS' },
+  'assets/*.css': { maxGzip: 15_000, label: 'Main CSS' },
   // Vendor chunks (gzipped)
   'chunks/pdf-lib-*.js': { maxGzip: 220_000, label: 'pdf-lib chunk' },
   'chunks/docx-*.js': { maxGzip: 120_000, label: 'docx chunk' },
