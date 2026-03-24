@@ -54,6 +54,7 @@ import { createPdfFromImages, createBlankPdf, canvasesToPdf } from './modules/pd
 import { initQuickActions, hideQuickActions } from './modules/quick-actions.js';
 import { initHotkeys, onHotkey, registerHotkeyHandlers, isSpaceHeld, getBindings, getCheatsheet } from './modules/hotkeys.js';
 import { CbzAdapter } from './modules/cbz-adapter.js';
+import { EraseUIController, EraseTool } from './modules/erase-tool.js';
 import { initAutosave, triggerAutosave, markCleanExit, checkForRecovery, clearRecoveryData, startAutosaveTimer, stopAutosaveTimer, applyRecoveredSnapshot } from './modules/autosave.js';
 import { initAutoScroll, startAutoScroll, stopAutoScroll, toggleAutoScroll, setAutoScrollSpeed, isAutoScrolling } from './modules/auto-scroll.js';
 
@@ -438,10 +439,57 @@ initDiagnosticsDeps({
   getOcrSearchIndexSize: () => ocrSearchIndex.pages.size,
   getToolMode: () => toolStateMachine.current,
 });
+/** @type {EraseUIController|null} */
+let _eraseUIController = null;
+
+function activateEraseOverlay() {
+  if (_eraseUIController) _eraseUIController.destroy();
+  const canvas = els.annotationCanvas;
+  if (!canvas) return;
+  canvas.style.pointerEvents = 'auto';
+  canvas.style.zIndex = '20';
+  _eraseUIController = new EraseUIController(
+    /** @type {HTMLCanvasElement} */ (canvas),
+    async (rect, subMode) => {
+      const pm = window._advancedToolsHandle?.docModel?.pages?.get(state.currentPage);
+      if (!pm) return;
+      const eraser = new EraseTool(pm, state.pdfLibDoc ?? null, async (bytes) => {
+        state.pdfBytes = bytes;
+        reloadPdfFromBytes(bytes);
+      });
+      if (subMode === 'smart' || subMode === 'word') {
+        await eraser.smartErase({ x: rect.x, y: rect.y }, { granularity: subMode === 'word' ? 'word' : undefined });
+      } else {
+        await eraser.contentErase(rect);
+      }
+    },
+    {
+      pageWidth: state.adapter?.pageWidth ?? 595,
+      pageHeight: state.adapter?.pageHeight ?? 842,
+      zoom: state.zoom ?? 1,
+    },
+  );
+}
+
+function deactivateEraseOverlay() {
+  if (_eraseUIController) {
+    _eraseUIController.destroy();
+    _eraseUIController = null;
+  }
+  const canvas = els.annotationCanvas;
+  if (!canvas) return;
+  if (!state.drawEnabled) {
+    canvas.style.pointerEvents = '';
+    canvas.style.zIndex = '';
+  }
+}
+
 initToolModeDeps({
   renderAnnotations,
   updateOverlayInteractionState,
   setOcrStatus,
+  activateEraseOverlay,
+  deactivateEraseOverlay,
 });
 initAnnotationControllerDeps({
   renderDocStats,
