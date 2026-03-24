@@ -13,6 +13,7 @@ import { loadOcrTextData } from './workspace-controller.js';
 import { setPageEdits, persistEdits } from './export-controller.js';
 import { blockEditor } from './pdf-advanced-edit.js';
 import { renderConfidenceOverlay } from './ocr-confidence-map.js';
+import { PixelPerfectTextLayer, FontWidthProvider } from './pixel-perfect-text-layer.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 const _deps = {
@@ -174,6 +175,22 @@ export async function renderTextLayer(pageNum, zoom, rotation) {
       const displayH = parseFloat(els.canvas.style.height) || displayViewport.height;
       container.style.width = `${displayW}px`;
       container.style.height = `${displayH}px`;
+
+      // Use pixel-perfect text layer when enabled (experimental)
+      if (state.settings?.usePixelPerfectText && textContent?.items?.length) {
+        try {
+          const provider = new FontWidthProvider();
+          await provider.loadFromPage(page);
+          const pptl = new PixelPerfectTextLayer(container, displayViewport);
+          pptl.render(textContent, provider);
+          _activeTextLayer = pptl;
+          _renderPdfAnnotationLayer(page, displayViewport).catch((err) => { console.warn('[render-controller] error:', err?.message); });
+          return;
+        } catch (_err) {
+          console.warn('[render-text-layer] Pixel-perfect text layer failed, using standard:', _err?.message);
+          // Fall through to standard TextLayer
+        }
+      }
 
       // Use official PDF.js TextLayer if available
       if (pdfjsLib?.TextLayer) {

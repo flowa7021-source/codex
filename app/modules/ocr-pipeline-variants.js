@@ -15,6 +15,7 @@ import {
   estimateSkewAngleFromBinary, rotateCanvas,
   preprocessOcrCanvas, pickVariantsByBudget,
 } from './ocr-image-processing.js';
+import { ocrWithCharBoxes } from './ocr-char-layer.js';
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // normalizeOcrTextByLang, scoreOcrTextByLang, postCorrectOcrText, setOcrStatus
 // are injected from app.js via initOcrPipelineVariantsDeps to avoid circular
@@ -269,6 +270,27 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   });
   // Apply post-correction using detected language
   best = _deps.postCorrectOcrText(best, detectedLang);
+
+  // Optionally enrich with character-level bounding boxes
+  if (options.charBoxes && best.length > 0 && canvas.width > 0) {
+    try {
+      const charResult = await ocrWithCharBoxes(canvas, {
+        lang: detectedLang || lang,
+        deskew: false,  // already deskewed in pipeline
+        denoise: false, // already preprocessed
+        upscale: false,
+      });
+      if (charResult?.charBoxes?.length) {
+        // Store char boxes alongside word data
+        if (options.pageNum && _deps._ocrWordCache) {
+          _deps._ocrWordCache.set(`charboxes_${options.pageNum}`, charResult.charBoxes);
+        }
+      }
+    } catch (_err) {
+      // Non-critical enrichment; word-level data is already available
+      console.debug('[ocr-pipeline] char-box enrichment skipped:', _err?.message);
+    }
+  }
 
   // Cache word-level data for text layer and DOCX export
   if (bestWords.length > 0 && options.pageNum) {
