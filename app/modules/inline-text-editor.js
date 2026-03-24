@@ -26,6 +26,8 @@
  *   deps.showTextBlock(id)  – restore after commit/cancel
  */
 
+import { matchFontFromOcr } from './scan-decomposer.js';
+
 // ---------------------------------------------------------------------------
 // InlineTextEditor
 // ---------------------------------------------------------------------------
@@ -118,6 +120,21 @@ export class InlineTextEditor {
     let fontFamily = run?.font || 'Arial';
     if (block.source === 'ocr') {
       fontFamily = block.matchedSystemFont || block.synthesizedFont || 'Arial';
+    }
+
+    const editorEl = this._editorEl;
+    const ocrResult = block.ocrResult || null;
+
+    // Try to match font from OCR data for scanned pages
+    if (!run?.font && ocrResult) {
+      try {
+        const fontMatch = matchFontFromOcr(ocrResult);
+        if (fontMatch?.family) {
+          editorEl.style.fontFamily = fontMatch.family;
+          editorEl.style.fontWeight = String(fontMatch.weight || 400);
+          editorEl.style.fontStyle = fontMatch.style || 'normal';
+        }
+      } catch (_e) { /* fallback to default font */ }
     }
 
     const color     = run?.color || '#000000';
