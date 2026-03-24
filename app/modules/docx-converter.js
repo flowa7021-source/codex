@@ -132,8 +132,8 @@ function makeHyperlinkRun(run) {
 // ─── Main conversion function ───────────────────────────────────────────────
 /** @param {any} pdfDoc @param {any} title @param {any} pageCount @param {any} options @returns {Promise<any>} */
 export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
-  // Try V2 pipeline first, fall back to V1 on failure
-  try {
+  // Try V2 pipeline when explicitly enabled, fall back to V1 on failure
+  if (options?.useV2Pipeline) try {
     const v2Result = await convertPdfToDocxV2(pdfDoc, {
       title,
       pageRange: options?.pageRange ?? null,
