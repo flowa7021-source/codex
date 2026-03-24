@@ -17,6 +17,7 @@ import { recordSuccessfulOperation } from './crash-telemetry.js';
 import { blockEditor } from './pdf-advanced-edit.js';
 import { shouldUseTileRendering, renderTiles, invalidateTiles, setRenderGenerationGetter } from './tile-renderer.js';
 import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+import { emit } from './event-bus.js';
 // ─── Imports from sub-modules (for local use + re-export) ───────────────────
 import {
   initRenderTextLayerDeps,
@@ -189,7 +190,7 @@ export function _updatePageUI(renderMs) {
       ms: renderMs ?? 0,
     });
     // Notify app of page render for bookmark/thumbnail updates
-    try { window.dispatchEvent(new CustomEvent('page-rendered', { detail: { page: renderedPage } })); } catch (err) { console.warn('[render-controller] error:', err?.message); }
+    try { emit('page-rendered', { page: renderedPage }); } catch (err) { console.warn('[render-controller] error:', err?.message); }
   });
 }
 

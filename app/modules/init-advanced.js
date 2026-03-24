@@ -2,6 +2,8 @@
 // ─── Advanced Features Bootstrap ────────────────────────────────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 
+import { on, once as onceBus } from './event-bus.js';
+
 /**
  * Wire up quick actions, command palette, auto-scroll, autosave,
  * minimap and extended hotkeys.
@@ -81,7 +83,7 @@ export function initAdvanced(deps) {
 
   const _debouncedMinimapUpdate = debounce(() => updateMinimap(), 60);
   safeOn(els.canvasWrap, 'scroll', _debouncedMinimapUpdate, { passive: true });
-  window.addEventListener('page-rendered', () => updateMinimap());
+  on('page-rendered', () => updateMinimap());
 
   // ── Auto-Scroll ────────────────────────────────────────────────────────
   initAutoScroll({ state, els, goToPage });
@@ -122,11 +124,11 @@ export function initAdvanced(deps) {
   });
 
   // Hook into file opening to start autosave timer
-  window.addEventListener('page-rendered', () => {
+  onceBus('page-rendered', () => {
     if (state.adapter && state.docName) {
       startAutosaveTimer();
     }
-  }, { once: true });
+  });
 
   // ── Command Palette ────────────────────────────────────────────────────
   initCommandPalette({

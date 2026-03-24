@@ -1,6 +1,7 @@
 // @ts-check
 // thumbnail-renderer.js — Single-column page thumbnail previews in sidebar
 import { state, els } from './state.js';
+import { emit } from './event-bus.js';
 
 const THUMB_WIDTH = 150;
 const THUMB_ZOOM = 0.2;
@@ -71,7 +72,7 @@ export async function renderPagePreviews() {
     wrapper.appendChild(label);
 
     wrapper.addEventListener('click', () => {
-      window.dispatchEvent(new CustomEvent('novareader-goto-page', { detail: { page: i } }));
+      emit('novareader-goto-page', { page: i });
     });
 
     container.appendChild(wrapper);

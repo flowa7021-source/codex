@@ -1,6 +1,7 @@
 // @ts-check
 // bookmark-controller.js — Bookmark management for NovaReader
 import { state, els } from './state.js';
+import { emit, on } from './event-bus.js';
 
 const MAX_BOOKMARKS = 500;
 
@@ -116,7 +117,7 @@ export function renderBookmarkList() {
     item.appendChild(removeBtn);
     item.addEventListener('click', () => {
       // Dispatch custom event for navigation
-      window.dispatchEvent(new CustomEvent('bookmark-navigate', { detail: { page: bm.page } }));
+      emit('bookmark-navigate', { page: bm.page });
     });
     list.appendChild(item);
   }
@@ -206,12 +207,12 @@ export function initBookmarkController() {
   }
 
   // Navigation event listener
-  window.addEventListener('bookmark-navigate', (e) => {
-    const page = /** @type {any} */ (e).detail?.page;
+  on('bookmark-navigate', (detail) => {
+    const page = detail?.page;
     if (page && page >= 1 && page <= state.pageCount) {
       state.currentPage = page;
       // Will be picked up by app.js renderCurrentPage dep
-      window.dispatchEvent(new CustomEvent('novareader-goto-page', { detail: { page } }));
+      emit('novareader-goto-page', { page });
     }
   });
 

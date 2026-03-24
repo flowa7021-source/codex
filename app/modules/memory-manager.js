@@ -3,6 +3,7 @@
 // ObjectURL lifecycle, canvas pooling, memory pressure monitoring.
 
 import { safeInterval, safeTimeout, clearSafeInterval, clearSafeTimeout } from './safe-timers.js';
+import { emit } from './event-bus.js';
 
 const CANVAS_POOL_MAX = 10;
 const URL_CLEANUP_INTERVAL = 30000;
@@ -166,9 +167,7 @@ async function monitorMemory() {
       const usedMB = /** @type {any} */ (performance).memory.usedJSHeapSize / 1048576;
       if (usedMB > MEMORY_WARNING_MB && !memoryWarningShown) {
         memoryWarningShown = true;
-        window.dispatchEvent(new CustomEvent('memory-warning', {
-          detail: { usedMB: Math.round(usedMB) },
-        }));
+        emit('memory-warning', { usedMB: Math.round(usedMB) });
       }
     }
   } catch (err) {

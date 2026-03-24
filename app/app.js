@@ -3,6 +3,7 @@ import { initPlatform } from './modules/platform.js';
 initPlatform().catch(() => {});   // non-blocking; fallback to browser mode
 
 // ─── Module Imports ─────────────────────────────────────────────────────────
+import { emit, on, once, removeAllListeners as removeAllBusListeners } from './modules/event-bus.js';
 import { debounce } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
 import { ensurePdfJs, preloadPdfRuntime } from './modules/loaders.js';
@@ -684,6 +685,9 @@ initViewModes({
   canvas: els.canvas,
 });
 
+// Expose event-bus for inter-module communication
+window._eventBus = { emit, on, once, removeAllBusListeners };
+
 // Expose toast for use throughout the app
 window._toast = { toast, toastSuccess, toastError, toastWarning, toastInfo, toastProgress, dismissAllToasts };
 
@@ -723,8 +727,8 @@ initBookmarkController();
 initNotesController();
 
 // Listen for page navigation events from bookmark-controller
-window.addEventListener('novareader-goto-page', async (e) => {
-  const page = e.detail?.page;
+on('novareader-goto-page', async (detail) => {
+  const page = detail?.page;
   if (page && page >= 1 && page <= state.pageCount) {
     state.currentPage = page;
     await renderCurrentPage();
@@ -734,7 +738,7 @@ window.addEventListener('novareader-goto-page', async (e) => {
 });
 
 // Hook page navigation to update bookmark button and thumbnails
-window.addEventListener('page-rendered', () => {
+on('page-rendered', () => {
   updateBookmarkButton();
   highlightThumbPage();
 });
