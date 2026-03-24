@@ -1171,44 +1171,81 @@ describe('pdfRedact handler', () => {
     assert.ok(statusCalls.length > 0);
   });
 
-  it('opens a modal dialog when file is set', async () => {
+  it('appends a modal and resolves when close button is clicked', async () => {
     state.file = makeMockFile();
     state.adapter = { type: 'pdf' };
     state.pageCount = 0;
 
-    let modalAppended = false;
-    let capturedModal = null;
-    const origAppend = document.body.appendChild.bind(document.body);
-    document.body.appendChild = (el) => {
-      if (el && el.className && el.className.includes('modal')) {
-        modalAppended = true;
-        capturedModal = el;
-        // Immediately close by simulating backdrop click
+    // The pdfRedact handler builds a modal div using innerHTML (which doesn't create
+    // real child nodes in the mock DOM), then calls querySelector/querySelectorAll on it.
+    // We patch createElement('div') so that the created modal div has stubbed
+    // querySelector/querySelectorAll that return stubs. The close button stub fires its
+    // click listener immediately when addEventListener is called, resolving the Promise.
+    const origCreateElement = document.createElement.bind(document);
+    let divCount = 0;
+    document.createElement = (tag) => {
+      const el = origCreateElement(tag);
+      if (tag === 'div') {
+        divCount++;
+        // Only patch the modal div (first one created in the handler)
+        let closeClickFn = null;
+        el.querySelectorAll = (sel) => {
+          // Return one stub pattern button so the forEach fires (but does nothing harmful)
+          if (sel.includes('data-pat')) {
+            const stubBtn = origCreateElement('button');
+            stubBtn.dataset = { pat: 'email' };
+            stubBtn.addEventListener = () => {};
+            return [stubBtn];
+          }
+          return [];
+        };
+        el.querySelector = (sel) => {
+          const stub = origCreateElement('button');
+          stub.value = '';
+          stub.addEventListener = (type, fn) => {
+            // Immediately invoke click listeners (resolves the Promise with null)
+            if (type === 'click' && sel === '#_redCloseModal') {
+              closeClickFn = fn;
+            }
+          };
+          return stub;
+        };
+        el.addEventListener = (type, fn) => {
+          // backdrop click - ignore
+        };
+        // Override remove to be a no-op
         el.remove = () => {};
+        // After element is fully set up and appended, fire the close button
+        const origInnerHTMLSetter = Object.getOwnPropertyDescriptor(el, 'innerHTML')?.set;
+        // We'll fire closeClickFn after querySelectorAll/querySelector calls are done
+        // Use a microtask delay via Promise
+        const origRemove = el.remove;
+        Object.defineProperty(el, 'innerHTML', {
+          set(val) {
+            // After innerHTML is set, querySelectorAll/querySelector will be called
+            // We schedule the close button click for after all setup
+            Promise.resolve().then(() => {
+              if (closeClickFn) closeClickFn();
+            });
+          },
+          get() { return ''; },
+        });
       }
-      return origAppend(el);
+      return el;
     };
+
+    const origAppend = document.body.appendChild.bind(document.body);
+    document.body.appendChild = (el) => origAppend(el);
 
     initPdfProHandlersDeps({
       setOcrStatus: () => {},
       nrConfirm: async () => false,
     });
 
-    // We'll run but manually close the modal by resolving null
-    // We patch querySelectorAll to auto-click close
-    const origQSA = document.body.querySelectorAll?.bind(document.body);
+    const handler = captureHandler('pdfRedact');
+    await handler(); // should complete because close resolves null → early return
 
-    const handlerPromise = captureHandler('pdfRedact')();
-
-    // Give modal time to appear then close it
-    await new Promise((r) => setTimeout(r, 20));
-    if (capturedModal && capturedModal._listeners) {
-      // Close via backdrop click
-    }
-    // Let it time out naturally with no resolution - the promise will hang
-    // unless we interact with the modal. Just verify it doesn't crash.
+    document.createElement = origCreateElement;
     document.body.appendChild = origAppend;
-
-    assert.ok(modalAppended || true); // just verifying no crash
   });
 });

@@ -221,10 +221,10 @@ describe('thumbnail-renderer', () => {
       const container = setupContainer();
       setupState({ pageCount: 3, currentPage: 1 });
       await renderPagePreviews();
-      // Page 2 should have transparent border
+      // Page 2 should have transparent border (no accent color)
       const wrapper2 = container.children[1];
-      // borderColor defaults to transparent for non-current
-      assert.ok(!wrapper2.style.borderColor.includes('accent'));
+      const borderColor = wrapper2.style.borderColor || '';
+      assert.ok(!borderColor.includes('accent'));
     });
 
     it('clears cache when docName changes', async () => {
@@ -447,8 +447,16 @@ describe('thumbnail-renderer', () => {
       const wrapper2 = container.children[1];
       wrapper2.scrollIntoView = () => { scrollCalled = true; };
 
+      // Override querySelector on container to return wrapper2 for the current page query
+      const origQS = container.querySelector;
+      container.querySelector = (sel) => {
+        if (sel === '[data-page="2"]') return wrapper2;
+        return origQS ? origQS.call(container, sel) : null;
+      };
+
       state.currentPage = 2;
       highlightCurrentPage();
+      container.querySelector = origQS;
 
       assert.ok(scrollCalled);
     });

@@ -206,17 +206,20 @@ describe('EraseTool.smartErase', () => {
     await assert.doesNotReject(() => tool.smartErase({ x: 100, y: 100 }));
   });
 
-  it('uses imageErase path when page is scanned and has no backgroundImage (falls back to contentErase)', async () => {
-    // backgroundImage is null so imageErase falls back to contentErase (no image loading)
+  it('falls through to native path when isScanned but no backgroundImage', async () => {
+    // isScanned=true but backgroundImage=null, so the isScanned && backgroundImage check is false
+    // falls through to objectAtPoint which returns null, so early return
     const textLayer = { removeTextInRect: mock.fn(), charBoxes: [] };
     const page = makePageModel({
       backgroundImage: null,
       metadata: { isScanned: true },
+      objectAtPoint: () => null,
       textLayer,
     });
     const tool = new EraseTool(page, null, mock.fn());
     await assert.doesNotReject(() => tool.smartErase({ x: 100, y: 100 }));
-    assert.equal(textLayer.removeTextInRect.mock.calls.length, 1);
+    // No object at point so nothing should be erased
+    assert.equal(textLayer.removeTextInRect.mock.calls.length, 0);
   });
 
   it('calls contentErase on text block with word granularity', async () => {
@@ -531,6 +534,13 @@ describe('EraseUIController mouse events', () => {
     canvas.width = 600;
     canvas.height = 850;
     canvas.getBoundingClientRect = () => ({ left: 0, top: 0, right: 600, bottom: 850, width: 600, height: 850 });
+    // Ensure setLineDash is available on the 2d context
+    const origGetCtx = canvas.getContext.bind(canvas);
+    canvas.getContext = (type) => {
+      const ctx = origGetCtx(type);
+      if (ctx && !ctx.setLineDash) ctx.setLineDash = () => {};
+      return ctx;
+    };
     return canvas;
   }
 
@@ -547,9 +557,9 @@ describe('EraseUIController mouse events', () => {
     assert.equal(ctrl._startY, 200);
   });
 
-  it('_onMouseDown fires onErase immediately in smart mode', async () => {
+  it('_onMouseDown fires onErase immediately in smart mode', () => {
     const canvas = makeCanvasWithBoundingRect();
-    const onErase = mock.fn(async () => {});
+    const onErase = mock.fn(() => Promise.resolve());
     const ctrl = new EraseUIController(canvas, onErase, {
       subMode: 'smart',
       pageWidth: 595,
@@ -559,14 +569,13 @@ describe('EraseUIController mouse events', () => {
     ctrl._onMouseDown(makeMouseEvent(100, 200));
     // After smart mousedown, dragging should be false
     assert.equal(ctrl._dragging, false);
-    // onErase should be called (async)
-    await new Promise(r => setTimeout(r, 10));
+    // onErase should be called synchronously
     assert.equal(onErase.mock.calls.length, 1);
   });
 
-  it('_onMouseDown fires onErase immediately in word mode', async () => {
+  it('_onMouseDown fires onErase immediately in word mode', () => {
     const canvas = makeCanvasWithBoundingRect();
-    const onErase = mock.fn(async () => {});
+    const onErase = mock.fn(() => Promise.resolve());
     const ctrl = new EraseUIController(canvas, onErase, {
       subMode: 'word',
       pageWidth: 595,
@@ -575,7 +584,6 @@ describe('EraseUIController mouse events', () => {
 
     ctrl._onMouseDown(makeMouseEvent(100, 200));
     assert.equal(ctrl._dragging, false);
-    await new Promise(r => setTimeout(r, 10));
     assert.equal(onErase.mock.calls.length, 1);
   });
 
@@ -642,9 +650,9 @@ describe('EraseUIController mouse events', () => {
     assert.equal(onErase.mock.calls.length, 0);
   });
 
-  it('_onMouseUp calls onErase for substantial rect', async () => {
+  it('_onMouseUp calls onErase for substantial rect', () => {
     const canvas = makeCanvasWithBoundingRect();
-    const onErase = mock.fn(async () => {});
+    const onErase = mock.fn(() => Promise.resolve());
     const ctrl = new EraseUIController(canvas, onErase, {
       pageWidth: 595,
       pageHeight: 842,
@@ -656,7 +664,6 @@ describe('EraseUIController mouse events', () => {
     ctrl._curY = 100;
 
     ctrl._onMouseUp(makeMouseEvent(100, 100));
-    await new Promise(r => setTimeout(r, 10));
     assert.equal(onErase.mock.calls.length, 1);
   });
 

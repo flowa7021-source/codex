@@ -1,54 +1,5 @@
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-
-// Mock pdfjs-dist and pdf-lib BEFORE importing the module under test
-await mock.module('pdfjs-dist/build/pdf.mjs', {
-  namedExports: {
-    getDocument: () => ({
-      promise: Promise.resolve({
-        numPages: 3,
-        getPage: async (pageNum) => ({
-          getViewport: () => ({ width: 100, height: 100 }),
-          render: () => ({ promise: Promise.resolve() }),
-        }),
-        destroy: () => {},
-      }),
-    }),
-  },
-});
-
-await mock.module('pdf-lib', {
-  namedExports: {
-    PDFDocument: {
-      load: async () => {
-        const pages = [
-          {
-            ref: { pageRef: 0 },
-            getSize: () => ({ width: 612, height: 792 }),
-            drawText: () => {},
-          },
-          {
-            ref: { pageRef: 1 },
-            getSize: () => ({ width: 612, height: 792 }),
-            drawText: () => {},
-          },
-          {
-            ref: { pageRef: 2 },
-            getSize: () => ({ width: 612, height: 792 }),
-            drawText: () => {},
-          },
-        ];
-        return {
-          getPages: () => pages,
-          save: async () => new Uint8Array([1, 2, 3, 4]),
-        };
-      },
-    },
-    PDFName: { of: (n) => n },
-    PDFString: { of: (s) => s },
-    PDFNumber: { of: (n) => n },
-  },
-});
 
 import { BatchOcrEditor, batchFindReplace, generateBatchReport } from '../../app/modules/batch-ocr-editor.js';
 
@@ -69,27 +20,46 @@ describe('BatchOcrEditor constructor', () => {
     assert.equal(editor._cancelled, false);
   });
 
-  it('accepts custom options', () => {
-    const bytes = new Uint8Array(10);
-    const onProgress = () => {};
-    const editor = new BatchOcrEditor(bytes, {
-      language: 'fra',
-      autoCorrect: false,
-      dpi: 150,
-      concurrency: 4,
-      pages: [1, 3, 5],
-      embedTextLayer: false,
-      replacements: [{ find: 'foo', replace: 'bar' }],
-      onProgress,
-    });
+  it('accepts custom language option', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { language: 'fra' });
     assert.equal(editor._language, 'fra');
+  });
+
+  it('accepts autoCorrect=false', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { autoCorrect: false });
     assert.equal(editor._autoCorrect, false);
+  });
+
+  it('accepts custom dpi', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { dpi: 150 });
     assert.equal(editor._dpi, 150);
+  });
+
+  it('accepts custom concurrency', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { concurrency: 4 });
     assert.equal(editor._concurrency, 4);
+  });
+
+  it('accepts pages filter', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { pages: [1, 3, 5] });
     assert.deepEqual(editor._pages, [1, 3, 5]);
+  });
+
+  it('accepts embedTextLayer=false', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { embedTextLayer: false });
     assert.equal(editor._embedText, false);
+  });
+
+  it('accepts replacements', () => {
+    const replacements = [{ find: 'foo', replace: 'bar' }];
+    const editor = new BatchOcrEditor(new Uint8Array(0), { replacements });
     assert.equal(editor._replacements.length, 1);
-    assert.equal(editor._onProgress, onProgress);
+  });
+
+  it('accepts onProgress callback', () => {
+    const fn = () => {};
+    const editor = new BatchOcrEditor(new Uint8Array(0), { onProgress: fn });
+    assert.equal(editor._onProgress, fn);
   });
 
   it('converts ArrayBuffer to Uint8Array', () => {
@@ -99,7 +69,7 @@ describe('BatchOcrEditor constructor', () => {
     assert.equal(editor._pdfBytes.length, 8);
   });
 
-  it('keeps Uint8Array as is', () => {
+  it('keeps Uint8Array input as Uint8Array', () => {
     const bytes = new Uint8Array([1, 2, 3]);
     const editor = new BatchOcrEditor(bytes);
     assert.ok(editor._pdfBytes instanceof Uint8Array);
@@ -116,148 +86,207 @@ describe('BatchOcrEditor.cancel()', () => {
     editor.cancel();
     assert.equal(editor._cancelled, true);
   });
+
+  it('can be called multiple times safely', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0));
+    editor.cancel();
+    editor.cancel();
+    assert.equal(editor._cancelled, true);
+  });
 });
 
 // ─── _postProcess ─────────────────────────────────────────────────────────────
 
-describe('BatchOcrEditor._postProcess()', () => {
-  it('corrects fi ligature', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+describe('BatchOcrEditor._postProcess() — ligatures', () => {
+  let editor;
+  beforeEach(() => {
+    editor = new BatchOcrEditor(new Uint8Array(0), { autoCorrect: true });
+  });
+
+  it('replaces fi ligature', () => {
     assert.equal(editor._postProcess('ﬁnd'), 'find');
   });
 
-  it('corrects fl ligature', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+  it('replaces fl ligature', () => {
     assert.equal(editor._postProcess('ﬂoor'), 'floor');
   });
 
-  it('corrects ff ligature', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+  it('replaces ff ligature', () => {
     assert.equal(editor._postProcess('ﬀ'), 'ff');
   });
 
-  it('corrects ffi ligature', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+  it('replaces ffi ligature', () => {
     assert.equal(editor._postProcess('ﬃ'), 'ffi');
   });
 
-  it('corrects ffl ligature', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+  it('replaces ffl ligature', () => {
     assert.equal(editor._postProcess('ﬄ'), 'ffl');
   });
 
-  it('corrects st ligature', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+  it('replaces st ligature', () => {
     assert.equal(editor._postProcess('ﬅ'), 'st');
   });
 
+  it('handles multiple ligatures in one string', () => {
+    const result = editor._postProcess('ﬁnd the ﬂoor');
+    assert.equal(result, 'find the floor');
+  });
+});
+
+describe('BatchOcrEditor._postProcess() — smart quotes', () => {
+  let editor;
+  beforeEach(() => {
+    editor = new BatchOcrEditor(new Uint8Array(0), { autoCorrect: true });
+  });
+
   it('normalizes left double quote', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
     assert.ok(editor._postProcess('\u201CHello\u201D').includes('"Hello"'));
   });
 
-  it('normalizes right single quote', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+  it('normalizes single curly quotes', () => {
     assert.ok(editor._postProcess('\u2018world\u2019').includes("'world'"));
   });
 
-  it('normalizes ellipsis', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+  it('normalizes low-9 double quote', () => {
+    assert.ok(editor._postProcess('\u201Etext\u201F').includes('"text"'));
+  });
+
+  it('normalizes ellipsis to three dots', () => {
     assert.equal(editor._postProcess('\u2026'), '...');
   });
 
-  it('normalizes em dash', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+  it('normalizes em dash to hyphen', () => {
     assert.equal(editor._postProcess('\u2014'), '-');
   });
 
-  it('normalizes en dash', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+  it('normalizes en dash to hyphen', () => {
     assert.equal(editor._postProcess('\u2013'), '-');
   });
+});
 
-  it('repairs hyphen break', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
+describe('BatchOcrEditor._postProcess() — hyphen break', () => {
+  it('repairs hyphen-newline break', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { autoCorrect: true });
     assert.equal(editor._postProcess('docu-\nment'), 'document');
   });
 
-  it('skips ligature correction when autoCorrect=false', () => {
+  it('repairs hyphen-break with surrounding spaces', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { autoCorrect: true });
+    const result = editor._postProcess('some-\n  thing');
+    assert.equal(result, 'something');
+  });
+});
+
+describe('BatchOcrEditor._postProcess() — autoCorrect disabled', () => {
+  it('skips all corrections when autoCorrect=false', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0), { autoCorrect: false });
-    const text = 'ﬁnd';
-    assert.equal(editor._postProcess(text), 'ﬁnd');
+    const text = 'ﬁnd \u2014 ﬂoor \u2026';
+    assert.equal(editor._postProcess(text), text);
   });
 
-  it('applies user string replacements globally', () => {
+  it('still applies user replacements when autoCorrect=false', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), {
+      autoCorrect: false,
+      replacements: [{ find: 'foo', replace: 'bar' }],
+    });
+    assert.equal(editor._postProcess('foo'), 'bar');
+  });
+});
+
+describe('BatchOcrEditor._postProcess() — user replacements', () => {
+  it('applies string replacements globally', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0), {
       replacements: [{ find: 'foo', replace: 'bar' }],
     });
     assert.equal(editor._postProcess('foo baz foo'), 'bar baz bar');
   });
 
-  it('applies user regex replacements', () => {
+  it('applies regex replacements', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0), {
       replacements: [{ find: /\d+/g, replace: 'NUM' }],
     });
     assert.equal(editor._postProcess('abc 123 def 456'), 'abc NUM def NUM');
   });
 
-  it('escapes special chars in string find', () => {
+  it('escapes special characters in string find', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0), {
       replacements: [{ find: 'a.b', replace: 'X' }],
     });
-    // 'a.b' should match literal 'a.b' not any char between
+    // 'a.b' should match literal 'a.b' not regex wildcard
     const result = editor._postProcess('a.b axb');
     assert.equal(result, 'X axb');
   });
 
-  it('returns text unchanged when autoCorrect=false and no replacements', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0), { autoCorrect: false });
-    const text = 'Hello World 123';
-    assert.equal(editor._postProcess(text), text);
+  it('applies multiple replacements in sequence', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), {
+      autoCorrect: false,
+      replacements: [
+        { find: 'a', replace: 'x' },
+        { find: 'x', replace: 'z' },
+      ],
+    });
+    assert.equal(editor._postProcess('abc'), 'zbc');
+  });
+
+  it('handles empty replacements array', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), {
+      autoCorrect: false,
+      replacements: [],
+    });
+    assert.equal(editor._postProcess('hello'), 'hello');
   });
 });
 
 // ─── _computeStats ──────────────────────────────────────────────────────────
 
 describe('BatchOcrEditor._computeStats()', () => {
-  it('computes stats for multiple pages', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
-    const results = [
-      { correctedText: 'hello', corrections: 2, confidence: 80 },
-      { correctedText: 'world!', corrections: 1, confidence: 90 },
-    ];
-    const stats = editor._computeStats(results);
-    assert.equal(stats.pagesProcessed, 2);
-    assert.equal(stats.totalChars, 11); // 5 + 6
-    assert.equal(stats.correctedChars, 3);
-    assert.equal(stats.avgConfidence, 85);
-  });
-
-  it('returns zero avgConfidence for empty results', () => {
+  it('returns zeros for empty results', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0));
     const stats = editor._computeStats([]);
     assert.equal(stats.pagesProcessed, 0);
-    assert.equal(stats.avgConfidence, 0);
     assert.equal(stats.totalChars, 0);
     assert.equal(stats.correctedChars, 0);
+    assert.equal(stats.avgConfidence, 0);
   });
 
   it('computes stats for single page', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0));
     const stats = editor._computeStats([
-      { correctedText: 'abc', corrections: 1, confidence: 95 },
+      { correctedText: 'hello', corrections: 2, confidence: 80 },
     ]);
     assert.equal(stats.pagesProcessed, 1);
-    assert.equal(stats.totalChars, 3);
-    assert.equal(stats.correctedChars, 1);
-    assert.equal(stats.avgConfidence, 95);
+    assert.equal(stats.totalChars, 5);
+    assert.equal(stats.correctedChars, 2);
+    assert.equal(stats.avgConfidence, 80);
+  });
+
+  it('computes stats for multiple pages', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0));
+    const stats = editor._computeStats([
+      { correctedText: 'hello', corrections: 2, confidence: 80 },
+      { correctedText: 'world!', corrections: 1, confidence: 90 },
+    ]);
+    assert.equal(stats.pagesProcessed, 2);
+    assert.equal(stats.totalChars, 11);
+    assert.equal(stats.correctedChars, 3);
+    assert.equal(stats.avgConfidence, 85);
+  });
+
+  it('rounds avgConfidence to 2 decimal places', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0));
+    const stats = editor._computeStats([
+      { correctedText: 'a', corrections: 0, confidence: 91 },
+      { correctedText: 'b', corrections: 0, confidence: 92 },
+      { correctedText: 'c', corrections: 0, confidence: 93 },
+    ]);
+    assert.equal(stats.avgConfidence, 92);
   });
 });
 
 // ─── _progress ───────────────────────────────────────────────────────────────
 
 describe('BatchOcrEditor._progress()', () => {
-  it('calls onProgress callback when set', () => {
+  it('calls onProgress with event', () => {
     const events = [];
     const editor = new BatchOcrEditor(new Uint8Array(0), {
       onProgress: (e) => events.push(e),
@@ -265,11 +294,23 @@ describe('BatchOcrEditor._progress()', () => {
     editor._progress({ phase: 'init', page: 0, total: 5 });
     assert.equal(events.length, 1);
     assert.equal(events[0].phase, 'init');
+    assert.equal(events[0].total, 5);
   });
 
-  it('does not throw when onProgress is null', () => {
+  it('does nothing when onProgress is null', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0));
     assert.doesNotThrow(() => editor._progress({ phase: 'init', page: 0, total: 1 }));
+  });
+
+  it('passes all event fields to callback', () => {
+    const events = [];
+    const editor = new BatchOcrEditor(new Uint8Array(0), {
+      onProgress: (e) => events.push(e),
+    });
+    editor._progress({ phase: 'ocr', page: 2, total: 5, pageNum: 3 });
+    assert.equal(events[0].phase, 'ocr');
+    assert.equal(events[0].page, 2);
+    assert.equal(events[0].pageNum, 3);
   });
 });
 
@@ -283,17 +324,7 @@ describe('BatchOcrEditor._embedPlainText()', () => {
     editor._embedPlainText(page, 'line1\nline2\nline3', 612, 792);
     assert.equal(drawCalls.length, 3);
     assert.equal(drawCalls[0].text, 'line1');
-  });
-
-  it('stops near bottom margin', () => {
-    const editor = new BatchOcrEditor(new Uint8Array(0));
-    const drawCalls = [];
-    const page = { drawText: (text, opts) => drawCalls.push(text) };
-    // Short page height, many lines - should stop before bottom
-    const manyLines = Array.from({ length: 100 }, (_, i) => `line${i}`).join('\n');
-    editor._embedPlainText(page, manyLines, 612, 100);
-    // With y starting at 100-36=64 and leading=14, should stop after 2-3 lines
-    assert.ok(drawCalls.length < 10);
+    assert.equal(drawCalls[0].opts.opacity, 0);
   });
 
   it('skips blank lines', () => {
@@ -312,12 +343,32 @@ describe('BatchOcrEditor._embedPlainText()', () => {
     editor._embedPlainText(page, longLine, 612, 792);
     assert.equal(drawCalls[0].length, 200);
   });
+
+  it('stops near bottom margin', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0));
+    const drawCalls = [];
+    const page = { drawText: (text, opts) => drawCalls.push(text) };
+    const manyLines = Array.from({ length: 100 }, (_, i) => `line${i}`).join('\n');
+    // Short height: y starts at 100-36=64, leading=14, so fits ~2 lines before y<36
+    editor._embedPlainText(page, manyLines, 612, 100);
+    assert.ok(drawCalls.length < 10);
+  });
+
+  it('uses font size 10 and leading 14', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0));
+    const drawCalls = [];
+    const page = { drawText: (text, opts) => drawCalls.push(opts) };
+    editor._embedPlainText(page, 'first\nsecond', 612, 792);
+    assert.equal(drawCalls[0].size, 10);
+    // second line should be 14px lower
+    assert.equal(drawCalls[1].y, drawCalls[0].y - 14);
+  });
 });
 
 // ─── _embedCharBoxes ─────────────────────────────────────────────────────────
 
 describe('BatchOcrEditor._embedCharBoxes()', () => {
-  it('returns early when no charBoxes', () => {
+  it('returns early when charBoxes is empty', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0));
     const drawCalls = [];
     const page = { drawText: (text, opts) => drawCalls.push(text) };
@@ -325,7 +376,7 @@ describe('BatchOcrEditor._embedCharBoxes()', () => {
     assert.equal(drawCalls.length, 0);
   });
 
-  it('groups chars into lines and draws text', () => {
+  it('draws grouped chars as a line with opacity 0', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0));
     const drawCalls = [];
     const page = { drawText: (text, opts) => drawCalls.push({ text, opts }) };
@@ -339,28 +390,38 @@ describe('BatchOcrEditor._embedCharBoxes()', () => {
     assert.equal(drawCalls[0].opts.opacity, 0);
   });
 
-  it('handles multiple lines of char boxes', () => {
+  it('handles multiple separate lines', () => {
     const editor = new BatchOcrEditor(new Uint8Array(0));
     const drawCalls = [];
     const page = { drawText: (text, opts) => drawCalls.push(text) };
     const charBoxes = [
-      // Line 1
       { char: 'A', bbox: { x0: 0, y0: 0, x1: 10, y1: 10 }, confidence: 90 },
       { char: 'B', bbox: { x0: 11, y0: 0, x1: 20, y1: 10 }, confidence: 90 },
-      // Line 2 (far below)
+      // Far below — new line
       { char: 'C', bbox: { x0: 0, y0: 50, x1: 10, y1: 60 }, confidence: 90 },
     ];
     editor._embedCharBoxes(page, { charBoxes }, 612, 792);
     assert.equal(drawCalls.length, 2);
+  });
+
+  it('clamps fontSize between 4 and 72', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0));
+    const drawCalls = [];
+    const page = { drawText: (text, opts) => drawCalls.push(opts) };
+    const charBoxes = [
+      { char: 'X', bbox: { x0: 0, y0: 0, x1: 1, y1: 1 }, confidence: 90 },
+    ];
+    editor._embedCharBoxes(page, { charBoxes }, 612, 792);
+    assert.ok(drawCalls[0].size >= 4);
+    assert.ok(drawCalls[0].size <= 72);
   });
 });
 
 // ─── _ocrPage ────────────────────────────────────────────────────────────────
 
 describe('BatchOcrEditor._ocrPage()', () => {
-  it('extracts text and charBoxes from worker result', async () => {
+  it('extracts text, confidence and charBoxes from worker result', async () => {
     const editor = new BatchOcrEditor(new Uint8Array(0));
-    const canvas = {};
     const worker = {
       recognize: async () => ({
         data: {
@@ -377,11 +438,12 @@ describe('BatchOcrEditor._ocrPage()', () => {
         },
       }),
     };
-    const result = await editor._ocrPage(worker, canvas);
+    const result = await editor._ocrPage(worker, {});
     assert.equal(result.text, 'Hello');
     assert.equal(result.confidence, 92);
     assert.equal(result.charBoxes.length, 2);
     assert.equal(result.charBoxes[0].char, 'H');
+    assert.deepEqual(result.charBoxes[0].bbox, { x0: 0, y0: 0, x1: 10, y1: 10 });
   });
 
   it('handles words without symbols gracefully', async () => {
@@ -391,7 +453,7 @@ describe('BatchOcrEditor._ocrPage()', () => {
         data: {
           text: 'test',
           confidence: 85,
-          words: [{ /* no symbols */ }],
+          words: [{ /* no symbols property */ }],
         },
       }),
     };
@@ -409,6 +471,33 @@ describe('BatchOcrEditor._ocrPage()', () => {
     const result = await editor._ocrPage(worker, {});
     assert.equal(result.charBoxes.length, 0);
     assert.equal(result.text, 'no words');
+  });
+
+  it('flattens symbols from multiple words', async () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0));
+    const worker = {
+      recognize: async () => ({
+        data: {
+          text: 'Hi World',
+          confidence: 88,
+          words: [
+            {
+              symbols: [
+                { text: 'H', bbox: { x0: 0, y0: 0, x1: 10, y1: 10 }, confidence: 90 },
+                { text: 'i', bbox: { x0: 11, y0: 0, x1: 16, y1: 10 }, confidence: 90 },
+              ],
+            },
+            {
+              symbols: [
+                { text: 'W', bbox: { x0: 20, y0: 0, x1: 30, y1: 10 }, confidence: 85 },
+              ],
+            },
+          ],
+        },
+      }),
+    };
+    const result = await editor._ocrPage(worker, {});
+    assert.equal(result.charBoxes.length, 3);
   });
 });
 
@@ -442,7 +531,7 @@ describe('batchFindReplace()', () => {
     assert.equal(result[1].correctedText, 'bar baz');
   });
 
-  it('does not mutate original array', () => {
+  it('does not mutate original page objects', () => {
     const pages = [
       { page: 1, rawText: 'foo', correctedText: 'foo', confidence: 90, corrections: 0, charBoxes: [] },
     ];
@@ -451,7 +540,7 @@ describe('batchFindReplace()', () => {
     assert.equal(result[0].correctedText, 'baz');
   });
 
-  it('applies multiple replacements in order', () => {
+  it('applies multiple replacements in sequence', () => {
     const pages = [
       { page: 1, rawText: 'abc', correctedText: 'abc', confidence: 90, corrections: 0, charBoxes: [] },
     ];
@@ -482,63 +571,101 @@ describe('batchFindReplace()', () => {
     const result = batchFindReplace([], [{ find: 'foo', replace: 'bar' }]);
     assert.deepEqual(result, []);
   });
+
+  it('recalculates corrections relative to rawText', () => {
+    const pages = [
+      { page: 1, rawText: 'original text', correctedText: 'original text', confidence: 90, corrections: 0, charBoxes: [] },
+    ];
+    const result = batchFindReplace(pages, [{ find: 'original', replace: 'new' }]);
+    // 'new text' vs 'original text' — differences at each char position
+    assert.ok(result[0].corrections > 0);
+  });
 });
 
 // ─── generateBatchReport ─────────────────────────────────────────────────────
 
 describe('generateBatchReport()', () => {
-  it('generates report with stats and per-page data', () => {
+  it('generates report with header', () => {
     const result = {
       pdfBytes: new Uint8Array(0),
-      pages: [
-        { page: 1, rawText: 'a', correctedText: 'abc', confidence: 92.5, corrections: 2, charBoxes: [] },
-        { page: 2, rawText: 'b', correctedText: 'def', confidence: 88.0, corrections: 0, charBoxes: [] },
-      ],
-      stats: { pagesProcessed: 2, totalChars: 200, correctedChars: 2, avgConfidence: 90.25 },
+      pages: [],
+      stats: { pagesProcessed: 0, totalChars: 0, correctedChars: 0, avgConfidence: 0 },
     };
-
     const report = generateBatchReport(result);
     assert.ok(report.includes('Batch OCR Report'));
-    assert.ok(report.includes('Pages processed: 2'));
+  });
+
+  it('includes pages processed count', () => {
+    const result = {
+      pdfBytes: new Uint8Array(0),
+      pages: [],
+      stats: { pagesProcessed: 5, totalChars: 100, correctedChars: 10, avgConfidence: 88.5 },
+    };
+    const report = generateBatchReport(result);
+    assert.ok(report.includes('Pages processed: 5'));
+  });
+
+  it('includes total characters', () => {
+    const result = {
+      pdfBytes: new Uint8Array(0),
+      pages: [],
+      stats: { pagesProcessed: 1, totalChars: 1234, correctedChars: 5, avgConfidence: 90 },
+    };
+    const report = generateBatchReport(result);
     assert.ok(report.includes('Total characters'));
+  });
+
+  it('includes characters corrected', () => {
+    const result = {
+      pdfBytes: new Uint8Array(0),
+      pages: [],
+      stats: { pagesProcessed: 1, totalChars: 100, correctedChars: 12, avgConfidence: 90 },
+    };
+    const report = generateBatchReport(result);
     assert.ok(report.includes('Characters corrected'));
-    assert.ok(report.includes('Average confidence'));
-    assert.ok(report.includes('Page 1'));
-    assert.ok(report.includes('Page 2'));
+  });
+
+  it('includes average confidence', () => {
+    const result = {
+      pdfBytes: new Uint8Array(0),
+      pages: [],
+      stats: { pagesProcessed: 2, totalChars: 200, correctedChars: 2, avgConfidence: 90.25 },
+    };
+    const report = generateBatchReport(result);
     assert.ok(report.includes('90.25%'));
   });
 
-  it('includes per-page confidence values', () => {
+  it('includes per-page details', () => {
     const result = {
       pdfBytes: new Uint8Array(0),
       pages: [
-        { page: 1, correctedText: 'hello', confidence: 75.123, corrections: 1, charBoxes: [] },
+        { page: 1, correctedText: 'hello world', confidence: 92.5, corrections: 2 },
+        { page: 3, correctedText: 'test text here!', confidence: 85.0, corrections: 0 },
       ],
-      stats: { pagesProcessed: 1, totalChars: 5, correctedChars: 1, avgConfidence: 75.12 },
+      stats: { pagesProcessed: 2, totalChars: 200, correctedChars: 2, avgConfidence: 88.75 },
     };
     const report = generateBatchReport(result);
-    assert.ok(report.includes('75.1'));
-    assert.ok(report.includes('1 corrections'));
+    assert.ok(report.includes('Page 1'));
+    assert.ok(report.includes('Page 3'));
+    assert.ok(report.includes('92.5%'));
+    assert.ok(report.includes('85.0%'));
   });
 
-  it('handles empty pages', () => {
+  it('returns a newline-separated string', () => {
     const result = {
       pdfBytes: new Uint8Array(0),
       pages: [],
       stats: { pagesProcessed: 0, totalChars: 0, correctedChars: 0, avgConfidence: 0 },
     };
-    const report = generateBatchReport(result);
-    assert.ok(report.includes('Pages processed: 0'));
-    assert.ok(typeof report === 'string');
+    assert.ok(generateBatchReport(result).includes('\n'));
   });
 
-  it('returns a newline-joined string', () => {
+  it('includes per-page summary header', () => {
     const result = {
       pdfBytes: new Uint8Array(0),
       pages: [],
       stats: { pagesProcessed: 0, totalChars: 0, correctedChars: 0, avgConfidence: 0 },
     };
-    const report = generateBatchReport(result);
-    assert.ok(report.includes('\n'));
+    assert.ok(generateBatchReport(result).includes('Per-Page Summary'));
   });
 });
