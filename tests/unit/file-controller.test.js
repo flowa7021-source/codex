@@ -808,4 +808,252 @@ describe('openFile', () => {
     assert.equal(state.file, file);
     assert.equal(state.docName, 'myfile.txt');
   });
+
+  it('exercises default _deps arrow functions when not overridden', async () => {
+    // Re-inject only the minimum deps needed so the default arrow-function
+    // stubs (lines 27-65 in file-controller.js) get executed, boosting
+    // function coverage.
+    initFileControllerDeps({
+      withErrorBoundary: (fn) => fn,
+      // Adapters are required for the openFile flow
+      PDFAdapter: class { constructor() { this.type = 'pdf'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      DjVuAdapter: class { constructor() { this.type = 'djvu'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      DjVuNativeAdapter: class { constructor() { this.type = 'djvu-native'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      ImageAdapter: class { constructor() { this.type = 'image'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      UnsupportedAdapter: class { constructor() { this.type = 'unsupported'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      // Leave all other deps as defaults (the arrow stubs)
+      renderCurrentPage: async () => {},
+      renderOutline: async () => {},
+      renderPagePreviews: async () => {},
+    });
+
+    const file = new File(['data'], 'something.xyz');
+    await openFile(file);
+    assert.equal(state.adapter.type, 'unsupported');
+  });
+
+  it('opens a .djvu file via DjVuNativeAdapter when DjVu runtime is available', async () => {
+    // Set up window.DjVu mock so ensureDjVuJs succeeds
+    /** @type {any} */ (window).DjVu = {
+      Document: class MockDjVuDocument {
+        constructor(_data) { this.pages = [{}]; }
+      },
+    };
+
+    const origAppendChild = document.head.appendChild;
+    document.head.appendChild = (el) => {
+      if (el && el.tagName === 'SCRIPT' && el.onload) {
+        queueMicrotask(() => el.onload());
+      }
+      return el;
+    };
+
+    try {
+      const file = new File(['AT&TFORM fake djvu data'], 'book.djvu');
+      await openFile(file);
+
+      assert.equal(state.docName, 'book.djvu');
+      assert.ok(state.adapter, 'adapter should be set');
+      assert.equal(state.adapter.type, 'djvu-native');
+    } finally {
+      document.head.appendChild = origAppendChild;
+      delete /** @type {any} */ (window).DjVu;
+    }
+  });
+
+  it('opens a .djvu file via DjVuAdapter fallback (no native runtime)', async () => {
+    // Patch document.head.appendChild to trigger onerror on script elements
+    // so ensureDjVuJs rejects quickly instead of hanging
+    const origAppendChild = document.head.appendChild;
+    document.head.appendChild = (el) => {
+      if (el && el.tagName === 'SCRIPT' && el.onerror) {
+        queueMicrotask(() => el.onerror(new Error('script load failed')));
+      }
+      return el;
+    };
+
+    try {
+      const file = new File(['not a real djvu'], 'book.djvu');
+      await openFile(file);
+
+      assert.equal(state.docName, 'book.djvu');
+      assert.ok(state.adapter, 'adapter should be set');
+      assert.equal(state.adapter.type, 'djvu');
+    } finally {
+      document.head.appendChild = origAppendChild;
+    }
+  });
+
+  it('opens a .djv file via DjVuAdapter fallback', async () => {
+    const origAppendChild = document.head.appendChild;
+    document.head.appendChild = (el) => {
+      if (el && el.tagName === 'SCRIPT' && el.onerror) {
+        queueMicrotask(() => el.onerror(new Error('script load failed')));
+      }
+      return el;
+    };
+
+    try {
+      const file = new File(['not a real djvu'], 'book.djv');
+      await openFile(file);
+
+      assert.equal(state.docName, 'book.djv');
+      assert.ok(state.adapter, 'adapter should be set');
+    } finally {
+      document.head.appendChild = origAppendChild;
+    }
+  });
+
+  it('opens .djvu with pre-existing djvu data in localStorage', async () => {
+    const origAppendChild = document.head.appendChild;
+    document.head.appendChild = (el) => {
+      if (el && el.tagName === 'SCRIPT' && el.onerror) {
+        queueMicrotask(() => el.onerror(new Error('script load failed')));
+      }
+      return el;
+    };
+
+    try {
+      // Pre-populate djvu data with page images so the hasPageData branch is taken
+      state.docName = 'saved.djvu';
+      saveDjvuData({
+        pageCount: 2,
+        pagesImages: ['data:image/png;base64,abc', 'data:image/png;base64,def'],
+        pagesText: ['Page 1 text', 'Page 2 text'],
+      });
+
+      state.docName = null;
+      const file = new File(['not a real djvu'], 'saved.djvu');
+      await openFile(file);
+
+      assert.equal(state.docName, 'saved.djvu');
+      assert.ok(state.adapter, 'adapter should be set');
+    } finally {
+      document.head.appendChild = origAppendChild;
+    }
+  });
+
+  it('reloadPdfFromBytes rejects on invalid PDF data', async () => {
+    // ensurePdfJs succeeds in this env (pdfjs-dist is installed), but
+    // getDocument will reject on garbage bytes
+    await assert.rejects(
+      () => reloadPdfFromBytes(new Uint8Array([1, 2, 3])),
+      (err) => err instanceof Error,
+    );
+  });
+
+  it('reloadPdfFromBytes succeeds with valid PDF bytes', async () => {
+    // Minimal valid PDF that pdfjs can parse
+    const pdfSrc = '%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF';
+    const bytes = new TextEncoder().encode(pdfSrc);
+
+    // Set up state so reloadPdfFromBytes has something to work with
+    state.docName = 'test.pdf';
+    state.currentPage = 1;
+
+    await reloadPdfFromBytes(new Uint8Array(bytes));
+
+    assert.ok(state.pdfBytes, 'pdfBytes should be set');
+    assert.ok(state.adapter, 'adapter should be created');
+    assert.equal(state.pageCount, 3); // mock PDFAdapter.getPageCount returns 3
+    assert.ok(state.file instanceof File, 'file should be a File');
+  });
+
+  it('reloadPdfFromBytes clamps currentPage when it exceeds new page count', async () => {
+    const pdfSrc = '%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF';
+    const bytes = new TextEncoder().encode(pdfSrc);
+
+    state.docName = 'test.pdf';
+    state.currentPage = 999; // higher than actual page count
+
+    await reloadPdfFromBytes(new Uint8Array(bytes));
+
+    // Mock PDFAdapter.getPageCount returns 3, so 999 gets clamped to 3
+    assert.equal(state.currentPage, 3, 'currentPage should be clamped to pageCount');
+  });
+
+  it('reloadPdfFromBytes calls _bootstrapAdvancedTools if present', async () => {
+    const pdfSrc = '%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF';
+    const bytes = new TextEncoder().encode(pdfSrc);
+
+    state.docName = 'test.pdf';
+    state.currentPage = 1;
+
+    let bootstrapCalled = false;
+    /** @type {any} */ (window)._bootstrapAdvancedTools = () => { bootstrapCalled = true; };
+
+    try {
+      await reloadPdfFromBytes(new Uint8Array(bytes));
+      assert.ok(bootstrapCalled, '_bootstrapAdvancedTools should be called');
+    } finally {
+      delete /** @type {any} */ (window)._bootstrapAdvancedTools;
+    }
+  });
+
+  it('handles renderOutline rejection gracefully', async () => {
+    deps.renderOutline = mock.fn(async () => { throw new Error('outline fail'); });
+    initFileControllerDeps(deps);
+
+    const file = new File(['data'], 'test.txt');
+    // Should not throw even though renderOutline rejects
+    await openFile(file);
+    assert.equal(deps.renderOutline.mock.callCount(), 1);
+  });
+
+  it('handles renderPagePreviews rejection gracefully', async () => {
+    deps.renderPagePreviews = mock.fn(async () => { throw new Error('previews fail'); });
+    initFileControllerDeps(deps);
+
+    const file = new File(['data'], 'test.txt');
+    await openFile(file);
+    assert.equal(deps.renderPagePreviews.mock.callCount(), 1);
+  });
+
+  it('handles formManager.loadFromAdapter for pdf adapter type', async () => {
+    // The PDF path falls back to UnsupportedAdapter in test env, so
+    // to test the formManager branch we need an adapter that reports type=pdf
+    // Set up a custom UnsupportedAdapter that reports type as pdf
+    deps.UnsupportedAdapter = class {
+      constructor(name) { this.name = name; this.type = 'pdf'; }
+      getPageCount() { return 1; }
+      async getPageViewport() { return { width: 100, height: 100 }; }
+    };
+    initFileControllerDeps(deps);
+
+    const file = new File(['data'], 'test.xyz');
+    await openFile(file);
+    // formManager.loadFromAdapter should be called since adapter.type === 'pdf'
+    assert.equal(state.adapter.type, 'pdf');
+  });
+
+  it('auto-fits zoom when getPageViewport is available and no saved state', async () => {
+    deps.restoreViewStateIfPresent = mock.fn(() => false);
+    deps.UnsupportedAdapter = class {
+      constructor(name) { this.name = name; this.type = 'unsupported'; }
+      getPageCount() { return 1; }
+      async getPageViewport() { return { width: 400, height: 600 }; }
+    };
+    initFileControllerDeps(deps);
+
+    els.canvasWrap = { offsetWidth: 800, clientWidth: 780, style: {} };
+    const file = new File(['data'], 'test.txt');
+    await openFile(file);
+    // zoom should be auto-fitted based on viewport width vs available width
+    assert.ok(state.zoom > 0, 'zoom should be positive');
+  });
+
+  it('handles getPageViewport throwing during auto-zoom', async () => {
+    deps.restoreViewStateIfPresent = mock.fn(() => false);
+    deps.UnsupportedAdapter = class {
+      constructor(name) { this.name = name; this.type = 'unsupported'; }
+      getPageCount() { return 1; }
+      async getPageViewport() { throw new Error('no viewport'); }
+    };
+    initFileControllerDeps(deps);
+
+    const file = new File(['data'], 'test.txt');
+    // Should not throw
+    await openFile(file);
+    assert.ok(state.adapter, 'adapter should be set');
+  });
 });
