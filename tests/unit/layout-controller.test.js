@@ -41,6 +41,16 @@ if (typeof window.getSelection !== 'function') {
   });
 }
 
+// Patch createElement to include `contains` on every element
+const _origCreateElement = document.createElement.bind(document);
+document.createElement = function (tag) {
+  const el = _origCreateElement(tag);
+  if (!el.contains) {
+    el.contains = () => false;
+  }
+  return el;
+};
+
 // ─── DOM helpers ────────────────────────────────────────────────────────────
 
 function makeEl(tag = 'div') {
@@ -337,6 +347,76 @@ describe('layout-controller', () => {
       updateSearchToolbarRows();
       // Should not throw — the rAF callback will call apply() eventually
     });
+
+    it('apply() computes distinct rows via rAF', async () => {
+      els.searchToolsGroup = makeEl();
+      els.searchInput = makeEl('input');
+      els.searchInput.offsetParent = {};
+      els.searchInput.getBoundingClientRect = () => ({ top: 10, left: 0, bottom: 30, right: 100, width: 100, height: 20 });
+      els.searchBtn = makeEl('button');
+      els.searchBtn.offsetParent = {};
+      els.searchBtn.getBoundingClientRect = () => ({ top: 40, left: 0, bottom: 60, right: 100, width: 100, height: 20 });
+      updateSearchToolbarRows();
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(document.documentElement.style.getPropertyValue('--search-toolbar-rows'), '2');
+    });
+
+    it('apply() sets --search-toolbar-row-height', async () => {
+      els.searchToolsGroup = makeEl();
+      els.searchInput = makeEl('input');
+      els.searchInput.offsetParent = {};
+      els.searchInput.getBoundingClientRect = () => ({ top: 10, left: 0, bottom: 40, right: 100, width: 100, height: 30 });
+      updateSearchToolbarRows();
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(document.documentElement.style.getPropertyValue('--search-toolbar-row-height'), '34px');
+    });
+
+    it('apply() enforces minimum row height of 18px', async () => {
+      els.searchToolsGroup = makeEl();
+      els.searchInput = makeEl('input');
+      els.searchInput.offsetParent = {};
+      els.searchInput.getBoundingClientRect = () => ({ top: 10, left: 0, bottom: 15, right: 100, width: 100, height: 5 });
+      updateSearchToolbarRows();
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(document.documentElement.style.getPropertyValue('--search-toolbar-row-height'), '18px');
+    });
+
+    it('apply() sets rows=1 when all controls same top via rAF', async () => {
+      els.searchToolsGroup = makeEl();
+      els.searchInput = makeEl('input');
+      els.searchInput.offsetParent = {};
+      els.searchInput.getBoundingClientRect = () => ({ top: 10, left: 0, bottom: 30, right: 100, width: 100, height: 20 });
+      els.searchBtn = makeEl('button');
+      els.searchBtn.offsetParent = {};
+      els.searchBtn.getBoundingClientRect = () => ({ top: 10, left: 110, bottom: 30, right: 150, width: 40, height: 20 });
+      updateSearchToolbarRows();
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(document.documentElement.style.getPropertyValue('--search-toolbar-rows'), '1');
+    });
+
+    it('apply() sets rows=1 when no visible controls via rAF', async () => {
+      els.searchToolsGroup = makeEl();
+      els.searchInput = makeEl('input');
+      els.searchInput.offsetParent = null;
+      updateSearchToolbarRows();
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(document.documentElement.style.getPropertyValue('--search-toolbar-rows'), '1');
+    });
+
+    it('falls back to synchronous apply() when rAF unavailable', () => {
+      const origRAF = window.requestAnimationFrame;
+      window.requestAnimationFrame = undefined;
+      try {
+        els.searchToolsGroup = makeEl();
+        els.searchInput = makeEl('input');
+        els.searchInput.offsetParent = {};
+        els.searchInput.getBoundingClientRect = () => ({ top: 10, left: 0, bottom: 30, right: 100, width: 100, height: 20 });
+        updateSearchToolbarRows();
+        assert.equal(document.documentElement.style.getPropertyValue('--search-toolbar-rows'), '1');
+      } finally {
+        window.requestAnimationFrame = origRAF;
+      }
+    });
   });
 
   // ── toggleLayoutState ────────────────────────────────────────────────────
@@ -548,6 +628,214 @@ describe('layout-controller', () => {
       handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
       assert.ok(classAdded);
     });
+
+    it('sidebar resize onMove updates --sidebar-width', () => {
+      const handle = makeEl();
+      els.sidebarResizeHandle = handle;
+      const appShell = makeAppShell();
+      let sidebarWidth = null;
+      appShell.style.setProperty = (k, v) => { if (k === '--sidebar-width') sidebarWidth = v; };
+      appShell.getBoundingClientRect = () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 });
+      _mockQueryMap['.app-shell'] = appShell;
+      const viewerArea = makeViewerArea();
+      viewerArea.style.setProperty = () => {};
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const tip = makeEl();
+      tip.id = 'resizeTooltip';
+      _mockQueryMap['#resizeTooltip'] = tip;
+
+      setupResizableLayout();
+      handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
+      window.dispatchEvent({ type: 'pointermove', clientX: 250, clientY: 100 });
+      assert.equal(sidebarWidth, '250px');
+    });
+
+    it('sidebar resize onMove creates tooltip when none exists', () => {
+      const handle = makeEl();
+      els.sidebarResizeHandle = handle;
+      const appShell = makeAppShell();
+      appShell.style.setProperty = () => {};
+      appShell.getBoundingClientRect = () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 });
+      _mockQueryMap['.app-shell'] = appShell;
+      const viewerArea = makeViewerArea();
+      viewerArea.style.setProperty = () => {};
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      // No #resizeTooltip in mock — will be created dynamically
+
+      setupResizableLayout();
+      handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
+      assert.doesNotThrow(() => window.dispatchEvent({ type: 'pointermove', clientX: 250, clientY: 100 }));
+    });
+
+    it('sidebar resize onMove clamps to min 180', () => {
+      const handle = makeEl();
+      els.sidebarResizeHandle = handle;
+      const appShell = makeAppShell();
+      let sidebarWidth = null;
+      appShell.style.setProperty = (k, v) => { if (k === '--sidebar-width') sidebarWidth = v; };
+      appShell.getBoundingClientRect = () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 });
+      _mockQueryMap['.app-shell'] = appShell;
+      const viewerArea = makeViewerArea();
+      viewerArea.style.setProperty = () => {};
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const tip = makeEl();
+      tip.id = 'resizeTooltip';
+      _mockQueryMap['#resizeTooltip'] = tip;
+
+      setupResizableLayout();
+      handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
+      window.dispatchEvent({ type: 'pointermove', clientX: 50, clientY: 100 });
+      assert.equal(sidebarWidth, '180px');
+    });
+
+    it('sidebar resize onMove clamps to max 360', () => {
+      const handle = makeEl();
+      els.sidebarResizeHandle = handle;
+      const appShell = makeAppShell();
+      let sidebarWidth = null;
+      appShell.style.setProperty = (k, v) => { if (k === '--sidebar-width') sidebarWidth = v; };
+      appShell.getBoundingClientRect = () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 });
+      _mockQueryMap['.app-shell'] = appShell;
+      const viewerArea = makeViewerArea();
+      viewerArea.style.setProperty = () => {};
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const tip = makeEl();
+      tip.id = 'resizeTooltip';
+      _mockQueryMap['#resizeTooltip'] = tip;
+
+      setupResizableLayout();
+      handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
+      window.dispatchEvent({ type: 'pointermove', clientX: 500, clientY: 100 });
+      assert.equal(sidebarWidth, '360px');
+    });
+
+    it('sidebar resize pointerup removes active and syncs settings', () => {
+      const handle = makeEl();
+      els.sidebarResizeHandle = handle;
+      const appShell = makeAppShell();
+      appShell.style.setProperty = () => {};
+      appShell.style.getPropertyValue = () => '250';
+      _mockQueryMap['.app-shell'] = appShell;
+      const viewerArea = makeViewerArea();
+      viewerArea.style.setProperty = () => {};
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const tip = makeEl();
+      tip.id = 'resizeTooltip';
+      _mockQueryMap['#resizeTooltip'] = tip;
+      state.settings = { uiSidebarWidth: 220 };
+
+      setupResizableLayout();
+      handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
+      window.dispatchEvent({ type: 'pointerup' });
+      assert.ok(!handle.classList.contains('active'));
+      assert.equal(state.settings.uiSidebarWidth, 250);
+    });
+
+    it('sidebar resize pointerup does nothing when not active', () => {
+      const handle = makeEl();
+      els.sidebarResizeHandle = handle;
+      const appShell = makeAppShell();
+      appShell.style.setProperty = () => {};
+      _mockQueryMap['.app-shell'] = appShell;
+      const viewerArea = makeViewerArea();
+      viewerArea.style.setProperty = () => {};
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const tip = makeEl();
+      tip.id = 'resizeTooltip';
+      _mockQueryMap['#resizeTooltip'] = tip;
+
+      setupResizableLayout();
+      assert.doesNotThrow(() => window.dispatchEvent({ type: 'pointerup' }));
+    });
+
+    it('canvas resize pointerdown marks active', () => {
+      const handle = makeEl();
+      els.canvasResizeHandle = handle;
+      els.canvasWrap = makeEl();
+      const viewerArea = makeViewerArea();
+      viewerArea.style.setProperty = () => {};
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const appShell = makeAppShell();
+      appShell.style.setProperty = () => {};
+      _mockQueryMap['.app-shell'] = appShell;
+
+      setupResizableLayout();
+      handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
+      assert.ok(handle.classList.contains('active'));
+    });
+
+    it('canvas resize onMove updates --page-area-height', () => {
+      const handle = makeEl();
+      els.canvasResizeHandle = handle;
+      els.canvasWrap = makeEl();
+      els.canvasWrap.getBoundingClientRect = () => ({ left: 0, top: 50, right: 800, bottom: 600, width: 800, height: 550 });
+      const viewerArea = makeViewerArea();
+      let pageAreaHeight = null;
+      viewerArea.style.setProperty = (k, v) => { if (k === '--page-area-height') pageAreaHeight = v; };
+      viewerArea.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 });
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const appShell = makeAppShell();
+      appShell.style.setProperty = () => {};
+      _mockQueryMap['.app-shell'] = appShell;
+      const tip = makeEl();
+      tip.id = 'resizeTooltip';
+      _mockQueryMap['#resizeTooltip'] = tip;
+
+      setupResizableLayout();
+      handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
+      window.dispatchEvent({ type: 'pointermove', clientX: 400, clientY: 600 });
+      assert.equal(pageAreaHeight, '550px');
+    });
+
+    it('canvas resize pointerup removes active and syncs settings', () => {
+      const handle = makeEl();
+      els.canvasResizeHandle = handle;
+      els.canvasWrap = makeEl();
+      const viewerArea = makeViewerArea();
+      viewerArea.style.setProperty = () => {};
+      viewerArea.style.getPropertyValue = () => '600';
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const appShell = makeAppShell();
+      appShell.style.setProperty = () => {};
+      _mockQueryMap['.app-shell'] = appShell;
+      const tip = makeEl();
+      tip.id = 'resizeTooltip';
+      _mockQueryMap['#resizeTooltip'] = tip;
+      state.settings = { uiPageAreaPx: 500 };
+
+      setupResizableLayout();
+      handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
+      window.dispatchEvent({ type: 'pointerup' });
+      assert.ok(!handle.classList.contains('active'));
+      assert.equal(state.settings.uiPageAreaPx, 600);
+    });
+
+    it('canvas resize with texttools visible considers minTextHeight', () => {
+      const handle = makeEl();
+      els.canvasResizeHandle = handle;
+      els.canvasWrap = makeEl();
+      els.canvasWrap.getBoundingClientRect = () => ({ left: 0, top: 50, right: 800, bottom: 600, width: 800, height: 550 });
+      const viewerArea = makeViewerArea();
+      let pageAreaHeight = null;
+      viewerArea.style.setProperty = (k, v) => { if (k === '--page-area-height') pageAreaHeight = v; };
+      viewerArea.getBoundingClientRect = () => ({ left: 0, top: 0, right: 1000, bottom: 800, width: 1000, height: 800 });
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const textToolsSection = makeEl();
+      _mockQueryMap['#textToolsSection'] = textToolsSection;
+      const appShell = makeAppShell();
+      appShell.style.setProperty = () => {};
+      _mockQueryMap['.app-shell'] = appShell;
+      const tip = makeEl();
+      tip.id = 'resizeTooltip';
+      _mockQueryMap['#resizeTooltip'] = tip;
+      state.settings = { uiTextMinHeight: 60 };
+
+      setupResizableLayout();
+      handle.dispatchEvent({ type: 'pointerdown', pointerId: 1 });
+      window.dispatchEvent({ type: 'pointermove', clientX: 400, clientY: 850 });
+      // maxPageHeight = max(420, 800 - 60 - 14) = 726
+      assert.equal(pageAreaHeight, '726px');
+    });
   });
 
   // ── applyLayoutWithTransition ────────────────────────────────────────────
@@ -627,6 +915,28 @@ describe('layout-controller', () => {
       window.dispatchEvent(dropEvt);
       await new Promise((r) => setTimeout(r, 10));
       assert.ok(!openFileCalled);
+    });
+
+    it('prevents default on dragenter event', () => {
+      let prevented = false;
+      setupDragAndDrop();
+      window.dispatchEvent({
+        type: 'dragenter',
+        preventDefault() { prevented = true; },
+        stopPropagation() {},
+      });
+      assert.ok(prevented);
+    });
+
+    it('prevents default on dragover event', () => {
+      let prevented = false;
+      setupDragAndDrop();
+      window.dispatchEvent({
+        type: 'dragover',
+        preventDefault() { prevented = true; },
+        stopPropagation() {},
+      });
+      assert.ok(prevented);
     });
   });
 
@@ -721,6 +1031,364 @@ describe('layout-controller', () => {
       setupAnnotationEvents();
       // Trigger mouseup — getSelection returns collapsed selection
       assert.doesNotThrow(() => textLayerDiv.dispatchEvent({ type: 'mouseup' }));
+    });
+
+    it('dblclick comment popup close button works', () => {
+      initLayoutControllerDeps({
+        getCanvasPointFromEvent: () => ({ x: 50, y: 50 }),
+        loadComments: () => [{ point: { x: 0, y: 0 }, text: 'close test' }],
+        denormalizePoint: () => ({ x: 50, y: 50 }),
+      });
+      const canvas = makeEl('canvas');
+      els.annotationCanvas = canvas;
+      setupAnnotationEvents();
+      // Track what gets appended to body
+      let appendedOverlay = null;
+      const origAppend = document.body.appendChild;
+      document.body.appendChild = (child) => { appendedOverlay = child; return child; };
+      try {
+        canvas.dispatchEvent({ type: 'dblclick', clientX: 50, clientY: 50 });
+        assert.ok(appendedOverlay);
+        assert.ok(appendedOverlay.className.includes('modal'));
+        // Click close button
+        const closeBtn = appendedOverlay.querySelector('#closeCommentPopup');
+        assert.ok(closeBtn);
+        closeBtn.dispatchEvent(new Event('click'));
+      } finally {
+        document.body.appendChild = origAppend;
+      }
+    });
+
+    it('dblclick comment popup closes on overlay background click', () => {
+      initLayoutControllerDeps({
+        getCanvasPointFromEvent: () => ({ x: 50, y: 50 }),
+        loadComments: () => [{ point: { x: 0, y: 0 }, text: 'overlay test' }],
+        denormalizePoint: () => ({ x: 50, y: 50 }),
+      });
+      const canvas = makeEl('canvas');
+      els.annotationCanvas = canvas;
+      setupAnnotationEvents();
+      let appendedOverlay = null;
+      const origAppend = document.body.appendChild;
+      document.body.appendChild = (child) => { appendedOverlay = child; return child; };
+      try {
+        canvas.dispatchEvent({ type: 'dblclick', clientX: 50, clientY: 50 });
+        assert.ok(appendedOverlay);
+        // Click on overlay itself (target === overlay)
+        appendedOverlay.dispatchEvent({ type: 'click', target: appendedOverlay });
+      } finally {
+        document.body.appendChild = origAppend;
+      }
+    });
+
+    it('dblclick skips comments too far away', () => {
+      initLayoutControllerDeps({
+        getCanvasPointFromEvent: () => ({ x: 50, y: 50 }),
+        loadComments: () => [{ point: { x: 0, y: 0 }, text: 'far' }],
+        denormalizePoint: () => ({ x: 200, y: 200 }),
+      });
+      const canvas = makeEl('canvas');
+      els.annotationCanvas = canvas;
+      setupAnnotationEvents();
+      let appendCalled = false;
+      const origAppend = document.body.appendChild;
+      document.body.appendChild = () => { appendCalled = true; };
+      try {
+        canvas.dispatchEvent({ type: 'dblclick', clientX: 50, clientY: 50 });
+        assert.ok(!appendCalled);
+      } finally {
+        document.body.appendChild = origAppend;
+      }
+    });
+
+    it('textLayerDiv mouseup creates markup popup on valid selection', () => {
+      const textLayerDiv = makeEl('div');
+      const anchorNode = makeEl('span');
+      textLayerDiv.appendChild(anchorNode);
+      textLayerDiv.contains = (node) => node === anchorNode;
+      els.textLayerDiv = textLayerDiv;
+      els.annotationCanvas = makeEl('canvas');
+
+      const origGetSel = window.getSelection;
+      window.getSelection = () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode,
+        getRangeAt: () => ({
+          getBoundingClientRect: () => ({ width: 50, top: 100, left: 200, bottom: 120, right: 250 }),
+        }),
+        removeAllRanges: () => {},
+      });
+
+      let appendedPopup = null;
+      const origAppend = document.body.appendChild;
+      document.body.appendChild = (child) => { appendedPopup = child; return child; };
+      try {
+        setupAnnotationEvents();
+        textLayerDiv.dispatchEvent({ type: 'mouseup' });
+        assert.ok(appendedPopup);
+        assert.ok(appendedPopup.className.includes('text-markup-popup'));
+        // Should have 4 tool buttons
+        assert.equal(appendedPopup.children.length, 4);
+      } finally {
+        window.getSelection = origGetSel;
+        document.body.appendChild = origAppend;
+      }
+    });
+
+    it('textLayerDiv mouseup ignores narrow selection', () => {
+      const textLayerDiv = makeEl('div');
+      const anchorNode = makeEl('span');
+      textLayerDiv.appendChild(anchorNode);
+      textLayerDiv.contains = (node) => node === anchorNode;
+      els.textLayerDiv = textLayerDiv;
+      els.annotationCanvas = makeEl('canvas');
+
+      const origGetSel = window.getSelection;
+      window.getSelection = () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode,
+        getRangeAt: () => ({
+          getBoundingClientRect: () => ({ width: 2, top: 100, left: 200, bottom: 120, right: 202 }),
+        }),
+        removeAllRanges: () => {},
+      });
+
+      let appendCalled = false;
+      const origAppend = document.body.appendChild;
+      document.body.appendChild = () => { appendCalled = true; };
+      try {
+        setupAnnotationEvents();
+        textLayerDiv.dispatchEvent({ type: 'mouseup' });
+        assert.ok(!appendCalled);
+      } finally {
+        window.getSelection = origGetSel;
+        document.body.appendChild = origAppend;
+      }
+    });
+
+    it('textLayerDiv mouseup ignores selection outside textLayerDiv', () => {
+      const textLayerDiv = makeEl('div');
+      textLayerDiv.contains = () => false;
+      els.textLayerDiv = textLayerDiv;
+      els.annotationCanvas = makeEl('canvas');
+
+      const origGetSel = window.getSelection;
+      window.getSelection = () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode: makeEl('span'),
+        getRangeAt: () => ({
+          getBoundingClientRect: () => ({ width: 50, top: 100, left: 200, bottom: 120, right: 250 }),
+        }),
+        removeAllRanges: () => {},
+      });
+
+      let appendCalled = false;
+      const origAppend = document.body.appendChild;
+      document.body.appendChild = () => { appendCalled = true; };
+      try {
+        setupAnnotationEvents();
+        textLayerDiv.dispatchEvent({ type: 'mouseup' });
+        assert.ok(!appendCalled);
+      } finally {
+        window.getSelection = origGetSel;
+        document.body.appendChild = origAppend;
+      }
+    });
+
+    it('markup popup button click calls _applyTextMarkupFromSelection', () => {
+      const textLayerDiv = makeEl('div');
+      const anchorNode = makeEl('span');
+      textLayerDiv.appendChild(anchorNode);
+      textLayerDiv.contains = (node) => node === anchorNode;
+      els.textLayerDiv = textLayerDiv;
+      els.annotationCanvas = makeEl('canvas');
+
+      let markupTool = null;
+      initLayoutControllerDeps({
+        _applyTextMarkupFromSelection: (_sel, tool) => { markupTool = tool; },
+      });
+
+      const origGetSel = window.getSelection;
+      window.getSelection = () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode,
+        getRangeAt: () => ({
+          getBoundingClientRect: () => ({ width: 50, top: 100, left: 200, bottom: 120, right: 250 }),
+        }),
+        removeAllRanges: () => {},
+      });
+
+      let appendedPopup = null;
+      const origAppend = document.body.appendChild;
+      document.body.appendChild = (child) => { appendedPopup = child; return child; };
+      try {
+        setupAnnotationEvents();
+        textLayerDiv.dispatchEvent({ type: 'mouseup' });
+        // Click first button (text-highlight)
+        appendedPopup.children[0].dispatchEvent(new Event('click'));
+        assert.equal(markupTool, 'text-highlight');
+      } finally {
+        window.getSelection = origGetSel;
+        document.body.appendChild = origAppend;
+      }
+    });
+
+    it('markup popup buttons have mouseenter/mouseleave handlers', () => {
+      const textLayerDiv = makeEl('div');
+      const anchorNode = makeEl('span');
+      textLayerDiv.appendChild(anchorNode);
+      textLayerDiv.contains = (node) => node === anchorNode;
+      els.textLayerDiv = textLayerDiv;
+      els.annotationCanvas = makeEl('canvas');
+
+      const origGetSel = window.getSelection;
+      window.getSelection = () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode,
+        getRangeAt: () => ({
+          getBoundingClientRect: () => ({ width: 50, top: 100, left: 200, bottom: 120, right: 250 }),
+        }),
+        removeAllRanges: () => {},
+      });
+
+      let appendedPopup = null;
+      const origAppend = document.body.appendChild;
+      document.body.appendChild = (child) => { appendedPopup = child; return child; };
+      try {
+        setupAnnotationEvents();
+        textLayerDiv.dispatchEvent({ type: 'mouseup' });
+        const btn = appendedPopup.children[0];
+        btn.dispatchEvent({ type: 'mouseenter' });
+        assert.ok(btn.style.background.includes('var(--hover'));
+        btn.dispatchEvent({ type: 'mouseleave' });
+        assert.equal(btn.style.background, 'transparent');
+      } finally {
+        window.getSelection = origGetSel;
+        document.body.appendChild = origAppend;
+      }
+    });
+
+    it('markup popup auto-removes on mousedown outside after delay', async () => {
+      const textLayerDiv = makeEl('div');
+      const anchorNode = makeEl('span');
+      textLayerDiv.appendChild(anchorNode);
+      textLayerDiv.contains = (node) => node === anchorNode;
+      els.textLayerDiv = textLayerDiv;
+      els.annotationCanvas = makeEl('canvas');
+
+      const origGetSel = window.getSelection;
+      window.getSelection = () => ({
+        isCollapsed: false,
+        rangeCount: 1,
+        anchorNode,
+        getRangeAt: () => ({
+          getBoundingClientRect: () => ({ width: 50, top: 100, left: 200, bottom: 120, right: 250 }),
+        }),
+        removeAllRanges: () => {},
+      });
+
+      let appendedPopup = null;
+      const origAppend = document.body.appendChild;
+      document.body.appendChild = (child) => { appendedPopup = child; return child; };
+
+      // Patch document.addEventListener to capture registered handlers
+      const docListeners = {};
+      const origDocAdd = document.addEventListener;
+      const origDocRemove = document.removeEventListener;
+      document.addEventListener = (type, fn) => {
+        if (!docListeners[type]) docListeners[type] = [];
+        docListeners[type].push(fn);
+      };
+      document.removeEventListener = (type, fn) => {
+        if (docListeners[type]) docListeners[type] = docListeners[type].filter((f) => f !== fn);
+      };
+
+      try {
+        setupAnnotationEvents();
+        textLayerDiv.dispatchEvent({ type: 'mouseup' });
+        assert.ok(appendedPopup);
+        // Patch contains on the popup before the handler fires
+        let popupRemoved = false;
+        appendedPopup.contains = () => false;
+        appendedPopup.remove = () => { popupRemoved = true; };
+        // Wait for safeTimeout(50) to register the mousedown listener
+        await new Promise((r) => setTimeout(r, 100));
+        // Verify handler was registered and call it
+        const handlers = docListeners.mousedown || [];
+        assert.ok(handlers.length > 0, 'mousedown handler should be registered');
+        // Call the last registered handler (in case others snuck in)
+        const outsideEl = makeEl('div');
+        for (const handler of handlers) {
+          handler({ target: outsideEl });
+        }
+        assert.ok(popupRemoved, 'popup should have been removed');
+      } finally {
+        window.getSelection = origGetSel;
+        document.body.appendChild = origAppend;
+        document.addEventListener = origDocAdd;
+        document.removeEventListener = origDocRemove;
+      }
+    });
+
+    it('textLayerDiv mouseup removes existing popup', () => {
+      const textLayerDiv = makeEl('div');
+      textLayerDiv.contains = () => false;
+      els.textLayerDiv = textLayerDiv;
+      els.annotationCanvas = makeEl('canvas');
+
+      // Mock querySelector to find existing popup
+      const existingPopup = makeEl('div');
+      existingPopup.className = 'text-markup-popup';
+      let removePopupCalled = false;
+      existingPopup.remove = () => { removePopupCalled = true; };
+      const origQS = document.querySelector;
+      document.querySelector = function (sel) {
+        if (sel === '.text-markup-popup') return existingPopup;
+        if (_mockQueryMap[sel]) return _mockQueryMap[sel];
+        return null;
+      };
+
+      try {
+        setupAnnotationEvents();
+        textLayerDiv.dispatchEvent({ type: 'mouseup' });
+        assert.ok(removePopupCalled);
+      } finally {
+        document.querySelector = origQS;
+      }
+    });
+  });
+
+  // ── ensureDefaultPageAreaHeight additional branches ──────────────────────
+  describe('ensureDefaultPageAreaHeight additional', () => {
+    it('resets pageAreaPx when below 520', () => {
+      localStorage.setItem(uiLayoutKey('pageAreaPx'), '400');
+      const viewerArea = makeViewerArea();
+      viewerArea.clientHeight = 1000;
+      viewerArea.style.setProperty = () => {};
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const appShell = makeAppShell();
+      appShell.style.setProperty = () => {};
+      _mockQueryMap['.app-shell'] = appShell;
+      ensureDefaultPageAreaHeight();
+      const val = Number(localStorage.getItem(uiLayoutKey('pageAreaPx')));
+      assert.ok(val >= 860);
+    });
+
+    it('keeps valid sidebarWidth in range', () => {
+      localStorage.setItem(uiLayoutKey('sidebarWidth'), '250');
+      const viewerArea = makeViewerArea();
+      viewerArea.style.setProperty = () => {};
+      _mockQueryMap['.viewer-area'] = viewerArea;
+      const appShell = makeAppShell();
+      appShell.style.setProperty = () => {};
+      _mockQueryMap['.app-shell'] = appShell;
+      ensureDefaultPageAreaHeight();
+      assert.equal(localStorage.getItem(uiLayoutKey('sidebarWidth')), '250');
     });
   });
 });

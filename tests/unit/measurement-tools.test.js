@@ -547,4 +547,477 @@ describe('MeasurementOverlay', () => {
     assert.deepStrictEqual(overlay.getMeasurements(), []);
     overlay.deactivate();
   });
+
+  // ── Mouse interaction: distance tool ────────────────────────────────────
+
+  it('distance tool commits after two clicks', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'mm' });
+    overlay.setTool('distance');
+
+    // Simulate two mouse clicks via the bound handler
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 0 });
+
+    const ms = overlay.getMeasurements();
+    assert.equal(ms.length, 1);
+    assert.equal(ms[0].tool, 'distance');
+    assert.equal(ms[0].unit, 'mm');
+    assert.ok(ms[0].formatted.includes('mm'));
+    overlay.deactivate();
+  });
+
+  // ── Mouse interaction: rectangle tool ───────────────────────────────────
+
+  it('rectangle tool commits after two clicks', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'in' });
+    overlay.setTool('rectangle');
+
+    overlay._onMouseDown({ clientX: 10, clientY: 10 });
+    overlay._onMouseDown({ clientX: 82, clientY: 82 });
+
+    const ms = overlay.getMeasurements();
+    assert.equal(ms.length, 1);
+    assert.equal(ms[0].tool, 'rectangle');
+    assert.ok(ms[0].formatted.includes('×'));
+    overlay.deactivate();
+  });
+
+  // ── Mouse interaction: angle tool ───────────────────────────────────────
+
+  it('angle tool commits after three clicks', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'pt' });
+    overlay.setTool('angle');
+
+    overlay._onMouseDown({ clientX: 100, clientY: 0 });
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 0, clientY: 100 });
+
+    const ms = overlay.getMeasurements();
+    assert.equal(ms.length, 1);
+    assert.equal(ms[0].tool, 'angle');
+    assert.ok(ms[0].formatted.includes('°'));
+    overlay.deactivate();
+  });
+
+  it('angle tool does not commit with only two clicks', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('angle');
+
+    overlay._onMouseDown({ clientX: 100, clientY: 0 });
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+
+    assert.equal(overlay.getMeasurements().length, 0);
+    overlay.deactivate();
+  });
+
+  // ── Mouse interaction: polyline tool ────────────────────────────────────
+
+  it('polyline tool commits on double-click', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'cm' });
+    overlay.setTool('polyline');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 72 });
+    overlay._onDblClick({});
+
+    const ms = overlay.getMeasurements();
+    assert.equal(ms.length, 1);
+    assert.equal(ms[0].tool, 'polyline');
+    assert.ok(ms[0].formatted.includes('cm'));
+    overlay.deactivate();
+  });
+
+  it('polyline tool does not commit with fewer than 2 points on dblclick', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('polyline');
+
+    overlay._onMouseDown({ clientX: 10, clientY: 10 });
+    overlay._onDblClick({});
+
+    assert.equal(overlay.getMeasurements().length, 0);
+    overlay.deactivate();
+  });
+
+  // ── Mouse interaction: area tool ────────────────────────────────────────
+
+  it('area tool commits on double-click with polygon', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'mm' });
+    overlay.setTool('area');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 72 });
+    overlay._onMouseDown({ clientX: 0, clientY: 72 });
+    overlay._onDblClick({});
+
+    const ms = overlay.getMeasurements();
+    assert.equal(ms.length, 1);
+    assert.equal(ms[0].tool, 'area');
+    assert.ok(ms[0].formatted.includes('²'));
+    assert.ok(ms[0].formatted.includes('perim'));
+    overlay.deactivate();
+  });
+
+  it('area tool does not commit with fewer than 2 points', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('area');
+
+    overlay._onMouseDown({ clientX: 10, clientY: 10 });
+    overlay._onDblClick({});
+
+    assert.equal(overlay.getMeasurements().length, 0);
+    overlay.deactivate();
+  });
+
+  // ── Mouse move (hover preview) ─────────────────────────────────────────
+
+  it('mouse move sets hover point for distance preview', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseMove({ clientX: 50, clientY: 50 });
+
+    // Should not throw and hover point should be set
+    assert.ok(overlay._hoverPt);
+    assert.equal(overlay._hoverPt.x, 50);
+    assert.equal(overlay._hoverPt.y, 50);
+    overlay.deactivate();
+  });
+
+  it('mouse move does nothing when not active', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+    overlay._active = false;
+
+    overlay._onMouseMove({ clientX: 50, clientY: 50 });
+    assert.equal(overlay._hoverPt, undefined);
+    overlay.deactivate();
+  });
+
+  it('mouse move does nothing when no points', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+
+    overlay._onMouseMove({ clientX: 50, clientY: 50 });
+    assert.equal(overlay._hoverPt, undefined);
+    overlay.deactivate();
+  });
+
+  // ── Mouse down when not active ──────────────────────────────────────────
+
+  it('mouse down does nothing when not active', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+    overlay._active = false;
+
+    overlay._onMouseDown({ clientX: 50, clientY: 50 });
+    assert.equal(overlay._points.length, 0);
+    overlay.deactivate();
+  });
+
+  // ── Escape key clears points and hoverPt ────────────────────────────────
+
+  it('Escape key clears in-progress points and hover', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('polyline');
+
+    overlay._onMouseDown({ clientX: 10, clientY: 10 });
+    overlay._onMouseDown({ clientX: 20, clientY: 20 });
+    overlay._onMouseMove({ clientX: 30, clientY: 30 });
+    assert.equal(overlay._points.length, 2);
+
+    overlay._onKeyDown({ key: 'Escape' });
+    assert.equal(overlay._points.length, 0);
+    assert.equal(overlay._hoverPt, null);
+    overlay.deactivate();
+  });
+
+  it('non-Escape key does not clear points', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+
+    overlay._onMouseDown({ clientX: 10, clientY: 10 });
+    overlay._onKeyDown({ key: 'Enter' });
+    assert.equal(overlay._points.length, 1);
+    overlay.deactivate();
+  });
+
+  // ── clearAll after measurements ─────────────────────────────────────────
+
+  it('clearAll removes completed measurements', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'pt' });
+    overlay.setTool('distance');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 100, clientY: 0 });
+    assert.equal(overlay.getMeasurements().length, 1);
+
+    overlay.clearAll();
+    assert.equal(overlay.getMeasurements().length, 0);
+    overlay.deactivate();
+  });
+
+  // ── getMeasurements returns correct data ─────────────────────────────────
+
+  it('getMeasurements returns correct structure for distance', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'pt' });
+    overlay.setTool('distance');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 100, clientY: 0 });
+
+    const ms = overlay.getMeasurements();
+    assert.equal(ms.length, 1);
+    assert.equal(ms[0].tool, 'distance');
+    assert.ok(Array.isArray(ms[0].points));
+    assert.equal(ms[0].points.length, 2);
+    assert.equal(typeof ms[0].value, 'number');
+    assert.equal(ms[0].unit, 'pt');
+    assert.equal(typeof ms[0].formatted, 'string');
+    overlay.deactivate();
+  });
+
+  // ── Multiple measurements ───────────────────────────────────────────────
+
+  it('supports multiple sequential measurements', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'mm' });
+    overlay.setTool('distance');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 100, clientY: 0 });
+
+    overlay._onMouseDown({ clientX: 50, clientY: 50 });
+    overlay._onMouseDown({ clientX: 150, clientY: 50 });
+
+    const ms = overlay.getMeasurements();
+    assert.equal(ms.length, 2);
+    overlay.deactivate();
+  });
+
+  // ── Draw with hover preview for various tools ───────────────────────────
+
+  it('polyline draw preview with hover', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('polyline');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 50, clientY: 0 });
+    overlay._onMouseMove({ clientX: 50, clientY: 50 });
+
+    // Trigger draw explicitly to exercise polyline preview path
+    overlay._draw();
+    assert.ok(true);
+    overlay.deactivate();
+  });
+
+  it('area draw preview with hover', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('area');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 50, clientY: 0 });
+    overlay._onMouseMove({ clientX: 50, clientY: 50 });
+
+    overlay._draw();
+    assert.ok(true);
+    overlay.deactivate();
+  });
+
+  it('angle draw preview with two points and hover', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('angle');
+
+    overlay._onMouseDown({ clientX: 100, clientY: 0 });
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseMove({ clientX: 0, clientY: 100 });
+
+    overlay._draw();
+    assert.ok(true);
+    overlay.deactivate();
+  });
+
+  it('rectangle draw preview with hover', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('rectangle');
+
+    overlay._onMouseDown({ clientX: 10, clientY: 10 });
+    overlay._onMouseMove({ clientX: 80, clientY: 80 });
+
+    overlay._draw();
+    assert.ok(true);
+    overlay.deactivate();
+  });
+
+  it('distance draw preview with hover', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+
+    overlay._onMouseDown({ clientX: 10, clientY: 10 });
+    overlay._onMouseMove({ clientX: 80, clientY: 10 });
+
+    overlay._draw();
+    assert.ok(true);
+    overlay.deactivate();
+  });
+
+  // ── Drawing completed measurements ──────────────────────────────────────
+
+  it('draws completed polyline measurement', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'mm' });
+    overlay.setTool('polyline');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 50, clientY: 0 });
+    overlay._onMouseDown({ clientX: 50, clientY: 50 });
+    overlay._onDblClick({});
+
+    // Draw is called internally after commit; call again to exercise completed path
+    overlay._draw();
+    assert.equal(overlay.getMeasurements().length, 1);
+    overlay.deactivate();
+  });
+
+  it('draws completed area measurement', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'mm' });
+    overlay.setTool('area');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 72 });
+    overlay._onDblClick({});
+
+    overlay._draw();
+    assert.equal(overlay.getMeasurements().length, 1);
+    overlay.deactivate();
+  });
+
+  it('draws completed angle measurement', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'pt' });
+    overlay.setTool('angle');
+
+    overlay._onMouseDown({ clientX: 100, clientY: 0 });
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 0, clientY: 100 });
+
+    overlay._draw();
+    assert.equal(overlay.getMeasurements().length, 1);
+    overlay.deactivate();
+  });
+
+  it('draws completed rectangle measurement', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'in' });
+    overlay.setTool('rectangle');
+
+    overlay._onMouseDown({ clientX: 10, clientY: 10 });
+    overlay._onMouseDown({ clientX: 82, clientY: 82 });
+
+    overlay._draw();
+    assert.equal(overlay.getMeasurements().length, 1);
+    overlay.deactivate();
+  });
+
+  // ── _canvasToPagePt with zoom ───────────────────────────────────────────
+
+  it('canvasToPagePt respects zoom', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 2 });
+    overlay.setTool('distance');
+
+    overlay._onMouseDown({ clientX: 100, clientY: 200 });
+    // With zoom=2, coordinates should be halved
+    assert.equal(overlay._points[0].x, 50);
+    assert.equal(overlay._points[0].y, 100);
+    overlay.deactivate();
+  });
+
+  // ── setUnit changes formatted output ────────────────────────────────────
+
+  it('setUnit changes unit on subsequent getMeasurements', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'mm' });
+    overlay.setTool('distance');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 0 });
+
+    assert.equal(overlay.getMeasurements()[0].unit, 'mm');
+    overlay.setUnit('in');
+    assert.equal(overlay.getMeasurements()[0].unit, 'in');
+    overlay.deactivate();
+  });
+
+  // ── _draw with no ctx is safe ───────────────────────────────────────────
+
+  it('_draw with no ctx does nothing', () => {
+    const overlay = new MeasurementOverlay(container);
+    // Don't call setTool, so _ctx is null
+    overlay._draw();
+    assert.ok(true);
+  });
+
+  // ── _drawPolyline with fewer than 2 points ─────────────────────────────
+
+  it('_drawPolyline with fewer than 2 points does nothing', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+    const ctx = overlay._ctx;
+    // Should not throw
+    overlay._drawPolyline(ctx, [{ x: 0, y: 0 }], 1, false);
+    overlay._drawPolyline(ctx, [], 1, true);
+    assert.ok(true);
+    overlay.deactivate();
+  });
+
+  // ── _drawAnglePreview with fewer than 2 points ─────────────────────────
+
+  it('_drawAnglePreview with fewer than 2 points does nothing', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+    const ctx = overlay._ctx;
+    overlay._drawAnglePreview(ctx, [{ x: 0, y: 0 }], 1);
+    overlay._drawAnglePreview(ctx, [], 1);
+    assert.ok(true);
+    overlay.deactivate();
+  });
+
+  // ── _drawAnglePreview with exactly 2 points (no arc) ───────────────────
+
+  it('_drawAnglePreview with 2 points draws ray but no arc', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+    const ctx = overlay._ctx;
+    overlay._drawAnglePreview(ctx, [{ x: 100, y: 0 }, { x: 0, y: 0 }], 1);
+    assert.ok(true);
+    overlay.deactivate();
+  });
+
+  // ── _drawPolyline with closed=true fills ────────────────────────────────
+
+  it('_drawPolyline with closed=true calls fill', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1 });
+    overlay.setTool('distance');
+    const ctx = overlay._ctx;
+    let fillCalled = false;
+    ctx.fill = () => { fillCalled = true; };
+    overlay._drawPolyline(ctx, [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }], 1, true);
+    assert.ok(fillCalled);
+    overlay.deactivate();
+  });
+
+  // ── Area tool with unknown unit label ───────────────────────────────────
+
+  it('area tool uses raw unit string for unknown units', () => {
+    const overlay = new MeasurementOverlay(container, { zoom: 1, unit: 'furlongs' });
+    overlay.setTool('area');
+
+    overlay._onMouseDown({ clientX: 0, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 0 });
+    overlay._onMouseDown({ clientX: 72, clientY: 72 });
+    overlay._onDblClick({});
+
+    const ms = overlay.getMeasurements();
+    assert.equal(ms.length, 1);
+    assert.ok(ms[0].formatted.includes('furlongs'));
+    overlay.deactivate();
+  });
 });

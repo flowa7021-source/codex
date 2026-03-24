@@ -2,7 +2,15 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { EpubAdapter, EPUB_READER_DEFAULTS } from '../../app/modules/epub-adapter.js';
+import {
+  EpubAdapter,
+  EPUB_READER_DEFAULTS,
+  parseContainer,
+  parseOpf,
+  stripHtmlTags,
+  extractChapterTitle,
+  parseToc,
+} from '../../app/modules/epub-adapter.js';
 
 // ─── EPUB_READER_DEFAULTS ────────────────────────────────────────────────────
 
@@ -22,6 +30,225 @@ describe('EPUB_READER_DEFAULTS', () => {
 });
 
 // Note: parseEpub tests require mock.module() (Node 23+) and are skipped
+
+// ─── parseContainer ──────────────────────────────────────────────────────────
+
+describe('parseContainer', () => {
+  it('extracts the full-path from a standard container.xml', () => {
+    const xml = '<?xml version="1.0"?><container><rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles></container>';
+    assert.equal(parseContainer(xml), 'OEBPS/content.opf');
+  });
+
+  it('returns null when full-path attribute is missing', () => {
+    const xml = '<container><rootfiles><rootfile media-type="application/oebps-package+xml"/></rootfiles></container>';
+    assert.equal(parseContainer(xml), null);
+  });
+
+  it('extracts path when OPF is at root level', () => {
+    assert.equal(parseContainer('<rootfile full-path="content.opf"/>'), 'content.opf');
+  });
+});
+
+// ─── parseOpf ────────────────────────────────────────────────────────────────
+
+describe('parseOpf', () => {
+  const sampleOpf = `
+    <package>
+      <manifest>
+        <item id="ch1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+        <item id="ch2" href="chapter2.xhtml" media-type="application/xhtml+xml"/>
+        <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+        <item id="css" href="style.css" media-type="text/css"/>
+      </manifest>
+      <spine toc="ncx">
+        <itemref idref="ch1"/>
+        <itemref idref="ch2"/>
+      </spine>
+    </package>`;
+
+  it('extracts manifest items with basePath prepended to href', () => {
+    const result = parseOpf(sampleOpf, 'OEBPS/');
+    assert.equal(result.items['ch1'].href, 'OEBPS/chapter1.xhtml');
+    assert.equal(result.items['ch1'].mediaType, 'application/xhtml+xml');
+    assert.equal(result.items['ch2'].href, 'OEBPS/chapter2.xhtml');
+  });
+
+  it('builds spine from itemref elements that exist in manifest', () => {
+    const result = parseOpf(sampleOpf, 'OEBPS/');
+    assert.equal(result.spine.length, 2);
+    assert.equal(result.spine[0].href, 'OEBPS/chapter1.xhtml');
+    assert.equal(result.spine[1].href, 'OEBPS/chapter2.xhtml');
+  });
+
+  it('skips spine itemref when id is not in manifest', () => {
+    const opf = `
+      <manifest><item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/></manifest>
+      <spine><itemref idref="ch1"/><itemref idref="missing"/></spine>`;
+    const result = parseOpf(opf, '');
+    assert.equal(result.spine.length, 1);
+  });
+
+  it('extracts tocHref for NCX file', () => {
+    const result = parseOpf(sampleOpf, 'OEBPS/');
+    assert.equal(result.tocHref, 'OEBPS/toc.ncx');
+  });
+
+  it('returns null tocHref when no NCX item exists', () => {
+    const opf = `<manifest><item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="ch1"/></spine>`;
+    const result = parseOpf(opf, '');
+    assert.equal(result.tocHref, null);
+  });
+
+  it('works with empty basePath', () => {
+    const result = parseOpf(sampleOpf, '');
+    assert.equal(result.items['ch1'].href, 'chapter1.xhtml');
+  });
+});
+
+// ─── stripHtmlTags ───────────────────────────────────────────────────────────
+
+describe('stripHtmlTags', () => {
+  it('converts <br> to newline', () => {
+    assert.equal(stripHtmlTags('a<br>b<br/>c<br />d'), 'a\nb\nc\nd');
+  });
+
+  it('converts </p> to double newline', () => {
+    assert.equal(stripHtmlTags('<p>hello</p><p>world</p>'), 'hello\n\nworld');
+  });
+
+  it('converts </div> to newline', () => {
+    assert.equal(stripHtmlTags('<div>block</div>'), 'block');
+  });
+
+  it('converts heading closing tags to double newline', () => {
+    assert.equal(stripHtmlTags('<h1>Title</h1>more'), 'Title\n\nmore');
+    assert.equal(stripHtmlTags('<h3>Sub</h3>text'), 'Sub\n\ntext');
+    assert.equal(stripHtmlTags('<h6>Small</h6>rest'), 'Small\n\nrest');
+  });
+
+  it('converts </li> to newline', () => {
+    assert.equal(stripHtmlTags('<li>item1</li><li>item2</li>'), 'item1\nitem2');
+  });
+
+  it('strips remaining HTML tags', () => {
+    assert.equal(stripHtmlTags('<span class="x">text</span>'), 'text');
+  });
+
+  it('decodes &nbsp; entity', () => {
+    assert.equal(stripHtmlTags('a&nbsp;b'), 'a b');
+  });
+
+  it('decodes &amp; entity', () => {
+    assert.equal(stripHtmlTags('a&amp;b'), 'a&b');
+  });
+
+  it('decodes &lt; and &gt; entities', () => {
+    assert.equal(stripHtmlTags('&lt;tag&gt;'), '<tag>');
+  });
+
+  it('decodes &quot; entity', () => {
+    assert.equal(stripHtmlTags('&quot;hello&quot;'), '"hello"');
+  });
+
+  it('decodes numeric character references', () => {
+    assert.equal(stripHtmlTags('&#65;&#66;'), 'AB');
+  });
+
+  it('collapses 3+ consecutive newlines to 2', () => {
+    assert.equal(stripHtmlTags('a\n\n\n\nb'), 'a\n\nb');
+  });
+
+  it('trims leading and trailing whitespace', () => {
+    assert.equal(stripHtmlTags('  <p>text</p>  '), 'text');
+  });
+
+  it('handles complex HTML with multiple features', () => {
+    const html = '<h1>Title</h1><p>Some &amp; text</p><br><p>More &lt;stuff&gt;</p>';
+    const result = stripHtmlTags(html);
+    assert.ok(result.includes('Title'));
+    assert.ok(result.includes('Some & text'));
+    assert.ok(result.includes('More <stuff>'));
+  });
+});
+
+// ─── extractChapterTitle ─────────────────────────────────────────────────────
+
+describe('extractChapterTitle', () => {
+  it('extracts title from <h1> tag', () => {
+    assert.equal(extractChapterTitle('<h1>Chapter One</h1><p>body</p>'), 'Chapter One');
+  });
+
+  it('extracts title from <h2> tag', () => {
+    assert.equal(extractChapterTitle('<h2 class="title">Second</h2>'), 'Second');
+  });
+
+  it('extracts title from <h3> tag', () => {
+    assert.equal(extractChapterTitle('<h3>Third</h3>'), 'Third');
+  });
+
+  it('strips inner HTML from heading', () => {
+    assert.equal(extractChapterTitle('<h1><span>Styled</span> Title</h1>'), 'Styled Title');
+  });
+
+  it('falls back to <title> when no heading found', () => {
+    assert.equal(extractChapterTitle('<title>Page Title</title><p>content</p>'), 'Page Title');
+  });
+
+  it('returns null when no heading or title found', () => {
+    assert.equal(extractChapterTitle('<p>Just a paragraph</p>'), null);
+  });
+
+  it('truncates to 100 characters', () => {
+    const longTitle = 'A'.repeat(200);
+    const result = extractChapterTitle(`<h1>${longTitle}</h1>`);
+    assert.equal(result.length, 100);
+  });
+
+  it('prefers heading over title tag', () => {
+    assert.equal(extractChapterTitle('<title>Fallback</title><h1>Primary</h1>'), 'Primary');
+  });
+
+  it('handles multiline heading content', () => {
+    const html = '<h1>\n  Multi\n  Line\n</h1>';
+    const result = extractChapterTitle(html);
+    assert.ok(result.includes('Multi'));
+  });
+});
+
+// ─── parseToc ────────────────────────────────────────────────────────────────
+
+describe('parseToc', () => {
+  it('extracts navPoint items with title and src', () => {
+    const ncx = `
+      <navMap>
+        <navPoint id="np1">
+          <navLabel><text>Introduction</text></navLabel>
+          <content src="intro.xhtml"/>
+        </navPoint>
+        <navPoint id="np2">
+          <navLabel><text>Chapter 1</text></navLabel>
+          <content src="ch1.xhtml"/>
+        </navPoint>
+      </navMap>`;
+    const result = parseToc(ncx);
+    assert.equal(result.length, 2);
+    assert.equal(result[0].title, 'Introduction');
+    assert.equal(result[0].src, 'intro.xhtml');
+    assert.equal(result[1].title, 'Chapter 1');
+    assert.equal(result[1].src, 'ch1.xhtml');
+  });
+
+  it('returns empty array for NCX with no navPoints', () => {
+    const ncx = '<navMap></navMap>';
+    assert.deepEqual(parseToc(ncx), []);
+  });
+
+  it('strips HTML from navPoint text', () => {
+    const ncx = `<navPoint><navLabel><text><b>Bold</b> Title</text></navLabel><content src="x.xhtml"/></navPoint>`;
+    const result = parseToc(ncx);
+    assert.equal(result[0].title, 'Bold Title');
+  });
+});
 
 // ─── EpubAdapter constructor ─────────────────────────────────────────────────
 
@@ -329,6 +556,83 @@ describe('EpubAdapter – renderPage', () => {
     const longText = 'word '.repeat(200);
     const adapter = new EpubAdapter({
       chapters: [{ title: 'Ch', text: longText, html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('handles text with newline words (blank lines)', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'before \n \n after', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders with auto theme defaulting to dark (no body class)', async () => {
+    document.body.className = '';
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'text', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    adapter.setReaderSettings({ theme: 'auto' });
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders with dark theme explicitly', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'text', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    adapter.setReaderSettings({ theme: 'dark' });
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders with zoom > 1', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Ch', text: 'text content here', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 2, rotation: 0 });
+    const dpr = Math.max(1, 1);
+    assert.equal(canvas.width, 800 * 2 * dpr);
+    assert.equal(canvas.height, 1100 * 2 * dpr);
+  });
+
+  it('renders empty chapter with rotation=90', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 90 });
+    const dpr = Math.max(1, 1);
+    assert.equal(canvas.width, 1100 * dpr);
+    assert.equal(canvas.height, 800 * dpr);
+  });
+
+  it('handles chapter with empty text', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'Empty', text: '', html: '', href: '' }],
+      toc: [], bytes: new Uint8Array(), css: [], fonts: [],
+    }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('handles chapter with no text property', async () => {
+    const adapter = new EpubAdapter({
+      chapters: [{ title: 'No text', html: '', href: '' }],
       toc: [], bytes: new Uint8Array(), css: [], fonts: [],
     }, 'x.epub');
     const canvas = makeCanvas();
