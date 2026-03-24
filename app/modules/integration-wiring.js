@@ -586,6 +586,7 @@ function _destroyAll(handles) {
   handles._measureOverlay?.destroy();
   handles._a11yPanel?.close();
   handles._readingMode?.exit();
+  handles._batchConverter?.cancel();
   handles._teardownPageChange?.();
 }
 
