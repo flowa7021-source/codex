@@ -51,6 +51,7 @@ import { MeasurementOverlay }                  from './measurement-tools.js';
 import { AccessibilityPanel }                  from './pdf-accessibility-checker.js';
 import { ReadingMode }                         from './reading-mode.js';
 import { DiffViewer, diffPdfPages }            from './word-level-diff.js';
+import { BatchConverter }                     from './batch-convert.js';
 
 // ---------------------------------------------------------------------------
 // Bootstrap
@@ -405,6 +406,45 @@ function _addToolbarButtons(ctx, handles) {
     });
     input.click();
   }));
+
+  // Batch Convert
+  const batchConvertBtn = _makeButton('batchConvertTool', 'Batch Convert', async () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf';
+    input.multiple = true;
+    input.addEventListener('change', async () => {
+      const files = input.files;
+      if (!files || files.length === 0) return;
+
+      const converter = new BatchConverter();
+      handles._batchConverter = converter;
+
+      converter.addFiles([...files], 'docx');
+
+      converter.onChange((st) => {
+        batchConvertBtn.textContent = st.isRunning
+          ? `Batch ${st.done}/${st.total}`
+          : 'Batch Convert';
+      });
+
+      await converter.start(async (file, _format, onProgress) => {
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const { getDocument } = await import('pdfjs-dist/build/pdf.mjs');
+        const pdfDoc = await getDocument({ data: bytes }).promise;
+        const { convertPdfToDocx } = await import('./docx-converter.js');
+        onProgress(10);
+        const blob = await convertPdfToDocx(pdfDoc, file.name.replace(/\.pdf$/i, ''), pdfDoc.numPages, {});
+        pdfDoc.destroy();
+        onProgress(100);
+        return blob;
+      });
+
+      await converter.downloadAsZip('batch-converted.zip');
+    });
+    input.click();
+  });
+  toolbar.appendChild(batchConvertBtn);
 }
 
 // ---------------------------------------------------------------------------

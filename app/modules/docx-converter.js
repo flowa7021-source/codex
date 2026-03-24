@@ -15,6 +15,7 @@ async function _loadDocx() {
   return _docx;
 }
 
+import { convertPdfToDocxV2 } from './conversion-pipeline.js';
 import { extractStructuredContent, mapPdfFont, isMonospaceFont } from './docx-structure-detector.js';
 
 // Re-export structure detector functions for backwards compatibility
@@ -131,6 +132,25 @@ function makeHyperlinkRun(run) {
 // ─── Main conversion function ───────────────────────────────────────────────
 /** @param {any} pdfDoc @param {any} title @param {any} pageCount @param {any} options @returns {Promise<any>} */
 export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
+  // Try V2 pipeline first, fall back to V1 on failure
+  try {
+    const v2Result = await convertPdfToDocxV2(pdfDoc, {
+      title,
+      pageRange: options?.pageRange ?? null,
+      mode: options?.mode ?? 'text',
+      includeHeader: options?.includeHeader ?? false,
+      includeFooter: options?.includeFooter ?? true,
+      capturePageImage: options?.capturePageImage ?? null,
+      ocrWordCache: options?.ocrWordCache ?? null,
+      onProgress: options?.onProgress,
+      runQA: false,
+    });
+    if (v2Result?.blob) return v2Result.blob;
+  } catch (_err) {
+    console.warn('[docx-converter] V2 pipeline failed, falling back to V1:', _err?.message);
+  }
+
+  // V1 fallback continues below
   await _loadDocx();
 
   const {
