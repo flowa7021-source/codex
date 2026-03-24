@@ -168,6 +168,14 @@ export function initPhase2Modules(deps) {
   });
   setupVirtualKeyboardAdaptation();
 
+  // ─── Double-tap zoom (wires the orphaned 'doubletapzoom' event) ───────────
+  document.addEventListener('doubletapzoom', (_e) => {
+    const zoom = state.zoom ?? 1;
+    const newZoom = zoom < 1.5 ? 2 : 1;
+    state.zoom = newZoom;
+    deps.renderCurrentPage();
+  });
+
   // ─── Initialize Minimap ──────────────────────────────────────────────────────
   initMinimap(
     document.querySelector('.document-viewport'),

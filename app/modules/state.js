@@ -69,6 +69,7 @@ export const state = createReactiveState({
   adapter: null,
   file: null,
   pdfBytes: null,
+  pdfLibDoc: null,
   docName: null,
   currentPage: 1,
   pageCount: 0,
