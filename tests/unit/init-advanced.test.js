@@ -2,6 +2,7 @@ import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { initAdvanced } from '../../app/modules/init-advanced.js';
+import { emit } from '../../app/modules/event-bus.js';
 
 function makeDeps(overrides = {}) {
   return {
@@ -446,7 +447,7 @@ describe('initAdvanced', () => {
     it('calls updateMinimap on page-rendered event', () => {
       const deps = makeDeps();
       initAdvanced(deps);
-      window.dispatchEvent(new Event('page-rendered'));
+      emit('page-rendered', {});
       assert.ok(deps.updateMinimap.mock.callCount() >= 1);
     });
 
@@ -455,7 +456,7 @@ describe('initAdvanced', () => {
       deps.state.adapter = {};
       deps.state.docName = 'test.pdf';
       initAdvanced(deps);
-      window.dispatchEvent(new Event('page-rendered'));
+      emit('page-rendered', {});
       assert.equal(deps.startAutosaveTimer.mock.callCount(), 1);
     });
 
@@ -464,7 +465,7 @@ describe('initAdvanced', () => {
       deps.state.adapter = null;
       deps.state.docName = 'test.pdf';
       initAdvanced(deps);
-      window.dispatchEvent(new Event('page-rendered'));
+      emit('page-rendered', {});
       assert.equal(deps.startAutosaveTimer.mock.callCount(), 0);
     });
 
@@ -473,7 +474,7 @@ describe('initAdvanced', () => {
       deps.state.adapter = {};
       deps.state.docName = '';
       initAdvanced(deps);
-      window.dispatchEvent(new Event('page-rendered'));
+      emit('page-rendered', {});
       assert.equal(deps.startAutosaveTimer.mock.callCount(), 0);
     });
 
@@ -482,9 +483,9 @@ describe('initAdvanced', () => {
       deps.state.adapter = {};
       deps.state.docName = 'test.pdf';
       initAdvanced(deps);
-      window.dispatchEvent(new Event('page-rendered'));
-      window.dispatchEvent(new Event('page-rendered'));
-      window.dispatchEvent(new Event('page-rendered'));
+      emit('page-rendered', {});
+      emit('page-rendered', {});
+      emit('page-rendered', {});
       // once: true means it should only fire once
       assert.equal(deps.startAutosaveTimer.mock.callCount(), 1);
     });
