@@ -145,6 +145,9 @@ function parseToc(ncxXml) {
   return items;
 }
 
+/** @internal — exported for unit testing only */
+export { parseContainer, parseOpf, stripHtmlTags, extractChapterTitle, parseToc };
+
 export const EPUB_READER_DEFAULTS = {
   fontSize: 16,
   lineHeight: 1.6,

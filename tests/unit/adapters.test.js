@@ -629,3 +629,731 @@ describe('UnsupportedAdapter – getText', () => {
     assert.equal(await new UnsupportedAdapter('x').getText(), '');
   });
 });
+
+// ─── Additional coverage tests ──────────────────────────────────────────────
+
+describe('PDFAdapter – renderPage main canvas branch', () => {
+  it('cancels in-flight render when rendering to main canvas', async () => {
+    // Simulate els.canvas pointing to our canvas
+    const { els } = await import('../../app/modules/state.js');
+    const canvas = document.createElement('canvas');
+    const origCanvas = els.canvas;
+    els.canvas = canvas;
+
+    let cancelCalled = false;
+    const oldTask = { cancel() { cancelCalled = true; } };
+
+    const adapter = new PDFAdapter({
+      numPages: 1,
+      getPage: async () => ({
+        getViewport: () => ({ width: 100, height: 100 }),
+        render: () => ({ promise: Promise.resolve() }),
+      }),
+    });
+    adapter._currentRenderTask = oldTask;
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0, dpr: 1 });
+    assert.ok(cancelCalled, 'should cancel in-flight render task');
+    assert.equal(adapter._currentRenderTask, null, 'should clear render task after completion');
+
+    els.canvas = origCanvas;
+  });
+
+  it('handles cancel error on main canvas gracefully', async () => {
+    const { els } = await import('../../app/modules/state.js');
+    const canvas = document.createElement('canvas');
+    const origCanvas = els.canvas;
+    els.canvas = canvas;
+
+    const adapter = new PDFAdapter({
+      numPages: 1,
+      getPage: async () => ({
+        getViewport: () => ({ width: 100, height: 100 }),
+        render: () => ({ promise: Promise.resolve() }),
+      }),
+    });
+    adapter._currentRenderTask = { cancel() { throw new Error('already done'); } };
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0, dpr: 1 });
+    assert.equal(adapter._currentRenderTask, null);
+
+    els.canvas = origCanvas;
+  });
+
+  it('sets _currentRenderTask when rendering to main canvas', async () => {
+    const { els } = await import('../../app/modules/state.js');
+    const canvas = document.createElement('canvas');
+    const origCanvas = els.canvas;
+    els.canvas = canvas;
+
+    let capturedTask = null;
+    const adapter = new PDFAdapter({
+      numPages: 1,
+      getPage: async () => ({
+        getViewport: () => ({ width: 100, height: 100 }),
+        render: () => {
+          const task = { promise: Promise.resolve() };
+          capturedTask = task;
+          return task;
+        },
+      }),
+    });
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0, dpr: 1 });
+    // After successful completion, task should be cleared
+    assert.equal(adapter._currentRenderTask, null);
+
+    els.canvas = origCanvas;
+  });
+
+  it('clears _currentRenderTask in finally block even on error', async () => {
+    const { els } = await import('../../app/modules/state.js');
+    const canvas = document.createElement('canvas');
+    const origCanvas = els.canvas;
+    els.canvas = canvas;
+
+    const realErr = new Error('render fail');
+    const adapter = new PDFAdapter({
+      numPages: 1,
+      getPage: async () => ({
+        getViewport: () => ({ width: 100, height: 100 }),
+        render: () => ({ promise: Promise.reject(realErr) }),
+      }),
+    });
+
+    await assert.rejects(
+      adapter.renderPage(1, canvas, { zoom: 1, rotation: 0, dpr: 1 }),
+      { message: 'render fail' },
+    );
+    assert.equal(adapter._currentRenderTask, null, 'task should be cleared after error');
+
+    els.canvas = origCanvas;
+  });
+
+  it('does not set _currentRenderTask for non-main canvas', async () => {
+    const { els } = await import('../../app/modules/state.js');
+    const origCanvas = els.canvas;
+    els.canvas = document.createElement('canvas'); // main canvas
+    const otherCanvas = document.createElement('canvas'); // different canvas
+
+    const adapter = new PDFAdapter({
+      numPages: 1,
+      getPage: async () => ({
+        getViewport: () => ({ width: 100, height: 100 }),
+        render: () => ({ promise: Promise.resolve() }),
+      }),
+    });
+
+    await adapter.renderPage(1, otherCanvas, { zoom: 1, rotation: 0, dpr: 1 });
+    assert.equal(adapter._currentRenderTask, null);
+
+    els.canvas = origCanvas;
+  });
+});
+
+describe('PDFAdapter – renderPage uses window.devicePixelRatio when no dpr override', () => {
+  it('defaults dpr from window.devicePixelRatio', async () => {
+    const canvas = document.createElement('canvas');
+    const origDpr = window.devicePixelRatio;
+    window.devicePixelRatio = 2;
+
+    const adapter = new PDFAdapter({
+      numPages: 1,
+      getPage: async () => ({
+        getViewport: ({ scale }) => ({
+          width: 200 * scale,
+          height: 100 * scale,
+        }),
+        render: () => ({ promise: Promise.resolve() }),
+      }),
+    });
+
+    // Pass no dpr override — zoom=1, rotation=0
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    // renderScale = zoom * dpr = 1 * 2 = 2, viewport = 400x200
+    assert.equal(canvas.width, 400);
+    assert.equal(canvas.height, 200);
+
+    window.devicePixelRatio = origDpr;
+  });
+});
+
+describe('PDFAdapter – resolveDestToPage edge cases', () => {
+  it('returns null for empty array dest', async () => {
+    const adapter = new PDFAdapter({
+      numPages: 10,
+      getDestination: async () => [],
+    });
+    const page = await adapter.resolveDestToPage('empty-dest');
+    assert.equal(page, null);
+  });
+});
+
+describe('PDFAdapter – buildTextFromItems edge cases', () => {
+  const adapter = new PDFAdapter({ numPages: 1 });
+
+  it('handles items without width (uses fallback calculation)', () => {
+    const items = [
+      { str: 'AB', transform: [1, 0, 0, 1, 10, 100], height: 10 },
+    ];
+    const text = adapter.buildTextFromItems(items);
+    assert.equal(text, 'AB');
+  });
+
+  it('does not add space when gap is small', () => {
+    // Same line, very close together
+    const items = [
+      { str: 'A', transform: [1, 0, 0, 1, 10, 100], height: 12, width: 8 },
+      { str: 'B', transform: [1, 0, 0, 1, 18, 100], height: 12, width: 8 },
+    ];
+    const text = adapter.buildTextFromItems(items);
+    assert.equal(text, 'AB');
+  });
+
+  it('adds space when gap is large', () => {
+    const items = [
+      { str: 'Hello', transform: [1, 0, 0, 1, 10, 100], height: 12, width: 30 },
+      { str: 'World', transform: [1, 0, 0, 1, 100, 100], height: 12, width: 30 },
+    ];
+    const text = adapter.buildTextFromItems(items);
+    assert.equal(text, 'Hello World');
+  });
+
+  it('collapses triple newlines', () => {
+    const items = [
+      { str: 'A', transform: [1, 0, 0, 1, 10, 300], height: 12, width: 10 },
+      { str: 'B', transform: [1, 0, 0, 1, 10, 200], height: 12, width: 10 },
+      { str: 'C', transform: [1, 0, 0, 1, 10, 100], height: 12, width: 10 },
+    ];
+    const text = adapter.buildTextFromItems(items);
+    assert.ok(!text.includes('\n\n\n'), 'should not have triple newlines');
+  });
+
+  it('handles items with zero height', () => {
+    const items = [
+      { str: 'X', transform: [1, 0, 0, 1, 10, 100], height: 0, width: 10 },
+    ];
+    const text = adapter.buildTextFromItems(items);
+    assert.equal(text, 'X');
+  });
+
+  it('handles item with null str', () => {
+    const items = [
+      { str: null, transform: [1, 0, 0, 1, 10, 100], height: 12 },
+      { str: 'Valid', transform: [1, 0, 0, 1, 10, 100], height: 12, width: 30 },
+    ];
+    const text = adapter.buildTextFromItems(items);
+    assert.equal(text, 'Valid');
+  });
+});
+
+describe('ImageAdapter – renderPage', () => {
+  it('renders image with 0 rotation', async () => {
+    // Mock loadImage by providing a module-level override
+    const canvas = document.createElement('canvas');
+    const origImage = globalThis.Image;
+
+    // The loadImage function uses the Image constructor, mock it
+    globalThis.Image = class MockImage {
+      constructor() {
+        this.width = 200;
+        this.height = 100;
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+      set src(_v) {
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+    };
+
+    const adapter = new ImageAdapter('blob:test', { width: 200, height: 100 });
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    // Canvas should have dimensions set
+    assert.ok(canvas.width > 0);
+    assert.ok(canvas.height > 0);
+
+    globalThis.Image = origImage;
+  });
+
+  it('renders image with 90 rotation (swapped dimensions)', async () => {
+    const canvas = document.createElement('canvas');
+    globalThis.Image = class MockImage {
+      constructor() {
+        this.width = 200;
+        this.height = 100;
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+      set src(_v) {
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+    };
+
+    const adapter = new ImageAdapter('blob:test', { width: 200, height: 100 });
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 90 });
+    // With 90 rotation, canvas width/height should be swapped
+    // rw = ceil(200 * 1 * dpr), rh = ceil(100 * 1 * dpr)
+    // canvas.width = rh, canvas.height = rw
+    assert.equal(canvas.width, 100); // rh
+    assert.equal(canvas.height, 200); // rw
+
+    globalThis.Image = class MockImage { constructor() { this.width = 0; this.height = 0; } };
+  });
+
+  it('renders image with 180 rotation (no swap)', async () => {
+    const canvas = document.createElement('canvas');
+    globalThis.Image = class MockImage {
+      constructor() {
+        this.width = 200;
+        this.height = 100;
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+      set src(_v) {
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+    };
+
+    const adapter = new ImageAdapter('blob:test', { width: 200, height: 100 });
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 180 });
+    assert.equal(canvas.width, 200);
+    assert.equal(canvas.height, 100);
+
+    globalThis.Image = class MockImage { constructor() { this.width = 0; this.height = 0; } };
+  });
+});
+
+describe('DjVuAdapter – setData edge cases', () => {
+  it('sanitizes non-string pagesImages entries', () => {
+    const adapter = new DjVuAdapter('test.djvu', {
+      pagesImages: [42, null, 'valid-url'],
+    });
+    assert.deepEqual(adapter.pagesImages, ['', '', 'valid-url']);
+  });
+
+  it('handles pageSizes with invalid width/height', () => {
+    const adapter = new DjVuAdapter('test.djvu', {
+      pageSizes: [
+        { width: -10, height: 0 },
+        { width: 'abc', height: undefined },
+        { width: 800, height: 600 },
+      ],
+    });
+    assert.deepEqual(adapter.pageSizes[0], { width: null, height: null });
+    assert.deepEqual(adapter.pageSizes[1], { width: null, height: null });
+    assert.deepEqual(adapter.pageSizes[2], { width: 800, height: 600 });
+  });
+
+  it('handles non-array outline', () => {
+    const adapter = new DjVuAdapter('test.djvu', { outline: 'not-an-array' });
+    assert.deepEqual(adapter.outline, []);
+  });
+
+  it('handles non-integer pageCount with valid data arrays', () => {
+    const adapter = new DjVuAdapter('test.djvu', {
+      pageCount: 'ten',
+      pagesText: ['a', 'b'],
+    });
+    assert.equal(adapter.pageCount, 2); // inferred from pagesText
+  });
+
+  it('handles pageCount of 0', () => {
+    const adapter = new DjVuAdapter('test.djvu', {
+      pageCount: 0,
+      pagesText: ['a'],
+    });
+    assert.equal(adapter.pageCount, 1); // 0 is not > 0, so inferred
+  });
+});
+
+describe('DjVuAdapter – renderPage with image URL', () => {
+  it('renders from image URL with 0 rotation', async () => {
+    const origImage = globalThis.Image;
+    globalThis.Image = class MockImage {
+      constructor() {
+        this.width = 400;
+        this.height = 300;
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+      set src(_v) {
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+    };
+
+    const canvas = document.createElement('canvas');
+    const adapter = new DjVuAdapter('test.djvu', {
+      pagesImages: ['blob:image1'],
+      pageSizes: [{ width: 400, height: 300 }],
+    });
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+    assert.ok(canvas.height > 0);
+
+    globalThis.Image = origImage;
+  });
+
+  it('renders from image URL with 90 rotation', async () => {
+    const origImage = globalThis.Image;
+    globalThis.Image = class MockImage {
+      constructor() {
+        this.width = 400;
+        this.height = 300;
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+      set src(_v) {
+        setTimeout(() => { if (this.onload) this.onload(); }, 0);
+      }
+    };
+
+    const canvas = document.createElement('canvas');
+    const adapter = new DjVuAdapter('test.djvu', {
+      pagesImages: ['blob:image1'],
+    });
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 90 });
+    // With 90 rotation, canvas dimensions should be swapped
+    assert.equal(canvas.width, 300); // rh
+    assert.equal(canvas.height, 400); // rw
+
+    globalThis.Image = origImage;
+  });
+});
+
+describe('DjVuAdapter – renderPage without image URL (fallback)', () => {
+  it('renders placeholder text when no image available', async () => {
+    const canvas = document.createElement('canvas');
+    const adapter = new DjVuAdapter('test.djvu', {
+      pagesText: ['some text'],
+      pageCount: 1,
+    });
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+    assert.ok(canvas.height > 0);
+  });
+
+  it('renders placeholder for page with no text', async () => {
+    const canvas = document.createElement('canvas');
+    const adapter = new DjVuAdapter('test.djvu', {
+      pageCount: 2,
+    });
+
+    await adapter.renderPage(2, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+});
+
+describe('DjVuNativeAdapter – renderPage', () => {
+  it('renders page successfully with 0 rotation', async () => {
+    const canvas = document.createElement('canvas');
+    const mockImageData = { width: 200, height: 150, data: new Uint8Array(200 * 150 * 4) };
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: async () => ({
+        getImageData: () => mockImageData,
+        reset() {},
+      }),
+      getPagesSizes: () => [{ width: 200, height: 150 }],
+    }, 'test.djvu');
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+    assert.ok(canvas.height > 0);
+  });
+
+  it('renders page with 90 rotation (swapped dimensions)', async () => {
+    const canvas = document.createElement('canvas');
+    const mockImageData = { width: 200, height: 150, data: new Uint8Array(200 * 150 * 4) };
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: async () => ({
+        getImageData: () => mockImageData,
+        reset() {},
+      }),
+      getPagesSizes: () => [{ width: 200, height: 150 }],
+    }, 'test.djvu');
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 90 });
+    // With 90deg rotation, canvas width/height should be swapped
+    assert.ok(canvas.width > 0);
+    assert.ok(canvas.height > 0);
+  });
+
+  it('uses two-pass rendering for high zoom levels', async () => {
+    const canvas = document.createElement('canvas');
+    const mockImageData = { width: 200, height: 150, data: new Uint8Array(200 * 150 * 4) };
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: async () => ({
+        getImageData: () => mockImageData,
+        reset() {},
+      }),
+      getPagesSizes: () => [{ width: 200, height: 150 }],
+    }, 'test.djvu');
+
+    // effectiveScale = zoom * dpr = 3 * 1 = 3, which is > 2.5
+    await adapter.renderPage(1, canvas, { zoom: 3, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders fallback on decompress error', async () => {
+    const canvas = document.createElement('canvas');
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: async () => { throw new Error('corrupt page'); },
+      getPagesSizes: () => [],
+    }, 'test.djvu');
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    // Should render error fallback with fixed dimensions
+    assert.ok(canvas.width > 0);
+    assert.ok(canvas.height > 0);
+  });
+
+  it('renders fallback on zero-dimension imageData', async () => {
+    const canvas = document.createElement('canvas');
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: async () => ({
+        getImageData: () => ({ width: 0, height: 0 }),
+        reset() {},
+      }),
+      getPagesSizes: () => [],
+    }, 'test.djvu');
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders fallback on null imageData', async () => {
+    const canvas = document.createElement('canvas');
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: async () => ({
+        getImageData: () => null,
+        reset() {},
+      }),
+      getPagesSizes: () => [],
+    }, 'test.djvu');
+
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('handles page without reset method', async () => {
+    const canvas = document.createElement('canvas');
+    const mockImageData = { width: 200, height: 150, data: new Uint8Array(200 * 150 * 4) };
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: async () => ({
+        getImageData: () => mockImageData,
+        // no reset method
+      }),
+      getPagesSizes: () => [{ width: 200, height: 150 }],
+    }, 'test.djvu');
+
+    // Should not throw even without reset()
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+});
+
+describe('DjVuNativeAdapter – getPageViewport edge cases', () => {
+  it('falls back to 1200x1600 when no page size data', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPagesSizes: () => [],
+    }, 'test.djvu');
+
+    const vp = await adapter.getPageViewport(1, 1, 0);
+    assert.equal(vp.width, 1200);
+    assert.equal(vp.height, 1600);
+  });
+
+  it('swaps dims for 90 rotation', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPagesSizes: () => [{ width: 500, height: 700 }],
+    }, 'test.djvu');
+
+    const vp = await adapter.getPageViewport(1, 1, 90);
+    assert.equal(vp.width, 700);
+    assert.equal(vp.height, 500);
+  });
+
+  it('keeps dims for 180 rotation', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPagesSizes: () => [{ width: 500, height: 700 }],
+    }, 'test.djvu');
+
+    const vp = await adapter.getPageViewport(1, 1, 180);
+    assert.equal(vp.width, 500);
+    assert.equal(vp.height, 700);
+  });
+});
+
+describe('DjVuNativeAdapter – getText edge cases', () => {
+  it('returns empty string when getText returns empty', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: async () => ({ getText: () => '', reset() {} }),
+    }, 'test.djvu');
+
+    assert.equal(await adapter.getText(1), '');
+  });
+
+  it('handles page without reset method', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: async () => ({ getText: () => 'text' }),
+    }, 'test.djvu');
+
+    assert.equal(await adapter.getText(1), 'text');
+  });
+});
+
+describe('DjVuNativeAdapter – getOutline edge cases', () => {
+  it('handles items without url', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 3,
+      getContents: () => [
+        { description: 'No URL item', children: [] },
+      ],
+      getPageNumberByUrl: () => null,
+    }, 'test.djvu');
+
+    const outline = await adapter.getOutline();
+    assert.equal(outline.length, 1);
+    assert.equal(outline[0].title, 'No URL item');
+    assert.equal(outline[0].dest, null);
+  });
+
+  it('handles items without description (uses default title)', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 3,
+      getContents: () => [
+        { url: '#p1', children: [] },
+      ],
+      getPageNumberByUrl: () => 1,
+    }, 'test.djvu');
+
+    const outline = await adapter.getOutline();
+    assert.equal(outline[0].title, '(без названия)');
+    assert.equal(outline[0].dest, 1);
+  });
+
+  it('handles nested children', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 5,
+      getContents: () => [
+        {
+          description: 'Parent',
+          url: '#p1',
+          children: [
+            { description: 'Child', url: '#p2', children: [] },
+          ],
+        },
+      ],
+      getPageNumberByUrl: (url) => {
+        if (url === '#p1') return 1;
+        if (url === '#p2') return 2;
+        return null;
+      },
+    }, 'test.djvu');
+
+    const outline = await adapter.getOutline();
+    assert.equal(outline[0].title, 'Parent');
+    assert.equal(outline[0].dest, 1);
+    assert.equal(outline[0].items.length, 1);
+    assert.equal(outline[0].items[0].title, 'Child');
+    assert.equal(outline[0].items[0].dest, 2);
+  });
+
+  it('handles non-array children gracefully', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getContents: () => [
+        { description: 'Item', url: '#p1', children: 'not-array' },
+      ],
+      getPageNumberByUrl: () => 1,
+    }, 'test.djvu');
+
+    const outline = await adapter.getOutline();
+    assert.equal(outline[0].items.length, 0);
+  });
+
+  it('handles non-integer page number from getPageNumberByUrl', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 3,
+      getContents: () => [
+        { description: 'Bad page', url: '#bad', children: [] },
+      ],
+      getPageNumberByUrl: () => 'not-a-number',
+    }, 'test.djvu');
+
+    const outline = await adapter.getOutline();
+    assert.equal(outline[0].dest, null);
+  });
+});
+
+describe('DjVuNativeAdapter – resolveDestToPage edge cases', () => {
+  it('returns null for non-integer string', async () => {
+    const adapter = new DjVuNativeAdapter({ getPagesQuantity: () => 10 }, 'test.djvu');
+    assert.equal(await adapter.resolveDestToPage('abc'), null);
+  });
+
+  it('returns null for float', async () => {
+    const adapter = new DjVuNativeAdapter({ getPagesQuantity: () => 10 }, 'test.djvu');
+    assert.equal(await adapter.resolveDestToPage(2.5), null);
+  });
+});
+
+describe('DjVuNativeAdapter – _ensurePageSizes with non-array result', () => {
+  it('handles getPagesSizes returning non-array', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPagesSizes: () => 'not-an-array',
+    }, 'test.djvu');
+
+    await adapter._ensurePageSizes();
+    assert.deepEqual(adapter.pageSizes, []);
+    assert.equal(adapter._pageSizesLoaded, true);
+  });
+
+  it('handles getPagesSizes missing from doc', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      // no getPagesSizes
+    }, 'test.djvu');
+
+    await adapter._ensurePageSizes();
+    assert.deepEqual(adapter.pageSizes, []);
+    assert.equal(adapter._pageSizesLoaded, true);
+  });
+});
+
+describe('DjVuAdapter – getPageViewport with invalid page size', () => {
+  it('falls back for page with zero-width size', async () => {
+    const adapter = new DjVuAdapter('test.djvu', {
+      pageSizes: [{ width: 0, height: 0 }],
+    });
+    const vp = await adapter.getPageViewport(1, 1, 0);
+    // width: 0 is not > 0 so falls back to 1200
+    assert.equal(vp.width, 1200);
+    assert.equal(vp.height, 1600);
+  });
+});
+
+describe('UnsupportedAdapter – renderPage with null context', () => {
+  it('returns early when getContext returns null', async () => {
+    const canvas = {
+      width: 0,
+      height: 0,
+      style: {},
+      getContext: () => null,
+    };
+    // Should not throw
+    await new UnsupportedAdapter('test.xyz').renderPage(1, canvas);
+    assert.equal(canvas.width, 1200);
+    assert.equal(canvas.height, 700);
+  });
+});

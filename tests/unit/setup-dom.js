@@ -167,7 +167,24 @@ if (typeof globalThis.document === 'undefined') {
       const frag = { children: [], appendChild(child) { frag.children.push(child); return child; }, append(...nodes) { for (const n of nodes) if (n != null) frag.appendChild(n); } };
       return frag;
     },
-    body: { appendChild() {}, style: {} },
+    body: (() => {
+      const _cls = new Set();
+      return {
+        appendChild() {},
+        style: {},
+        className: '',
+        classList: {
+          add(...c) { c.forEach(x => _cls.add(x)); },
+          remove(...c) { c.forEach(x => _cls.delete(x)); },
+          toggle(c, force) {
+            if (force !== undefined) { force ? _cls.add(c) : _cls.delete(c); }
+            else if (_cls.has(c)) { _cls.delete(c); }
+            else { _cls.add(c); }
+          },
+          contains(c) { return _cls.has(c); },
+        },
+      };
+    })(),
     head: { appendChild() {} },
     documentElement: { style: {} },
     addEventListener() {},
@@ -324,6 +341,33 @@ if (typeof globalThis.CustomEvent === 'undefined') {
 
 if (typeof globalThis.EventTarget === 'undefined') {
   // Node 18+ has EventTarget, but just in case
+}
+
+// Promise.withResolvers polyfill (required by pdfjs-dist, native in Node 22+)
+if (typeof Promise.withResolvers === 'undefined') {
+  Promise.withResolvers = function () {
+    let resolve, reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    return { promise, resolve, reject };
+  };
+}
+
+// ResizeObserver mock (not available in Node.js)
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
+// Worker mock (not available in Node.js — prevents "[ocr] Worker is not defined" noise)
+if (typeof globalThis.Worker === 'undefined') {
+  globalThis.Worker = class Worker {
+    constructor() { this.onmessage = null; this.onerror = null; }
+    postMessage() {}
+    terminate() {}
+  };
 }
 
 if (typeof globalThis.fetch === 'undefined') {

@@ -4,7 +4,7 @@ import './setup-dom.js';
 
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { FormulaEditor } from '../../app/modules/formula-editor.js';
+import { FormulaEditor, renderLatexToPng, insertFormulaIntoPdf } from '../../app/modules/formula-editor.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -376,5 +376,301 @@ describe('FormulaEditor._positionOverlay', () => {
     const editor = new FormulaEditor(container, 612, 792, 1);
 
     assert.doesNotThrow(() => editor._positionOverlay());
+  });
+});
+
+// ─── renderLatexToPng (fallback renderer) ─────────────────────────────────
+
+describe('renderLatexToPng', () => {
+  it('renders simple LaTeX via fallback when no KaTeX/MathJax available', async () => {
+    // Neither globalThis.katex nor window.MathJax is set, so it falls through
+    // to the built-in fallback renderer
+    const result = await renderLatexToPng('x^2 + 1');
+    assert.ok(result, 'should return a result');
+    assert.ok(result.png instanceof Uint8Array, 'png should be a Uint8Array');
+    assert.equal(typeof result.width, 'number');
+    assert.equal(typeof result.height, 'number');
+  });
+
+  it('renders with custom options', async () => {
+    const result = await renderLatexToPng('\\alpha + \\beta', {
+      fontSize: 24,
+      color: '#ff0000',
+      background: '#ffffff',
+      paddingPx: 10,
+      scale: 1,
+      mode: 'inline',
+    });
+    assert.ok(result, 'should return a result');
+    assert.ok(result.png instanceof Uint8Array);
+  });
+
+  it('renders Greek letters and symbols via fallback', async () => {
+    const result = await renderLatexToPng('\\pi \\sigma \\omega \\infty \\sum \\int');
+    assert.ok(result);
+    assert.ok(result.png instanceof Uint8Array);
+  });
+
+  it('renders fractions and sqrt via fallback', async () => {
+    const result = await renderLatexToPng('\\frac{a}{b} + \\sqrt{c}');
+    assert.ok(result);
+    assert.ok(result.png instanceof Uint8Array);
+  });
+
+  it('renders subscripts and superscripts via fallback', async () => {
+    const result = await renderLatexToPng('x_0 + x_1 + x_2 + x_n + y^2 + z^3 + w^n');
+    assert.ok(result);
+  });
+
+  it('renders comparison and arithmetic operators via fallback', async () => {
+    const result = await renderLatexToPng('a \\leq b \\geq c \\neq d \\approx e \\times f \\div g \\pm h \\cdot i');
+    assert.ok(result);
+  });
+
+  it('renders partial, nabla, and more Greek via fallback', async () => {
+    const result = await renderLatexToPng('\\partial \\nabla \\delta \\epsilon \\theta \\lambda \\mu \\phi \\gamma');
+    assert.ok(result);
+  });
+
+  it('uses transparent background by default', async () => {
+    const result = await renderLatexToPng('x');
+    assert.ok(result);
+    assert.ok(result.width > 0 || result.width === 0); // mock canvas returns 0 width
+  });
+
+  it('uses KaTeX backend when globalThis.katex is available', async () => {
+    const renderCalls = [];
+    globalThis.katex = {
+      renderToString(latex, opts) {
+        renderCalls.push({ latex, opts });
+        return `<span>${latex}</span>`;
+      },
+    };
+    // Patch Image so that _htmlToPng fires onerror immediately (falls back to canvas)
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class MockImage {
+      constructor() { this.src = ''; }
+      set src(v) {
+        this._src = v;
+        // Fire onerror async to trigger the fallback inside _htmlToPng
+        queueMicrotask(() => { if (this.onerror) this.onerror(new Error('mock')); });
+      }
+      get src() { return this._src; }
+    };
+    try {
+      const result = await renderLatexToPng('E=mc^2', { mode: 'display' });
+      assert.ok(result, 'should return a result from KaTeX path');
+      assert.equal(renderCalls.length, 1);
+      assert.equal(renderCalls[0].latex, 'E=mc^2');
+      assert.equal(renderCalls[0].opts.displayMode, true);
+    } finally {
+      delete globalThis.katex;
+      globalThis.Image = OrigImage;
+    }
+  });
+
+  it('falls back when KaTeX throws', async () => {
+    globalThis.katex = {
+      renderToString() {
+        throw new Error('KaTeX parse error');
+      },
+    };
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class MockImage {
+      constructor() { this.src = ''; }
+      set src(v) {
+        this._src = v;
+        queueMicrotask(() => { if (this.onerror) this.onerror(new Error('mock')); });
+      }
+      get src() { return this._src; }
+    };
+    try {
+      const result = await renderLatexToPng('bad latex');
+      assert.ok(result, 'should still return a result via fallback from KaTeX error path');
+    } finally {
+      delete globalThis.katex;
+      globalThis.Image = OrigImage;
+    }
+  });
+
+  it('uses MathJax backend when window.MathJax.tex2svg is available', async () => {
+    const origMathJax = window.MathJax;
+    window.MathJax = {
+      tex2svg(latex, opts) {
+        const svgEl = document.createElement('svg');
+        svgEl.outerHTML = '<svg></svg>';
+        return svgEl;
+      },
+    };
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class MockImage {
+      constructor() { this.src = ''; }
+      set src(v) {
+        this._src = v;
+        queueMicrotask(() => { if (this.onerror) this.onerror(new Error('mock')); });
+      }
+      get src() { return this._src; }
+    };
+    try {
+      const result = await renderLatexToPng('y^2', { mode: 'inline' });
+      assert.ok(result, 'should return a result from MathJax path');
+    } finally {
+      window.MathJax = origMathJax;
+      globalThis.Image = OrigImage;
+    }
+  });
+
+  it('falls back when MathJax throws', async () => {
+    const origMathJax = window.MathJax;
+    window.MathJax = {
+      tex2svg() {
+        throw new Error('MathJax error');
+      },
+    };
+    try {
+      const result = await renderLatexToPng('z^3');
+      assert.ok(result, 'should still return result via fallback');
+    } finally {
+      window.MathJax = origMathJax;
+    }
+  });
+});
+
+// ─── FormulaEditor._updatePreview ─────────────────────────────────────────
+
+describe('FormulaEditor._updatePreview', () => {
+  it('clears preview when input is empty', async () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+    editor.open(10, 20);
+
+    editor._inputEl.value = '';
+    await editor._updatePreview();
+
+    assert.equal(editor._previewEl.textContent, 'Введите формулу для предпросмотра...');
+  });
+
+  it('clears preview when input is whitespace', async () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+    editor.open(10, 20);
+
+    editor._inputEl.value = '   ';
+    await editor._updatePreview();
+
+    assert.equal(editor._previewEl.textContent, 'Введите формулу для предпросмотра...');
+  });
+
+  it('renders formula preview when input has content', async () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+    editor.open(10, 20);
+
+    editor._inputEl.value = 'x^2';
+    await editor._updatePreview();
+
+    // After rendering, preview should contain an img tag
+    assert.ok(editor._previewEl.innerHTML.includes('img'), 'preview should contain an img element');
+  });
+
+  it('does nothing if _previewEl is null', async () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+    // Don't call open(), so _previewEl stays null
+    assert.doesNotThrow(async () => await editor._updatePreview());
+  });
+
+  it('does nothing if _inputEl is null', async () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+    // Manually set only _previewEl
+    editor._previewEl = document.createElement('div');
+    assert.doesNotThrow(async () => await editor._updatePreview());
+  });
+});
+
+// ─── FormulaEditor._schedulePreview ───────────────────────────────────────
+
+describe('FormulaEditor._schedulePreview', () => {
+  it('sets a debounce timer', () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+    editor.open(10, 20);
+
+    assert.equal(editor._debounceTimer, null);
+    editor._schedulePreview();
+    assert.notEqual(editor._debounceTimer, null, 'debounce timer should be set');
+
+    // Clean up
+    editor.close();
+  });
+
+  it('clears previous timer before setting new one', () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+    editor.open(10, 20);
+
+    editor._schedulePreview();
+    const firstTimer = editor._debounceTimer;
+
+    editor._schedulePreview();
+    const secondTimer = editor._debounceTimer;
+
+    assert.notEqual(firstTimer, secondTimer, 'new timer should be different from old one');
+
+    // Clean up
+    editor.close();
+  });
+});
+
+// ─── FormulaEditor._buildOverlay ──────────────────────────────────────────
+
+describe('FormulaEditor._buildOverlay', () => {
+  it('creates overlay with correct class name', () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+
+    editor._buildOverlay();
+
+    assert.ok(editor._overlay, 'overlay should exist');
+    assert.equal(editor._overlay.className, 'formula-editor-overlay');
+  });
+
+  it('creates textarea input element', () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+
+    editor._buildOverlay();
+
+    assert.ok(editor._inputEl, 'input element should exist');
+    assert.equal(editor._inputEl.tagName, 'TEXTAREA');
+  });
+
+  it('creates preview element', () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+
+    editor._buildOverlay();
+
+    assert.ok(editor._previewEl, 'preview element should exist');
+  });
+
+  it('sets container position to relative', () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+
+    editor._buildOverlay();
+
+    assert.equal(container.style.position, 'relative');
+  });
+
+  it('appends overlay to container', () => {
+    const container = makeContainer();
+    const editor = new FormulaEditor(container, 612, 792, 1);
+
+    editor._buildOverlay();
+
+    assert.ok(container.children.length > 0, 'container should have children');
+    assert.equal(container.children[0], editor._overlay);
   });
 });

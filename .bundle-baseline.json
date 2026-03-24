@@ -1,27 +1,67 @@
 {
-  "timestamp": "2026-03-22T00:00:00.000Z",
-  "totalRaw": 3145728,
-  "totalGzip": 819200,
+  "timestamp": "2026-03-24T18:25:24.076Z",
+  "totalRaw": 2169584,
+  "totalGzip": 699133,
   "files": [
     {
-      "file": "js/index-main.js",
-      "raw": 1048576,
-      "gzip": 307200
+      "file": "js/index-B2udakOd.js",
+      "raw": 842176,
+      "gzip": 250372
     },
     {
-      "file": "chunks/pdf-lib-vendor.js",
-      "raw": 1048576,
-      "gzip": 204800
+      "file": "chunks/pdf-lib-BKUboW6q.js",
+      "raw": 525053,
+      "gzip": 209062
     },
     {
-      "file": "chunks/docx-vendor.js",
-      "raw": 716800,
-      "gzip": 102400
+      "file": "chunks/docx-BZndvtqa.js",
+      "raw": 406913,
+      "gzip": 119189
     },
     {
-      "file": "js/index-main.css",
-      "raw": 51200,
-      "gzip": 10240
+      "file": "chunks/pdfjs-CzLvbfuH.js",
+      "raw": 359250,
+      "gzip": 105809
+    },
+    {
+      "file": "chunks/tesseract-BtMKiGAI.js",
+      "raw": 16966,
+      "gzip": 7195
+    },
+    {
+      "file": "chunks/fflate-NDoNn75I.js",
+      "raw": 5293,
+      "gzip": 2657
+    },
+    {
+      "file": "chunks/index-ChM5wRko.js",
+      "raw": 6844,
+      "gzip": 1866
+    },
+    {
+      "file": "chunks/core-DhEqZVGG.js",
+      "raw": 2441,
+      "gzip": 978
+    },
+    {
+      "file": "chunks/index-F3_Uwzbp.js",
+      "raw": 2214,
+      "gzip": 812
+    },
+    {
+      "file": "chunks/index-D7bH7vXg.js",
+      "raw": 1273,
+      "gzip": 436
+    },
+    {
+      "file": "chunks/erase-tool-DL1naTzD.js",
+      "raw": 658,
+      "gzip": 393
+    },
+    {
+      "file": "chunks/index-Zca5do7_.js",
+      "raw": 503,
+      "gzip": 364
     }
   ]
 }
