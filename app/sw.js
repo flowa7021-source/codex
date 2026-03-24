@@ -10,7 +10,7 @@ const APP_SHELL = ['./', './index.html'];
 // ── Install: pre-cache app shell ────────────────────────────
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(APP_CACHE).then((cache) => cache.addAll(APP_SHELL).catch(() => {}))
+    caches.open(APP_CACHE).then((cache) => cache.addAll(APP_SHELL).catch(() => { /* Non-critical: cache prefetch may fail offline or on first load */ }))
   );
   self.skipWaiting();
 });

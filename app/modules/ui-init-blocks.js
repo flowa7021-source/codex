@@ -30,7 +30,7 @@ function _trackOn(el, type, handler, opts) {
 /** Remove all tracked listeners registered via _trackOn. */
 export function cleanupUiBlockListeners() {
   for (const { el, type, handler } of _uiListeners) {
-    try { el.removeEventListener(type, handler); } catch (_e) { /* */ }
+    try { el.removeEventListener(type, handler); } catch (_e) { /* Ignore: element may already be detached from DOM */ }
   }
   _uiListeners.length = 0;
 }

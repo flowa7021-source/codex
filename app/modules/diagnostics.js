@@ -634,7 +634,7 @@ export function exportDiagnostics() {
 }
 
 /** @returns {Promise<any>} */
-export async function verifyBundledAssets() {
+async function verifyBundledAssets() {
   const assets = [
     { key: 'djvuRuntime', url: new URL('../vendor/djvu.js', import.meta.url).href },
     { key: 'ocrLangData', url: new URL('../vendor/tesseract/lang-data', import.meta.url).href },

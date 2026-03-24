@@ -122,57 +122,6 @@ export async function diffPdfPages(pdfBytesA, pdfBytesB, opts = {}) {
   return diffWords(textA, textB);
 }
 
-/**
- * Diff all pages of two PDFs (full document comparison).
- *
- * @param {Uint8Array|ArrayBuffer} pdfBytesA
- * @param {Uint8Array|ArrayBuffer} pdfBytesB
- * @param {Object} [opts]
- * @param {string} [opts.granularity='word']
- * @returns {Promise<{ pages: Array<{ pageNum: number, diff: DiffResult }>, stats: Object }>}
- */
-export async function diffPdfDocuments(pdfBytesA, pdfBytesB, opts = {}) {
-  const gran = opts.granularity ?? 'word';
-  const dataA = pdfBytesA instanceof Uint8Array ? pdfBytesA : new Uint8Array(pdfBytesA);
-  const dataB = pdfBytesB instanceof Uint8Array ? pdfBytesB : new Uint8Array(pdfBytesB);
-
-  const docA = await getDocument({ data: dataA.slice() }).promise;
-  const docB = await getDocument({ data: dataB.slice() }).promise;
-
-  const maxPages = Math.max(docA.numPages, docB.numPages);
-  const pages    = [];
-
-  let totalEqual = 0, totalInserted = 0, totalDeleted = 0, totalReplaced = 0;
-
-  for (let i = 1; i <= maxPages; i++) {
-    const textA = i <= docA.numPages ? await _extractPageTextFromDoc(docA, i) : '';
-    const textB = i <= docB.numPages ? await _extractPageTextFromDoc(docB, i) : '';
-
-    const fn = gran === 'char' ? diffChars : gran === 'line' ? diffLines : diffWords;
-    const diff = fn(textA, textB);
-
-    pages.push({ pageNum: i, diff });
-    totalEqual    += diff.stats.equal;
-    totalInserted += diff.stats.inserted;
-    totalDeleted  += diff.stats.deleted;
-    totalReplaced += diff.stats.replaced;
-  }
-
-  docA.destroy();
-  docB.destroy();
-
-  return {
-    pages,
-    stats: {
-      totalPages: maxPages,
-      equal:    totalEqual,
-      inserted: totalInserted,
-      deleted:  totalDeleted,
-      replaced: totalReplaced,
-    },
-  };
-}
-
 // ---------------------------------------------------------------------------
 // Public API — HTML rendering
 // ---------------------------------------------------------------------------

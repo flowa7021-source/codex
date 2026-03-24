@@ -16,10 +16,7 @@
  *   • **Pattern-based**: Regex patterns for SSNs, emails, phone numbers, etc.
  *
  * Usage:
- *   import { redactBySearch, redactByRegion, RedactionEditor } from './text-redact.js';
- *
- *   const blob = await redactBySearch(pdfBytes, 'John Doe', opts);
- *   const blob2 = await redactByRegion(pdfBytes, pageNum, rect, opts);
+ *   import { RedactionEditor } from './text-redact.js';
  */
 
 import { PDFDocument, rgb } from 'pdf-lib';
@@ -57,7 +54,7 @@ export const REDACTION_PATTERNS = {
  * @param {string}   [opts.replacementText]  - optional text drawn over redaction
  * @returns {Promise<{ blob: Blob, count: number, locations: Array }>}
  */
-export async function redactBySearch(pdfBytes, searchTerm, opts = {}) {
+async function redactBySearch(pdfBytes, searchTerm, opts = {}) {
   const data  = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
   const color = opts.color ?? DEFAULT_REDACT_COLOR;
 
@@ -124,47 +121,12 @@ export async function redactBySearch(pdfBytes, searchTerm, opts = {}) {
  * @param {Object} [opts]      - same as redactBySearch opts
  * @returns {Promise<{ blob: Blob, count: number, locations: Array }>}
  */
-export async function redactByPattern(pdfBytes, patternName, opts = {}) {
+async function redactByPattern(pdfBytes, patternName, opts = {}) {
   const pattern = REDACTION_PATTERNS[patternName];
   if (!pattern) {
     throw new Error(`Unknown redaction pattern: "${patternName}". Available: ${Object.keys(REDACTION_PATTERNS).join(', ')}`);
   }
   return redactBySearch(pdfBytes, pattern, opts);
-}
-
-// ---------------------------------------------------------------------------
-// Public API — Region-based redaction
-// ---------------------------------------------------------------------------
-
-/**
- * Redact a rectangular region on a specific page.
- *
- * @param {Uint8Array|ArrayBuffer} pdfBytes
- * @param {number} pageNum - 1-based
- * @param {{ x: number, y: number, width: number, height: number }} rect - PDF coords (bottom-left origin)
- * @param {Object} [opts]
- * @param {{ r:number, g:number, b:number }} [opts.color]
- * @returns {Promise<Blob>}
- */
-export async function redactByRegion(pdfBytes, pageNum, rect, opts = {}) {
-  const data   = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
-  const pdfDoc = await PDFDocument.load(data);
-  const color  = opts.color ?? DEFAULT_REDACT_COLOR;
-
-  const page = pdfDoc.getPages()[pageNum - 1];
-  if (!page) throw new Error(`Page ${pageNum} not found`);
-
-  page.drawRectangle({
-    x:       rect.x,
-    y:       rect.y,
-    width:   rect.width,
-    height:  rect.height,
-    color:   rgb(color.r, color.g, color.b),
-    opacity: 1,
-  });
-
-  const saved = await pdfDoc.save();
-  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +141,7 @@ export async function redactByRegion(pdfBytes, pageNum, rect, opts = {}) {
  * @param {string[]} [patternNames] - keys from REDACTION_PATTERNS (default: all)
  * @returns {Promise<Array<{ pattern: string, count: number, samples: string[] }>>}
  */
-export async function scanForSensitiveData(pdfBytes, patternNames) {
+async function scanForSensitiveData(pdfBytes, patternNames) {
   const data    = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
   const names   = patternNames ?? Object.keys(REDACTION_PATTERNS);
   const results = [];

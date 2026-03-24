@@ -139,22 +139,6 @@ export async function readFileAsBytes(pathOrFile) {
   throw new Error('readFileAsBytes: unsupported input type');
 }
 
-/**
- * Write data to a file.
- *
- * @param {string} path – file path (Tauri) or filename for download (browser)
- * @param {Uint8Array|ArrayBuffer} data
- */
-export async function writeFile(path, data) {
-  if (_isTauri) {
-    const bytes = data instanceof Uint8Array ? Array.from(data) : Array.from(new Uint8Array(data));
-    await _tauriInvoke('write_file_bytes', { path, data: bytes });
-    return;
-  }
-
-  // Browser fallback: trigger download
-  downloadBlob(new Blob([/** @type {any} */ (data)]), path.split('/').pop() || 'document');
-}
 
 /**
  * Trigger a browser download for a Blob.
