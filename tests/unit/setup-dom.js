@@ -167,7 +167,24 @@ if (typeof globalThis.document === 'undefined') {
       const frag = { children: [], appendChild(child) { frag.children.push(child); return child; }, append(...nodes) { for (const n of nodes) if (n != null) frag.appendChild(n); } };
       return frag;
     },
-    body: { appendChild() {}, style: {} },
+    body: (() => {
+      const _cls = new Set();
+      return {
+        appendChild() {},
+        style: {},
+        className: '',
+        classList: {
+          add(...c) { c.forEach(x => _cls.add(x)); },
+          remove(...c) { c.forEach(x => _cls.delete(x)); },
+          toggle(c, force) {
+            if (force !== undefined) { force ? _cls.add(c) : _cls.delete(c); }
+            else if (_cls.has(c)) { _cls.delete(c); }
+            else { _cls.add(c); }
+          },
+          contains(c) { return _cls.has(c); },
+        },
+      };
+    })(),
     head: { appendChild() {} },
     documentElement: { style: {} },
     addEventListener() {},

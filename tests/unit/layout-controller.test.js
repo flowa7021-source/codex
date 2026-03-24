@@ -507,7 +507,7 @@ describe('layout-controller', () => {
 
       setupResizableLayout();
       // Simulate pointerdown
-      assert.doesNotThrow(() => handle.dispatchEvent(new (class extends Event {}('pointerdown', { pointerId: 1 }))));
+      assert.doesNotThrow(() => handle.dispatchEvent(Object.assign(new Event('pointerdown'), { pointerId: 1 })));
     });
 
     it('attaches pointerdown listener to canvasResizeHandle', () => {
