@@ -832,38 +832,11 @@ describe('openFile', () => {
     assert.equal(state.adapter.type, 'unsupported');
   });
 
-  it('opens a .djvu file via DjVuNativeAdapter when DjVu runtime is available', async () => {
-    // Set up window.DjVu mock so ensureDjVuJs succeeds
-    /** @type {any} */ (window).DjVu = {
-      Document: class MockDjVuDocument {
-        constructor(_data) { this.pages = [{}]; }
-      },
-    };
-
-    const origAppendChild = document.head.appendChild;
-    document.head.appendChild = (el) => {
-      if (el && el.tagName === 'SCRIPT' && el.onload) {
-        queueMicrotask(() => el.onload());
-      }
-      return el;
-    };
-
-    try {
-      const file = new File(['AT&TFORM fake djvu data'], 'book.djvu');
-      await openFile(file);
-
-      assert.equal(state.docName, 'book.djvu');
-      assert.ok(state.adapter, 'adapter should be set');
-      assert.equal(state.adapter.type, 'djvu-native');
-    } finally {
-      document.head.appendChild = origAppendChild;
-      delete /** @type {any} */ (window).DjVu;
-    }
-  });
-
   it('opens a .djvu file via DjVuAdapter fallback (no native runtime)', async () => {
     // Patch document.head.appendChild to trigger onerror on script elements
-    // so ensureDjVuJs rejects quickly instead of hanging
+    // so ensureDjVuJs rejects quickly instead of hanging.
+    // IMPORTANT: This must run BEFORE the native DjVu test because ensureDjVuJs
+    // caches the lib permanently once loaded.
     const origAppendChild = document.head.appendChild;
     document.head.appendChild = (el) => {
       if (el && el.tagName === 'SCRIPT' && el.onerror) {
@@ -930,6 +903,59 @@ describe('openFile', () => {
       assert.ok(state.adapter, 'adapter should be set');
     } finally {
       document.head.appendChild = origAppendChild;
+    }
+  });
+
+  it('opens a .djvu file via DjVuNativeAdapter when DjVu runtime is available', async () => {
+    // Set up window.DjVu mock so ensureDjVuJs succeeds.
+    // This test must run AFTER the fallback tests (above) because once
+    // djvuLib is cached, ensureDjVuJs never creates a new script element.
+    /** @type {any} */ (window).DjVu = {
+      Document: class MockDjVuDocument {
+        constructor(_data) { this.pages = [{}]; }
+      },
+    };
+
+    const origAppendChild = document.head.appendChild;
+    document.head.appendChild = (el) => {
+      if (el && el.tagName === 'SCRIPT' && el.onload) {
+        queueMicrotask(() => el.onload());
+      }
+      return el;
+    };
+
+    try {
+      const file = new File(['AT&TFORM fake djvu data'], 'book.djvu');
+      await openFile(file);
+
+      assert.equal(state.docName, 'book.djvu');
+      assert.ok(state.adapter, 'adapter should be set');
+      assert.equal(state.adapter.type, 'djvu-native');
+    } finally {
+      document.head.appendChild = origAppendChild;
+      // Don't delete window.DjVu - djvuLib is now cached and references it
+    }
+  });
+
+  it('falls back to DjVuAdapter when DjVu.Document constructor throws', async () => {
+    // After the native test cached djvuLib, mutate Document on the cached
+    // object so the constructor throws, testing the reject(err) branch
+    // inside the setTimeout callback (lines 277-278).
+    const cachedDjVu = /** @type {any} */ (window).DjVu;
+    const origDoc = cachedDjVu.Document;
+    cachedDjVu.Document = class ThrowingDocument {
+      constructor() { throw new Error('parse error'); }
+    };
+
+    try {
+      const file = new File(['not a real djvu'], 'broken.djvu');
+      await openFile(file);
+
+      assert.equal(state.docName, 'broken.djvu');
+      assert.ok(state.adapter, 'adapter should be set');
+      assert.equal(state.adapter.type, 'djvu');
+    } finally {
+      cachedDjVu.Document = origDoc;
     }
   });
 
