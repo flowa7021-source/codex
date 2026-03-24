@@ -98,6 +98,7 @@ export class PresentationMode {
     document.removeEventListener('keydown', this._onKeyDown);
 
     if (document.fullscreenElement) {
+      // Exit fullscreen during cleanup; failure is non-critical
       document.exitFullscreen?.().catch(() => {});
     }
 
@@ -306,7 +307,9 @@ export class PresentationMode {
       case 'f':
       case 'F':
         if (!document.fullscreenElement) {
-          this._overlay?.requestFullscreen?.().catch(() => {});
+          this._overlay?.requestFullscreen?.().catch((_err) => {
+            console.warn('[presentation-mode] Fullscreen request denied');
+          });
         }
         break;
     }

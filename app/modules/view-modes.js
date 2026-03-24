@@ -63,7 +63,7 @@ export function setViewMode(mode) {
       break;
   }
 
-  // Dispatch event for external listeners
+  // Dispatched for external listeners (Tauri host, extensions); not consumed internally
   document.dispatchEvent(new CustomEvent('viewmodechange', { detail: { mode, prev } }));
 }
 

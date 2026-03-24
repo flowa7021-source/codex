@@ -259,7 +259,9 @@ export function exportLogsAsJson() {
     URL.revokeObjectURL(url);
   } catch (_err) {
     // Fallback: copy to clipboard when download is blocked (Tauri WebView)
-    copyLogsToClipboard().catch(() => {});
+    copyLogsToClipboard().catch((_err) => {
+      console.warn('[diagnostics] Failed to export logs via both download and clipboard');
+    });
   }
   novaLog('diagnostics', 'logs.exported', { count: _logBuffer.length });
 }

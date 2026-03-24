@@ -317,7 +317,9 @@ function _showRecoveryBanner(snapshot) {
     const onDismiss = () => {
       cleanup();
       // Mark as acknowledged
-      _markSnapshotClean(snapshot.sessionId).catch(() => {});
+      _markSnapshotClean(snapshot.sessionId).catch((_err) => {
+        console.debug('[autosave] Failed to mark snapshot clean; will show again next startup');
+      });
       resolve(null);
     };
 
