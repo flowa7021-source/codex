@@ -9,7 +9,7 @@ import { pushDiagnosticEvent } from './diagnostics.js';
 import { yieldToMainThread } from './utils.js';
 import { getOcrLang } from './settings-controller.js';
 import { detectLanguage } from './ocr-languages.js';
-import { initTesseract, recognizeTesseract, isTesseractAvailable, getTesseractStatus, recognizeWithPool, isTesseractPoolReady } from './tesseract-adapter.js';
+import { initTesseract, recognizeTesseract, isTesseractAvailable, getTesseractStatus, recognizeWithPool, isTesseractPoolReady, setTesseractProgressCallback } from './tesseract-adapter.js';
 import { loadOcrTextData, saveOcrTextData } from './workspace-controller.js';
 import {
   estimateSkewAngleFromBinary, rotateCanvas,
@@ -73,23 +73,39 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
 
   const preprocessStart = performance.now();
   const isAccurate = pipelineQualityMode === 'accurate';
+  // Multi-language OCR (e.g. eng+rus for "auto") is inherently slow because
+  // Tesseract loads multiple language models.  Use fewer preprocessing
+  // variants so the total wall-time stays reasonable.
+  const isMultiLang = typeof lang === 'string' && lang.includes('+');
   const recipeList = isAccurate
-    ? [
-      [-32, 'mean', false, 1],
-      [-16, 'mean', false, 1],
-      [0, 'mean', false, 1],
-      [0, 'otsu', false, 1],
-      [16, 'otsu', false, 1],
-      [28, 'otsu', false, 1],
-      [10, 'otsu', true, 1],
-      [-10, 'otsu', false, 1],
-    ]
-    : [
-      [0, 'otsu', false, 1],
-      [0, 'mean', false, 1],
-      [16, 'otsu', false, 1],
-      [-16, 'mean', false, 1],
-    ];
+    ? (isMultiLang
+      ? [
+        [0, 'otsu', false, 1],
+        [0, 'mean', false, 1],
+        [16, 'otsu', false, 1],
+        [-16, 'mean', false, 1],
+      ]
+      : [
+        [-32, 'mean', false, 1],
+        [-16, 'mean', false, 1],
+        [0, 'mean', false, 1],
+        [0, 'otsu', false, 1],
+        [16, 'otsu', false, 1],
+        [28, 'otsu', false, 1],
+        [10, 'otsu', true, 1],
+        [-10, 'otsu', false, 1],
+      ])
+    : (isMultiLang
+      ? [
+        [0, 'otsu', false, 1],
+        [0, 'mean', false, 1],
+      ]
+      : [
+        [0, 'otsu', false, 1],
+        [0, 'mean', false, 1],
+        [16, 'otsu', false, 1],
+        [-16, 'mean', false, 1],
+      ]);
 
   let preprocessDone = 0;
   const reportPreprocess = (total) => {
@@ -183,9 +199,27 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   let detectedLang = lang;
   let taskCancelled = false;
   try {
+    // Wire up Tesseract-level progress callback for real-time recognition %
+    const variantStartTimes = [];
+    setTesseractProgressCallback((percent, _status) => {
+      if (onProgress) {
+        // Forward per-variant Tesseract progress to the pipeline-level callback.
+        // The pipeline reports recognize phase progress as (currentVariant - 1 + fraction).
+        const curIdx = variantStartTimes.length - 1;
+        const fraction = percent / 100;
+        onProgress({
+          phase: 'recognize',
+          current: curIdx + fraction,
+          total: variants.length,
+          recognizePercent: percent,
+        });
+      }
+    });
+
     for (let i = 0; i < variants.length; i += 1) {
       if (taskId && taskId !== state.ocrTaskId) { taskCancelled = true; break; }
-      if (onProgress) onProgress({ phase: 'recognize', current: i + 1, total: variants.length });
+      variantStartTimes.push(performance.now());
+      if (onProgress) onProgress({ phase: 'recognize', current: i, total: variants.length, recognizePercent: 0 });
       const variant = variants[i];
       let rawText = '';
       let words = [];
@@ -220,12 +254,18 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
         bestVariantH = variant?.height || 0;
         detectedLang = effectiveLang;
       }
+      // Early exit: if the first variant already produces good text, skip the rest.
+      // For multi-lang OCR (slow), also exit after the second variant.
       if (i === 0 && best.length >= 20 && bestScore > 50) {
+        break;
+      }
+      if (isMultiLang && i >= 1 && best.length >= 10 && bestScore > 30) {
         break;
       }
       await yieldToMainThread();
     }
   } finally {
+    setTesseractProgressCallback(null);
     freeAllVariants();
   }
 

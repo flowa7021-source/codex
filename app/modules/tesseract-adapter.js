@@ -29,6 +29,21 @@ let _lastFailTime = 0; // timestamp of last failure for cooldown
 const MAX_INIT_RETRIES = 3; // max retries before giving up for this session
 const INIT_FAIL_COOLDOWN_MS = 5000; // minimum delay between retry attempts after failure
 
+// ─── Progress callback for Tesseract recognition ────────────────────────────
+// Set via setTesseractProgressCallback() before recognition to receive
+// real-time progress updates from the Tesseract worker (0-100%).
+/** @type {((progress: number, status: string) => void) | null} */
+let _progressCallback = null;
+
+/**
+ * Set a callback that receives Tesseract recognition progress updates.
+ * Pass `null` to clear.
+ * @param {((progress: number, status: string) => void) | null} cb
+ */
+export function setTesseractProgressCallback(cb) {
+  _progressCallback = cb;
+}
+
 // ─── Worker Pool (Scheduler) state ──────────────────────────────────────────
 let _scheduler = null;
 let _poolWorkers = [];
@@ -189,13 +204,21 @@ export function getTesseractWorkerOpts() {
  * @returns {Promise<object>} created worker
  */
 async function _createWorkerWithFallback(Tesseract, tessLang, workerOpts) {
+  const optsWithLogger = {
+    ...workerOpts,
+    logger: (m) => {
+      if (_progressCallback && m && m.status === 'recognizing text' && typeof m.progress === 'number') {
+        _progressCallback(Math.round(m.progress * 100), m.status);
+      }
+    },
+  };
   try {
-    return await Tesseract.createWorker(tessLang, 1, workerOpts);
+    return await Tesseract.createWorker(tessLang, 1, optsWithLogger);
   } catch (primaryErr) {
     if (tessLang.includes('+')) {
       const fallbackLang = tessLang.split('+')[0];
       console.warn(`Tesseract multi-lang "${tessLang}" failed, trying "${fallbackLang}":`, primaryErr?.message);
-      return await Tesseract.createWorker(fallbackLang, 1, workerOpts);
+      return await Tesseract.createWorker(fallbackLang, 1, optsWithLogger);
     }
     throw primaryErr;
   }
