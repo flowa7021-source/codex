@@ -315,8 +315,9 @@ export class TableEditor {
       case 'Enter': {
         e.preventDefault();
         // Move to the input below (same column, next row)
-        const row = Math.floor(idx / colCount);
-        const col = idx % colCount;
+        const currentColCount = this._grid?.querySelectorAll('tr:first-child td')?.length || colCount;
+        const row = Math.floor(idx / currentColCount);
+        const col = idx % currentColCount;
         const nextRow = row + 1;
         if (nextRow < rowCount) {
           const nextIdx = nextRow * colCount + col;

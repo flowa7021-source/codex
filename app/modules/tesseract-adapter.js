@@ -503,3 +503,16 @@ export async function terminateTesseract() {
 export function getAvailableTesseractLangs() {
   return Object.keys(LANG_MAP);
 }
+
+/**
+ * Create (or reuse) a Tesseract worker for the given language and return
+ * a thin proxy that exposes the raw `recognize` method.
+ * Used by ocr-char-layer's _defaultWorkerFactory fallback.
+ * @param {string} [lang='eng']
+ * @returns {Promise<{ recognize: (canvas: HTMLCanvasElement) => Promise<any> }>}
+ */
+export async function createTesseractWorker(lang = 'eng') {
+  const ok = await initTesseract(lang);
+  if (!ok) throw new Error(`[tesseract-adapter] failed to init worker for lang="${lang}"`);
+  return { recognize: (canvas) => _worker.recognize(canvas) };
+}

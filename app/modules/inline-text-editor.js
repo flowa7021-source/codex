@@ -81,8 +81,10 @@ export class InlineTextEditor {
     const range = document.createRange();
     range.selectNodeContents(this._editorEl);
     const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
+    if (sel) {
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
 
     this._editorEl.addEventListener('blur', this._onBlur);
     document.addEventListener('keydown', this._onKeyDown);
@@ -175,7 +177,7 @@ export class InlineTextEditor {
 
   _blockToCanvasRect(block) {
     const zoom = this.deps.zoom || 1;
-    const ph   = this.deps.pageHeightPt || this.page.height;
+    const ph   = this.deps.pageHeightPt ?? this.page.height;
     return {
       x:      block.boundingBox.x * zoom,
       y:      (ph - block.boundingBox.y - block.boundingBox.height) * zoom,

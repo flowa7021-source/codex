@@ -237,14 +237,25 @@ export class PdfRedactor {
 
   _findTextBounds(items, searchText, charOffset) {
     const bounds = [];
-    let currentOffset = 0;
 
+    // Build a char-to-item mapping: precompute global start offset for each item
+    const itemOffsets = [];
+    let runningOffset = 0;
     for (const item of items) {
-      const itemStart = currentOffset;
-      const itemEnd = currentOffset + item.str.length;
+      itemOffsets.push(runningOffset);
+      runningOffset += item.str.length;
+    }
 
-      // Check if this item overlaps with the matched region
-      if (itemEnd > charOffset && itemStart < charOffset + searchText.length) {
+    const matchStart = charOffset;
+    const matchEnd = charOffset + searchText.length;
+
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx];
+      const itemStart = itemOffsets[idx];
+      const itemEnd = itemStart + item.str.length;
+
+      // Check if this item overlaps with the matched region (global positions)
+      if (itemEnd > matchStart && itemStart < matchEnd) {
         const tx = item.transform?.[4] || 0;
         const ty = item.transform?.[5] || 0;
         const w = item.width || item.str.length * 6;
@@ -252,8 +263,6 @@ export class PdfRedactor {
 
         bounds.push({ x: tx, y: ty - h, w, h: h * 1.2 });
       }
-
-      currentOffset = itemEnd;
     }
 
     return bounds;

@@ -98,12 +98,25 @@ export class VirtualScroll {
     const viewTop = scrollTop - this.overscan * viewportHeight;
     const viewBottom = scrollTop + viewportHeight + this.overscan * viewportHeight;
 
-    // Find visible pages
+    // Find first visible page via binary search with -1 guard to include boundary page
+    let startIdx = 1;
+    let lo = 1, hi = this.pageCount;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      if (this.offsets[mid] < viewTop) {
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    startIdx = Math.max(1, lo - 1); // -1 to include the boundary page
+
     const visiblePages = new Set();
-    for (let i = 1; i <= this.pageCount; i++) {
+    for (let i = startIdx; i <= this.pageCount; i++) {
       const top = this.offsets[i - 1];
+      if (top > viewBottom) break;
       const bottom = this.offsets[i];
-      if (bottom >= viewTop && top <= viewBottom) {
+      if (bottom >= viewTop) {
         visiblePages.add(i);
       }
     }

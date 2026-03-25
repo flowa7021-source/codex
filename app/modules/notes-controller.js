@@ -3,6 +3,8 @@
 import { state, els } from './state.js';
 import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 
+let saveTimer = null;
+
 function storageKey() {
   return `novareader-notes:${state.docName || 'global'}`;
 }
@@ -153,8 +155,9 @@ export function initNotesController() {
   }
 
   // Auto-save on textarea changes (debounced)
+  clearSafeTimeout(saveTimer);
+  saveTimer = null;
   if (els.notes) {
-    let saveTimer = null;
     els.notes.addEventListener('input', () => {
       clearSafeTimeout(saveTimer);
       saveTimer = safeTimeout(saveNotesFromUI, 2000);

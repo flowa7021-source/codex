@@ -1068,7 +1068,7 @@
 
     <script type="module" src="./app.js"></script>
     <script>
-    if ('serviceWorker' in navigator) {
+    if (!window.__TAURI_INTERNALS__ && 'serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
     </script>

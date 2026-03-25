@@ -297,10 +297,10 @@ function _drawSlot(page, font, fontSize, color, margin, pageWidth, y, template, 
   }
 }
 
-function _drawLine(page, x1, y1, x2, _y2, color) {
+function _drawLine(page, x1, y1, x2, y2, color) {
   page.drawLine({
     start: { x: x1, y: y1 },
-    end:   { x: x2, y: y1 },
+    end:   { x: x2, y: y2 },
     thickness: 0.5,
     color: rgb(color.r, color.g, color.b),
     opacity: 0.4,

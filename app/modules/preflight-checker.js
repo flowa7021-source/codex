@@ -158,25 +158,28 @@ async function _checkFontEmbedding(pdfJsDoc) {
 }
 
 async function _checkImageResolution(pdfJsDoc, targetDpi) {
-  const page = await pdfJsDoc.getPage(1);
-  const ops  = await page.getOperatorList();
-
   let imageCount = 0;
   const imageOps = [85, 86, 87, 88, 82]; // paintImageXObject, etc.
+  const pagesToCheck = Math.min(pdfJsDoc.numPages, 5);
 
-  for (let i = 0; i < ops.fnArray.length; i++) {
-    if (imageOps.includes(ops.fnArray[i])) {
-      imageCount++;
+  for (let p = 1; p <= pagesToCheck; p++) {
+    const page = await pdfJsDoc.getPage(p);
+    const ops  = await page.getOperatorList();
+
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      if (imageOps.includes(ops.fnArray[i])) {
+        imageCount++;
+      }
     }
   }
 
   if (imageCount === 0) {
     return _check('image-dpi', 'Image Resolution', 'images', 'info',
-      'No images detected on first page.');
+      `No images detected (checked ${pagesToCheck} page(s)).`);
   }
 
   return _check('image-dpi', 'Image Resolution', 'images', 'warn',
-    `${imageCount} image(s) found. Manual DPI verification recommended (target: ${targetDpi} DPI).`,
+    `${imageCount} image(s) found across ${pagesToCheck} page(s). Manual DPI verification recommended (target: ${targetDpi} DPI).`,
     `Ensure all images are at least ${MIN_ACCEPTABLE_DPI} DPI for acceptable print quality.`);
 }
 

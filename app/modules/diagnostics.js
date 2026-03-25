@@ -256,7 +256,7 @@ export function exportLogsAsJson() {
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
+    safeTimeout(() => URL.revokeObjectURL(url), 500);
   } catch (_err) {
     // Fallback: copy to clipboard when download is blocked (Tauri WebView)
     copyLogsToClipboard().catch((_err) => {

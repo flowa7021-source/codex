@@ -115,7 +115,7 @@ export function initPageOrganizerUI(deps) {
         const dropIdx = parseInt(thumb.dataset.idx);
         if (orgState.selected.size > 0) {
           const newOrd = computeReorderFromDrag(orgState, dropIdx);
-          orgNewOrder = newOrd.map(ni => orgNewOrder[ni] ?? ni);
+          orgNewOrder = newOrd.map(ni => (ni >= 0 && ni < orgNewOrder.length) ? orgNewOrder[ni] : orgNewOrder[Math.min(ni, orgNewOrder.length - 1)] ?? ni);
           orgState.selected.clear();
           renderOrgGrid();
         }

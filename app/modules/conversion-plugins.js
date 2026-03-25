@@ -88,7 +88,8 @@ class InvoicePlugin extends ConversionPlugin {
   }
 
   _buildTable(rows, escXml) {
-    const maxCols = Math.max(...rows.map((r) => r.length));
+    const colLengths = rows.map((r) => r.length);
+    const maxCols = colLengths.length === 0 ? 0 : Math.max(...colLengths);
     const colW = Math.floor(9000 / maxCols);
     let xml = '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/><w:tblBorders>';
     xml += '<w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/>';

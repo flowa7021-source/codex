@@ -388,7 +388,8 @@ function _updateViewportIndicator() {
 function _doUpdateViewport() {
   if (!_viewport || !_deps || !_track) return;
   const { els } = _deps;
-  const canvasWrap = els?.canvasWrap;
+  if (!els.canvasWrap) return;
+  const canvasWrap = els.canvasWrap;
   if (!canvasWrap) return;
 
   const totalTrackH = _track.scrollHeight;
