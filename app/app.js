@@ -3,6 +3,7 @@ import { initPlatform } from './modules/platform.js';
 initPlatform().catch(() => {});   // non-blocking; fallback to browser mode
 
 // ─── Module Imports ─────────────────────────────────────────────────────────
+import { emit, on, once, removeAllListeners as removeAllBusListeners } from './modules/event-bus.js';
 import { debounce } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
 import { ensurePdfJs, preloadPdfRuntime } from './modules/loaders.js';
@@ -54,6 +55,7 @@ import { createPdfFromImages, createBlankPdf, canvasesToPdf } from './modules/pd
 import { initQuickActions, hideQuickActions } from './modules/quick-actions.js';
 import { initHotkeys, onHotkey, registerHotkeyHandlers, isSpaceHeld, getBindings, getCheatsheet } from './modules/hotkeys.js';
 import { CbzAdapter } from './modules/cbz-adapter.js';
+import { EraseUIController, EraseTool } from './modules/erase-tool.js';
 import { initAutosave, triggerAutosave, markCleanExit, checkForRecovery, clearRecoveryData, startAutosaveTimer, stopAutosaveTimer, applyRecoveredSnapshot } from './modules/autosave.js';
 import { initAutoScroll, startAutoScroll, stopAutoScroll, toggleAutoScroll, setAutoScrollSpeed, isAutoScrolling } from './modules/auto-scroll.js';
 
@@ -438,10 +440,57 @@ initDiagnosticsDeps({
   getOcrSearchIndexSize: () => ocrSearchIndex.pages.size,
   getToolMode: () => toolStateMachine.current,
 });
+/** @type {EraseUIController|null} */
+let _eraseUIController = null;
+
+function activateEraseOverlay() {
+  if (_eraseUIController) _eraseUIController.destroy();
+  const canvas = els.annotationCanvas;
+  if (!canvas) return;
+  canvas.style.pointerEvents = 'auto';
+  canvas.style.zIndex = '20';
+  _eraseUIController = new EraseUIController(
+    /** @type {HTMLCanvasElement} */ (canvas),
+    async (rect, subMode) => {
+      const pm = window._advancedToolsHandle?.docModel?.pages?.get(state.currentPage);
+      if (!pm) return;
+      const eraser = new EraseTool(pm, state.pdfLibDoc ?? null, async (bytes) => {
+        state.pdfBytes = bytes;
+        reloadPdfFromBytes(bytes);
+      });
+      if (subMode === 'smart' || subMode === 'word') {
+        await eraser.smartErase({ x: rect.x, y: rect.y }, { granularity: subMode === 'word' ? 'word' : undefined });
+      } else {
+        await eraser.contentErase(rect);
+      }
+    },
+    {
+      pageWidth: state.adapter?.pageWidth ?? 595,
+      pageHeight: state.adapter?.pageHeight ?? 842,
+      zoom: state.zoom ?? 1,
+    },
+  );
+}
+
+function deactivateEraseOverlay() {
+  if (_eraseUIController) {
+    _eraseUIController.destroy();
+    _eraseUIController = null;
+  }
+  const canvas = els.annotationCanvas;
+  if (!canvas) return;
+  if (!state.drawEnabled) {
+    canvas.style.pointerEvents = '';
+    canvas.style.zIndex = '';
+  }
+}
+
 initToolModeDeps({
   renderAnnotations,
   updateOverlayInteractionState,
   setOcrStatus,
+  activateEraseOverlay,
+  deactivateEraseOverlay,
 });
 initAnnotationControllerDeps({
   renderDocStats,
@@ -636,6 +685,9 @@ initViewModes({
   canvas: els.canvas,
 });
 
+// Expose event-bus for inter-module communication
+window._eventBus = { emit, on, once, removeAllBusListeners };
+
 // Expose toast for use throughout the app
 window._toast = { toast, toastSuccess, toastError, toastWarning, toastInfo, toastProgress, dismissAllToasts };
 
@@ -675,8 +727,8 @@ initBookmarkController();
 initNotesController();
 
 // Listen for page navigation events from bookmark-controller
-window.addEventListener('novareader-goto-page', async (e) => {
-  const page = e.detail?.page;
+on('novareader-goto-page', async (detail) => {
+  const page = detail?.page;
   if (page && page >= 1 && page <= state.pageCount) {
     state.currentPage = page;
     await renderCurrentPage();
@@ -686,7 +738,7 @@ window.addEventListener('novareader-goto-page', async (e) => {
 });
 
 // Hook page navigation to update bookmark button and thumbnails
-window.addEventListener('page-rendered', () => {
+on('page-rendered', () => {
   updateBookmarkButton();
   highlightThumbPage();
 });

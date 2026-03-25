@@ -41,7 +41,7 @@ const DIFF_THRESHOLD       = 15;    // per-channel tolerance (0-255)
  * @param {number} scale     – CSS pixel density factor
  * @returns {Promise<HTMLCanvasElement>}
  */
-export async function renderPageToCanvas(pdfBytes, pageNum, scale = DEFAULT_RENDER_SCALE) {
+async function renderPageToCanvas(pdfBytes, pageNum, scale = DEFAULT_RENDER_SCALE) {
   const data   = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
   const loadingTask = getDocument({ data });
   const pdfDoc = await loadingTask.promise;

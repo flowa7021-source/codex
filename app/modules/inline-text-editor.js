@@ -26,6 +26,8 @@
  *   deps.showTextBlock(id)  – restore after commit/cancel
  */
 
+import { matchFontFromOcr } from './scan-decomposer.js';
+
 // ---------------------------------------------------------------------------
 // InlineTextEditor
 // ---------------------------------------------------------------------------
@@ -46,6 +48,7 @@ export class InlineTextEditor {
     this._origText  = '';
 
     this._onKeyDown = this._onKeyDown.bind(this);
+    this._onBlur    = () => this._commit();
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -81,7 +84,7 @@ export class InlineTextEditor {
     sel.removeAllRanges();
     sel.addRange(range);
 
-    this._editorEl.addEventListener('blur', () => this._commit());
+    this._editorEl.addEventListener('blur', this._onBlur);
     document.addEventListener('keydown', this._onKeyDown);
 
     // Hide original text while editing
@@ -118,6 +121,21 @@ export class InlineTextEditor {
     let fontFamily = run?.font || 'Arial';
     if (block.source === 'ocr') {
       fontFamily = block.matchedSystemFont || block.synthesizedFont || 'Arial';
+    }
+
+    const editorEl = this._editorEl;
+    const ocrResult = block.ocrResult || null;
+
+    // Try to match font from OCR data for scanned pages
+    if (!run?.font && ocrResult) {
+      try {
+        const fontMatch = matchFontFromOcr(ocrResult);
+        if (fontMatch?.family) {
+          editorEl.style.fontFamily = fontMatch.family;
+          editorEl.style.fontWeight = String(fontMatch.weight || 400);
+          editorEl.style.fontStyle = fontMatch.style || 'normal';
+        }
+      } catch (_e) { /* fallback to default font */ }
     }
 
     const color     = run?.color || '#000000';
@@ -219,7 +237,7 @@ export class InlineTextEditor {
   _cleanup() {
     document.removeEventListener('keydown', this._onKeyDown);
     if (this._editorEl) {
-      this._editorEl.removeEventListener('blur', this._commit);
+      this._editorEl.removeEventListener('blur', this._onBlur);
       this._editorEl.remove();
       this._editorEl = null;
     }

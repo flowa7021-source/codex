@@ -15,11 +15,17 @@ import {
   estimateSkewAngleFromBinary, rotateCanvas,
   preprocessOcrCanvas, pickVariantsByBudget,
 } from './ocr-image-processing.js';
-import { normalizeOcrTextByLang, scoreOcrTextByLang, postCorrectOcrText, setOcrStatus } from './ocr-controller.js';
-
+import { ocrWithCharBoxes } from './ocr-char-layer.js';
 // ─── Late-bound dependencies ────────────────────────────────────────────────
+// normalizeOcrTextByLang, scoreOcrTextByLang, postCorrectOcrText, setOcrStatus
+// are injected from app.js via initOcrPipelineVariantsDeps to avoid circular
+// import with ocr-controller.js.
 const _deps = {
   _ocrWordCache: new Map(),
+  normalizeOcrTextByLang: /** @type {(text: string, lang: string) => string} */ (t) => t,
+  scoreOcrTextByLang: /** @type {(text: string, lang: string) => number} */ () => 0,
+  postCorrectOcrText: /** @type {(text: string, lang: string) => string} */ (t) => t,
+  setOcrStatus: /** @type {(text: string) => void} */ () => {},
 };
 
 export function initOcrPipelineVariantsDeps(deps) {
@@ -55,13 +61,13 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
     pushDiagnosticEvent('ocr.tesseract.init', { available: true, initialized: initOk, lang, failCount: /** @type {any} */ (tessStatus).initFailCount, lastError: /** @type {any} */ (tessStatus).lastError || undefined });
     if (!initOk) {
       pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-init-failed', lang, ms: Math.round(performance.now() - startedAt), lastError: /** @type {any} */ (tessStatus).lastError || undefined });
-      setOcrStatus(`OCR: ошибка инициализации движка (попытка ${/** @type {any} */ (tessStatus).initFailCount}/3)`);
+      _deps.setOcrStatus(`OCR: ошибка инициализации движка (попытка ${/** @type {any} */ (tessStatus).initFailCount}/3)`);
       return '';
     }
   } else {
     pushDiagnosticEvent('ocr.tesseract.init', { available: false, initialized: false, lang }, 'error');
     pushDiagnosticEvent('ocr.pipeline.skip', { reason: 'tesseract-unavailable', lang, ms: Math.round(performance.now() - startedAt) });
-    setOcrStatus('OCR: движок Tesseract недоступен');
+    _deps.setOcrStatus('OCR: движок Tesseract недоступен');
     return '';
   }
 
@@ -204,8 +210,8 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
         continue;
       }
       const effectiveLang = (lang === 'auto' && rawText && rawText.length >= 20) ? detectLanguage(rawText) : lang;
-      const candidate = normalizeOcrTextByLang(rawText, effectiveLang);
-      const score = scoreOcrTextByLang(candidate, effectiveLang);
+      const candidate = _deps.normalizeOcrTextByLang(rawText, effectiveLang);
+      const score = _deps.scoreOcrTextByLang(candidate, effectiveLang);
       if (score > bestScore) {
         best = candidate;
         bestScore = score;
@@ -263,7 +269,28 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
     bestScore: Number.isFinite(bestScore) ? Math.round(bestScore) : null,
   });
   // Apply post-correction using detected language
-  best = postCorrectOcrText(best, detectedLang);
+  best = _deps.postCorrectOcrText(best, detectedLang);
+
+  // Optionally enrich with character-level bounding boxes
+  if (options.charBoxes && best.length > 0 && canvas.width > 0) {
+    try {
+      const charResult = await ocrWithCharBoxes(canvas, {
+        lang: detectedLang || lang,
+        deskew: false,  // already deskewed in pipeline
+        denoise: false, // already preprocessed
+        upscale: false,
+      });
+      if (charResult?.charBoxes?.length) {
+        // Store char boxes alongside word data
+        if (options.pageNum && _deps._ocrWordCache) {
+          _deps._ocrWordCache.set(`charboxes_${options.pageNum}`, charResult.charBoxes);
+        }
+      }
+    } catch (_err) {
+      // Non-critical enrichment; word-level data is already available
+      console.debug('[ocr-pipeline] char-box enrichment skipped:', _err?.message);
+    }
+  }
 
   // Cache word-level data for text layer and DOCX export
   if (bestWords.length > 0 && options.pageNum) {

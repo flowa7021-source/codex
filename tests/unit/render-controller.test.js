@@ -721,4 +721,365 @@ describe('renderCurrentPage', () => {
 
     assert.equal(els.emptyState.style.display, 'none');
   });
+
+  it('uses stale cache as placeholder when rotation differs', async () => {
+    let adapterRendered = false;
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        adapterRendered = true;
+        canvas.width = 200;
+        canvas.height = 150;
+      },
+      getPageViewport: async () => ({ width: 200, height: 150 }),
+    };
+    state.currentPage = 3;
+    state.pageCount = 10;
+    state.zoom = 1;
+    state.rotation = 90; // different rotation than cached
+
+    // Cache at rotation=0
+    const cachedCanvas = document.createElement('canvas');
+    cachedCanvas.width = 200;
+    cachedCanvas.height = 150;
+    cacheRenderedPage(3, cachedCanvas, 1, 0);
+
+    await renderCurrentPage();
+
+    assert.equal(adapterRendered, true, 'should do full render when rotation differs');
+    assert.equal(els.pageStatus.textContent, '3 / 10');
+  });
+
+  it('caches the rendered page after a full render', async () => {
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        canvas.width = 300;
+        canvas.height = 200;
+      },
+      getPageViewport: async () => ({ width: 300, height: 200 }),
+    };
+    state.currentPage = 4;
+    state.pageCount = 10;
+    state.zoom = 1.5;
+    state.rotation = 0;
+
+    await renderCurrentPage();
+
+    const cached = pageRenderCache.entries.get(4);
+    assert.ok(cached, 'page should be cached after render');
+    assert.equal(cached.zoom, 1.5);
+    assert.equal(cached.rotation, 0);
+  });
+
+  it('does not cache when generation is stale', async () => {
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        canvas.width = 100;
+        canvas.height = 100;
+        // Simulate a newer render starting
+        bumpRenderGeneration();
+      },
+      getPageViewport: async () => ({ width: 100, height: 100 }),
+    };
+    state.currentPage = 7;
+    state.pageCount = 10;
+    state.zoom = 1;
+    state.rotation = 0;
+
+    await renderCurrentPage();
+
+    // The stale render should not have cached
+    const cached = pageRenderCache.entries.get(7);
+    assert.equal(cached, undefined, 'stale render should not be cached');
+  });
+
+  it('removes leftover skeleton from previous render', async () => {
+    // Add a leftover skeleton to canvasWrap
+    const leftover = document.createElement('div');
+    leftover.className = 'page-skeleton';
+    els.canvasWrap.appendChild(leftover);
+
+    let skeletonsDuringRender = 0;
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        // Count skeletons during render — should be exactly 1 (the new one)
+        const all = els.canvasWrap.querySelectorAll('.page-skeleton');
+        skeletonsDuringRender = all.length;
+        canvas.width = 100;
+        canvas.height = 100;
+      },
+      getPageViewport: async () => ({ width: 100, height: 100 }),
+    };
+    state.currentPage = 1;
+    state.pageCount = 5;
+
+    await renderCurrentPage();
+
+    assert.equal(skeletonsDuringRender, 1, 'leftover skeleton should be replaced with new one');
+  });
+
+  it('handles text layer cancel() throwing', async () => {
+    const fakeTextLayer = { cancel: () => { throw new Error('already cancelled'); } };
+    setActiveTextLayer(fakeTextLayer);
+
+    state.adapter = {
+      renderPage: async (page, canvas) => { canvas.width = 100; canvas.height = 100; },
+      getPageViewport: async () => ({ width: 100, height: 100 }),
+    };
+    state.currentPage = 1;
+    state.pageCount = 5;
+
+    // Should not throw despite cancel() throwing
+    await renderCurrentPage();
+    assert.equal(els.pageStatus.textContent, '1 / 5');
+  });
+
+  it('skips cache hit when cached canvas has zero width', async () => {
+    let adapterCalled = false;
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        adapterCalled = true;
+        canvas.width = 200;
+        canvas.height = 150;
+      },
+      getPageViewport: async () => ({ width: 200, height: 150 }),
+    };
+    state.currentPage = 2;
+    state.pageCount = 5;
+    state.zoom = 1;
+    state.rotation = 0;
+
+    // Cache with zero-width canvas (invalidated)
+    const zeroCanvas = document.createElement('canvas');
+    zeroCanvas.width = 0;
+    zeroCanvas.height = 0;
+    cacheRenderedPage(2, zeroCanvas, 1, 0);
+
+    await renderCurrentPage();
+
+    assert.equal(adapterCalled, true, 'should do full render when cached canvas has zero width');
+  });
+
+  it('does not show stale cache placeholder when cached canvas has zero width', async () => {
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        canvas.width = 200;
+        canvas.height = 150;
+      },
+      getPageViewport: async () => ({ width: 200, height: 150 }),
+    };
+    state.currentPage = 2;
+    state.pageCount = 5;
+    state.zoom = 2; // different zoom
+    state.rotation = 0;
+
+    // Cache with zero-width canvas at zoom=1
+    const zeroCanvas = document.createElement('canvas');
+    zeroCanvas.width = 0;
+    zeroCanvas.height = 0;
+    cacheRenderedPage(2, zeroCanvas, 1, 0);
+
+    // Before render, main canvas has known dimensions
+    els.canvas.width = 100;
+    els.canvas.height = 100;
+
+    await renderCurrentPage();
+
+    // Render completed successfully
+    assert.equal(els.pageStatus.textContent, '2 / 5');
+  });
+
+  it('handles error with message containing "Rendering cancelled"', async () => {
+    state.adapter = {
+      renderPage: async () => {
+        const err = new Error('Rendering cancelled due to page change');
+        throw err;
+      },
+      getPageViewport: async () => ({ width: 100, height: 100 }),
+    };
+    state.currentPage = 1;
+    state.pageCount = 5;
+
+    // Should not throw — the message includes "Rendering cancelled"
+    await renderCurrentPage();
+  });
+});
+
+// ─── _preRenderAdjacent (cache zoom/rotation mismatch) ──────────────────────
+
+describe('_preRenderAdjacent (cache mismatch)', () => {
+  it('re-renders page when cache exists but zoom differs', async () => {
+    const rendered = [];
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        rendered.push(page);
+        canvas.width = 100;
+        canvas.height = 100;
+      },
+    };
+    state.currentPage = 5;
+    state.pageCount = 10;
+
+    // Cache page 6 at zoom=1, but request pre-render at zoom=2
+    const fakeCached = document.createElement('canvas');
+    fakeCached.width = 100;
+    fakeCached.height = 100;
+    cacheRenderedPage(6, fakeCached, 1, 0);
+
+    await _preRenderAdjacent(5, 2, 0);
+
+    assert.ok(rendered.includes(6), 'should re-render page 6 with different zoom');
+  });
+
+  it('re-renders page when cache exists but rotation differs', async () => {
+    const rendered = [];
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        rendered.push(page);
+        canvas.width = 100;
+        canvas.height = 100;
+      },
+    };
+    state.currentPage = 5;
+    state.pageCount = 10;
+
+    // Cache page 6 at rotation=0, but request pre-render at rotation=90
+    const fakeCached = document.createElement('canvas');
+    fakeCached.width = 100;
+    fakeCached.height = 100;
+    cacheRenderedPage(6, fakeCached, 1, 0);
+
+    await _preRenderAdjacent(5, 1, 90);
+
+    assert.ok(rendered.includes(6), 'should re-render page 6 with different rotation');
+  });
+
+  it('caches pre-rendered pages', async () => {
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        canvas.width = 200;
+        canvas.height = 150;
+      },
+    };
+    state.currentPage = 5;
+    state.pageCount = 10;
+
+    await _preRenderAdjacent(5, 1.5, 0);
+
+    const cached6 = pageRenderCache.entries.get(6);
+    assert.ok(cached6, 'page 6 should be cached after pre-render');
+    assert.equal(cached6.zoom, 1.5);
+    assert.equal(cached6.rotation, 0);
+  });
+
+  it('discards offscreen canvas after navigation during async render', async () => {
+    let renderCount = 0;
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        renderCount++;
+        canvas.width = 100;
+        canvas.height = 100;
+        // Navigate away after first render
+        if (renderCount === 1) {
+          state.currentPage = 99;
+        }
+      },
+    };
+    state.currentPage = 5;
+    state.pageCount = 10;
+
+    await _preRenderAdjacent(5, 1, 0);
+
+    // Only page 6 should be rendered; page 4 should be skipped because
+    // currentPage changed during render of page 6
+    assert.equal(renderCount, 1, 'should stop after detecting navigation');
+  });
+
+  it('handles two-page document at page 1', async () => {
+    const rendered = [];
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        rendered.push(page);
+        canvas.width = 100;
+        canvas.height = 100;
+      },
+    };
+    state.currentPage = 1;
+    state.pageCount = 2;
+
+    await _preRenderAdjacent(1, 1, 0);
+
+    assert.deepStrictEqual(rendered, [2], 'should only pre-render page 2');
+  });
+
+  it('handles two-page document at page 2', async () => {
+    const rendered = [];
+    state.adapter = {
+      renderPage: async (page, canvas) => {
+        rendered.push(page);
+        canvas.width = 100;
+        canvas.height = 100;
+      },
+    };
+    state.currentPage = 2;
+    state.pageCount = 2;
+
+    await _preRenderAdjacent(2, 1, 0);
+
+    assert.deepStrictEqual(rendered, [1], 'should only pre-render page 1');
+  });
+});
+
+// ─── _updateAnnotationCanvas (additional edge cases) ─────────────────────────
+
+describe('_updateAnnotationCanvas (additional edge cases)', () => {
+  it('computes pixel dimensions using devicePixelRatio', () => {
+    const origDpr = window.devicePixelRatio;
+    window.devicePixelRatio = 2;
+
+    els.canvas.style.width = '300px';
+    els.canvas.style.height = '200px';
+
+    _updateAnnotationCanvas();
+
+    assert.equal(els.annotationCanvas.width, Math.ceil(300 * 2));
+    assert.equal(els.annotationCanvas.height, Math.ceil(200 * 2));
+    assert.equal(els.annotationCanvas.style.width, '300px');
+    assert.equal(els.annotationCanvas.style.height, '200px');
+
+    window.devicePixelRatio = origDpr;
+  });
+
+  it('uses dpr=1 when devicePixelRatio is 0', () => {
+    const origDpr = window.devicePixelRatio;
+    window.devicePixelRatio = 0;
+
+    els.canvas.style.width = '100px';
+    els.canvas.style.height = '80px';
+
+    _updateAnnotationCanvas();
+
+    // Math.max(1, 0) = 1, so pixel dims = display dims * 1
+    assert.equal(els.annotationCanvas.width, 100);
+    assert.equal(els.annotationCanvas.height, 80);
+
+    window.devicePixelRatio = origDpr;
+  });
+
+  it('does not add drawing-enabled when both drawEnabled and ocrRegionMode are false', () => {
+    state.drawEnabled = false;
+    state.ocrRegionMode = false;
+
+    _updateAnnotationCanvas();
+
+    assert.equal(els.annotationCanvas.classList.contains('drawing-enabled'), false);
+  });
+
+  it('adds drawing-enabled when both drawEnabled and ocrRegionMode are true', () => {
+    state.drawEnabled = true;
+    state.ocrRegionMode = true;
+
+    _updateAnnotationCanvas();
+
+    assert.ok(els.annotationCanvas.classList.contains('drawing-enabled'));
+  });
 });

@@ -23,6 +23,7 @@ import { toastSuccess, toastError, toastWarning, toastInfo, toastProgress } from
 import { mergePdfDocuments } from './pdf-operations.js';
 import { clearPageRenderCache, revokeAllTrackedUrls } from './perf.js';
 import { _updatePageUI } from './render-controller.js';
+import { on } from './event-bus.js';
 
 export function initPhase2Modules(deps) {
   const { renderCurrentPage, goToPage: _goToPage } = deps;
@@ -168,6 +169,14 @@ export function initPhase2Modules(deps) {
   });
   setupVirtualKeyboardAdaptation();
 
+  // ─── Double-tap zoom (wires the orphaned 'doubletapzoom' event) ───────────
+  document.addEventListener('doubletapzoom', (_e) => {
+    const zoom = state.zoom ?? 1;
+    const newZoom = zoom < 1.5 ? 2 : 1;
+    state.zoom = newZoom;
+    deps.renderCurrentPage();
+  });
+
   // ─── Initialize Minimap ──────────────────────────────────────────────────────
   initMinimap(
     document.querySelector('.document-viewport'),
@@ -291,8 +300,8 @@ export function initPhase2Modules(deps) {
 
   // ─── Initialize Memory Manager ────────────────────────────────────────────
   initMemoryManager();
-  window.addEventListener('memory-warning', (e) => {
-    toastWarning(`\u0412\u044b\u0441\u043e\u043a\u043e\u0435 \u043f\u043e\u0442\u0440\u0435\u0431\u043b\u0435\u043d\u0438\u0435 \u043f\u0430\u043c\u044f\u0442\u0438: ${/** @type {any} */ (e).detail.usedMB} \u041c\u0411`);
+  on('memory-warning', (detail) => {
+    toastWarning(`\u0412\u044b\u0441\u043e\u043a\u043e\u0435 \u043f\u043e\u0442\u0440\u0435\u0431\u043b\u0435\u043d\u0438\u0435 \u043f\u0430\u043c\u044f\u0442\u0438: ${detail.usedMB} \u041c\u0411`);
     forceCleanup();
   });
 

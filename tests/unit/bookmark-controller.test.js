@@ -17,6 +17,7 @@ import {
   initBookmarkController,
 } from '../../app/modules/bookmark-controller.js';
 import { state, els } from '../../app/modules/state.js';
+import { emit, on } from '../../app/modules/event-bus.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -262,13 +263,12 @@ describe('renderBookmarkList', () => {
     addBookmark(3, 'Test');
 
     let navigated = null;
-    const handler = (e) => { navigated = e.detail.page; };
-    window.addEventListener('bookmark-navigate', handler);
+    const unsub = on('bookmark-navigate', (detail) => { navigated = detail.page; });
 
     const item = list.querySelector('.bookmark-item');
     item.click();
     assert.equal(navigated, 3);
-    window.removeEventListener('bookmark-navigate', handler);
+    unsub();
   });
 
   it('remove button removes bookmark', () => {
@@ -486,13 +486,14 @@ describe('initBookmarkController', () => {
     initBookmarkController();
 
     let gotoPage = null;
-    window.addEventListener('novareader-goto-page', (e) => {
-      gotoPage = /** @type {any} */ (e).detail.page;
-    }, { once: true });
+    const unsub = on('novareader-goto-page', (detail) => {
+      gotoPage = detail.page;
+    });
 
-    window.dispatchEvent(new CustomEvent('bookmark-navigate', { detail: { page: 5 } }));
+    emit('bookmark-navigate', { page: 5 });
     assert.equal(state.currentPage, 5);
     assert.equal(gotoPage, 5);
+    unsub();
   });
 
   it('ignores bookmark-navigate for out-of-range pages', () => {
@@ -501,7 +502,7 @@ describe('initBookmarkController', () => {
     state.currentPage = 1;
     initBookmarkController();
 
-    window.dispatchEvent(new CustomEvent('bookmark-navigate', { detail: { page: 99 } }));
+    emit('bookmark-navigate', { page: 99 });
     assert.equal(state.currentPage, 1); // unchanged
   });
 
@@ -511,7 +512,7 @@ describe('initBookmarkController', () => {
     state.currentPage = 1;
     initBookmarkController();
 
-    window.dispatchEvent(new CustomEvent('bookmark-navigate', { detail: {} }));
+    emit('bookmark-navigate', {});
     assert.equal(state.currentPage, 1);
   });
 });

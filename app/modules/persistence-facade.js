@@ -36,7 +36,8 @@ const SIZE_THRESHOLD_BYTES = 100 * 1024; // 100 KB
 function estimateJsonSize(value) {
   try {
     return new Blob([JSON.stringify(value)]).size;
-  } catch {
+  } catch (e) {
+    console.warn('[persistence-facade] size estimate failed:', e?.message);
     return 0;
   }
 }
@@ -123,7 +124,8 @@ export const persistence = {
       try {
         const raw = localStorage.getItem(key);
         return raw !== null ? JSON.parse(raw) : defaultValue;
-      } catch {
+      } catch (e) {
+        console.warn('[persistence-facade] getSettings parse failed for key:', key, e?.message);
         return defaultValue;
       }
     }

@@ -35,6 +35,7 @@ import { DocumentModel }              from './page-model.js';
 import { PermissionEnforcer, getSecurityInfo } from './pdf-security.js';
 // EraseTool is activated via tool-modes.js deps, not directly imported here
 import { novaLog }                     from './diagnostics.js';
+import { icon }                        from './icons.js';
 import { InlineTextEditor }            from './inline-text-editor.js';
 import { ClipboardController }         from './cross-format-paste.js';
 import { smartCropPage }                from './smart-crop.js';
@@ -134,7 +135,7 @@ function _addToolbarButtons(ctx, handles) {
   toolbar.appendChild(_makeSeparator());
 
   // Erase tool
-  const eraseBtn = _makeButton('eraseTool', 'Erase', () => {
+  const eraseBtn = _makeButton('eraseTool', icon('eraser') + ' Erase', () => {
     toolStateMachine.toggle(ToolMode.ERASE);
   });
   toolbar.appendChild(eraseBtn);
@@ -190,7 +191,7 @@ function _addToolbarButtons(ctx, handles) {
   toolbar.appendChild(formulaBtn);
 
   // Visual Diff
-  const diffBtn = _makeButton('visualDiffTool', 'Diff', () => {
+  const diffBtn = _makeButton('visualDiffTool', icon('diffIcon') + ' Diff', () => {
     if (handles._visualDiff) {
       handles._visualDiff.destroy();
       handles._visualDiff = null;
@@ -220,15 +221,16 @@ function _addToolbarButtons(ctx, handles) {
   toolbar.appendChild(diffBtn);
 
   // Batch OCR
-  const batchBtn = _makeButton('batchOcrTool', 'Batch OCR', async () => {
+  const batchOcrLabel = icon('scan') + ' Batch OCR';
+  const batchBtn = _makeButton('batchOcrTool', batchOcrLabel, async () => {
     const batch = new BatchOcrEditor(ctx.pdfBytes, {
       onProgress: (p) => {
-        batchBtn.textContent = `OCR ${p.page}/${p.total}`;
+        batchBtn.innerHTML = icon('scan') + ` OCR ${p.page}/${p.total}`;
       },
     });
 
     const result = await batch.run();
-    batchBtn.textContent = 'Batch OCR';
+    batchBtn.innerHTML = batchOcrLabel;
 
     // Update PDF
     if (result.pdfBytes) {
@@ -245,7 +247,7 @@ function _addToolbarButtons(ctx, handles) {
   toolbar.appendChild(_makeSeparator());
 
   // Watermark
-  toolbar.appendChild(_makeButton('watermarkTool', 'Watermark', () => {
+  toolbar.appendChild(_makeButton('watermarkTool', icon('droplet') + ' Watermark', () => {
     const editor = new WatermarkEditor(ctx.container, {
       onApply: async (opts) => {
         let blob;
@@ -263,7 +265,7 @@ function _addToolbarButtons(ctx, handles) {
   }));
 
   // Signature
-  toolbar.appendChild(_makeButton('signatureTool', 'Sign', () => {
+  toolbar.appendChild(_makeButton('signatureTool', icon('penTool') + ' Sign', () => {
     const pad = new SignaturePad(ctx.container, {
       onInsert: async (sigData) => {
         const blob = await insertSignatureIntoPdf(ctx.pdfBytes, ctx.getPageNum(), sigData);
@@ -276,7 +278,7 @@ function _addToolbarButtons(ctx, handles) {
   }));
 
   // Bates Numbering
-  toolbar.appendChild(_makeButton('batesTool', 'Bates', () => {
+  toolbar.appendChild(_makeButton('batesTool', icon('hash') + ' Bates', () => {
     const editor = new BatesEditor(ctx.container, {
       onApply: async (opts) => {
         let blob;
@@ -296,7 +298,7 @@ function _addToolbarButtons(ctx, handles) {
   }));
 
   // Redaction
-  toolbar.appendChild(_makeButton('redactTool', 'Redact', () => {
+  toolbar.appendChild(_makeButton('redactTool', icon('shield') + ' Redact', () => {
     const editor = new RedactionEditor(ctx.container, {
       getPdfBytes: () => ctx.pdfBytes,
       onApply: (result) => {
@@ -311,7 +313,7 @@ function _addToolbarButtons(ctx, handles) {
   }));
 
   // Outline / Bookmarks
-  toolbar.appendChild(_makeButton('outlineTool', 'Bookmarks', async () => {
+  toolbar.appendChild(_makeButton('outlineTool', icon('bookmark') + ' Bookmarks', async () => {
     const editor = new OutlineEditor(ctx.container, {
       getPdfBytes: () => ctx.pdfBytes,
       onApply: (blob) => {
@@ -346,7 +348,7 @@ function _addToolbarButtons(ctx, handles) {
   }));
 
   // Accessibility Check
-  toolbar.appendChild(_makeButton('a11yTool', 'A11y', async () => {
+  toolbar.appendChild(_makeButton('a11yTool', icon('accessibility') + ' A11y', async () => {
     const panel = new AccessibilityPanel(ctx.container, {
       getPdfBytes: () => ctx.pdfBytes,
       onClose: () => {},
@@ -356,7 +358,7 @@ function _addToolbarButtons(ctx, handles) {
   }));
 
   // Reading Mode
-  toolbar.appendChild(_makeButton('readingModeTool', 'Read', () => {
+  toolbar.appendChild(_makeButton('readingModeTool', icon('eye') + ' Read', () => {
     const reader = new ReadingMode({
       getPageText: async (pageNum) => {
         const { getDocument } = await import('pdfjs-dist/build/pdf.mjs');
@@ -375,7 +377,7 @@ function _addToolbarButtons(ctx, handles) {
   }));
 
   // Word-level Text Diff
-  toolbar.appendChild(_makeButton('textDiffTool', 'Text Diff', () => {
+  toolbar.appendChild(_makeButton('textDiffTool', icon('type') + ' Text Diff', () => {
     // Open file picker for comparison PDF
     const input = document.createElement('input');
     input.type   = 'file';
@@ -546,6 +548,7 @@ function _destroyAll(handles) {
   handles._measureOverlay?.destroy();
   handles._a11yPanel?.close();
   handles._readingMode?.exit();
+  handles._batchConverter?.cancel();
   handles._teardownPageChange?.();
 }
 
@@ -556,7 +559,7 @@ function _destroyAll(handles) {
 function _makeButton(id, label, onClick) {
   const btn = document.createElement('button');
   btn.id          = id;
-  btn.textContent = label;
+  btn.innerHTML   = label;
   btn.className   = 'tool-btn';
   btn.style.cssText = [
     'padding:4px 8px', 'border:1px solid #555', 'border-radius:3px',

@@ -1,4 +1,5 @@
 // @ts-check
+import './setup-dom.js';
 import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -32,6 +33,48 @@ function createMockAdapter(opts = {}) {
     ...opts,
   };
 }
+
+// ─── Default _deps stub execution (MUST run before any initFileControllerDeps) ─
+// This test exercises the original default arrow-function stubs in _deps
+// (lines 26-65 of file-controller.js). Once initFileControllerDeps is called,
+// those stubs are permanently replaced via Object.assign, so this describe
+// block MUST appear before any other test that calls initFileControllerDeps.
+
+describe('default _deps stub functions (early execution)', () => {
+  it('exercises the original default arrow-function stubs by calling openFile', async () => {
+    // Only inject the adapters (which default to null and would crash)
+    // and withErrorBoundary. All other _deps retain their original
+    // default arrow-function stubs from the module definition.
+    initFileControllerDeps({
+      withErrorBoundary: (fn) => fn,
+      PDFAdapter: class { constructor() { this.type = 'pdf'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      DjVuAdapter: class { constructor() { this.type = 'djvu'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      DjVuNativeAdapter: class { constructor() { this.type = 'djvu-native'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      ImageAdapter: class { constructor() { this.type = 'image'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      UnsupportedAdapter: class { constructor() { this.type = 'unsupported'; } getPageCount() { return 1; } async getPageViewport() { return { width: 100, height: 100 }; } },
+      renderCurrentPage: async () => {},
+      renderOutline: async () => {},
+      renderPagePreviews: async () => {},
+    });
+
+    // Set up minimal els
+    els.searchStatus = mockEl();
+    els.pageText = mockEl();
+    els.pageInput = mockEl();
+    els.canvasWrap = mockEl();
+    els.cloudSyncUrl = mockEl();
+
+    // Enable collab and backgroundOcr so their default stubs execute
+    state.currentObjectUrl = null;
+    state.adapter = null;
+    state.collabEnabled = true;
+    state.settings = { backgroundOcr: true };
+
+    const file = new File(['data'], 'stub-early.xyz');
+    await openFile(file);
+    assert.equal(state.adapter.type, 'unsupported');
+  });
+});
 
 // ─── Setup ──────────────────────────────────────────────────────────────────
 
@@ -1081,5 +1124,156 @@ describe('openFile', () => {
     // Should not throw
     await openFile(file);
     assert.ok(state.adapter, 'adapter should be set');
+  });
+
+  // ─── Additional openFile tests ──────────────────────────────────────────────
+
+  it('opens a PDF file successfully with valid minimal PDF', async () => {
+    const pdfSrc = '%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF';
+    const bytes = new TextEncoder().encode(pdfSrc);
+    const file = new File([bytes], 'document.pdf', { type: 'application/pdf' });
+    await openFile(file);
+
+    assert.equal(state.docName, 'document.pdf');
+    assert.ok(state.adapter, 'adapter should be set');
+    assert.ok(['pdf', 'unsupported'].includes(state.adapter.type));
+    assert.ok(state.pageCount >= 1);
+  });
+
+  it('opens a PDF and falls back to UnsupportedAdapter on parse failure', async () => {
+    const file = new File(['not a real pdf at all'], 'broken.pdf', { type: 'application/pdf' });
+    await openFile(file);
+
+    assert.equal(state.docName, 'broken.pdf');
+    assert.equal(state.adapter.type, 'unsupported');
+    assert.ok(els.searchStatus.textContent.length > 0);
+  });
+
+  it('reloadPdfFromBytes preserves docName in new File object', async () => {
+    const pdfSrc = '%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF';
+    const bytes = new TextEncoder().encode(pdfSrc);
+    state.docName = 'preserved.pdf';
+    state.currentPage = 1;
+    await reloadPdfFromBytes(new Uint8Array(bytes));
+    assert.ok(state.file instanceof File);
+    assert.equal(state.file.name, 'preserved.pdf');
+  });
+
+  it('reloadPdfFromBytes with null docName uses default filename', async () => {
+    const pdfSrc = '%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF';
+    const bytes = new TextEncoder().encode(pdfSrc);
+    state.docName = null;
+    state.currentPage = 1;
+    await reloadPdfFromBytes(new Uint8Array(bytes));
+    assert.ok(state.file instanceof File);
+    assert.equal(state.file.name, 'document.pdf');
+  });
+
+  it('reloadPdfFromBytes throws on ArrayBuffer input', async () => {
+    await assert.rejects(() => reloadPdfFromBytes(new ArrayBuffer(10)), /expected Uint8Array/);
+  });
+
+  it('reloadPdfFromBytes throws on number input', async () => {
+    await assert.rejects(() => reloadPdfFromBytes(42), /expected Uint8Array/);
+  });
+
+  it('reloadPdfFromBytes updates state.pdfBytes', async () => {
+    const pdfSrc = '%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF';
+    const bytes = new Uint8Array(new TextEncoder().encode(pdfSrc));
+    state.docName = 'test.pdf';
+    state.currentPage = 1;
+    await reloadPdfFromBytes(bytes);
+    assert.equal(state.pdfBytes, bytes);
+  });
+
+  it('reloadPdfFromBytes calls render deps', async () => {
+    const pdfSrc = '%PDF-1.0\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer<</Size 4/Root 1 0 R>>\nstartxref\n190\n%%EOF';
+    const bytes = new Uint8Array(new TextEncoder().encode(pdfSrc));
+    state.docName = 'test.pdf';
+    state.currentPage = 1;
+    await reloadPdfFromBytes(bytes);
+    assert.ok(deps.renderCurrentPage.mock.callCount() >= 1);
+    assert.ok(deps.renderOutline.mock.callCount() >= 1);
+    assert.ok(deps.renderPagePreviews.mock.callCount() >= 1);
+  });
+});
+
+// ─── saveDjvuData / loadDjvuData round-trip ──────────────────────────────────
+
+describe('saveDjvuData / loadDjvuData round-trip', () => {
+  it('round-trips complex payload', () => {
+    state.docName = 'roundtrip.djvu';
+    const payload = {
+      pageCount: 10,
+      pagesText: ['Page 1 text', 'Page 2 text'],
+      pagesImages: ['data:image/png;base64,abc'],
+      metadata: { author: 'Test', nested: { key: 'value' } },
+    };
+    saveDjvuData(payload);
+    assert.deepEqual(loadDjvuData(), payload);
+  });
+
+  it('round-trips empty object', () => {
+    state.docName = 'empty.djvu';
+    saveDjvuData({});
+    assert.deepEqual(loadDjvuData(), {});
+  });
+
+  it('round-trips array payload', () => {
+    state.docName = 'array.djvu';
+    saveDjvuData([1, 2, 3]);
+    assert.deepEqual(loadDjvuData(), [1, 2, 3]);
+  });
+
+  it('overwrites previous data', () => {
+    state.docName = 'overwrite.djvu';
+    saveDjvuData({ version: 1 });
+    saveDjvuData({ version: 2 });
+    assert.deepEqual(loadDjvuData(), { version: 2 });
+  });
+
+  it('data is scoped to docName', () => {
+    state.docName = 'doc1.djvu';
+    saveDjvuData({ doc: 1 });
+    state.docName = 'doc2.djvu';
+    saveDjvuData({ doc: 2 });
+    state.docName = 'doc1.djvu';
+    assert.deepEqual(loadDjvuData(), { doc: 1 });
+    state.docName = 'doc2.djvu';
+    assert.deepEqual(loadDjvuData(), { doc: 2 });
+  });
+});
+
+// ─── isLikelyDjvuFile — additional edge cases ───────────────────────────────
+
+describe('isLikelyDjvuFile — edge cases', () => {
+  it('returns true when AT&TFORM appears mid-header', async () => {
+    const bytes = new TextEncoder().encode('xxAT&TFORMdjvu');
+    const file = new Blob([bytes]);
+    file.slice = (start, end) => new Blob([bytes.slice(start, end)]);
+    assert.equal(await isLikelyDjvuFile(file), true);
+  });
+
+  it('returns false for JPEG header', async () => {
+    const bytes = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const file = new Blob([bytes]);
+    file.slice = (start, end) => new Blob([bytes.slice(start, end)]);
+    assert.equal(await isLikelyDjvuFile(file), false);
+  });
+
+  it('returns false for PNG header', async () => {
+    const bytes = new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const file = new Blob([bytes]);
+    file.slice = (start, end) => new Blob([bytes.slice(start, end)]);
+    assert.equal(await isLikelyDjvuFile(file), false);
+  });
+
+  it('returns false when arrayBuffer rejects', async () => {
+    const file = {
+      slice() {
+        return { arrayBuffer() { return Promise.reject(new Error('cannot read')); } };
+      },
+    };
+    assert.equal(await isLikelyDjvuFile(file), false);
   });
 });

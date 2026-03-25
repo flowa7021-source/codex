@@ -8,9 +8,15 @@ import { state, defaultHotkeys, hotkeys, setHotkeys, els as _els } from './state
 import { toastError } from './toast.js';
 import { nrPrompt } from './modal-prompt.js';
 import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
+import { persistence } from './persistence-facade.js';
 
 /** @type {Record<string, any>} */
 const els = _els;
+
+// Expose persistence on window for debugging
+if (typeof window !== 'undefined') {
+  /** @type {any} */ (window)._persistence = persistence;
+}
 
 // ─── App Settings ───────────────────────────────────────────────────────────
 
@@ -45,8 +51,7 @@ export function defaultSettings() {
 /** @returns {any} */
 export function loadAppSettings() {
   try {
-    const raw = localStorage.getItem(appSettingsKey());
-    const parsed = raw ? JSON.parse(raw) : {};
+    const parsed = persistence.getSettings(appSettingsKey(), {}, { raw: true });
     const defaults = defaultSettings();
     state.settings = { ...defaults, ...(parsed || {}) };
     // Deep merge all nested objects so saved keys are merged with defaults
@@ -63,7 +68,7 @@ export function loadAppSettings() {
 
 /** @returns {any} */
 export function saveAppSettings() {
-  localStorage.setItem(appSettingsKey(), JSON.stringify(state.settings || defaultSettings()));
+  persistence.setSettings(appSettingsKey(), state.settings || defaultSettings(), { raw: true });
 }
 
 /**
@@ -234,7 +239,7 @@ export function setNotesStatus(message) {
  * @param {string} [source='manual']
  */
 export function saveNotes(noteKey, source = 'manual') {
-  localStorage.setItem(noteKey(), JSON.stringify(getNotesModel()));
+  persistence.setSettings(noteKey(), getNotesModel(), { raw: true });
   if (source === 'manual') {
     setNotesStatus(`Сохранено вручную: ${new Date().toLocaleTimeString()}`);
   } else {
@@ -495,15 +500,15 @@ export function saveHotkeys() {
 
   setHotkeysInputErrors([]);
   setHotkeys(candidate);
-  localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
+  persistence.setSettings('novareader-hotkeys', hotkeys, { raw: true });
   renderHotkeyInputs();
   setHotkeysStatus(validation.message, 'success');
 }
 
 /** @returns {any} */
 export function loadHotkeys() {
-  const raw = localStorage.getItem('novareader-hotkeys');
-  if (!raw) {
+  const parsed = persistence.getSettings('novareader-hotkeys', null, { raw: true });
+  if (!parsed) {
     setHotkeys({ ...defaultHotkeys });
     renderHotkeyInputs();
     setHotkeysInputErrors([]);
@@ -511,23 +516,17 @@ export function loadHotkeys() {
     return;
   }
 
-  try {
-    const parsed = JSON.parse(raw);
-    setHotkeys({
-      next: normalizeHotkey(parsed.next, defaultHotkeys.next),
-      prev: normalizeHotkey(parsed.prev, defaultHotkeys.prev),
-      zoomIn: normalizeHotkey(parsed.zoomIn, defaultHotkeys.zoomIn),
-      zoomOut: normalizeHotkey(parsed.zoomOut, defaultHotkeys.zoomOut),
-      annotate: normalizeHotkey(parsed.annotate, defaultHotkeys.annotate),
-      searchFocus: normalizeHotkey(parsed.searchFocus, defaultHotkeys.searchFocus),
-      ocrPage: normalizeHotkey(parsed.ocrPage, defaultHotkeys.ocrPage),
-      fitWidth: normalizeHotkey(parsed.fitWidth, defaultHotkeys.fitWidth),
-      fitPage: normalizeHotkey(parsed.fitPage, defaultHotkeys.fitPage),
-    });
-  } catch (err) {
-    console.warn('[ocr] error:', err?.message);
-    setHotkeys({ ...defaultHotkeys });
-  }
+  setHotkeys({
+    next: normalizeHotkey(parsed.next, defaultHotkeys.next),
+    prev: normalizeHotkey(parsed.prev, defaultHotkeys.prev),
+    zoomIn: normalizeHotkey(parsed.zoomIn, defaultHotkeys.zoomIn),
+    zoomOut: normalizeHotkey(parsed.zoomOut, defaultHotkeys.zoomOut),
+    annotate: normalizeHotkey(parsed.annotate, defaultHotkeys.annotate),
+    searchFocus: normalizeHotkey(parsed.searchFocus, defaultHotkeys.searchFocus),
+    ocrPage: normalizeHotkey(parsed.ocrPage, defaultHotkeys.ocrPage),
+    fitWidth: normalizeHotkey(parsed.fitWidth, defaultHotkeys.fitWidth),
+    fitPage: normalizeHotkey(parsed.fitPage, defaultHotkeys.fitPage),
+  });
   renderHotkeyInputs();
   setHotkeysInputErrors([]);
   setHotkeysStatus('Hotkeys загружены.');
@@ -536,7 +535,7 @@ export function loadHotkeys() {
 /** @returns {any} */
 export function resetHotkeys() {
   setHotkeys({ ...defaultHotkeys });
-  localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
+  persistence.setSettings('novareader-hotkeys', hotkeys, { raw: true });
   renderHotkeyInputs();
   setHotkeysInputErrors([]);
   setHotkeysStatus('Hotkeys сброшены к умолчанию.', 'success');
@@ -629,7 +628,7 @@ export function autoFixHotkeys() {
   }
 
   setHotkeys(candidate);
-  localStorage.setItem('novareader-hotkeys', JSON.stringify(hotkeys));
+  persistence.setSettings('novareader-hotkeys', hotkeys, { raw: true });
   renderHotkeyInputs();
   setHotkeysInputErrors([]);
   setHotkeysStatus('Hotkeys авто-исправлены и сохранены.', 'success');
@@ -726,7 +725,7 @@ export async function importBookmarksJson(file, saveBookmarksFn, renderBookmarks
  * @returns {Array}
  */
 export function loadBookmarks(bookmarkKey) {
-  return JSON.parse(localStorage.getItem(bookmarkKey()) || '[]');
+  return persistence.getSettings(bookmarkKey(), [], { raw: true });
 }
 
 /**
@@ -737,7 +736,7 @@ export function loadBookmarks(bookmarkKey) {
  * @param {function} renderEtaStatus - Re-renders ETA status.
  */
 export function saveBookmarks(next, bookmarkKey, renderDocStats, renderEtaStatus) {
-  localStorage.setItem(bookmarkKey(), JSON.stringify(next));
+  persistence.setSettings(bookmarkKey(), next, { raw: true });
   renderDocStats();
   renderEtaStatus();
 }

@@ -160,6 +160,13 @@ export async function reloadPdfFromBytes(bytes) {
   // Update state
   state.pdfBytes = bytes;
   state.adapter = new _deps.PDFAdapter(pdfDoc);
+  // Refresh pdf-lib document for advanced editing
+  try {
+    const { PDFDocument } = await import('pdf-lib');
+    state.pdfLibDoc = await PDFDocument.load(bytes, { ignoreEncryption: true });
+  } catch (_e) {
+    state.pdfLibDoc = null;
+  }
   state.pageCount = state.adapter.getPageCount();
 
   // Clamp current page
@@ -231,6 +238,7 @@ const _openFileImpl = async function openFileImpl(file) {
   _deps.setBookmarksStatus('');
   /** @type {any} */ (els.pageText).value = '';
   _deps.ensureTextToolsVisible();
+  state.pdfLibDoc = null;
   state.djvuBinaryDetected = false;
   _deps.invalidateAnnotationCaches();
   _deps.clearOcrRuntimeCaches('file-open');
@@ -252,6 +260,13 @@ const _openFileImpl = async function openFileImpl(file) {
       }
       const pdfDoc = await pdf.getDocument(pdfOptions).promise;
       state.adapter = new _deps.PDFAdapter(pdfDoc);
+      // Load pdf-lib PDFDocument for advanced editing (erase, watermark, etc.)
+      try {
+        const { PDFDocument } = await import('pdf-lib');
+        state.pdfLibDoc = await PDFDocument.load(state.pdfBytes, { ignoreEncryption: true });
+      } catch (_e) {
+        state.pdfLibDoc = null;
+      }
     } catch (err) {
       console.warn('[file-controller] error:', err?.message);
       state.adapter = new _deps.UnsupportedAdapter(file.name);

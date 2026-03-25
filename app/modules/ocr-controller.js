@@ -65,6 +65,10 @@ export function initOcrControllerDeps(deps) {
   // Forward deps to sub-modules
   initOcrPipelineVariantsDeps({
     _ocrWordCache: deps._ocrWordCache,
+    normalizeOcrTextByLang,
+    scoreOcrTextByLang,
+    postCorrectOcrText,
+    setOcrStatus,
   });
   initOcrRegionDeps({
     renderTextLayer: deps.renderTextLayer,
