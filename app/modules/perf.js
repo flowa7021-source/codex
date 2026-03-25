@@ -150,6 +150,7 @@ export function getPoolWorker() {
       return null;
     }
   }
+  if (workerPool.workers.length === 0) return null;
   const idx = workerPool.activeCount % workerPool.workers.length;
   return workerPool.workers[idx] || null;
 }

@@ -25,6 +25,7 @@ function createReactiveState(initial) {
       if (prop === 'on') return (field, cb) => { getListenerSet(field).add(cb); };
       if (prop === 'off') return (field, cb) => { getListenerSet(field).delete(cb); };
       if (prop === 'batch') return (fn) => {
+        if (batchDepth > 0) { fn(); return; }
         batchDepth++;
         try {
           fn();

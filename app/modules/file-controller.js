@@ -209,7 +209,12 @@ export function saveCurrentPdfAs() {
 
 // ─── Open File ──────────────────────────────────────────────────────────────
 
+let _fileOpening = false;
+
 const _openFileImpl = async function openFileImpl(file) {
+  if (_fileOpening) return;
+  _fileOpening = true;
+  try {
   try { performance.mark('file-open-start'); } catch (_e) { /* Performance API unavailable */ }
   const openStartedAt = performance.now();
   pushDiagnosticEvent('file.open.start', { name: file?.name || 'unknown', size: Number(file?.size) || 0 });
@@ -423,6 +428,9 @@ const _openFileImpl = async function openFileImpl(file) {
     performance.mark('file-open-end');
     performance.measure('file-open', 'file-open-start', 'file-open-end');
   } catch (_e) { /* Performance API unavailable */ }
+  } finally {
+    _fileOpening = false;
+  }
 };
 
 export const openFile = (() => {

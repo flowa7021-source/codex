@@ -151,5 +151,8 @@ export function loadPersistedEdits() {
         pdfEditState.edits.set(Number(page), text);
       }
     }
-  } catch (err) { console.warn('[app] non-critical error:', err?.message); }
+  } catch (err) {
+    console.error('[export-controller] failed to load persisted edits — data may be lost:', err?.message);
+    try { localStorage.removeItem(key); } catch (_e) { /* cleanup failed */ }
+  }
 }

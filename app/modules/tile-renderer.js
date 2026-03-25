@@ -109,6 +109,7 @@ export async function renderTiles(adapter, page, canvas, { zoom, rotation }, scr
   canvas.style.height = `${Math.round(fullH / dpr)}px`;
 
   const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) return;
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, fullW, fullH);
 

@@ -174,7 +174,7 @@ export async function exportCurrentDocToWord() {
       // Capture page image function for text+images mode
       const captureImage = async (pageNum) => {
         const imgData = await _deps.capturePageAsImageData(pageNum);
-        if (!imgData) return null;
+        if (!imgData || typeof imgData !== 'string') return null;
         return Uint8Array.from(atob(imgData), c => c.charCodeAt(0));
       };
 
