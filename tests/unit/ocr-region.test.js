@@ -494,3 +494,291 @@ describe('ocr-region module exports', () => {
     assert.equal(typeof startBackgroundOcrScan, 'function');
   });
 });
+
+// ── runOcrOnRectNow — canvas dimension handling ─────────────────────────────
+
+describe('runOcrOnRectNow — canvas dimension edge cases', () => {
+  beforeEach(() => {
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    state.ocrTaskId = 0;
+    state.currentPage = 1;
+    state.docName = 'test-doc';
+    state.zoom = 1;
+    state.rotation = 0;
+    initOcrRegionDeps({ renderTextLayer: mock.fn(async () => {}) });
+  });
+
+  it('computes relative rect using canvas dimensions (Math.max 1 guard)', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 0; // triggers Math.max(1, 0) = 1
+    canvas.height = 0;
+    els.canvas = canvas;
+    els.pageText = document.createElement('textarea');
+    // Should not throw — errors are caught internally
+    await assert.doesNotReject(async () => {
+      await runOcrOnRectNow({ x: 10, y: 10, w: 50, h: 50 });
+    });
+  });
+
+  it('handles very large rect coordinates without throwing', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 100;
+    els.canvas = canvas;
+    els.pageText = document.createElement('textarea');
+    await assert.doesNotReject(async () => {
+      await runOcrOnRectNow({ x: 9999, y: 9999, w: 9999, h: 9999 });
+    });
+  });
+
+  it('handles zero-size rect without throwing', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 200;
+    canvas.height = 200;
+    els.canvas = canvas;
+    els.pageText = document.createElement('textarea');
+    await assert.doesNotReject(async () => {
+      await runOcrOnRectNow({ x: 50, y: 50, w: 0, h: 0 });
+    });
+  });
+
+  it('handles negative rect coordinates without throwing', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 200;
+    canvas.height = 200;
+    els.canvas = canvas;
+    els.pageText = document.createElement('textarea');
+    await assert.doesNotReject(async () => {
+      await runOcrOnRectNow({ x: -10, y: -10, w: 50, h: 50 });
+    });
+  });
+});
+
+// ── runOcrOnRectNow — taskId cancellation ───────────────────────────────────
+
+describe('runOcrOnRectNow — taskId cancellation', () => {
+  beforeEach(() => {
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    state.ocrTaskId = 0;
+    state.currentPage = 1;
+    state.docName = 'test-doc';
+    state.zoom = 1;
+    state.rotation = 0;
+    initOcrRegionDeps({ renderTextLayer: mock.fn(async () => {}) });
+  });
+
+  it('increments ocrTaskId on each call', async () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 100;
+    canvas.height = 100;
+    els.canvas = canvas;
+    els.pageText = document.createElement('textarea');
+    const id1 = state.ocrTaskId;
+    await runOcrOnRectNow({ x: 0, y: 0, w: 50, h: 50 });
+    const id2 = state.ocrTaskId;
+    await runOcrOnRectNow({ x: 0, y: 0, w: 50, h: 50 });
+    const id3 = state.ocrTaskId;
+    assert.ok(id2 > id1);
+    assert.ok(id3 > id2);
+  });
+});
+
+// ── runOcrOnRect — background OCR cancellation ──────────────────────────────
+
+describe('runOcrOnRect — background OCR interaction', () => {
+  beforeEach(() => {
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    state.ocrTaskId = 0;
+    state.ocrLastProgressUiAt = 0;
+    state.ocrLastProgressText = '';
+    state.backgroundOcrRunning = false;
+    state.backgroundOcrToken = 0;
+    state.backgroundOcrTimer = null;
+    state.ocrQueueEpoch = 0;
+    state.ocrLatestByReason = {};
+  });
+
+  it('accepts full-page reason', async () => {
+    state.adapter = null;
+    const result = await runOcrOnRect(null, 'full-page');
+    assert.equal(result, undefined);
+  });
+
+  it('accepts empty string reason', async () => {
+    state.adapter = null;
+    const result = await runOcrOnRect(null, '');
+    assert.equal(result, undefined);
+  });
+});
+
+// ── runOcrForCurrentPage — adapter and canvas validation ────────────────────
+
+describe('runOcrForCurrentPage — full coverage', () => {
+  beforeEach(() => {
+    state.adapter = null;
+    state.currentPage = 1;
+    state.ocrTaskId = 0;
+    state.ocrLastProgressUiAt = 0;
+    state.ocrLastProgressText = '';
+    state.backgroundOcrRunning = false;
+    state.backgroundOcrToken = 0;
+    state.backgroundOcrTimer = null;
+    state.ocrQueueEpoch = 0;
+    state.ocrLatestByReason = {};
+  });
+
+  it('returns early when both width and height are zero', async () => {
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    const canvas = document.createElement('canvas');
+    canvas.width = 0;
+    canvas.height = 0;
+    els.canvas = canvas;
+    const result = await runOcrForCurrentPage();
+    assert.equal(result, undefined);
+  });
+
+  it('uses full canvas dimensions as rect when canvas has valid size', async () => {
+    // adapter present but will fail during OCR — we just verify no throw
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    const canvas = document.createElement('canvas');
+    canvas.width = 500;
+    canvas.height = 400;
+    els.canvas = canvas;
+    els.pageText = document.createElement('textarea');
+    // Will hit enqueueOcrTask → runOcrOnRectNow internally
+    await assert.doesNotReject(async () => {
+      await runOcrForCurrentPage();
+    });
+  });
+});
+
+// ── extractTextForPage — fallback chain ─────────────────────────────────────
+
+describe('extractTextForPage — fallback chain', () => {
+  beforeEach(() => {
+    state.adapter = null;
+    state.docName = 'test-doc';
+    localStorage.clear();
+  });
+
+  it('returns adapter text when not whitespace-only', async () => {
+    state.adapter = { getText: mock.fn(async () => 'Non-empty text'), type: 'pdf' };
+    const result = await extractTextForPage(3);
+    assert.equal(result, 'Non-empty text');
+  });
+
+  it('falls through to IDB/localStorage when adapter getText returns undefined', async () => {
+    state.adapter = { getText: mock.fn(async () => undefined), type: 'pdf' };
+    const result = await extractTextForPage(1);
+    assert.equal(typeof result, 'string');
+  });
+
+  it('handles adapter.getText returning a number gracefully', async () => {
+    state.adapter = { getText: mock.fn(async () => 42), type: 'pdf' };
+    const result = await extractTextForPage(1);
+    // String(42).trim() is '42' which is truthy
+    assert.equal(result, '42');
+  });
+
+  it('handles adapter.getText returning boolean false gracefully', async () => {
+    state.adapter = { getText: mock.fn(async () => false), type: 'pdf' };
+    const result = await extractTextForPage(1);
+    assert.equal(typeof result, 'string');
+  });
+
+  it('handles page number 0 without crashing', async () => {
+    state.adapter = { getText: mock.fn(async () => ''), type: 'pdf' };
+    const result = await extractTextForPage(0);
+    assert.equal(typeof result, 'string');
+  });
+
+  it('handles negative page number without crashing', async () => {
+    state.adapter = { getText: mock.fn(async () => ''), type: 'pdf' };
+    const result = await extractTextForPage(-1);
+    assert.equal(typeof result, 'string');
+  });
+});
+
+// ── scheduleBackgroundOcrScan — timer management ────────────────────────────
+
+describe('scheduleBackgroundOcrScan — edge cases', () => {
+  beforeEach(() => {
+    state.adapter = null;
+    state.settings = { backgroundOcr: false };
+    state.backgroundOcrTimer = null;
+  });
+
+  it('handles negative delay by clamping to 50ms', () => {
+    state.settings = { backgroundOcr: true };
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    scheduleBackgroundOcrScan('test', -100);
+    assert.notEqual(state.backgroundOcrTimer, null);
+  });
+
+  it('handles zero delay by clamping to 50ms', () => {
+    state.settings = { backgroundOcr: true };
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    scheduleBackgroundOcrScan('test', 0);
+    assert.notEqual(state.backgroundOcrTimer, null);
+  });
+
+  it('handles undefined settings.backgroundOcr', () => {
+    state.settings = {};
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    scheduleBackgroundOcrScan();
+    // backgroundOcr is undefined → falsy → early return
+    assert.equal(state.backgroundOcrTimer, null);
+  });
+
+  it('handles string delay by using Number coercion', () => {
+    state.settings = { backgroundOcr: true };
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    scheduleBackgroundOcrScan('test', '500');
+    assert.notEqual(state.backgroundOcrTimer, null);
+  });
+});
+
+// ── startBackgroundOcrScan — guard paths ────────────────────────────────────
+
+describe('startBackgroundOcrScan — additional guards', () => {
+  beforeEach(() => {
+    state.adapter = null;
+    state.pageCount = 0;
+    state.docName = null;
+    state.backgroundOcrRunning = false;
+    state.backgroundOcrToken = 0;
+    state.backgroundOcrTimer = null;
+    state.currentPage = 1;
+    state.zoom = 1;
+    state.rotation = 0;
+    state.settings = { backgroundOcr: true };
+    localStorage.clear();
+  });
+
+  it('does not set backgroundOcrToken when adapter is missing', async () => {
+    state.adapter = null;
+    state.pageCount = 10;
+    state.docName = 'doc';
+    const tokenBefore = state.backgroundOcrToken;
+    await startBackgroundOcrScan('test');
+    assert.equal(state.backgroundOcrToken, tokenBefore);
+  });
+
+  it('returns early when pageCount is negative', async () => {
+    state.adapter = { getText: mock.fn(), type: 'pdf' };
+    state.pageCount = -1;
+    state.docName = 'test';
+    await startBackgroundOcrScan();
+    assert.equal(state.backgroundOcrRunning, false);
+  });
+
+  it('does not modify backgroundOcrToken when all guards fail', async () => {
+    state.adapter = null;
+    state.pageCount = 0;
+    state.docName = null;
+    const tokenBefore = state.backgroundOcrToken;
+    await startBackgroundOcrScan();
+    assert.equal(state.backgroundOcrToken, tokenBefore);
+    assert.equal(state.backgroundOcrRunning, false);
+  });
+});

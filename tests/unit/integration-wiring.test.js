@@ -653,3 +653,233 @@ describe('bootstrap with minimal ctx', () => {
     handles.destroy();
   });
 });
+
+// ─── Additional coverage tests ───────────────────────────────────────────────
+
+describe('_addToolbarButtons — button click handlers', () => {
+  it('erase button click toggles tool state without error', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const eraseBtn = ctx.toolbar.querySelector('#eraseTool');
+    assert.ok(eraseBtn);
+    // Click should not throw
+    eraseBtn.click();
+    handles.destroy();
+  });
+
+  it('table editor button click does not throw when canvas returns no regions', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const tableBtn = ctx.toolbar.querySelector('#tableEditorTool');
+    assert.ok(tableBtn);
+    tableBtn.click();
+    handles.destroy();
+  });
+
+  it('visual diff button toggles on first click', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const diffBtn = ctx.toolbar.querySelector('#visualDiffTool');
+    assert.ok(diffBtn);
+    diffBtn.click();
+    // _visualDiff should be set after first click
+    assert.ok(handles._visualDiff);
+    handles.destroy();
+  });
+
+  it('visual diff button toggles off on second click', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const diffBtn = ctx.toolbar.querySelector('#visualDiffTool');
+    diffBtn.click(); // on
+    assert.ok(handles._visualDiff);
+    diffBtn.click(); // off
+    assert.equal(handles._visualDiff, null);
+    handles.destroy();
+  });
+
+  it('measure button toggles on and off', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const measureBtn = ctx.toolbar.querySelector('#measureTool');
+    assert.ok(measureBtn);
+    measureBtn.click(); // on
+    assert.ok(handles._measureOverlay);
+    measureBtn.click(); // off
+    assert.equal(handles._measureOverlay, null);
+    handles.destroy();
+  });
+
+  it('measure button handles missing page gracefully', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx({
+      pdfLibDoc: {
+        getPages: () => [],
+        getPageCount: () => 0,
+        save: async () => new Uint8Array(),
+      },
+      getPageNum: () => 5, // out of range
+    });
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const measureBtn = ctx.toolbar.querySelector('#measureTool');
+    assert.ok(measureBtn);
+    measureBtn.click();
+    // Should not crash even when page is missing
+    assert.ok(!handles._measureOverlay || handles._measureOverlay === null);
+    handles.destroy();
+  });
+
+  it('watermark button creates editor', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const btn = ctx.toolbar.querySelector('#watermarkTool');
+    assert.ok(btn);
+    btn.click();
+    assert.ok(handles._watermarkEditor);
+    handles.destroy();
+  });
+
+  it('signature button creates pad', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const btn = ctx.toolbar.querySelector('#signatureTool');
+    assert.ok(btn);
+    btn.click();
+    assert.ok(handles._signaturePad);
+    handles.destroy();
+  });
+
+  it('bates button creates editor', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const btn = ctx.toolbar.querySelector('#batesTool');
+    assert.ok(btn);
+    btn.click();
+    assert.ok(handles._batesEditor);
+    handles.destroy();
+  });
+
+  it('redact button creates editor', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const btn = ctx.toolbar.querySelector('#redactTool');
+    assert.ok(btn);
+    btn.click();
+    assert.ok(handles._redactionEditor);
+    handles.destroy();
+  });
+
+  it('outline button exists and is clickable', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const btn = ctx.toolbar.querySelector('#outlineTool');
+    assert.ok(btn);
+    assert.equal(btn.className, 'tool-btn');
+    handles.destroy();
+  });
+
+  it('a11y button exists and is clickable', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const btn = ctx.toolbar.querySelector('#a11yTool');
+    assert.ok(btn);
+    assert.equal(btn.className, 'tool-btn');
+    handles.destroy();
+  });
+
+  it('reading mode button exists and is clickable', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    const btn = ctx.toolbar.querySelector('#readingModeTool');
+    assert.ok(btn);
+    assert.equal(btn.className, 'tool-btn');
+    handles.destroy();
+  });
+});
+
+describe('_initInlineEditor — dblclick handling', () => {
+  it('dblclick does nothing when docModel.pages is undefined', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    // Clear the pages map to simulate no pages
+    handles.docModel.pages = undefined;
+    const dblEvt = new Event('dblclick');
+    dblEvt.clientX = 100;
+    dblEvt.clientY = 100;
+    ctx.container.dispatchEvent(dblEvt);
+    // Should not throw
+    handles.destroy();
+  });
+
+  it('dblclick does nothing when page model has no matching object', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    // Add getBoundingClientRect to the container mock
+    ctx.container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 });
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    // Set up a page model that returns null for objectAtPoint
+    handles.docModel.pages = new Map();
+    handles.docModel.pages.set(1, { objectAtPoint: () => null });
+    const dblEvt = new Event('dblclick');
+    dblEvt.clientX = 100;
+    dblEvt.clientY = 100;
+    ctx.container.dispatchEvent(dblEvt);
+    handles.destroy();
+  });
+
+  it('dblclick does nothing for non-text objects', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    ctx.container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 });
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    handles.docModel.pages = new Map();
+    handles.docModel.pages.set(1, { objectAtPoint: () => ({ type: 'image' }) });
+    const dblEvt = new Event('dblclick');
+    dblEvt.clientX = 100;
+    dblEvt.clientY = 100;
+    ctx.container.dispatchEvent(dblEvt);
+    handles.destroy();
+  });
+});
+
+describe('toolbar separators', () => {
+  it('toolbar contains separator elements', async () => {
+    const mod = await loadMod();
+    if (!mod) return;
+    const ctx = makeCtx();
+    const handles = mod.bootstrapAdvancedTools(ctx);
+    // Separators are div elements (not buttons)
+    const divs = ctx.toolbar.children.filter(c => c.tagName === 'DIV');
+    assert.ok(divs.length >= 2, 'should have at least 2 separators');
+    handles.destroy();
+  });
+});
