@@ -1249,3 +1249,485 @@ describe('pdfRedact handler', () => {
     document.body.appendChild = origAppend;
   });
 });
+
+// ─── orgRotateCCW handler — additional coverage ────────────────────────────────
+
+describe('orgRotateCCW handler — additional', () => {
+  let origFile, origAdapter, origCurrentPage;
+
+  beforeEach(() => {
+    origFile = state.file;
+    origAdapter = state.adapter;
+    origCurrentPage = state.currentPage;
+  });
+
+  afterEach(() => {
+    state.file = origFile;
+    state.adapter = origAdapter;
+    state.currentPage = origCurrentPage;
+  });
+
+  it('returns early when no file is set', async () => {
+    state.file = null;
+    state.adapter = null;
+
+    const statusCalls = [];
+    initPdfProHandlersDeps({ setOcrStatus: (m) => statusCalls.push(m) });
+
+    await captureHandler('orgRotateCCW')();
+
+    assert.ok(statusCalls.length > 0);
+  });
+
+  it('does not reload when rotatePdfPages returns null', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+    state.currentPage = 1;
+
+    const reloadCalls = [];
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      rotatePdfPages: async () => null,
+      reloadPdfFromBytes: async (b) => reloadCalls.push(b),
+    });
+
+    await captureHandler('orgRotateCCW')();
+
+    assert.equal(reloadCalls.length, 0);
+  });
+});
+
+// ─── orgDelete handler — additional coverage ───────────────────────────────────
+
+describe('orgDelete handler — additional', () => {
+  let origFile, origAdapter, origPageCount, origCurrentPage;
+
+  beforeEach(() => {
+    origFile = state.file;
+    origAdapter = state.adapter;
+    origPageCount = state.pageCount;
+    origCurrentPage = state.currentPage;
+  });
+
+  afterEach(() => {
+    state.file = origFile;
+    state.adapter = origAdapter;
+    state.pageCount = origPageCount;
+    state.currentPage = origCurrentPage;
+  });
+
+  it('deletes first page from 3-page doc (pages 2,3 remain)', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+    state.pageCount = 3;
+    state.currentPage = 1;
+
+    const splitCalls = [];
+    const mockBlob = makeMockBlob();
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      nrConfirm: async () => true,
+      splitPdfDocument: async (buf, pages) => { splitCalls.push(pages); return mockBlob; },
+      reloadPdfFromBytes: async () => {},
+    });
+
+    await captureHandler('orgDelete')();
+
+    assert.deepEqual(splitCalls[0], [2, 3]);
+  });
+
+  it('deletes last page from 3-page doc (pages 1,2 remain)', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+    state.pageCount = 3;
+    state.currentPage = 3;
+
+    const splitCalls = [];
+    const mockBlob = makeMockBlob();
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      nrConfirm: async () => true,
+      splitPdfDocument: async (buf, pages) => { splitCalls.push(pages); return mockBlob; },
+      reloadPdfFromBytes: async () => {},
+    });
+
+    await captureHandler('orgDelete')();
+
+    assert.deepEqual(splitCalls[0], [1, 2]);
+  });
+});
+
+// ─── pdfOptimize handler — additional coverage ─────────────────────────────────
+
+describe('pdfOptimize handler — additional', () => {
+  let origFile, origAdapter;
+
+  beforeEach(() => {
+    origFile = state.file;
+    origAdapter = state.adapter;
+  });
+
+  afterEach(() => {
+    state.file = origFile;
+    state.adapter = origAdapter;
+  });
+
+  it('returns early when no file is set', async () => {
+    state.file = null;
+    state.adapter = null;
+
+    const statusCalls = [];
+    initPdfProHandlersDeps({ setOcrStatus: (m) => statusCalls.push(m) });
+
+    await captureHandler('pdfOptimize')();
+
+    assert.ok(statusCalls.length > 0);
+  });
+
+  it('passes arrayBuffer to optimizer', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+
+    let receivedBuffer = null;
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      pdfOptimizer: {
+        optimize: async (buf) => {
+          receivedBuffer = buf;
+          return { blob: makeMockBlob(), summary: 'ok', original: 100, optimized: 90, savingsPercent: 10 };
+        },
+      },
+      reloadPdfFromBytes: async () => {},
+      pushDiagnosticEvent: () => {},
+    });
+
+    await captureHandler('pdfOptimize')();
+
+    assert.ok(receivedBuffer instanceof ArrayBuffer);
+  });
+});
+
+// ─── pdfFlatten handler — additional coverage ──────────────────────────────────
+
+describe('pdfFlatten handler — additional', () => {
+  let origFile, origAdapter;
+
+  beforeEach(() => {
+    origFile = state.file;
+    origAdapter = state.adapter;
+  });
+
+  afterEach(() => {
+    state.file = origFile;
+    state.adapter = origAdapter;
+  });
+
+  it('returns early when no file is set', async () => {
+    state.file = null;
+    state.adapter = null;
+
+    const statusCalls = [];
+    initPdfProHandlersDeps({ setOcrStatus: (m) => statusCalls.push(m) });
+
+    await captureHandler('pdfFlatten')();
+
+    assert.ok(statusCalls.length > 0);
+  });
+
+  it('passes correct options to flattenPdf', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+
+    let receivedOpts = null;
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      flattenPdf: async (buf, opts) => {
+        receivedOpts = opts;
+        return { blob: makeMockBlob(), formsFlattened: 0, annotationsFlattened: 0 };
+      },
+      reloadPdfFromBytes: async () => {},
+      pushDiagnosticEvent: () => {},
+    });
+
+    await captureHandler('pdfFlatten')();
+
+    assert.deepEqual(receivedOpts, { flattenForms: true, flattenAnnotations: true });
+  });
+});
+
+// ─── orgRotateCW handler — additional coverage ─────────────────────────────────
+
+describe('orgRotateCW handler — additional', () => {
+  let origFile, origAdapter, origCurrentPage;
+
+  beforeEach(() => {
+    origFile = state.file;
+    origAdapter = state.adapter;
+    origCurrentPage = state.currentPage;
+  });
+
+  afterEach(() => {
+    state.file = origFile;
+    state.adapter = origAdapter;
+    state.currentPage = origCurrentPage;
+  });
+
+  it('rotates correct page number', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+    state.currentPage = 5;
+
+    const rotateCalls = [];
+    const mockBlob = makeMockBlob();
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      rotatePdfPages: async (buf, pages, angle) => { rotateCalls.push({ pages, angle }); return mockBlob; },
+      reloadPdfFromBytes: async () => {},
+    });
+
+    await captureHandler('orgRotateCW')();
+
+    assert.deepEqual(rotateCalls[0].pages, [5]);
+    assert.equal(rotateCalls[0].angle, 90);
+  });
+});
+
+// ─── pdfBatesNumber handler — additional coverage ──────────────────────────────
+
+describe('pdfBatesNumber handler — additional', () => {
+  let origFile, origAdapter;
+
+  beforeEach(() => {
+    origFile = state.file;
+    origAdapter = state.adapter;
+  });
+
+  afterEach(() => {
+    state.file = origFile;
+    state.adapter = origAdapter;
+  });
+
+  it('passes correct options to addBatesNumbering', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+
+    let receivedOpts = null;
+    let promptCount = 0;
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      nrPrompt: async () => { promptCount++; return promptCount === 1 ? 'CASE-' : '10'; },
+      addBatesNumbering: async (buf, opts) => {
+        receivedOpts = opts;
+        return { blob: makeMockBlob(), startNum: 10, endNum: 20, totalPages: 11 };
+      },
+      reloadPdfFromBytes: async () => {},
+      pushDiagnosticEvent: () => {},
+    });
+
+    await captureHandler('pdfBatesNumber')();
+
+    assert.equal(receivedOpts.prefix, 'CASE-');
+    assert.equal(receivedOpts.startNum, 10);
+    assert.equal(receivedOpts.digits, 6);
+    assert.equal(receivedOpts.position, 'bottom-right');
+  });
+
+  it('defaults startNum to 1 when invalid', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+
+    let receivedOpts = null;
+    let promptCount = 0;
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      nrPrompt: async () => { promptCount++; return promptCount === 1 ? 'DOC-' : 'abc'; },
+      addBatesNumbering: async (buf, opts) => {
+        receivedOpts = opts;
+        return { blob: makeMockBlob(), startNum: 1, endNum: 10, totalPages: 10 };
+      },
+      reloadPdfFromBytes: async () => {},
+      pushDiagnosticEvent: () => {},
+    });
+
+    await captureHandler('pdfBatesNumber')();
+
+    assert.equal(receivedOpts.startNum, 1);
+  });
+});
+
+// ─── pdfAccessibility handler — additional coverage ────────────────────────────
+
+describe('pdfAccessibility handler — additional', () => {
+  let origFile, origAdapter, origDocName;
+
+  beforeEach(() => {
+    origFile = state.file;
+    origAdapter = state.adapter;
+    origDocName = state.docName;
+  });
+
+  afterEach(() => {
+    state.file = origFile;
+    state.adapter = origAdapter;
+    state.docName = origDocName;
+  });
+
+  it('passes document title and language to autoFixAccessibility', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+    state.docName = 'my-report.pdf';
+
+    let fixOpts = null;
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      toastInfo: () => {},
+      checkAccessibility: async () => ({
+        score: 40,
+        level: 'A',
+        summary: { errors: 3, warnings: 0 },
+        issues: [{ severity: 'error', rule: 'title', message: 'No title', fix: 'Add', autoFixable: true }],
+      }),
+      autoFixAccessibility: async (buf, opts) => {
+        fixOpts = opts;
+        return { blob: makeMockBlob(), fixCount: 1 };
+      },
+      reloadPdfFromBytes: async () => {},
+      nrConfirm: async () => true,
+      pushDiagnosticEvent: () => {},
+    });
+
+    await captureHandler('pdfAccessibility')();
+
+    assert.equal(fixOpts.title, 'my-report.pdf');
+    assert.equal(fixOpts.language, 'ru');
+  });
+});
+
+// ─── pdfHeaderFooter handler — additional coverage ─────────────────────────────
+
+describe('pdfHeaderFooter handler — additional', () => {
+  let origFile, origAdapter;
+
+  beforeEach(() => {
+    origFile = state.file;
+    origAdapter = state.adapter;
+  });
+
+  afterEach(() => {
+    state.file = origFile;
+    state.adapter = origAdapter;
+  });
+
+  it('returns early when no file is set', async () => {
+    state.file = null;
+    state.adapter = null;
+
+    const statusCalls = [];
+    initPdfProHandlersDeps({ setOcrStatus: (m) => statusCalls.push(m) });
+
+    await captureHandler('pdfHeaderFooter')();
+
+    assert.ok(statusCalls.length > 0);
+  });
+
+  it('passes headerCenter when position is top', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+
+    let receivedOpts = null;
+    let promptCount = 0;
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      nrPrompt: async () => { promptCount++; return promptCount === 1 ? '{{title}}' : 'top'; },
+      addHeaderFooter: async (buf, opts) => { receivedOpts = opts; return makeMockBlob(); },
+      reloadPdfFromBytes: async () => {},
+      pushDiagnosticEvent: () => {},
+    });
+
+    await captureHandler('pdfHeaderFooter')();
+
+    assert.equal(receivedOpts.headerCenter, '{{title}}');
+    assert.equal(receivedOpts.footerCenter, undefined);
+  });
+
+  it('passes footerCenter when position is bottom', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+
+    let receivedOpts = null;
+    let promptCount = 0;
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      nrPrompt: async () => { promptCount++; return promptCount === 1 ? '{{date}}' : 'bottom'; },
+      addHeaderFooter: async (buf, opts) => { receivedOpts = opts; return makeMockBlob(); },
+      reloadPdfFromBytes: async () => {},
+      pushDiagnosticEvent: () => {},
+    });
+
+    await captureHandler('pdfHeaderFooter')();
+
+    assert.equal(receivedOpts.footerCenter, '{{date}}');
+    assert.equal(receivedOpts.headerCenter, undefined);
+  });
+});
+
+// ─── orgExtract handler — additional coverage ──────────────────────────────────
+
+describe('orgExtract handler — additional', () => {
+  let origFile, origAdapter, origDocName, origCurrentPage, origPageCount;
+
+  beforeEach(() => {
+    origFile = state.file;
+    origAdapter = state.adapter;
+    origDocName = state.docName;
+    origCurrentPage = state.currentPage;
+    origPageCount = state.pageCount;
+  });
+
+  afterEach(() => {
+    state.file = origFile;
+    state.adapter = origAdapter;
+    state.docName = origDocName;
+    state.currentPage = origCurrentPage;
+    state.pageCount = origPageCount;
+  });
+
+  it('passes correct pages to splitPdfDocument', async () => {
+    state.file = makeMockFile();
+    state.adapter = { type: 'pdf' };
+    state.pageCount = 10;
+    state.currentPage = 3;
+
+    let splitPages = null;
+
+    initPdfProHandlersDeps({
+      setOcrStatus: () => {},
+      nrPrompt: async () => '2,4,6',
+      parsePageRangeLib: () => [2, 4, 6],
+      splitPdfDocument: async (buf, pages) => { splitPages = pages; return makeMockBlob(); },
+      safeCreateObjectURL: () => 'blob:url',
+    });
+
+    const origCreateElement = document.createElement.bind(document);
+    document.createElement = (tag) => {
+      if (tag === 'a') return { href: '', download: '', click: () => {} };
+      return origCreateElement(tag);
+    };
+
+    await captureHandler('orgExtract')();
+
+    document.createElement = origCreateElement;
+
+    assert.deepEqual(splitPages, [2, 4, 6]);
+  });
+});
