@@ -64,20 +64,38 @@ export async function runOcrOnRectNow(rect) {
     const ocrPageCanvas = await buildOcrSourceCanvas(state.currentPage);
     const src = cropCanvasByRelativeRect(ocrPageCanvas, rel);
     const preferredSkew = await estimatePageSkewAngle(state.currentPage);
+    const recognizePhaseStart = { t: 0 };
     const text = await runOcrOnPreparedCanvas(src, {
       preferredSkew,
       taskId,
       pageNum: state.currentPage,
-      onProgress: ({ phase, current, total }) => {
+      onProgress: ({ phase, current, total, recognizePercent }) => {
         if (taskId !== state.ocrTaskId) return;
         if (phase === 'preprocess') {
           const percent = Math.max(1, Math.min(25, Math.round((current / Math.max(1, total)) * 25)));
-          setOcrStatusThrottled(`OCR: подготовка... ${percent}%`);
+          setOcrStatusThrottled(`OCR стр.${state.currentPage}: подготовка ${percent}%`);
           return;
         }
         if (phase === 'recognize') {
-          const percent = Math.max(26, Math.min(100, 25 + Math.round((current / Math.max(1, total)) * 75)));
-          setOcrStatusThrottled(`OCR: обработка... ${percent}%`);
+          if (!recognizePhaseStart.t) recognizePhaseStart.t = performance.now();
+          const variantIdx = Math.floor(/** @type {number} */ (current));
+          const tessPercent = typeof recognizePercent === 'number' ? recognizePercent : 0;
+          // Overall progress: 25% reserved for preprocess, 75% for recognition
+          const variantFraction = (variantIdx + tessPercent / 100) / Math.max(1, total);
+          const overallPercent = Math.max(26, Math.min(99, 25 + Math.round(variantFraction * 75)));
+          // Estimate time remaining
+          const elapsed = performance.now() - recognizePhaseStart.t;
+          let eta = '';
+          if (variantFraction > 0.05 && elapsed > 1000) {
+            const totalEstMs = elapsed / variantFraction;
+            const remainMs = totalEstMs - elapsed;
+            const remainSec = Math.ceil(remainMs / 1000);
+            if (remainSec > 0 && remainSec < 600) {
+              eta = ` (~${remainSec}с)`;
+            }
+          }
+          const variantInfo = total > 1 ? ` [${variantIdx + 1}/${total}]` : '';
+          setOcrStatusThrottled(`OCR стр.${state.currentPage}: ${overallPercent}%${variantInfo} ${tessPercent}%${eta}`);
         }
       },
     });
@@ -94,7 +112,8 @@ export async function runOcrOnRectNow(rect) {
       if (state.docName) {
         savePageOcrText(state.docName, state.currentPage, corrected).catch((err) => { console.warn('[ocr] error:', err?.message); });
       }
-      setOcrStatus(`OCR: распознано ${corrected.length} символов за ${totalMs}мс [${confidence.level} ${confidence.score}%] качество: ${qualitySummary.quality}`);
+      const totalSec = (totalMs / 1000).toFixed(1);
+      setOcrStatus(`OCR стр.${state.currentPage}: готово — ${corrected.length} симв. за ${totalSec}с [${confidence.level} ${confidence.score}%] качество: ${qualitySummary.quality}`);
       recordPerfMetric('ocrTimes', totalMs);
       recordSuccessfulOperation();
       pushDiagnosticEvent('ocr.manual.finish', { taskId, textLength: corrected.length, totalMs, page: state.currentPage, confidence: confidence.score, confidenceLevel: confidence.level, wordQuality: qualitySummary.quality, avgWordScore: qualitySummary.avgScore, lowConfidenceWords: qualitySummary.lowCount });
@@ -105,7 +124,8 @@ export async function runOcrOnRectNow(rect) {
       /** @type {any} */ (_deps).renderTextLayer(state.currentPage, state.zoom, state.rotation).catch((err) => { console.warn('[ocr] error:', err?.message); });
     } else {
       recordPerfMetric('ocrTimes', totalMs);
-      setOcrStatus(`OCR: текст не найден (${totalMs}мс)`);
+      const emptySec = (totalMs / 1000).toFixed(1);
+      setOcrStatus(`OCR стр.${state.currentPage}: текст не найден (${emptySec}с)`);
       pushDiagnosticEvent('ocr.manual.empty', { taskId, totalMs, page: state.currentPage }, 'warn');
     }
   } catch (error) {
@@ -128,7 +148,9 @@ export async function runOcrOnRect(rect, reason = 'manual') {
   return enqueueOcrTask(reason, async () => {
     state.ocrLastProgressUiAt = 0;
     state.ocrLastProgressText = '';
-    setOcrStatus('OCR: обработка...');
+    const lang = getOcrLang();
+    const langLabel = lang === 'auto' ? 'авто (eng+rus)' : lang;
+    setOcrStatus(`OCR стр.${state.currentPage}: инициализация [${langLabel}]...`);
     await runOcrOnRectNow(rect);
   }, { latestWins: true, latestReason: 'manual-ocr' });
 }
@@ -252,6 +274,7 @@ export async function startBackgroundOcrScan(reason = 'auto') {
   const maxPages = state.pageCount;
   let consecutiveEmpty = 0;
   let scannedCount = 0;
+  const scanStartTime = performance.now();
 
   try {
     // Build list of pages that need OCR
@@ -318,7 +341,19 @@ export async function startBackgroundOcrScan(reason = 'auto') {
           updatedAt: new Date().toISOString(),
         });
       }
-      setOcrStatus(`OCR: фоновое распознавание ${scannedCount}/${pagesToScan.length} (×${concurrency})`);
+      // Compute ETA based on average time per page so far
+      const elapsedSec = (performance.now() - scanStartTime) / 1000;
+      const avgSecPerPage = scannedCount > 0 ? elapsedSec / scannedCount : 0;
+      const remainingPages = pagesToScan.length - scannedCount;
+      const etaSec = Math.ceil(avgSecPerPage * remainingPages);
+      const pct = Math.round((scannedCount / Math.max(1, pagesToScan.length)) * 100);
+      let etaLabel = '';
+      if (etaSec > 0 && etaSec < 3600 && scannedCount >= 1) {
+        etaLabel = etaSec >= 60
+          ? ` ~${Math.floor(etaSec / 60)}м${etaSec % 60 ? ` ${etaSec % 60}с` : ''}`
+          : ` ~${etaSec}с`;
+      }
+      setOcrStatus(`OCR: фон ${scannedCount}/${pagesToScan.length} (${pct}%) ×${concurrency}${etaLabel}`);
       await yieldToMainThread();
     }
 
@@ -329,9 +364,10 @@ export async function startBackgroundOcrScan(reason = 'auto') {
       totalPages: state.pageCount,
       updatedAt: new Date().toISOString(),
     });
-    setOcrStatus('OCR: фоновое распознавание завершено');
-    try { toastSuccess('OCR: фоновое распознавание завершено'); } catch (err) { console.warn('[ocr] toast failed:', err?.message); }
-    pushDiagnosticEvent('ocr.background.finish', { scannedPages: scannedCount, concurrency });
+    const totalScanSec = ((performance.now() - scanStartTime) / 1000).toFixed(1);
+    setOcrStatus(`OCR: фоновое распознавание завершено — ${scannedCount} стр. за ${totalScanSec}с`);
+    try { toastSuccess(`OCR завершено: ${scannedCount} стр. за ${totalScanSec}с`); } catch (err) { console.warn('[ocr] toast failed:', err?.message); }
+    pushDiagnosticEvent('ocr.background.finish', { scannedPages: scannedCount, concurrency, totalMs: Math.round(performance.now() - scanStartTime) });
   } finally {
     if (state.backgroundOcrToken === token) {
       state.backgroundOcrRunning = false;
