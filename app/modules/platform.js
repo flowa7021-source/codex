@@ -72,7 +72,7 @@ export async function openFileDialog(options = {}) {
       multiple: options.multiple || false,
       directory: false,
       filters,
-      title: options.title || 'Открыть файл',
+      title: options.title || 'NovaReader',
     });
     return result;   // string (path) or string[] or null
   }
@@ -108,7 +108,7 @@ export async function saveFileDialog(options = {}) {
         { name: 'DOCX', extensions: ['docx'] },
       ],
       defaultPath: options.defaultPath,
-      title: options.title || 'Сохранить файл',
+      title: options.title || 'NovaReader',
     });
   }
 
