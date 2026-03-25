@@ -212,7 +212,7 @@ export async function exportCurrentDocToWord() {
   }
 
   for (const [pageNum, editText] of _deps.pdfEditState.edits) {
-    if (editText && (!pages[pageNum - 1] || pages[pageNum - 1].length < editText.length)) {
+    if (editText) {
       pages[pageNum - 1] = editText;
     }
   }

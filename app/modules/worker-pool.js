@@ -157,9 +157,8 @@ export class WorkerPool {
     worker.onmessage = (e) => {
       const { id, result, error } = e.data;
       const task = this.activeTasks.get(id);
-      if (task) {
-        this._completeTask(entry, task, result, error ? new Error(error) : null);
-      }
+      if (!task) { console.warn('[worker-pool] unknown task id:', id); return; }
+      this._completeTask(entry, task, result, error ? new Error(error) : null);
     };
 
     worker.onerror = (e) => {

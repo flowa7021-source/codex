@@ -197,7 +197,9 @@ function buildCombo(e) {
 function normalizeKey(keyStr) {
   return keyStr.toLowerCase().replace(/\s/g, '').split('+').sort((a, b) => {
     const order = { ctrl: 0, alt: 1, shift: 2 };
-    return (order[a] ?? 3) - (order[b] ?? 3);
+    const oa = order[a] ?? 3;
+    const ob = order[b] ?? 3;
+    return oa !== ob ? oa - ob : a.localeCompare(b);
   }).join('+');
 }
 

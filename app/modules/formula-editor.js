@@ -416,11 +416,20 @@ export class FormulaEditor {
     }
 
     try {
-      const { png, width, height } = await renderLatexToPng(latex, { fontSize: 18, scale: 1 });
+      const result = await renderLatexToPng(latex, { fontSize: 18, scale: 1 });
+      if (!result) { this._previewEl.textContent = 'Render error'; return; }
+      const { png, width, height } = result;
 // @ts-ignore
       const blob = new Blob([png], { type: 'image/png' });
       const url  = URL.createObjectURL(blob);
-      this._previewEl.innerHTML = `<img src="${url}" width="${width}" height="${height}" style="max-width:100%" alt="formula">`;
+      this._previewEl.innerHTML = '';
+      const img = document.createElement('img');
+      img.src = url;
+      img.width = width;
+      img.height = height;
+      img.style.maxWidth = '100%';
+      img.alt = 'formula';
+      this._previewEl.appendChild(img);
       // Revoke after display
       safeTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (err) {

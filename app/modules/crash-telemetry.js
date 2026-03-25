@@ -11,6 +11,7 @@ const telemetry = {
   crashes: [],
   errors: [],
   totalErrors: 0,
+  totalOperations: 0,
   recoveries: 0,
   longestStreak: 0,
   currentStreak: 0,
@@ -37,6 +38,7 @@ export function recordCrashEvent(type, message, context, extra = {}) {
 
   telemetry.errors.push(event);
   telemetry.totalErrors++;
+  telemetry.totalOperations++;
   telemetry.lastErrorAt = Date.now();
   telemetry.currentStreak = 0;
 
@@ -51,6 +53,7 @@ export function recordCrashEvent(type, message, context, extra = {}) {
 
 /** Record a successful operation (grows the crash-free streak). */
 export function recordSuccessfulOperation() {
+  telemetry.totalOperations++;
   telemetry.currentStreak++;
   telemetry.longestStreak = Math.max(telemetry.longestStreak, telemetry.currentStreak);
 }
@@ -62,9 +65,8 @@ export function recordRecovery() {
 
 /** @returns {number} Crash-free rate as percentage (0-100). */
 export function getCrashFreeRate() {
-  const totalOps = telemetry.longestStreak + telemetry.totalErrors;
-  if (totalOps === 0) return 100;
-  return Math.round(((totalOps - telemetry.totalErrors) / totalOps) * 10000) / 100;
+  if (telemetry.totalOperations === 0) return 100;
+  return Math.round(((telemetry.totalOperations - telemetry.totalErrors) / telemetry.totalOperations) * 10000) / 100;
 }
 
 /**

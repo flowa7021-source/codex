@@ -295,7 +295,7 @@ export function buildDocxXmlWithImages(title, pages, imageRels) {
       let tableRows = [];
 
       for (const lineWords of lineGroups) {
-        if (!lineWords.length) continue;
+        if (!lineWords || !lineWords.length) continue;
         const lineTop = Math.min(...lineWords.map(w => w.bbox?.y0 || 0));
         const lineBottom = Math.max(...lineWords.map(w => w.bbox?.y1 || 0));
         const lineHeight = lineBottom - lineTop;

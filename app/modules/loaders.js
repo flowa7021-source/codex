@@ -11,7 +11,7 @@
 //     tesseract-adapter.js. WASM core and worker assets are resolved by
 //     Vite from node_modules/tesseract.js/dist/.
 
-import { safeTimeout } from './safe-timers.js';
+import { safeTimeout, safeInterval, clearSafeInterval } from './safe-timers.js';
 
 let pdfjsLib = null;
 let djvuLib = null;
@@ -102,10 +102,10 @@ export async function ensureDjVuJs() {
           } else {
             // Script tag finished loading but DjVu global not yet available — poll briefly
             let waited = 0;
-            const poll = setInterval(() => {
+            const poll = safeInterval(() => {
               waited += 50;
-              if (/** @type {any} */ (window).DjVu) { clearInterval(poll); resolve(); }
-              else if (waited >= 5000) { clearInterval(poll); reject(new Error('DjVu runtime load timeout')); }
+              if (/** @type {any} */ (window).DjVu) { clearSafeInterval(poll); resolve(); }
+              else if (waited >= 5000) { clearSafeInterval(poll); reject(new Error('DjVu runtime load timeout')); }
             }, 50);
           }
           return;

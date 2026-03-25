@@ -133,7 +133,9 @@ export async function listFiles(providerId, folder, query) {
 export async function openFile(providerId, fileId) {
   const provider = providers.get(providerId);
   if (!provider) throw new Error(`Unknown provider: ${providerId}`);
-  let data = await provider.downloadFile(fileId);
+  let data;
+  try { data = await provider.downloadFile(fileId); }
+  catch (err) { console.warn('[cloud] download failed:', err?.message); return null; }
 
   // Decrypt if encryption is active and data looks encrypted (has envelope header)
   if (_encryptionKey && data) {

@@ -255,10 +255,12 @@ async function _evictIfNeeded(storeName) {
   const toEvict = count - Math.floor(MAX_CACHE_ENTRIES * 0.8);
 
   let evicted = 0;
+  let safetyCounter = 0;
   const cursor = index.openCursor();
 
   await new Promise((resolve, reject) => {
     cursor.onsuccess = (event) => {
+      if (++safetyCounter > toEvict + 50) { resolve(); return; }
       const c = /** @type {any} */ (event.target).result;
       if (c && evicted < toEvict) {
         c.delete();

@@ -825,7 +825,9 @@ export async function searchInPdf(query) {
     const ocrHits = searchOcrIndex(query);
     const ocrHitPages = new Set(ocrHits.map(h => h.page));
 
-    for (let i = 1; i <= state.pageCount; i += 1) {
+    const maxPage = state.pageCount;
+    for (let i = 1; i <= maxPage; i += 1) {
+      if (!state.adapter) break;
       const txt = await _getSearchText(i);
       let count = txt.split(normalized).length - 1;
       // Supplement with OCR index matches for pages not caught by text
@@ -837,7 +839,7 @@ export async function searchInPdf(query) {
         state.searchResultCounts[i] = count;
       }
       if (i % 10 === 0) {
-        els.searchStatus.textContent = `${i}/${state.pageCount}…`;
+        els.searchStatus.textContent = `${i}/${maxPage}…`;
         await yieldToMainThread();
       }
     }

@@ -92,6 +92,18 @@ export function createFloatingSearch(callbacks = /** @type {any} */ ({})) {
       return;
     }
 
+    // Validate regex when regex mode is enabled
+    if (state.regex) {
+      try {
+        new RegExp(state.query);
+      } catch (_e) {
+        // Invalid regex — show no results instead of crashing
+        updateResults(-1, 0);
+        countLabel.classList.add('no-results');
+        return;
+      }
+    }
+
     if (callbacks.onSearch) {
       const result = callbacks.onSearch(state.query, {
         caseSensitive: state.caseSensitive,

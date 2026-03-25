@@ -42,8 +42,8 @@ export function extractTextInReadingOrder(items, options = {}) {
     const headerZone = pageHeight * 0.05;
     const footerZone = pageHeight * 0.95;
     filtered = items.filter(item => {
-      if (removeHeaders && item.y > footerZone) return false;
-      if (removeFooters && item.y < headerZone) return false;
+      if (removeHeaders && item.y < headerZone) return false;
+      if (removeFooters && item.y > footerZone) return false;
       return true;
     });
   }
