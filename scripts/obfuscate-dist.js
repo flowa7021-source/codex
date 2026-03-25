@@ -20,6 +20,7 @@ const SKIP_PATTERNS = [
   /djvu/i, /pdf\.min/i, /pdf\.worker/i,
   /\.css$/, /\.html$/, /\.json$/, /\.wasm$/, /\.map$/,
   /\.png$/, /\.jpg$/, /\.svg$/, /\.ico$/, /\.traineddata$/,
+  /^sw\.js$/,  // Service Worker must not be obfuscated (runs in SW scope, not window)
 ];
 
 const OBFUSCATION_OPTIONS = {
