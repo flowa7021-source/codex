@@ -426,6 +426,7 @@ export function drawStroke(ctx, stroke) {
 /** @returns {void} */
 export function renderAnnotations() {
   const ctx = getCurrentAnnotationCtx();
+  if (!ctx) return;
   const adpr = getAnnotationDpr();
   ctx.clearRect(0, 0, els.annotationCanvas.width, els.annotationCanvas.height);
 

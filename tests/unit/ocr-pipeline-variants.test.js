@@ -417,3 +417,200 @@ describe('runOcrOnPreparedCanvas — edge cases', () => {
     }
   });
 });
+
+// ─── runOcrOnPreparedCanvas — pipeline settings snapshot ────────────────────
+
+import { state } from '../../app/modules/state.js';
+
+describe('runOcrOnPreparedCanvas — pipeline settings snapshot', () => {
+  beforeEach(() => {
+    initOcrPipelineVariantsDeps({
+      _ocrWordCache: new Map(),
+      normalizeOcrTextByLang: (t) => t,
+      scoreOcrTextByLang: () => 50,
+      postCorrectOcrText: (t) => t,
+      setOcrStatus: () => {},
+    });
+  });
+
+  it('reads ocrQualityMode from state.settings', async () => {
+    state.settings = { ocrQualityMode: 'accurate' };
+    const canvas = makeCanvas(200, 200);
+    // Tesseract unavailable, but pipeline reads settings before that check
+    const result = await runOcrOnPreparedCanvas(canvas);
+    assert.equal(result, '');
+  });
+
+  it('defaults ocrQualityMode to balanced when settings is null', async () => {
+    state.settings = null;
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas);
+    assert.equal(result, '');
+  });
+
+  it('defaults ocrQualityMode to balanced when not set', async () => {
+    state.settings = {};
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas);
+    assert.equal(result, '');
+  });
+
+  it('reads ocrCyrillicOnly from state.settings', async () => {
+    state.settings = { ocrCyrillicOnly: true };
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas);
+    assert.equal(result, '');
+  });
+
+  it('handles ocrCyrillicOnly false', async () => {
+    state.settings = { ocrCyrillicOnly: false };
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas);
+    assert.equal(result, '');
+  });
+});
+
+// ─── runOcrOnPreparedCanvas — taskId cancellation path ──────────────────────
+
+describe('runOcrOnPreparedCanvas — taskId handling', () => {
+  beforeEach(() => {
+    initOcrPipelineVariantsDeps({
+      _ocrWordCache: new Map(),
+      normalizeOcrTextByLang: (t) => t,
+      scoreOcrTextByLang: () => 50,
+      postCorrectOcrText: (t) => t,
+      setOcrStatus: () => {},
+    });
+    state.settings = { ocrQualityMode: 'balanced' };
+  });
+
+  it('uses numeric taskId from options', async () => {
+    state.ocrTaskId = 99;
+    const canvas = makeCanvas(200, 200);
+    // taskId=99 matches state.ocrTaskId=99, no cancellation
+    const result = await runOcrOnPreparedCanvas(canvas, { taskId: 99 });
+    assert.equal(result, '');
+  });
+
+  it('handles taskId=0 as no-cancellation path', async () => {
+    state.ocrTaskId = 5;
+    const canvas = makeCanvas(200, 200);
+    // taskId 0 is falsy, so cancellation check is skipped
+    const result = await runOcrOnPreparedCanvas(canvas, { taskId: 0 });
+    assert.equal(result, '');
+  });
+
+  it('coerces string taskId to number', async () => {
+    state.ocrTaskId = 10;
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas, { taskId: '10' });
+    assert.equal(result, '');
+  });
+
+  it('preferredSkew is coerced to number', async () => {
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas, { preferredSkew: '1.5' });
+    assert.equal(result, '');
+  });
+
+  it('preferredSkew defaults to 0 when not provided', async () => {
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas, {});
+    assert.equal(result, '');
+  });
+
+  it('fast option is coerced to boolean', async () => {
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas, { fast: 1 });
+    assert.equal(result, '');
+  });
+
+  it('fast defaults to false when not provided', async () => {
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas, {});
+    assert.equal(result, '');
+  });
+});
+
+// ─── runOcrOnPreparedCanvas — setOcrStatus message content ──────────────────
+
+describe('runOcrOnPreparedCanvas — status messages', () => {
+  it('produces a status message containing OCR when Tesseract unavailable', async () => {
+    const messages = [];
+    initOcrPipelineVariantsDeps({
+      _ocrWordCache: new Map(),
+      normalizeOcrTextByLang: (t) => t,
+      scoreOcrTextByLang: () => 0,
+      postCorrectOcrText: (t) => t,
+      setOcrStatus: (msg) => messages.push(msg),
+    });
+    const canvas = makeCanvas(200, 200);
+    await runOcrOnPreparedCanvas(canvas);
+    assert.ok(messages.length >= 1);
+    assert.ok(messages.some(m => m.includes('OCR')));
+  });
+
+  it('does not produce status messages for null canvas', async () => {
+    const messages = [];
+    initOcrPipelineVariantsDeps({
+      _ocrWordCache: new Map(),
+      normalizeOcrTextByLang: (t) => t,
+      scoreOcrTextByLang: () => 0,
+      postCorrectOcrText: (t) => t,
+      setOcrStatus: (msg) => messages.push(msg),
+    });
+    await runOcrOnPreparedCanvas(null);
+    assert.equal(messages.length, 0);
+  });
+
+  it('does not produce status messages for zero-dimension canvas', async () => {
+    const messages = [];
+    initOcrPipelineVariantsDeps({
+      _ocrWordCache: new Map(),
+      normalizeOcrTextByLang: (t) => t,
+      scoreOcrTextByLang: () => 0,
+      postCorrectOcrText: (t) => t,
+      setOcrStatus: (msg) => messages.push(msg),
+    });
+    await runOcrOnPreparedCanvas(makeCanvas(0, 100));
+    assert.equal(messages.length, 0);
+  });
+});
+
+// ─── runOcrOnPreparedCanvas — onProgress callback filtering ─────────────────
+
+describe('runOcrOnPreparedCanvas — onProgress type check', () => {
+  beforeEach(() => {
+    initOcrPipelineVariantsDeps({
+      _ocrWordCache: new Map(),
+      normalizeOcrTextByLang: (t) => t,
+      scoreOcrTextByLang: () => 0,
+      postCorrectOcrText: (t) => t,
+      setOcrStatus: () => {},
+    });
+  });
+
+  it('ignores null onProgress', async () => {
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas, { onProgress: null });
+    assert.equal(result, '');
+  });
+
+  it('ignores numeric onProgress', async () => {
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas, { onProgress: 42 });
+    assert.equal(result, '');
+  });
+
+  it('ignores object onProgress', async () => {
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas, { onProgress: {} });
+    assert.equal(result, '');
+  });
+
+  it('ignores boolean onProgress', async () => {
+    const canvas = makeCanvas(200, 200);
+    const result = await runOcrOnPreparedCanvas(canvas, { onProgress: true });
+    assert.equal(result, '');
+  });
+});

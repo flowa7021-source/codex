@@ -315,7 +315,7 @@ function exportPluginResult(pluginId, result) {
   URL.revokeObjectURL(url);
 }
 
-document.getElementById('convertToPdfBtn')?.addEventListener('click', async () => {
+safeOn(document.getElementById('convertToPdfBtn'), 'click', async () => {
   await convertCurrentToPdf(reloadPdfFromBytes, setOcrStatus);
 });
 
@@ -390,6 +390,8 @@ function restoreSidebarSectionsCollapsed() {
 
 function initSidebarSections() {
   document.querySelectorAll('.sidebar > section > h2').forEach((title) => {
+    if (title._sidebarToggleInit) return;
+    title._sidebarToggleInit = true;
     title.classList.add('section-toggle');
     title.title = 'Клик: свернуть/развернуть';
     title.addEventListener('click', () => {
@@ -410,6 +412,11 @@ window.addEventListener('beforeunload', () => {
   revokeCurrentObjectUrl();
   _saveViewStateNow();
   markCleanExit();
+  stopReadingTimer(true);
+  if (pdfEditState.dirty) persistEdits();
+  revokeAllTrackedUrls();
+  clearPageRenderCache();
+  terminateTesseract().catch((err) => { console.warn('[ocr] error:', err?.message); });
 });
 
 // ─── Global Keyboard Handlers (delegated to init-keyboard.js) ────────────────
@@ -421,14 +428,7 @@ initKeyboard({
   closeSettingsModal,
 });
 
-document.addEventListener('visibilitychange', syncReadingTimerWithVisibility);
-window.addEventListener('beforeunload', () => {
-  stopReadingTimer(true);
-  if (pdfEditState.dirty) persistEdits();
-  revokeAllTrackedUrls();
-  clearPageRenderCache();
-  terminateTesseract().catch((err) => { console.warn('[ocr] error:', err?.message); });
-});
+safeOn(document, 'visibilitychange', syncReadingTimerWithVisibility);
 
 renderRecent();
 
@@ -599,7 +599,7 @@ loadLanguage();
 applyI18nToDOM();
 if (els.cfgAppLang) {
   els.cfgAppLang.value = getLanguage();
-  els.cfgAppLang.addEventListener('change', () => {
+  safeOn(els.cfgAppLang, 'change', () => {
     setLanguage(els.cfgAppLang.value);
     applyI18nToDOM();
   });

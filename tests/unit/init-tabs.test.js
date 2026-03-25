@@ -301,12 +301,13 @@ describe('initTabs', () => {
     assert.equal(removeSpy.mock.calls[0].arguments[1], oldHandler);
   });
 
-  it('returns early without error when fileInput is null', () => {
+  it('returns without error when fileInput is null', () => {
     const deps = makeDeps();
     deps.els.fileInput = null;
-    // Should not throw; returns undefined (no tabManager/openFileWithTabs)
+    // Should not throw; still returns tabManager (rest of init continues)
     const result = initTabs(deps);
-    assert.equal(result, undefined);
+    assert.ok(result, 'should still return tabManager even without fileInput');
+    assert.ok(result.tabManager, 'tabManager should be initialized');
   });
 
   it('saveTabsToSession persists tabs via visibilitychange', () => {

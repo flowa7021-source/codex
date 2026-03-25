@@ -70,8 +70,9 @@ export function subscribe(event, handler) {
  * Remove all tracked subscriptions.
  */
 export function removeAllListeners() {
-  for (const { event, wrapper } of _listeners) {
+  const toRemove = [..._listeners];
+  _listeners = [];
+  for (const { event, wrapper } of toRemove) {
     _bus.removeEventListener(event, wrapper);
   }
-  _listeners = [];
 }

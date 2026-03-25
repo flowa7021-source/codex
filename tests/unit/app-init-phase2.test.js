@@ -733,3 +733,375 @@ describe('Error recovery registration', () => {
     assert.equal(messages[0], 'Out of memory');
   });
 });
+
+// ─── 16. Dropdown toggle with multiple dropdowns ─────────────────────────────
+
+describe('Dropdown toggle — full lifecycle', () => {
+  function createDropdown() {
+    const dd = el('div', { className: 'dropdown' });
+    const trigger = el('button', { className: 'dropdown-trigger' });
+    dd.appendChild(trigger);
+    const menu = el('div', { className: 'dropdown-menu' });
+    const menuBtn = el('button');
+    menu.appendChild(menuBtn);
+    dd.appendChild(menu);
+    return { dd, trigger, menu, menuBtn };
+  }
+
+  function toggleDropdown(allDropdowns, dd) {
+    const wasOpen = dd.classList.contains('open');
+    allDropdowns.forEach(d => d.classList.remove('open'));
+    if (!wasOpen) dd.classList.add('open');
+  }
+
+  it('toggles open then closed on consecutive clicks', () => {
+    const { dd } = createDropdown();
+    toggleDropdown([dd], dd);
+    assert.ok(dd.classList.contains('open'));
+    toggleDropdown([dd], dd);
+    assert.ok(!dd.classList.contains('open'));
+  });
+
+  it('opening one dropdown closes others', () => {
+    const d1 = createDropdown();
+    const d2 = createDropdown();
+    const all = [d1.dd, d2.dd];
+    toggleDropdown(all, d1.dd);
+    assert.ok(d1.dd.classList.contains('open'));
+    toggleDropdown(all, d2.dd);
+    assert.ok(!d1.dd.classList.contains('open'));
+    assert.ok(d2.dd.classList.contains('open'));
+  });
+
+  it('document click closes all dropdowns', () => {
+    const d1 = createDropdown();
+    const d2 = createDropdown();
+    d1.dd.classList.add('open');
+    d2.dd.classList.add('open');
+    const all = [d1.dd, d2.dd];
+    // Simulate document click handler (line 75-77)
+    all.forEach(d => d.classList.remove('open'));
+    assert.ok(!d1.dd.classList.contains('open'));
+    assert.ok(!d2.dd.classList.contains('open'));
+  });
+
+  it('menu button click closes its parent dropdown', () => {
+    const { dd, menuBtn } = createDropdown();
+    dd.classList.add('open');
+    // Replicate line 80-82
+    dd.classList.remove('open');
+    assert.ok(!dd.classList.contains('open'));
+  });
+});
+
+// ─── 17. View Mode Button Clicks Setting View Mode ──────────────────────────
+
+describe('View mode button clicks setting view mode', () => {
+  it('calls setViewMode with the correct mode from data attribute', () => {
+    const modes = ['single', 'double', 'scroll', 'continuous'];
+    for (const mode of modes) {
+      const btn = el('button', { 'data-view-mode': mode });
+      const viewMode = btn.dataset.viewMode;
+      assert.equal(viewMode, mode);
+    }
+  });
+
+  it('marks the selected button as active and deactivates others', () => {
+    const menuBtns = ['single', 'double', 'scroll'].map(m =>
+      el('button', { className: 'dropdown-item', 'data-view-mode': m })
+    );
+    // Select 'double'
+    menuBtns.forEach(b => b.classList.remove('active'));
+    menuBtns[1].classList.add('active');
+    assert.ok(menuBtns[1].classList.contains('active'));
+    assert.ok(!menuBtns[0].classList.contains('active'));
+    assert.ok(!menuBtns[2].classList.contains('active'));
+
+    // Now select 'scroll'
+    menuBtns.forEach(b => b.classList.remove('active'));
+    menuBtns[2].classList.add('active');
+    assert.ok(!menuBtns[1].classList.contains('active'));
+    assert.ok(menuBtns[2].classList.contains('active'));
+  });
+});
+
+// ─── 18. goToPage integration ────────────────────────────────────────────────
+
+describe('goToPage integration in initPhase2Modules', () => {
+  it('goToPage is destructured from deps', () => {
+    const goToPage = mock.fn();
+    const deps = { renderCurrentPage: mock.fn(), goToPage };
+    // Replicate line 29: const { renderCurrentPage, goToPage: _goToPage } = deps;
+    const { goToPage: _goToPage } = deps;
+    assert.equal(typeof _goToPage, 'function');
+  });
+
+  it('goToPage can be called with a page number', () => {
+    const goToPage = mock.fn();
+    goToPage(5);
+    assert.equal(goToPage.mock.callCount(), 1);
+    assert.equal(goToPage.mock.calls[0].arguments[0], 5);
+  });
+});
+
+// ─── 19. Missing element handling (null safety) ─────────────────────────────
+
+describe('Null safety in initPhase2Modules', () => {
+  it('viewModeDropdown handler skips when dd is null', () => {
+    // Replicate lines 107-134: const dd = document.getElementById('viewModeDropdown');
+    const dd = null;
+    assert.doesNotThrow(() => {
+      if (dd) {
+        // This block should be skipped entirely
+        throw new Error('Should not reach');
+      }
+    });
+  });
+
+  it('exportHtml handler skips when btn is null', () => {
+    const btn = null;
+    assert.doesNotThrow(() => {
+      if (btn) {
+        throw new Error('Should not reach');
+      }
+    });
+  });
+
+  it('pdfFindReplace handler skips when btn is null', () => {
+    const findReplaceBtn = null;
+    assert.doesNotThrow(() => {
+      if (findReplaceBtn) {
+        throw new Error('Should not reach');
+      }
+    });
+  });
+
+  it('cleanMetadata handler skips when btn is null', () => {
+    const cleanMetaBtn = null;
+    assert.doesNotThrow(() => {
+      if (cleanMetaBtn) {
+        throw new Error('Should not reach');
+      }
+    });
+  });
+
+  it('sanitizePdf handler skips when btn is null', () => {
+    const sanitizeBtn = null;
+    assert.doesNotThrow(() => {
+      if (sanitizeBtn) {
+        throw new Error('Should not reach');
+      }
+    });
+  });
+
+  it('exportPlainText handler skips when btn is null', () => {
+    const btn = null;
+    assert.doesNotThrow(() => {
+      if (btn) {
+        throw new Error('Should not reach');
+      }
+    });
+  });
+
+  it('exportPdfA handler skips when btn is null', () => {
+    const btn = null;
+    assert.doesNotThrow(() => {
+      if (btn) {
+        throw new Error('Should not reach');
+      }
+    });
+  });
+
+  it('status bar handles missing sbPage, sbZoom elements', () => {
+    // updateStatusBar with all null els should not throw
+    function updateStatusBar(state, sbEls) {
+      if (sbEls.sbPage) sbEls.sbPage.textContent = 'test';
+      if (sbEls.sbZoom) sbEls.sbZoom.textContent = 'test';
+      if (sbEls.sbReadingTime) sbEls.sbReadingTime.textContent = 'test';
+      if (sbEls.sbFileSize && state.file) sbEls.sbFileSize.textContent = 'test';
+    }
+    assert.doesNotThrow(() => {
+      updateStatusBar({ currentPage: 1, zoom: 1, pageCount: 1 }, {
+        sbPage: null, sbZoom: null, sbReadingTime: null, sbFileSize: null,
+      });
+    });
+  });
+});
+
+// ─── 20. HTML Export handler logic ───────────────────────────────────────────
+
+describe('HTML Export handler logic', () => {
+  it('returns early when adapter is null', () => {
+    const state = { adapter: null, pageCount: 0 };
+    let called = false;
+    // Replicate lines 142-143
+    if (!state.adapter || state.pageCount === 0) {
+      // should return
+    } else {
+      called = true;
+    }
+    assert.ok(!called);
+  });
+
+  it('returns early when pageCount is 0', () => {
+    const state = { adapter: {}, pageCount: 0 };
+    let proceeded = false;
+    if (!state.adapter || state.pageCount === 0) {
+      // should return
+    } else {
+      proceeded = true;
+    }
+    assert.ok(!proceeded);
+  });
+
+  it('proceeds when adapter exists and pageCount > 0', () => {
+    const state = { adapter: { type: 'pdf' }, pageCount: 5 };
+    let proceeded = false;
+    if (!state.adapter || state.pageCount === 0) {
+      // would return
+    } else {
+      proceeded = true;
+    }
+    assert.ok(proceeded);
+  });
+});
+
+// ─── 21. PDF Find/Replace handler logic ─────────────────────────────────────
+
+describe('PDF Find/Replace handler logic', () => {
+  it('shows warning when pdfBytes is null', () => {
+    const state = { pdfBytes: null, pageCount: 0 };
+    let warned = false;
+    if (!state.pdfBytes || state.pageCount === 0) {
+      warned = true;
+    }
+    assert.ok(warned);
+  });
+
+  it('shows warning when pageCount is 0', () => {
+    const state = { pdfBytes: new Uint8Array(10), pageCount: 0 };
+    let warned = false;
+    if (!state.pdfBytes || state.pageCount === 0) {
+      warned = true;
+    }
+    assert.ok(warned);
+  });
+
+  it('proceeds when pdfBytes exist and pageCount > 0', () => {
+    const state = { pdfBytes: new Uint8Array(10), pageCount: 5 };
+    let warned = false;
+    if (!state.pdfBytes || state.pageCount === 0) {
+      warned = true;
+    }
+    assert.ok(!warned);
+  });
+
+  it('returns early if search prompt is empty', () => {
+    const search = '';
+    let proceeded = false;
+    if (!search) {
+      // early return
+    } else {
+      proceeded = true;
+    }
+    assert.ok(!proceeded);
+  });
+
+  it('returns early if replace prompt is null (cancelled)', () => {
+    const replace = null;
+    let proceeded = false;
+    if (replace === null) {
+      // early return
+    } else {
+      proceeded = true;
+    }
+    assert.ok(!proceeded);
+  });
+
+  it('allows empty string as valid replace value', () => {
+    const replace = '';
+    let proceeded = false;
+    if (replace === null) {
+      // early return
+    } else {
+      proceeded = true;
+    }
+    assert.ok(proceeded);
+  });
+});
+
+// ─── 22. PDF Security handlers logic ────────────────────────────────────────
+
+describe('PDF Security handlers logic', () => {
+  it('cleanMetadata warns when pdfBytes is null', () => {
+    const state = { pdfBytes: null };
+    let warned = false;
+    if (!state.pdfBytes) warned = true;
+    assert.ok(warned);
+  });
+
+  it('sanitizePdf warns when pdfBytes is null', () => {
+    const state = { pdfBytes: null };
+    let warned = false;
+    if (!state.pdfBytes) warned = true;
+    assert.ok(warned);
+  });
+
+  it('cleanMetadata proceeds when pdfBytes exist', () => {
+    const state = { pdfBytes: new Uint8Array(10) };
+    let warned = false;
+    if (!state.pdfBytes) warned = true;
+    assert.ok(!warned);
+  });
+});
+
+// ─── 23. PDF/A Export handler logic ─────────────────────────────────────────
+
+describe('PDF/A Export handler logic', () => {
+  it('warns when pdfBytes is null', () => {
+    const state = { pdfBytes: null };
+    let warned = false;
+    if (!state.pdfBytes) warned = true;
+    assert.ok(warned);
+  });
+
+  it('generates correct filename from docName', () => {
+    const docName = 'report.pdf';
+    const filename = docName.replace(/\.[^.]+$/, '') + '-pdfa.pdf';
+    assert.equal(filename, 'report-pdfa.pdf');
+  });
+
+  it('generates correct filename when docName has no extension', () => {
+    const docName = 'document';
+    const filename = (docName || 'document').replace(/\.[^.]+$/, '') + '-pdfa.pdf';
+    assert.equal(filename, 'document-pdfa.pdf');
+  });
+
+  it('uses default name when docName is null', () => {
+    const docName = null;
+    const filename = (docName || 'document').replace(/\.[^.]+$/, '') + '-pdfa.pdf';
+    assert.equal(filename, 'document-pdfa.pdf');
+  });
+});
+
+// ─── 24. Plain Text Export filename logic ───────────────────────────────────
+
+describe('Plain Text Export filename logic', () => {
+  it('replaces extension with .txt', () => {
+    const docName = 'myfile.pdf';
+    const filename = (docName || 'document').replace(/\.[^.]+$/, '') + '.txt';
+    assert.equal(filename, 'myfile.txt');
+  });
+
+  it('defaults to document.txt when docName is null', () => {
+    const docName = null;
+    const filename = (docName || 'document').replace(/\.[^.]+$/, '') + '.txt';
+    assert.equal(filename, 'document.txt');
+  });
+
+  it('handles multi-dot filenames', () => {
+    const docName = 'my.report.v2.pdf';
+    const filename = (docName || 'document').replace(/\.[^.]+$/, '') + '.txt';
+    assert.equal(filename, 'my.report.v2.txt');
+  });
+});

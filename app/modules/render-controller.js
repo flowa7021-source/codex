@@ -248,7 +248,7 @@ export async function renderCurrentPage() {
   }
 
   // ── Show stale cache as placeholder while rendering ──
-  if (cached && cached.canvas.width > 0) {
+  if (cached && cached.canvas.width > 0 && generation === _renderGeneration) {
     _blitCacheToCanvas(cached, els.canvas);
   }
 

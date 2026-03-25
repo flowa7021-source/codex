@@ -96,9 +96,17 @@ export async function ensureDjVuJs() {
         if (existing) {
           if (/** @type {any} */ (window).DjVu) {
             resolve();
-          } else {
+          } else if (!/** @type {any} */ (existing).complete && /** @type {any} */ (existing).readyState !== 'complete') {
             existing.addEventListener('load', () => resolve(), { once: true });
             existing.addEventListener('error', () => reject(new Error('DjVu runtime load error')), { once: true });
+          } else {
+            // Script tag finished loading but DjVu global not yet available — poll briefly
+            let waited = 0;
+            const poll = setInterval(() => {
+              waited += 50;
+              if (/** @type {any} */ (window).DjVu) { clearInterval(poll); resolve(); }
+              else if (waited >= 5000) { clearInterval(poll); reject(new Error('DjVu runtime load timeout')); }
+            }, 50);
           }
           return;
         }

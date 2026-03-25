@@ -78,14 +78,15 @@ export function initTabs(deps) {
   if (els.fileInput?._nrChangeHandler) {
     els.fileInput.removeEventListener('change', els.fileInput._nrChangeHandler);
   }
-  if (!els.fileInput) return;
-  els.fileInput._nrChangeHandler = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    await openFileWithTabs(file);
-    e.target.value = '';
-  };
-  safeOn(els.fileInput, 'change', els.fileInput._nrChangeHandler);
+  if (els.fileInput) {
+    els.fileInput._nrChangeHandler = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      await openFileWithTabs(file);
+      e.target.value = '';
+    };
+    safeOn(els.fileInput, 'change', els.fileInput._nrChangeHandler);
+  }
 
   // Tab bar new tab button
   document.getElementById('tabBarNewTab')?.addEventListener('click', () => {

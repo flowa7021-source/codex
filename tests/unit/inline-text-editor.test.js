@@ -160,4 +160,213 @@ describe('InlineTextEditor', () => {
 
     assert.ok(editor._editorEl.style.cssText.includes('Times New Roman'));
   });
+
+  it('commitEdit cleans up the editor element', async () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    editor.activate(makeBlock(), makeCanvasRect());
+
+    await editor.commitEdit();
+
+    assert.equal(editor._editorEl, null);
+    assert.equal(editor._block, null);
+  });
+
+  it('commitEdit handles no editorEl gracefully', async () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    // No activate — _editorEl is null
+    await editor.commitEdit();
+    assert.equal(deps.onCommit.mock.calls.length, 0);
+  });
+
+  it('cancel on non-activated editor does not throw', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    assert.doesNotThrow(() => editor.cancel());
+  });
+
+  it('cancel does not call onCancel if deps.onCancel is missing', () => {
+    const noCancelDeps = makeDeps({ onCancel: undefined });
+    const editor = new InlineTextEditor(container, page, noCancelDeps);
+    editor.activate(makeBlock(), makeCanvasRect());
+    assert.doesNotThrow(() => editor.cancel());
+  });
+
+  it('Escape key cancels the editor', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    editor.activate(makeBlock(), makeCanvasRect());
+
+    const event = new Event('keydown');
+    event.key = 'Escape';
+    event.preventDefault = () => {};
+    editor._onKeyDown(event);
+
+    assert.equal(editor._editorEl, null);
+    assert.equal(deps.onCancel.mock.calls.length, 1);
+  });
+
+  it('Ctrl+Enter commits the editor', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    editor.activate(makeBlock(), makeCanvasRect());
+
+    const event = new Event('keydown');
+    event.key = 'Enter';
+    event.ctrlKey = true;
+    event.shiftKey = false;
+    event.preventDefault = () => {};
+    editor._onKeyDown(event);
+
+    // After commit, editor should be cleaned up
+    assert.equal(editor._editorEl, null);
+  });
+
+  it('Shift+Enter commits the editor', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    editor.activate(makeBlock(), makeCanvasRect());
+
+    const event = new Event('keydown');
+    event.key = 'Enter';
+    event.ctrlKey = false;
+    event.shiftKey = true;
+    event.preventDefault = () => {};
+    editor._onKeyDown(event);
+
+    assert.equal(editor._editorEl, null);
+  });
+
+  it('regular key does not cancel or commit', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    editor.activate(makeBlock(), makeCanvasRect());
+
+    const event = new Event('keydown');
+    event.key = 'a';
+    event.ctrlKey = false;
+    event.shiftKey = false;
+    event.preventDefault = () => {};
+    editor._onKeyDown(event);
+
+    assert.ok(editor._editorEl !== null);
+  });
+
+  it('setZoom repositions the editor when active', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    const block = makeBlock({ boundingBox: { x: 10, y: 20, width: 100, height: 14 } });
+    editor.activate(block, makeCanvasRect());
+
+    editor.setZoom(2);
+    assert.equal(deps.zoom, 2);
+    // The editor position should have been recalculated
+    assert.ok(editor._editorEl.style.left);
+  });
+
+  it('setZoom does nothing when no editor is active', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    assert.doesNotThrow(() => editor.setZoom(3));
+    assert.equal(deps.zoom, 3);
+  });
+
+  it('activate applies bold font weight', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    const block = makeBlock({
+      lines: [{ runs: [{ text: 'Bold', fontSize: 14, color: '#000', bold: true, font: 'Arial' }] }],
+    });
+    editor.activate(block, makeCanvasRect());
+
+    assert.ok(editor._editorEl.style.cssText.includes('bold'));
+  });
+
+  it('activate applies italic font style', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    const block = makeBlock({
+      lines: [{ runs: [{ text: 'Italic', fontSize: 14, color: '#000', italic: true, font: 'Arial' }] }],
+    });
+    editor.activate(block, makeCanvasRect());
+
+    assert.ok(editor._editorEl.style.cssText.includes('italic'));
+  });
+
+  it('activate uses default font when no run font', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    const block = makeBlock({
+      lines: [{ runs: [{ text: 'Test', fontSize: 12, color: '#000' }] }],
+    });
+    editor.activate(block, makeCanvasRect());
+
+    assert.ok(editor._editorEl.style.cssText.includes('Arial'));
+  });
+
+  it('activate uses synthesizedFont for OCR blocks', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    const block = makeBlock({ source: 'ocr' });
+    block.synthesizedFont = 'Georgia';
+    editor.activate(block, makeCanvasRect());
+
+    assert.ok(editor._editorEl.style.cssText.includes('Georgia'));
+  });
+
+  it('activate uses default font size when no run', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    const block = makeBlock({ lines: [{ runs: [] }] });
+    editor.activate(block, makeCanvasRect());
+
+    // Default 12px * zoom 1 = 12px
+    assert.ok(editor._editorEl.style.cssText.includes('12px'));
+  });
+
+  it('activate applies color from run', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    const block = makeBlock({
+      lines: [{ runs: [{ text: 'Red', fontSize: 12, color: '#ff0000', font: 'Arial' }] }],
+    });
+    editor.activate(block, makeCanvasRect());
+
+    assert.ok(editor._editorEl.style.cssText.includes('#ff0000'));
+  });
+
+  it('_writeNativeText returns early without pdfLibDoc', async () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    // deps.pdfLibDoc is null
+    await assert.doesNotReject(async () => {
+      await editor._writeNativeText(makeBlock(), 'new text');
+    });
+  });
+
+  it('_writeOcrText returns early without getBackgroundCanvas', async () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    await assert.doesNotReject(async () => {
+      await editor._writeOcrText(makeBlock({ source: 'ocr' }), 'new text');
+    });
+  });
+
+  it('_writeNativeText draws text on pdf page', async () => {
+    const drawRectCalls = [];
+    const drawTextCalls = [];
+    const mockPage = {
+      drawRectangle: (opts) => drawRectCalls.push(opts),
+      drawText: (text, opts) => drawTextCalls.push({ text, ...opts }),
+    };
+    const pdfDeps = makeDeps({
+      pdfLibDoc: {
+        getPage: () => mockPage,
+      },
+    });
+    const editor = new InlineTextEditor(container, page, pdfDeps);
+    const block = makeBlock();
+    await editor._writeNativeText(block, 'Updated');
+
+    assert.equal(drawRectCalls.length, 1);
+    assert.equal(drawTextCalls.length, 1);
+    assert.equal(drawTextCalls[0].text, 'Updated');
+  });
+
+  it('cleanup removes keydown listener and editor element', () => {
+    const editor = new InlineTextEditor(container, page, deps);
+    editor.activate(makeBlock(), makeCanvasRect());
+    const el = editor._editorEl;
+    assert.ok(el);
+
+    editor._cleanup();
+
+    assert.equal(editor._editorEl, null);
+    assert.equal(editor._block, null);
+    assert.equal(editor._origText, '');
+  });
 });

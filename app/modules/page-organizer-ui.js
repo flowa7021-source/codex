@@ -28,9 +28,10 @@ export function initPageOrganizerUI(deps) {
       toastError('Организатор страниц доступен только для PDF');
       return;
     }
+    if (!orgModal) return;
     orgModal.style.display = '';
     orgModal.classList.add('open');
-    orgStatus.textContent = 'Загрузка страниц...';
+    if (orgStatus) orgStatus.textContent = 'Загрузка страниц...';
 
     try {
       orgPdfBytes = await state.adapter.getRawBytes();
@@ -38,9 +39,9 @@ export function initPageOrganizerUI(deps) {
       orgState = createOrganizerState(pages);
       orgNewOrder = pages.map((_, i) => i);
       await renderOrgGrid();
-      orgStatus.textContent = `${pages.length} страниц`;
+      if (orgStatus) orgStatus.textContent = `${pages.length} страниц`;
     } catch (err) {
-      orgStatus.textContent = `Ошибка: ${err.message}`;
+      if (orgStatus) orgStatus.textContent = `Ошибка: ${err.message}`;
     }
   }
 

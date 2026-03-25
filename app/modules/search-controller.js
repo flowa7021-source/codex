@@ -803,7 +803,8 @@ export async function searchInPdf(query) {
 
   // Merge native text with OCR text for comprehensive search
   const _getSearchText = async (pageNum) => {
-    const native = (await state.adapter.getText(pageNum)).toLowerCase();
+    let native = '';
+    try { native = (await state.adapter.getText(pageNum)).toLowerCase(); } catch (_e) { /* text extraction failed for page */ }
     const ocr = String(ocrPages[pageNum - 1] || '').toLowerCase();
     // Use whichever is longer, or combine both if they differ substantially
     if (!native) return ocr;

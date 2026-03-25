@@ -300,12 +300,18 @@ export function setupDragAndDrop() {
 
 // ─── Annotation Events Setup ────────────────────────────────────────────────
 
+let _annotAbort = null;
+
 export function setupAnnotationEvents() {
   const target = els.annotationCanvas;
-  target.addEventListener('pointerdown', _deps.beginStroke);
-  target.addEventListener('pointermove', _deps.moveStroke);
-  target.addEventListener('pointerup', _deps.endStroke);
-  target.addEventListener('pointerleave', _deps.endStroke);
+  if (!target) return;
+  if (_annotAbort) _annotAbort.abort();
+  _annotAbort = new AbortController();
+  const signal = _annotAbort.signal;
+  target.addEventListener('pointerdown', _deps.beginStroke, { signal });
+  target.addEventListener('pointermove', _deps.moveStroke, { signal });
+  target.addEventListener('pointerup', _deps.endStroke, { signal });
+  target.addEventListener('pointerleave', _deps.endStroke, { signal });
   target.addEventListener('dblclick', (e) => {
     const p = /** @type {any} */ (_deps).getCanvasPointFromEvent(e);
     const comments = /** @type {any} */ (_deps).loadComments();
@@ -343,7 +349,7 @@ export function setupAnnotationEvents() {
         break;
       }
     }
-  });
+  }, { signal });
 
   // Text layer context menu for quick markup on text selection
   if (els.textLayerDiv) {
@@ -397,6 +403,6 @@ export function setupAnnotationEvents() {
         }
       };
       safeTimeout(() => document.addEventListener('mousedown', removePopup), 50);
-    });
+    }, { signal });
   }
 }

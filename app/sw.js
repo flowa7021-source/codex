@@ -1,21 +1,20 @@
 /* global self, caches, fetch, URL, Response */
-// NovaReader Service Worker — cache-first strategy for offline access
-const APP_CACHE = 'novareader-app-v1';
+// NovaReader Service Worker — handles offline access and cache management
+//
+// Strategy:
+//   Navigation (HTML)  → network-first (always get fresh HTML after rebuild)
+//   Hashed assets (JS/CSS) → cache-first (hash in filename = immutable)
+//   Documents (PDF, DJVU) → cache on access for offline re-reading
+
+const APP_CACHE = 'novareader-app-v2';
 const DOC_CACHE = 'novareader-docs-v1';
 
-// App shell: cache index.html on install, other assets cached on first fetch
-// (Vite adds hashes to filenames, so we can't pre-cache them by name)
-const APP_SHELL = ['./', './index.html'];
-
-// ── Install: pre-cache app shell ────────────────────────────
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(APP_CACHE).then((cache) => cache.addAll(APP_SHELL).catch(() => { /* Non-critical: cache prefetch may fail offline or on first load */ }))
-  );
+// ── Install: skip waiting to activate immediately ────────────
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-// ── Activate: clean up old caches on version bump ───────────
+// ── Activate: clean up ALL old caches except current versions ─
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
@@ -29,26 +28,27 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// ── Fetch: cache-first for app shell, cache opened docs ─────
+// ── Fetch handler ─────────────────────────────────────────────
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
   // Only handle GET requests
   if (request.method !== 'GET') return;
 
-  // For document files (PDF, DJVU, EPUB), cache on access for offline re-reading
   const url = new URL(request.url);
-  const isDocument = /\.(pdf|djvu|djv|epub|xps)$/i.test(url.pathname);
 
+  // Skip cross-origin requests
+  if (url.origin !== self.location.origin) return;
+
+  // Document files (PDF, DJVU, EPUB): cache on access
+  const isDocument = /\.(pdf|djvu|djv|epub|xps)$/i.test(url.pathname);
   if (isDocument) {
     event.respondWith(
       caches.open(DOC_CACHE).then((cache) =>
         cache.match(request).then((cached) => {
           if (cached) return cached;
           return fetch(request).then((response) => {
-            if (response.ok) {
-              cache.put(request, response.clone());
-            }
+            if (response.ok) cache.put(request, response.clone());
             return response;
           }).catch(() => cached || new Response('Offline', { status: 503 }));
         })
@@ -57,13 +57,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // App shell and other assets: cache-first with network fallback
+  // Navigation requests (HTML pages): NETWORK-FIRST
+  // This ensures the latest index.html (with correct JS hashes) is always served
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.ok) {
+            const clone = response.clone();
+            caches.open(APP_CACHE).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() =>
+          caches.match(request).then((cached) =>
+            cached || new Response('Offline', { status: 503, headers: { 'Content-Type': 'text/html' } })
+          )
+        )
+    );
+    return;
+  }
+
+  // Static assets (JS, CSS, images): CACHE-FIRST
+  // Vite adds content hashes to filenames, so cached versions are immutable
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
       return fetch(request).then((response) => {
-        // Cache successful same-origin responses for future offline use
-        if (response.ok && url.origin === self.location.origin) {
+        if (response.ok) {
           const clone = response.clone();
           caches.open(APP_CACHE).then((cache) => cache.put(request, clone));
         }

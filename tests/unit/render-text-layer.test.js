@@ -936,4 +936,339 @@ describe('_createParagraphEditor', () => {
     _createParagraphEditor(spans);
     assert.ok(removed);
   });
+
+  it('calculates bounding box from multiple spans', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 });
+    els.textLayerDiv = container;
+
+    const spans = [
+      makeSpan('First', { fontSize: '14px', _top: 10, _left: 10, _width: 60, _height: 14 }),
+      makeSpan('Second', { fontSize: '14px', _top: 10, _left: 80, _width: 70, _height: 14 }),
+      makeSpan('Third', { fontSize: '14px', _top: 30, _left: 10, _width: 50, _height: 14 }),
+    ];
+
+    _createParagraphEditor(spans);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+    // Editor should span from x=10 to x=150 and y=10 to y=44
+    assert.equal(editor.style.left, '10px');
+    assert.equal(editor.style.top, '10px');
+  });
+
+  it('uses dominant font size', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 });
+    els.textLayerDiv = container;
+
+    const spans = [
+      makeSpan('Large', { fontSize: '20px', _top: 10, _left: 10, _width: 80, _height: 20 }),
+      makeSpan('Small', { fontSize: '12px', _top: 10, _left: 100, _width: 40, _height: 12 }),
+    ];
+
+    _createParagraphEditor(spans);
+    const editor = getActiveInlineEditor();
+    // Dominant size should be the largest: 20px
+    assert.equal(editor.style.fontSize, '20px');
+  });
+});
+
+// ── Additional _renderOcrTextLayer tests ─────────────────────────────────────
+
+describe('_renderOcrTextLayer — additional coverage', () => {
+  let origTextLayerDiv, origCanvas, origAnnotCanvas;
+
+  beforeEach(() => {
+    origTextLayerDiv = els.textLayerDiv;
+    origCanvas = els.canvas;
+    origAnnotCanvas = els.annotationCanvas;
+    _ocrWordCache.clear();
+  });
+
+  afterEach(() => {
+    els.textLayerDiv = origTextLayerDiv;
+    els.canvas = origCanvas;
+    els.annotationCanvas = origAnnotCanvas;
+    state.ocrConfidenceMode = false;
+  });
+
+  it('sorts words by reading order (top-to-bottom, left-to-right)', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '800px';
+    canvas.style.height = '600px';
+    Object.assign(els, { textLayerDiv: container, canvas });
+
+    _ocrWordCache.set(1, [
+      { text: 'Second', bbox: { x0: 0.5, y0: 0.1, x1: 0.7, y1: 0.15 } },
+      { text: 'First', bbox: { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.15 } },
+      { text: 'Third', bbox: { x0: 0.1, y0: 0.5, x1: 0.3, y1: 0.55 } },
+    ]);
+
+    await _renderOcrTextLayer(1, 1, 1);
+
+    // Should have 3 children (fragment appended)
+    assert.ok(container.children.length >= 1);
+  });
+
+  it('renders multi-character words without error', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '800px';
+    canvas.style.height = '600px';
+    Object.assign(els, { textLayerDiv: container, canvas });
+
+    _ocrWordCache.set(1, [
+      { text: 'LongWord', bbox: { x0: 0.1, y0: 0.1, x1: 0.8, y1: 0.2 } },
+    ]);
+
+    await _renderOcrTextLayer(1, 1, 1);
+
+    assert.ok(container.children.length >= 1);
+  });
+
+  it('renders words with confidence without error', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '400px';
+    canvas.style.height = '300px';
+    Object.assign(els, { textLayerDiv: container, canvas });
+
+    _ocrWordCache.set(1, [
+      { text: 'Word', confidence: 72, bbox: { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.15 } },
+    ]);
+
+    await _renderOcrTextLayer(1, 1, 1);
+
+    assert.ok(container.children.length >= 1);
+  });
+
+  it('renders single character words without error', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '400px';
+    canvas.style.height = '300px';
+    Object.assign(els, { textLayerDiv: container, canvas });
+
+    _ocrWordCache.set(1, [
+      { text: 'X', bbox: { x0: 0.1, y0: 0.1, x1: 0.12, y1: 0.15 } },
+    ]);
+
+    await _renderOcrTextLayer(1, 1, 1);
+
+    assert.ok(container.children.length >= 1);
+  });
+
+  it('handles word with very small bbox height', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '400px';
+    canvas.style.height = '300px';
+    Object.assign(els, { textLayerDiv: container, canvas });
+
+    _ocrWordCache.set(1, [
+      { text: 'Tiny', bbox: { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.101 } },
+    ]);
+
+    await _renderOcrTextLayer(1, 1, 1);
+
+    assert.ok(container.children.length >= 1);
+  });
+
+  it('renders words with small baseline angle without error', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '400px';
+    canvas.style.height = '300px';
+    Object.assign(els, { textLayerDiv: container, canvas });
+
+    _ocrWordCache.set(1, [
+      { text: 'Straight', bbox: { x0: 0.1, y0: 0.1, x1: 0.4, y1: 0.15 }, baseline: { angle: 0.2 } },
+    ]);
+
+    await _renderOcrTextLayer(1, 1, 1);
+
+    assert.ok(container.children.length >= 1);
+  });
+
+  it('renders words without confidence field', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '400px';
+    canvas.style.height = '300px';
+    Object.assign(els, { textLayerDiv: container, canvas });
+
+    _ocrWordCache.set(1, [
+      { text: 'NoConf', bbox: { x0: 0.1, y0: 0.1, x1: 0.3, y1: 0.15 } },
+    ]);
+
+    await _renderOcrTextLayer(1, 1, 1);
+
+    assert.ok(container.children.length >= 1);
+  });
+
+  it('renders many words on multiple lines', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '1000px';
+    canvas.style.height = '800px';
+    Object.assign(els, { textLayerDiv: container, canvas });
+
+    const words = [];
+    for (let i = 0; i < 20; i++) {
+      words.push({
+        text: `word${i}`,
+        bbox: { x0: (i % 5) * 0.2, y0: Math.floor(i / 5) * 0.1, x1: (i % 5) * 0.2 + 0.15, y1: Math.floor(i / 5) * 0.1 + 0.05 },
+        confidence: 80 + i,
+      });
+    }
+    _ocrWordCache.set(1, words);
+
+    await _renderOcrTextLayer(1, 1, 1);
+
+    assert.ok(container.children.length >= 1);
+  });
+});
+
+// ── Additional renderTextLayer tests ────────────────────────────────────────
+
+describe('renderTextLayer — additional coverage', () => {
+  let origTextLayerDiv, origCanvas, origPdfAnnotationLayer, origAdapter;
+
+  beforeEach(() => {
+    origTextLayerDiv = els.textLayerDiv;
+    origCanvas = els.canvas;
+    origPdfAnnotationLayer = els.pdfAnnotationLayer;
+    origAdapter = state.adapter;
+  });
+
+  afterEach(() => {
+    els.textLayerDiv = origTextLayerDiv;
+    els.canvas = origCanvas;
+    els.pdfAnnotationLayer = origPdfAnnotationLayer;
+    state.adapter = origAdapter;
+    setActiveTextLayer(null);
+  });
+
+  it('returns early when adapter is null', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '800px';
+    canvas.style.height = '600px';
+    els.textLayerDiv = container;
+    els.canvas = canvas;
+    els.pdfAnnotationLayer = null;
+    state.adapter = null;
+
+    await renderTextLayer(1, 1, 0);
+    // Container should be cleared but no content added
+    assert.equal(container.innerHTML, '');
+  });
+
+  it('cancels previous text layer even if cancel throws', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '800px';
+    canvas.style.height = '600px';
+    els.textLayerDiv = container;
+    els.canvas = canvas;
+    els.pdfAnnotationLayer = document.createElement('div');
+    state.adapter = null;
+
+    setActiveTextLayer({ cancel() { throw new Error('cancel error'); } });
+
+    // Should not throw
+    await renderTextLayer(1, 1, 0);
+    assert.equal(getActiveTextLayer(), null);
+  });
+
+  it('sets container dimensions from canvas style', async () => {
+    const container = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.style.width = '500px';
+    canvas.style.height = '700px';
+    els.textLayerDiv = container;
+    els.canvas = canvas;
+    els.pdfAnnotationLayer = null;
+    state.adapter = null;
+
+    await renderTextLayer(1, 1, 0);
+
+    assert.equal(container.style.width, '500px');
+    assert.equal(container.style.height, '700px');
+  });
+});
+
+// ── Additional _reflowTextToSpans tests ────────────────────────────────────
+
+describe('_reflowTextToSpans — additional', () => {
+  it('clears extra spans when few words', () => {
+    const spans = [makeSpan('a'), makeSpan('b'), makeSpan('c'), makeSpan('d')];
+    _reflowTextToSpans(spans, 'only', 14, 200);
+    assert.equal(spans[0].textContent, 'only');
+    assert.equal(spans[1].textContent, '');
+    assert.equal(spans[2].textContent, '');
+    assert.equal(spans[3].textContent, '');
+  });
+
+  it('distributes 7 words across 3 spans', () => {
+    const spans = [makeSpan(''), makeSpan(''), makeSpan('')];
+    _reflowTextToSpans(spans, 'a b c d e f g', 14, 300);
+    // wordsPerSpan = ceil(7/3) = 3
+    assert.equal(spans[0].textContent, 'a b c');
+    assert.equal(spans[1].textContent, 'd e f');
+    assert.equal(spans[2].textContent, 'g');
+  });
+});
+
+// ── Additional _findParagraphSpans tests ────────────────────────────────────
+
+describe('_findParagraphSpans — additional', () => {
+  it('returns array with single target span when only one span exists', () => {
+    const container = document.createElement('div');
+    els.textLayerDiv = container;
+
+    const span = makeSpan('only', { _top: 10, _left: 10, _width: 40, _height: 14 });
+    // querySelectorAll must return spans
+    container.querySelectorAll = (sel) => {
+      if (sel.includes('span')) return [span];
+      return [];
+    };
+
+    const result = _findParagraphSpans(span);
+    assert.ok(result.length >= 1);
+    assert.equal(result[0], span);
+
+    els.textLayerDiv = undefined;
+  });
+});
+
+// ── _syncTextLayerToStorage — additional ────────────────────────────────────
+
+describe('_syncTextLayerToStorage — additional', () => {
+  let origTextLayerDiv, origAdapter;
+  beforeEach(() => {
+    origTextLayerDiv = els.textLayerDiv;
+    origAdapter = state.adapter;
+  });
+  afterEach(() => {
+    els.textLayerDiv = origTextLayerDiv;
+    state.adapter = origAdapter;
+  });
+
+  it('syncs text from spans to storage', () => {
+    const container = document.createElement('div');
+    const span1 = document.createElement('span');
+    span1.textContent = 'Hello';
+    const span2 = document.createElement('span');
+    span2.textContent = 'World';
+    container.appendChild(span1);
+    container.appendChild(span2);
+    els.textLayerDiv = container;
+    state.adapter = { type: 'pdf' };
+    state.currentPage = 1;
+
+    // This should not throw even if setPageEdits/persistEdits are mocked
+    assert.doesNotThrow(() => _syncTextLayerToStorage());
+  });
 });

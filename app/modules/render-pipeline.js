@@ -195,7 +195,10 @@ export async function renderPageProgressive(options, ctx, callbacks = {}) {
     ? requestIdleCallback
     : (cb) => safeTimeout(cb, 16);
 
+  const renderToken = Symbol('render');
+  /** @type {any} */ (ctx.canvas)._pipelineRenderToken = renderToken;
   scheduleIdle(() => {
+    if (/** @type {any} */ (ctx.canvas)._pipelineRenderToken !== renderToken) return;
     adapter.renderPage(page, ctx.canvas, { zoom, rotation, dpr: realDPR })
       .then(() => {
         if (ctx.annotationCanvas) {
