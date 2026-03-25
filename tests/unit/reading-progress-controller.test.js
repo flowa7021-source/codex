@@ -345,10 +345,11 @@ describe('reading-progress-controller', () => {
       assert.equal(state.readingStartedAt, null);
     });
 
-    it('startReadingTimer does nothing when document is hidden', () => {
+    it('startReadingTimer sets readingStartedAt', () => {
       // document.hidden is false in our mock, so we check the positive path
       startReadingTimer();
       assert.ok(state.readingStartedAt !== null);
+      stopReadingTimer(false); // cleanup to avoid dangling timer
     });
 
     it('startReadingTimer does not restart when already running', () => {
@@ -356,6 +357,7 @@ describe('reading-progress-controller', () => {
       const first = state.readingStartedAt;
       startReadingTimer();
       assert.equal(state.readingStartedAt, first);
+      stopReadingTimer(false); // cleanup
     });
 
     it('stopReadingTimer accumulates time', () => {
@@ -647,6 +649,7 @@ describe('reading-progress-controller', () => {
       state.readingTotalMs = 50000;
       await resetReadingTime();
       assert.equal(state.readingTotalMs, 0);
+      stopReadingTimer(false); // cleanup dangling timer
     });
   });
 
@@ -709,6 +712,12 @@ describe('reading-progress-controller', () => {
     it('does nothing without adapter', () => {
       state.adapter = null;
       assert.doesNotThrow(() => syncReadingTimerWithVisibility());
+    });
+
+    it('starts timer when document is visible', () => {
+      syncReadingTimerWithVisibility();
+      assert.ok(state.readingStartedAt !== null);
+      stopReadingTimer(false); // cleanup
     });
   });
 
