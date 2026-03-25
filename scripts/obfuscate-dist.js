@@ -105,6 +105,15 @@ for (const file of files) {
     continue;
   }
 
+  // Vite places vendor/worker assets in dist/assets/ with hash filenames
+  // that don't match name-based skip patterns. Skip all JS in assets/.
+  const relPath = path.relative(DIST, file);
+  if (relPath.startsWith('assets' + path.sep) || relPath.startsWith('assets/')) {
+    console.log(`  ⊘ ${relPath} — skipped (assets/ directory = vendor/worker)`);
+    skipped++;
+    continue;
+  }
+
   const originalSize = Buffer.byteLength(original);
   totalOriginal += originalSize;
 
