@@ -2,8 +2,8 @@
 //
 // Usage:
 //   npm run dev           — Vite dev server (for browser testing or Tauri dev)
-//   npm run build         — Production build to dist/ (obfuscated)
-//   npm run build:dev     — Dev build without obfuscation
+//   npm run build         — Production build to dist/ (minified)
+//   npm run build:dev     — Dev build without minification
 //   npm run tauri:dev     — Tauri dev mode (opens native window)
 //   npm run tauri:build   — Tauri production build (creates installer)
 
@@ -12,10 +12,6 @@ import { resolve } from 'path';
 // Tauri sets TAURI_DEV_HOST for mobile dev
 const host = process.env.TAURI_DEV_HOST;
 const isDebug = !!process.env.TAURI_ENV_DEBUG;
-
-// Obfuscation is handled post-build by scripts/obfuscate-dist.js
-// Run `npm run build` for obfuscated production build
-// Run `npm run build:dev` for unobfuscated development build
 
 // Remove <script type="importmap"> from production HTML — Vite bundles these deps.
 // Only applies during build; dev server needs the importmap for bare import resolution.
