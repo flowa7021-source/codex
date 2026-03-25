@@ -24,6 +24,8 @@ export function initKeyboard(deps) {
     undoPageEdit,
     redoPageEdit,
     showShortcutsHelp,
+    blockEditor,
+    renderCurrentPage,
   } = deps;
 
   document.addEventListener('keydown', async (e) => {
@@ -77,6 +79,11 @@ export function initKeyboard(deps) {
           els.pageText.value = action.text;
           setOcrStatus(`Отмена: страница ${action.page}`);
         }
+      } else if (blockEditor?.active) {
+        e.preventDefault();
+        if (blockEditor.undo(state.currentPage)) {
+          renderCurrentPage();
+        }
       }
     }
     if ((e.ctrlKey || e.metaKey) && key === 'y') {
@@ -86,6 +93,11 @@ export function initKeyboard(deps) {
         if (action && els.pageText) {
           els.pageText.value = action.text;
           setOcrStatus(`Повтор: страница ${action.page}`);
+        }
+      } else if (blockEditor?.active) {
+        e.preventDefault();
+        if (blockEditor.redo(state.currentPage)) {
+          renderCurrentPage();
         }
       }
     }
