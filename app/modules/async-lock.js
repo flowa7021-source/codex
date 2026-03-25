@@ -43,7 +43,7 @@ export class AsyncLock {
       released = true;
       if (this.#queue.length > 0) {
         const next = this.#queue.shift();
-        next();
+        Promise.resolve().then(next);
       } else {
         this.#locked = false;
       }
