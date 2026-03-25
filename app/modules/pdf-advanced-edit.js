@@ -275,9 +275,10 @@ export class PdfBlockEditor {
     if (!this.active || !container || !sourceCanvas) return;
     if (!this._overlay) {
       this._overlay = document.createElement('canvas');
-      this._overlay.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:5;';
+      this._overlay.style.cssText = 'position:absolute;top:0;left:0;pointer-events:auto;z-index:5;';
       container.style.position = 'relative';
       container.appendChild(this._overlay);
+      this._attachPointerListeners(this._overlay, container);
     }
     this._overlay.width = sourceCanvas.width;
     this._overlay.height = sourceCanvas.height;
@@ -289,6 +290,53 @@ export class PdfBlockEditor {
     if (!ctx) return;
     ctx.clearRect(0, 0, this._overlay.width, this._overlay.height);
     this.renderBlocks(ctx, pageNum, 1);
+  }
+
+  /** @private */
+  _attachPointerListeners(overlay, container) {
+    let dragState = null;
+
+    overlay.addEventListener('pointerdown', (e) => {
+      const pageNum = Number(container.dataset?.page || 1);
+      const hit = this.hitTest(pageNum, e.offsetX, e.offsetY);
+      if (hit) {
+        dragState = {
+          blockId: hit.id,
+          pageNum,
+          startX: e.offsetX,
+          startY: e.offsetY,
+          origX: hit.x,
+          origY: hit.y,
+        };
+        this.selectBlock(hit);
+        overlay.setPointerCapture(e.pointerId);
+        e.preventDefault();
+      } else {
+        this.deselectAll();
+      }
+      // Re-render to show selection
+      const ctx = overlay.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+        this.renderBlocks(ctx, pageNum, 1);
+      }
+    });
+
+    overlay.addEventListener('pointermove', (e) => {
+      if (!dragState) return;
+      const dx = e.offsetX - dragState.startX;
+      const dy = e.offsetY - dragState.startY;
+      this.moveBlock(dragState.pageNum, dragState.blockId, dragState.origX + dx, dragState.origY + dy);
+      const ctx = overlay.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, overlay.width, overlay.height);
+        this.renderBlocks(ctx, dragState.pageNum, 1);
+      }
+    });
+
+    overlay.addEventListener('pointerup', () => {
+      dragState = null;
+    });
   }
 
   onEvent(fn) {

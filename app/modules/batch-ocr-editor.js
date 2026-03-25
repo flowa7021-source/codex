@@ -30,6 +30,7 @@
 
 import { getDocument } from 'pdfjs-dist/build/pdf.mjs';
 import { PDFDocument } from 'pdf-lib';
+import { getTesseractWorkerOpts } from './tesseract-adapter.js';
 
 // ---------------------------------------------------------------------------
 // Types (JSDoc only)
@@ -221,10 +222,11 @@ export class BatchOcrEditor {
   async _createWorkers() {
     const { createWorker } = await import('tesseract.js');
     const count = Math.min(this._concurrency, 4);
+    const workerOpts = getTesseractWorkerOpts();
     const workers = [];
 
     for (let i = 0; i < count; i++) {
-      const worker = await createWorker(this._language);
+      const worker = await createWorker(this._language, 1, workerOpts);
       workers.push(worker);
     }
 

@@ -425,7 +425,7 @@ initKeyboard({
   navigateHistoryBack, navigateHistoryForward, addBookmark,
   setDrawMode, setOcrRegionMode, setOcrStatus,
   undoStroke, undoPageEdit, redoPageEdit, showShortcutsHelp,
-  closeSettingsModal,
+  closeSettingsModal, blockEditor, renderCurrentPage,
 });
 
 safeOn(document, 'visibilitychange', syncReadingTimerWithVisibility);

@@ -47,10 +47,28 @@ function resolveVendorPath(relativePath) {
   }
 }
 
-// Language data stays in vendor; worker/core paths are left undefined so
-// Tesseract.js resolves them from its own package (works in both dev and built modes).
+/**
+ * Resolve a path under the public vendor/tesseract directory.
+ * In dev mode, Vite serves `app/public/` at the root.
+ * In production, these files are copied to `dist/vendor/tesseract/`.
+ * Uses document baseURI so it works on any origin (http, tauri.localhost, file://).
+ */
+function resolvePublicTesseractPath(filename) {
+  try {
+    const base = (typeof document !== 'undefined' && document.baseURI) || import.meta.url;
+    return new URL(`vendor/tesseract/${filename}`, base).href;
+  } catch {
+    return `vendor/tesseract/${filename}`;
+  }
+}
+
+// Worker and core files are served from app/public/vendor/tesseract/ so they
+// load from the app's own origin — no external CDN requests.
+// Language data stays in app/vendor/tesseract/lang-data (bundled by Vite).
 const PATHS = {
   langDataDir: resolveVendorPath('../vendor/tesseract/lang-data'),
+  workerPath: resolvePublicTesseractPath('worker.min.js'),
+  corePath: resolvePublicTesseractPath(''),
 };
 
 // Map our lang codes to Tesseract lang codes
@@ -148,10 +166,16 @@ async function loadTesseractModule() {
 
 /**
  * Common worker creation options.
+ * Exported so other modules (e.g. batch-ocr-editor) can create workers that
+ * load from the local origin instead of a CDN.
+ * @returns {{ workerPath: string, corePath: string, langPath: string, workerBlobURL: boolean, cacheMethod: string, gzip: boolean }}
  */
-function _getWorkerOpts() {
+export function getTesseractWorkerOpts() {
   return {
+    workerPath: PATHS.workerPath,
+    corePath: PATHS.corePath,
     langPath: PATHS.langDataDir,
+    workerBlobURL: true,
     cacheMethod: 'none',
     gzip: false,
   };
@@ -228,7 +252,7 @@ export async function initTesseract(lang = 'eng') {
       }
 
       const Tesseract = await loadTesseractModule();
-      const workerOpts = _getWorkerOpts();
+      const workerOpts = getTesseractWorkerOpts();
 
       _worker = await _createWorkerWithFallback(Tesseract, tessLang, workerOpts);
       _currentLang = tessLang;
@@ -302,7 +326,7 @@ export async function initTesseractPool(lang = 'eng', size) {
         return await initTesseract(lang);
       }
 
-      const workerOpts = _getWorkerOpts();
+      const workerOpts = getTesseractWorkerOpts();
       const scheduler = Tesseract.createScheduler();
       const workers = [];
 

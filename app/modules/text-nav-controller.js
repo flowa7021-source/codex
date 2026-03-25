@@ -10,6 +10,7 @@
 import { state, els as _els } from './state.js';
 import { ToolMode, toolStateMachine } from './tool-modes.js';
 import { enableInlineTextEditing, disableInlineTextEditing } from './render-controller.js';
+import { saveOrDownload } from './platform.js';
 
 /** @type {any} - Cast to any to allow input/canvas element property access */
 const els = _els;
@@ -100,15 +101,11 @@ export async function copyPageText() {
   document.execCommand('copy');
 }
 
-export function exportPageText() {
+export async function exportPageText() {
   const text = els.pageText.value || '';
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${state.docName || 'document'}-page-${state.currentPage}.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const filename = `${state.docName || 'document'}-page-${state.currentPage}.txt`;
+  await saveOrDownload(blob, filename, [{ name: 'Text', extensions: ['txt'] }]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -300,14 +297,11 @@ export async function fitPage() {
 /*  File download / print                                              */
 /* ------------------------------------------------------------------ */
 
-export function downloadCurrentFile() {
+export async function downloadCurrentFile() {
   if (!state.file) return;
-  const url = _deps.safeCreateObjectURL(state.file);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = state.file.name;
-  a.click();
-  URL.revokeObjectURL(url);
+  const blob = (state.file instanceof Blob) ? state.file : new Blob([state.file]);
+  const filename = state.file.name || 'document';
+  await saveOrDownload(blob, filename);
 }
 
 export function printCanvasPage() {

@@ -155,6 +155,45 @@ export function downloadBlob(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Unified save helper: shows native save dialog in Tauri, falls back to
+ * browser blob download otherwise.
+ *
+ * @param {Blob} blob          - data to save
+ * @param {string} filename    - suggested file name
+ * @param {Array<{name:string, extensions:string[]}>} [filters] - file type filters for save dialog
+ * @returns {Promise<boolean>} true if saved/downloaded successfully
+ */
+export async function saveOrDownload(blob, filename, filters) {
+  if (_isTauri) {
+    const path = await saveFileDialog({ defaultPath: filename, filters });
+    if (path) {
+      const bytes = new Uint8Array(await blob.arrayBuffer());
+      await writeFileBytes(path, bytes);
+      return true;
+    }
+    // User cancelled save dialog
+    return false;
+  }
+  // Browser fallback
+  downloadBlob(blob, filename);
+  return true;
+}
+
+/**
+ * Write raw bytes to a file path (Tauri only).
+ *
+ * @param {string} path
+ * @param {Uint8Array} bytes
+ * @returns {Promise<void>}
+ */
+export async function writeFileBytes(path, bytes) {
+  if (!_isTauri || !_tauriFs) {
+    throw new Error('writeFileBytes: only available in Tauri');
+  }
+  await _tauriFs.writeBinaryFile(path, bytes);
+}
+
 // ── Shell ────────────────────────────────────────────────────────────────────
 
 /**
