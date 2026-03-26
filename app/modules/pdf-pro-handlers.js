@@ -568,6 +568,31 @@ export function initPdfProHandlers() {
     });
   }
 
+  // ── Export XLSX ──
+  { const _el = document.getElementById('exportXlsx'); if (_el) _el.addEventListener('click', async () => {
+      const file = requirePdfFile();
+      if (!file) return;
+
+      try {
+        _deps.setOcrStatus('Конвертация PDF в Excel...');
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfBytes = new Uint8Array(arrayBuffer);
+        const { convertPdfToXlsx } = await import('./pdf-to-xlsx.js');
+        const result = await convertPdfToXlsx(pdfBytes, {
+          onProgress: (current, total) => {
+            _deps.setOcrStatus(`Конвертация PDF в Excel: страница ${current} / ${total}...`);
+          },
+        });
+        const { downloadBlob } = await import('./platform.js');
+        downloadBlob(result.blob, `${state.docName || 'document'}.xlsx`);
+        _deps.toastSuccess(`Excel экспортирован: ${result.sheetCount} листов, ${result.tableCount} таблиц`);
+        _deps.pushDiagnosticEvent('pdf.exportXlsx', { sheets: result.sheetCount, tables: result.tableCount });
+      } catch (err) {
+        _deps.setOcrStatus(`Ошибка экспорта XLSX: ${err?.message || 'неизвестная'}`);
+      }
+    });
+  }
+
   { const _el = document.getElementById('orgInsertPages'); if (_el) _el.addEventListener('change', async (e) => {
       const file = requirePdfFile();
       if (!file) return;

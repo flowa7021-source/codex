@@ -1,7 +1,7 @@
 // @ts-check
 
 /**
- * @typedef {{ text: string, rect: { x: number, y: number, w: number, h: number } }} CellData
+ * @typedef {{ text: string, rect: { x: number, y: number, w: number, h: number }, mergeAcross?: number, mergeDown?: number }} CellData
  * @typedef {{ rows: CellData[][], bounds: { x: number, y: number, w: number, h: number }, ruled: boolean }} Table
  * @typedef {{ mode?: 'auto' | 'ruled' | 'ruleless', yTolerance?: number, gapMultiplier?: number }} ExtractOptions
  */
@@ -42,20 +42,6 @@ function isHorizontal(line) {
  */
 function isVertical(line) {
   return Math.abs(line.x1 - line.x2) <= LINE_TOLERANCE;
-}
-
-/**
- * Snaps a value to the nearest value in a sorted array within tolerance.
- * @param {number} val
- * @param {number[]} sorted
- * @param {number} tol
- * @returns {number}
- */
-function _snapTo(val, sorted, tol) {
-  for (const s of sorted) {
-    if (Math.abs(val - s) <= tol) return s;
-  }
-  return val;
 }
 
 /**
@@ -172,10 +158,10 @@ function buildRuledTable(horizontal, vertical, textItems) {
   if (numRows < 1 || numCols < 1) return null;
 
   // Build empty grid: rows × cols, each cell has text accumulator and rect
-  /** @type {{ texts: string[], rect: { x: number, y: number, w: number, h: number }, mergeAcross?: number }[][]} */
+  /** @type {{ texts: string[], rect: { x: number, y: number, w: number, h: number }, mergeAcross?: number, mergeDown?: number }[][]} */
   const grid = [];
   for (let r = 0; r < numRows; r++) {
-    /** @type {{ texts: string[], rect: { x: number, y: number, w: number, h: number }, mergeAcross?: number }[]} */
+    /** @type {{ texts: string[], rect: { x: number, y: number, w: number, h: number }, mergeAcross?: number, mergeDown?: number }[]} */
     const row = [];
     for (let c = 0; c < numCols; c++) {
       row.push({
@@ -242,6 +228,25 @@ function buildRuledTable(horizontal, vertical, textItems) {
     }
   }
 
+  // Detect vertical merges: sequences of empty cells below a filled cell
+  for (let c = 0; c < numCols; c++) {
+    for (let r = 0; r < numRows - 1; r++) {
+      if (grid[r][c].texts.length > 0) {
+        let span = 0;
+        for (let rr = r + 1; rr < numRows; rr++) {
+          if (grid[rr][c].texts.length === 0) {
+            span++;
+          } else {
+            break;
+          }
+        }
+        if (span > 0) {
+          grid[r][c].mergeDown = span;
+        }
+      }
+    }
+  }
+
   // Convert grid to output format
   /** @type {CellData[][]} */
   const rows = grid.map((row) =>
@@ -249,8 +254,12 @@ function buildRuledTable(horizontal, vertical, textItems) {
       text: cell.texts.join(' '),
       rect: cell.rect,
       ...(cell.mergeAcross ? { mergeAcross: cell.mergeAcross } : {}),
+      ...(cell.mergeDown ? { mergeDown: cell.mergeDown } : {}),
     }))
   );
+
+  // PDF Y increases upward, so reverse to get visual top-to-bottom order
+  rows.reverse();
 
   const bounds = {
     x: xValues[0],
@@ -368,6 +377,48 @@ async function extractRulelessTables(page, yTolerance, gapMultiplier) {
   // Validate: need at least 2 rows and 2 columns
   const maxCols = Math.max(...tableRows.map((r) => r.length));
   if (tableRows.length < 2 || maxCols < 2) return [];
+
+  // Normalize column count across all rows
+  if (tableRows.length >= 2) {
+    // Collect all cell X-centers across all rows
+    /** @type {number[]} */
+    const allXCenters = [];
+    for (const row of tableRows) {
+      for (const cell of row) {
+        allXCenters.push(cell.rect.x + cell.rect.w / 2);
+      }
+    }
+
+    // Cluster X-centers into column positions
+    allXCenters.sort((a, b) => a - b);
+    const colPositions = [allXCenters[0]];
+    for (let i = 1; i < allXCenters.length; i++) {
+      if (allXCenters[i] - colPositions[colPositions.length - 1] > gapThreshold) {
+        colPositions.push(allXCenters[i]);
+      } else {
+        // Average with existing position
+        colPositions[colPositions.length - 1] =
+          (colPositions[colPositions.length - 1] + allXCenters[i]) / 2;
+      }
+    }
+
+    // Re-map each row to have exactly colPositions.length cells
+    const normalizedRows = tableRows.map(row => {
+      const normalized = colPositions.map(colX => {
+        // Find cell closest to this column position
+        const match = row.find(cell => {
+          const center = cell.rect.x + cell.rect.w / 2;
+          return Math.abs(center - colX) < gapThreshold;
+        });
+        return match || { text: '', rect: { x: colX, y: 0, w: 0, h: 0 } };
+      });
+      return normalized;
+    });
+
+    // Replace tableRows with normalized version
+    tableRows.length = 0;
+    tableRows.push(...normalizedRows);
+  }
 
   // Compute bounds
   let minX = Infinity;

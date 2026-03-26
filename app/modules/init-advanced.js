@@ -72,6 +72,7 @@ export function initAdvanced(deps) {
     search: () => { const toggle = document.getElementById('searchToggle'); if (toggle) toggle.click(); },
     fullscreen: () => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); },
     print: () => window.print(),
+    exportXlsx: () => { document.getElementById('exportXlsx')?.click(); },
   });
 
   // ── Minimap ────────────────────────────────────────────────────────────

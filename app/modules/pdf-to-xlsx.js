@@ -1,7 +1,7 @@
 // @ts-check
 
 import { XlsxBuilder } from './xlsx-builder.js';
-import { extractTables, extractAllTables } from './table-extractor.js';
+import { extractTables } from './table-extractor.js';
 
 /**
  * @typedef {Object} ConvertOptions
@@ -9,6 +9,8 @@ import { extractTables, extractAllTables } from './table-extractor.js';
  * @property {{x: number, y: number, width: number, height: number}} [selectedArea]
  * @property {boolean} [sheetsPerPage=false]  - true = one sheet per page; false = one sheet per table
  * @property {boolean} [numberDetection=true] - auto-detect numbers, dates, currencies
+ * @property {(current: number, total: number) => void} [onProgress] - progress callback
+ * @property {string} [pageRange] - e.g. "1-5,8" to limit pages
  */
 
 /**
@@ -29,17 +31,21 @@ import { extractTables, extractAllTables } from './table-extractor.js';
 /*  Regex patterns for data-type detection                            */
 /* ------------------------------------------------------------------ */
 
-/** @type {RegExp} */
-const RE_NUMBER = /^-?\d+([.,]\d+)?$/;
+/**
+ * Matches plain numbers and thousand-separated numbers.
+ * Examples: "123", "-1,234.56", "1.234,56", "1 234", "-42.5"
+ * @type {RegExp}
+ */
+const RE_NUMBER = /^-?\d{1,3}([,. ]\d{3})*([.,]\d+)?$|^-?\d+([.,]\d+)?$/;
 
 /** @type {RegExp} */
 const RE_DATE = /^\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}$/;
 
 /** @type {RegExp} */
-const RE_CURRENCY_PREFIX = /^([$€£¥₽])\s*([\d.,]+)$/;
+const RE_CURRENCY_PREFIX = /^([$€£¥₽])\s*([\d.,\s]+)$/;
 
 /** @type {RegExp} */
-const RE_CURRENCY_SUFFIX = /^([\d.,]+)\s*([$€£¥₽])$/;
+const RE_CURRENCY_SUFFIX = /^([\d.,\s]+)\s*([$€£¥₽])$/;
 
 /** @type {RegExp} */
 const RE_PERCENTAGE = /^([\d.,]+)\s*%$/;
@@ -55,20 +61,21 @@ const RE_PERCENTAGE = /^([\d.,]+)\s*%$/;
  * @returns {number}
  */
 function parseNumeric(raw) {
-  // Determine whether comma is a decimal separator or thousands separator.
-  // If the string contains both '.' and ',', the last one is the decimal sep.
-  const lastComma = raw.lastIndexOf(',');
-  const lastDot = raw.lastIndexOf('.');
+  // Remove spaces used as thousands separators
+  const noSpaces = raw.replace(/\s/g, '');
+
+  const lastComma = noSpaces.lastIndexOf(',');
+  const lastDot = noSpaces.lastIndexOf('.');
 
   /** @type {string} */
   let cleaned;
 
   if (lastComma > lastDot) {
     // Comma is the decimal separator (e.g. "1.234,56")
-    cleaned = raw.replace(/\./g, '').replace(',', '.');
+    cleaned = noSpaces.replace(/\./g, '').replace(',', '.');
   } else {
     // Dot is the decimal separator or there is no decimal (e.g. "1,234.56")
-    cleaned = raw.replace(/,/g, '');
+    cleaned = noSpaces.replace(/,/g, '');
   }
 
   return Number(cleaned);
@@ -91,7 +98,9 @@ function typeCell(raw, numberDetection) {
   const pctMatch = text.match(RE_PERCENTAGE);
   if (pctMatch) {
     const num = parseNumeric(pctMatch[1]);
-    return { value: num / 100, type: 'percentage', format: '0.00%' };
+    if (isFinite(num)) {
+      return { value: num / 100, type: 'percentage', format: '0.00%' };
+    }
   }
 
   // Currency with prefix  e.g. "$1,234.56"
@@ -99,7 +108,9 @@ function typeCell(raw, numberDetection) {
   if (curPrefixMatch) {
     const symbol = curPrefixMatch[1];
     const num = parseNumeric(curPrefixMatch[2]);
-    return { value: num, type: 'currency', format: symbol };
+    if (isFinite(num)) {
+      return { value: num, type: 'currency', format: symbol };
+    }
   }
 
   // Currency with suffix  e.g. "1.234,56 €"
@@ -107,7 +118,9 @@ function typeCell(raw, numberDetection) {
   if (curSuffixMatch) {
     const symbol = curSuffixMatch[2];
     const num = parseNumeric(curSuffixMatch[1]);
-    return { value: num, type: 'currency', format: symbol };
+    if (isFinite(num)) {
+      return { value: num, type: 'currency', format: symbol };
+    }
   }
 
   // Date  e.g. "12/31/2024"
@@ -118,10 +131,53 @@ function typeCell(raw, numberDetection) {
   // Plain number  e.g. "-1,234.56"
   if (RE_NUMBER.test(text)) {
     const num = parseNumeric(text);
-    return { value: num, type: 'number' };
+    if (isFinite(num)) {
+      return { value: num, type: 'number' };
+    }
   }
 
   return { value: text, type: 'string' };
+}
+
+/**
+ * Convert a TypedCell to an XlsxBuilder-compatible CellValue.
+ * Maps internal types (currency, percentage) to XlsxBuilder's types
+ * with appropriate number formats.
+ *
+ * @param {string} rawText - the cell's raw text (CellData.text)
+ * @param {boolean} numberDetection
+ * @returns {import('./xlsx-builder.js').CellValue}
+ */
+function typeCellToXlsx(rawText, numberDetection) {
+  const typed = typeCell(rawText, numberDetection);
+
+  switch (typed.type) {
+    case 'number':
+      return { value: /** @type {number} */ (typed.value), type: 'number' };
+
+    case 'date':
+      return { value: /** @type {string} */ (typed.value), type: 'date', style: { numberFormat: 'dd.mm.yyyy' } };
+
+    case 'currency': {
+      const symbol = typed.format || '$';
+      return {
+        value: /** @type {number} */ (typed.value),
+        type: 'number',
+        style: { numberFormat: `${symbol}#,##0.00` },
+      };
+    }
+
+    case 'percentage':
+      return {
+        value: /** @type {number} */ (typed.value),
+        type: 'number',
+        style: { numberFormat: '0.00%' },
+      };
+
+    default:
+      // string — return the plain string value
+      return /** @type {string} */ (typed.value);
+  }
 }
 
 /**
@@ -149,9 +205,103 @@ function yieldToUI() {
  * @returns {Promise<typeof import('pdfjs-dist')>}
  */
 async function loadPdfjs() {
-  /** @type {typeof import('pdfjs-dist')} */
   const pdfjs = await import('pdfjs-dist');
   return pdfjs;
+}
+
+/**
+ * Parse a simple page-range string like "1-5,8,10-12" into an array of
+ * 1-based page numbers, clamped to [1, maxPage].
+ * @param {string} str
+ * @param {number} maxPage
+ * @returns {number[]}
+ */
+function parseSimpleRange(str, maxPage) {
+  /** @type {Set<number>} */
+  const pages = new Set();
+  const parts = str.split(',');
+
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+
+    const dashIdx = trimmed.indexOf('-');
+    if (dashIdx >= 0) {
+      const start = parseInt(trimmed.slice(0, dashIdx), 10);
+      const end = parseInt(trimmed.slice(dashIdx + 1), 10);
+      if (isNaN(start) || isNaN(end)) continue;
+      const lo = Math.max(1, Math.min(start, end));
+      const hi = Math.min(maxPage, Math.max(start, end));
+      for (let p = lo; p <= hi; p++) {
+        pages.add(p);
+      }
+    } else {
+      const num = parseInt(trimmed, 10);
+      if (!isNaN(num) && num >= 1 && num <= maxPage) {
+        pages.add(num);
+      }
+    }
+  }
+
+  return [...pages].sort((a, b) => a - b);
+}
+
+/**
+ * Compute column widths from a table's cell rects and apply them to the builder.
+ * PDF points / 7 ≈ Excel character units.
+ *
+ * @param {XlsxBuilder} builder
+ * @param {number} sheetIdx - 0-based sheet index
+ * @param {import('./table-extractor.js').Table} table
+ */
+function setColumnWidthsFromTable(builder, sheetIdx, table) {
+  if (!table.rows || table.rows.length === 0) return;
+
+  // Find the row with the most columns to determine column count
+  const maxCols = Math.max(...table.rows.map((r) => r.length));
+  if (maxCols === 0) return;
+
+  // For each column, compute width from the max cell width in that column
+  for (let c = 0; c < maxCols; c++) {
+    let maxWidth = 0;
+    for (const row of table.rows) {
+      if (c < row.length && row[c].rect) {
+        maxWidth = Math.max(maxWidth, row[c].rect.w);
+      }
+    }
+    if (maxWidth > 0) {
+      // Convert PDF points to Excel character units (roughly points / 7)
+      const excelWidth = Math.max(8, Math.round(maxWidth / 7));
+      builder.setColumnWidth(sheetIdx, c, excelWidth);
+    }
+  }
+}
+
+/**
+ * Apply merged-cell ranges for a single table that starts at the given
+ * rowOffset within its sheet.
+ *
+ * @param {XlsxBuilder} builder
+ * @param {number} sheetIdx - 0-based sheet index
+ * @param {import('./table-extractor.js').Table} table
+ * @param {number} rowOffset - the row offset of this table within the sheet
+ */
+function applyMergesForTable(builder, sheetIdx, table, rowOffset) {
+  for (let r = 0; r < table.rows.length; r++) {
+    const row = table.rows[r];
+    for (let c = 0; c < row.length; c++) {
+      const cell = row[c];
+      if (cell.mergeAcross && cell.mergeAcross > 0) {
+        builder.mergeCells(
+          sheetIdx,
+          rowOffset + r,
+          c,
+          rowOffset + r,
+          c + cell.mergeAcross,
+        );
+      }
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -171,6 +321,8 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
     selectedArea,
     sheetsPerPage = false,
     numberDetection = true,
+    onProgress,
+    pageRange,
   } = options;
 
   /* ---- 1. Load PDF via PDF.js ----------------------------------- */
@@ -179,30 +331,45 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
   const pdfDoc = await loadingTask.promise;
   const totalPages = pdfDoc.numPages;
 
+  /* ---- 2. Determine which pages to process ---------------------- */
+  /** @type {number[]} */
+  let pagesToProcess;
+  if (pageRange) {
+    pagesToProcess = parseSimpleRange(pageRange, totalPages);
+  } else {
+    pagesToProcess = [];
+    for (let i = 1; i <= totalPages; i++) {
+      pagesToProcess.push(i);
+    }
+  }
+
   const builder = new XlsxBuilder();
 
   let sheetCount = 0;
   let tableCount = 0;
 
-  /* ---- 2. Iterate pages ----------------------------------------- */
-  for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
-    const page = await pdfDoc.getPage(pageNum);
+  /* ---- 3. Iterate pages ----------------------------------------- */
+  for (let idx = 0; idx < pagesToProcess.length; idx++) {
+    const pageNum = pagesToProcess[idx];
 
-    /** @type {any} */
+    // Report progress
+    if (onProgress) {
+      onProgress(idx + 1, pagesToProcess.length);
+    }
+
+    // FIX B1 & B2: call extractTables(pdfDoc, pageNum, ...) — NOT extractAllTables(page)
+    /** @type {import('./table-extractor.js').Table[]} */
     let tables;
 
     if (mode === 'manual' && selectedArea) {
-      tables = await extractTables(/** @type {any} */ (page), /** @type {any} */ ({ area: selectedArea }));
+      tables = await extractTables(pdfDoc, pageNum, /** @type {any} */ ({ area: selectedArea }));
     } else {
-      tables = await extractAllTables(/** @type {any} */ (page));
+      tables = await extractTables(pdfDoc, pageNum);
     }
 
     if (!tables || tables.length === 0) {
-      // Skip pages without detected tables
-      // (but continue to next page)
-      page.cleanup();
       // Yield every 5 pages to keep UI responsive
-      if (pageNum % 5 === 0) {
+      if (idx % 5 === 0) {
         await yieldToUI();
       }
       continue;
@@ -213,18 +380,40 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
     if (sheetsPerPage) {
       /* -- One sheet per page: merge all tables on this page ------- */
       const sheetName = sanitizeSheetName(`Page ${pageNum}`);
-      /** @type {any[]} */
+      /** @type {import('./xlsx-builder.js').CellValue[][]} */
       const sheetRows = [];
+
+      /** @type {Array<{table: import('./table-extractor.js').Table, rowOffset: number}>} */
+      const mergeQueue = [];
+
       for (const table of tables) {
-        for (const row of /** @type {any} */ (table)) {
-          /** @type {TypedCell[]} */
-          const typedRow = row.map((/** @type {any} */ cell) => typeCell(cell, numberDetection));
+        const rowOffset = sheetRows.length;
+        mergeQueue.push({ table, rowOffset });
+
+        // FIX B3: iterate table.rows, not table directly
+        for (const row of table.rows) {
+          // FIX B4: pass cell.text (string), not cell (object)
+          // FIX B5: typeCellToXlsx maps currency/percentage to XlsxBuilder-compatible format
+          const typedRow = row.map((cell) => typeCellToXlsx(cell.text, numberDetection));
           sheetRows.push(typedRow);
         }
+
         // Blank separator row between tables on the same sheet
         sheetRows.push([]);
       }
+
       builder.addSheet(sheetName, sheetRows);
+
+      // A5: Set column widths from the first table's cell rects
+      if (tables.length > 0) {
+        setColumnWidthsFromTable(builder, sheetCount, tables[0]);
+      }
+
+      // Apply merged cells after the sheet exists in the builder
+      for (const { table, rowOffset } of mergeQueue) {
+        applyMergesForTable(builder, sheetCount, table, rowOffset);
+      }
+
       sheetCount++;
     } else {
       /* -- One sheet per table ------------------------------------ */
@@ -233,35 +422,39 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
         const sheetName = sanitizeSheetName(
           `Page ${pageNum} - Table ${t + 1}`,
         );
-        /** @type {any[]} */
-        const sheetRows = [];
-        for (const row of /** @type {any} */ (table)) {
-          /** @type {TypedCell[]} */
-          const typedRow = row.map((/** @type {any} */ cell) => typeCell(cell, numberDetection));
-          sheetRows.push(typedRow);
-        }
+
+        // FIX B3: iterate table.rows, not table
+        // FIX B4: pass cell.text (string), not cell (object)
+        // FIX B5: typeCellToXlsx maps currency/percentage to XlsxBuilder format
+        const sheetRows = table.rows.map((row) =>
+          row.map((cell) => typeCellToXlsx(cell.text, numberDetection)),
+        );
+
         builder.addSheet(sheetName, sheetRows);
+
+        // A5: Set column widths from table cell rects
+        setColumnWidthsFromTable(builder, sheetCount, table);
+
+        // Merged cells
+        applyMergesForTable(builder, sheetCount, table, 0);
+
         sheetCount++;
       }
     }
 
-    page.cleanup();
-
     // Yield to UI every 5 pages so the browser stays responsive
-    if (pageNum % 5 === 0) {
+    if (idx % 5 === 0) {
       await yieldToUI();
     }
   }
 
-  /* ---- 3. Handle edge-case: no tables found at all -------------- */
+  /* ---- 4. Handle edge-case: no tables found at all -------------- */
   if (sheetCount === 0) {
-    const emptyName = sanitizeSheetName('Sheet1');
-    builder.addSheet(emptyName, []);
+    builder.addSheet(sanitizeSheetName('Sheet1'), []);
     sheetCount = 1;
   }
 
-  /* ---- 4. Build XLSX -------------------------------------------- */
-  /** @type {Uint8Array} */
+  /* ---- 5. Build XLSX -------------------------------------------- */
   const xlsxBytes = await builder.build();
 
   const blob = new Blob([/** @type {any} */ (xlsxBytes)], {

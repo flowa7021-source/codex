@@ -228,15 +228,22 @@ export async function startBackgroundOcrScan(reason = 'auto') {
   if (state.docName == null) return;
   if (state.backgroundOcrRunning) return;
 
-  // Acquire lock to prevent concurrent background OCR mutations
-  const releaseLock = await ocrBackgroundLock.acquire();
-
-  // Pre-check: ensure Tesseract can initialize before scanning all pages
+  // Pre-check: ensure Tesseract can initialize before acquiring the lock
   const tessAvail = await isTesseractAvailable();
   if (!tessAvail) {
     pushDiagnosticEvent('ocr.background.skip', { reason: 'tesseract-unavailable' }, 'warn');
     return;
   }
+
+  // Acquire lock to prevent concurrent background OCR mutations
+  const releaseLock = await ocrBackgroundLock.acquire();
+
+  // Re-check guards after acquiring lock (state may have changed while waiting)
+  if (!state.adapter || !state.pageCount || state.docName == null || state.backgroundOcrRunning) {
+    releaseLock();
+    return;
+  }
+
   const lang = getOcrLang();
   const tessLang = lang === 'auto' ? 'auto' : lang;
 
@@ -259,6 +266,7 @@ export async function startBackgroundOcrScan(reason = 'auto') {
     if (!initOk) {
       pushDiagnosticEvent('ocr.background.skip', { reason: 'tesseract-init-failed', lang }, 'warn');
       setOcrStatus('OCR: фоновое распознавание невозможно — ошибка инициализации');
+      releaseLock();
       return;
     }
   }
@@ -285,8 +293,8 @@ export async function startBackgroundOcrScan(reason = 'auto') {
 
     // Process pages in parallel batches
     for (let batchStart = 0; batchStart < pagesToScan.length; batchStart += concurrency) {
-      if (state.backgroundOcrToken !== token) return;
-      if (state.docName === null || state.docName === undefined) return;
+      if (state.backgroundOcrToken !== token) break;
+      if (state.docName === null || state.docName === undefined) break;
 
       const batch = pagesToScan.slice(batchStart, batchStart + concurrency);
       const batchPromises = batch.map(async (pageNum) => {
@@ -303,7 +311,7 @@ export async function startBackgroundOcrScan(reason = 'auto') {
       const results = await Promise.all(batchPromises);
 
       for (const { pageNum, text } of results) {
-        if (state.backgroundOcrToken !== token) return;
+        if (state.backgroundOcrToken !== token) break;
         if (text) {
           consecutiveEmpty = 0;
           const corrected = postCorrectOcrText(text);
