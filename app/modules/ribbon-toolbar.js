@@ -64,6 +64,18 @@ const DEFAULT_TABS = [
     groups: [
       { label: 'Формат', buttonIds: ['exportText', 'exportWord', 'exportHtml', 'exportPlainText'] },
       { label: 'PDF', buttonIds: ['exportPdfA', 'cleanMetadata', 'sanitizePdf'] },
+      { label: 'Конвертеры', buttonIds: ['exportXlsx', 'exportPptx', 'exportRtf', 'exportSvg', 'exportCsv', 'exportTiff'] },
+    ],
+  },
+  {
+    id: 'tools',
+    label: 'Инструменты',
+    groups: [
+      { label: 'Формы', buttonIds: ['formDesigner', 'formFill'] },
+      { label: 'Автоматизация', buttonIds: ['actionWizard', 'batchConvert'] },
+      { label: 'Разделение', buttonIds: ['splitByBookmarks', 'splitBySize', 'splitByBlank'] },
+      { label: 'Оптимизация', buttonIds: ['compressScreen', 'compressEbook', 'compressPrint', 'compressPrepress'] },
+      { label: 'Безопасность', buttonIds: ['sanitizeDocument', 'validatePdfa'] },
     ],
   },
   {

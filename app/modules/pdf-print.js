@@ -18,7 +18,7 @@ import { safeTimeout } from './safe-timers.js';
  * @property {boolean} booklet
  */
 
-const _DEFAULT_OPTIONS = {
+export const _DEFAULT_OPTIONS = {
   pages: 'all',
   pageRange: '',
   currentPage: 1,
@@ -29,6 +29,8 @@ const _DEFAULT_OPTIONS = {
   pagesPerSheet: 1,
   borders: false,
   booklet: false,
+  printAnnotations: true,
+  printFormFieldsOnly: false,
 };
 
 /**

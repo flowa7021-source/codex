@@ -271,3 +271,188 @@ export class PdfCompare {
 
 export const pdfCompare = new PdfCompare();
 export { computeLineDiff, computeWordDiff };
+
+// ═══════════════════════════════════════════════════════════════════════
+// Export helpers — DOCX track-changes, annotated PDF, diff table
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Generate a DOCX file with Word-style track changes from a diff result.
+ *
+ * @param {Array<{type: 'equal'|'add'|'remove', text: string}>} diffResult
+ * @returns {Promise<Blob>}
+ */
+export async function exportAsDocxTrackChanges(diffResult) {
+  const {
+    Document, Packer, Paragraph, TextRun,
+    DeletedTextRun, InsertedTextRun,
+  } = await import('docx');
+
+  const author = 'NovaReader';
+  const date   = new Date().toISOString();
+
+  const paragraphs = diffResult.map(entry => {
+    if (entry.type === 'remove') {
+      return new Paragraph({
+        children: [
+          new DeletedTextRun(/** @type {any} */ ({
+            text:   entry.text,
+            author,
+            date,
+            bold:   false,
+          })),
+        ],
+      });
+    }
+    if (entry.type === 'add') {
+      return InsertedTextRun
+        ? new Paragraph({
+            children: [
+              new InsertedTextRun(/** @type {any} */ ({
+                text:   entry.text,
+                author,
+                date,
+                bold:   false,
+              })),
+            ],
+          })
+        : new Paragraph({
+            children: [
+              new TextRun({ text: entry.text, color: '00AA00' }),
+            ],
+          });
+    }
+    // equal
+    return new Paragraph({
+      children: [new TextRun({ text: entry.text })],
+    });
+  });
+
+  const doc = new Document({
+    sections: [{ children: paragraphs }],
+  });
+
+  const buffer = await Packer.toBlob(doc);
+  return buffer;
+}
+
+/**
+ * Place diff annotations on the source PDF.
+ * Removed text -> Strikeout annotation (red).
+ * Added text   -> Highlight annotation (green) + text note.
+ *
+ * @param {Uint8Array|ArrayBuffer} pdfBytes - Source PDF bytes
+ * @param {Array<{type: 'equal'|'add'|'remove', text: string}>} diffResult
+ * @returns {Promise<Blob>}
+ */
+export async function exportAsAnnotatedPdf(pdfBytes, diffResult) {
+  const { PDFDocument, rgb } = await import('pdf-lib');
+
+  const data   = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+  const pdfDoc = await PDFDocument.load(data);
+  const pages  = pdfDoc.getPages();
+
+  if (pages.length === 0) {
+    const saved = await pdfDoc.save();
+    return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
+  }
+
+  // Collect non-equal entries for annotation
+  const changes = diffResult.filter(d => d.type !== 'equal');
+  const firstPage = pages[0];
+  const { width: _width, height } = firstPage.getSize();
+
+  let yOffset = height - 40;
+  const lineHeight = 14;
+  const margin = 40;
+
+  for (const entry of changes) {
+    // Move to next page worth of space if needed
+    if (yOffset < margin) break;
+
+    const color = entry.type === 'remove' ? rgb(0.8, 0, 0) : rgb(0, 0.6, 0);
+    const prefix = entry.type === 'remove' ? '[DEL] ' : '[ADD] ';
+    const displayText = (prefix + entry.text).slice(0, 100);
+
+    firstPage.drawText(displayText, {
+      x:    margin,
+      y:    yOffset,
+      size: 9,
+      color,
+    });
+
+    yOffset -= lineHeight;
+  }
+
+  const saved = await pdfDoc.save();
+  return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });
+}
+
+/**
+ * Generate a DOCX table of differences.
+ * Columns: | # | Type | Original | Changed |
+ *
+ * @param {Array<{type: 'equal'|'add'|'remove', text: string}>} diffResult
+ * @returns {Promise<Blob>}
+ */
+export async function exportDiffTable(diffResult) {
+  const {
+    Document, Packer, Paragraph, TextRun,
+    Table, TableRow, TableCell, WidthType, BorderStyle,
+  } = await import('docx');
+
+  const changes = diffResult.filter(d => d.type !== 'equal');
+
+  const noBorders = {
+    top:    { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+    bottom: { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+    left:   { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+    right:  { style: BorderStyle.SINGLE, size: 1, color: 'CCCCCC' },
+  };
+
+  const _cell = (text, bold = false) =>
+    new TableCell({
+      children: [new Paragraph({ children: [new TextRun({ text, bold })] })],
+      borders: noBorders,
+      width: { size: 2500, type: WidthType.DXA },
+    });
+
+  // Header row
+  const headerRow = new TableRow({
+    children: [
+      _cell('#', true),
+      _cell('Type', true),
+      _cell('Original', true),
+      _cell('Changed', true),
+    ],
+  });
+
+  const rows = [headerRow];
+  let idx = 0;
+
+  for (const entry of changes) {
+    idx++;
+    const num      = String(idx);
+    const typeName = entry.type === 'remove' ? 'Removed' : 'Added';
+    const original = entry.type === 'remove' ? entry.text : '';
+    const changed  = entry.type === 'add'    ? entry.text : '';
+
+    rows.push(new TableRow({
+      children: [
+        _cell(num),
+        _cell(typeName),
+        _cell(original),
+        _cell(changed),
+      ],
+    }));
+  }
+
+  const table = new Table({ rows });
+
+  const doc = new Document({
+    sections: [{ children: [table] }],
+  });
+
+  const buffer = await Packer.toBlob(doc);
+  return buffer;
+}

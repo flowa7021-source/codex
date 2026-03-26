@@ -48,6 +48,10 @@ const DEFAULT_BINDINGS = [
   { key: 'r', action: 'rectangleTool', description: 'Прямоугольник' },
   { key: 'o', action: 'ovalTool', description: 'Овал' },
 
+  // Export & Batch
+  { key: 'ctrl+shift+x', action: 'exportXlsx', description: 'Экспорт в Excel' },
+  { key: 'ctrl+shift+b', action: 'batchConvert', description: 'Пакетная конвертация' },
+
   // View
   { key: 'f11', action: 'fullscreen', description: 'Полный экран', global: true },
   { key: 'escape', action: 'exitMode', description: 'Выход из режима', global: true },
