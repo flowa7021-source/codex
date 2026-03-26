@@ -19,6 +19,7 @@ function makeDeps(overrides = {}) {
       rotate: document.createElement('button'),
       fullscreen: document.createElement('button'),
       canvasWrap: document.createElement('div'),
+      canvas: document.createElement('canvas'),
     },
     debounce: (fn) => fn,
     safeOn: mock.fn(),
