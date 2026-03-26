@@ -1,4 +1,4 @@
-// ─── Unit Tests: XlsxBuilder ────────────────────────────────────────────────
+// --- Unit Tests: XlsxBuilder ---
 import './setup-dom.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -61,6 +61,19 @@ describe('XlsxBuilder', () => {
     });
   });
 
+  describe('addSheet return value', () => {
+    it('addSheet returns 0-based sheet index', () => {
+      const builder = new XlsxBuilder();
+      const idx0 = builder.addSheet('First', [['a']]);
+      const idx1 = builder.addSheet('Second', [['b']]);
+      const idx2 = builder.addSheet('Third', [['c']]);
+
+      assert.equal(idx0, 0, 'first sheet should be index 0');
+      assert.equal(idx1, 1, 'second sheet should be index 1');
+      assert.equal(idx2, 2, 'third sheet should be index 2');
+    });
+  });
+
   describe('sheet with 3x3 data', () => {
     it('all cells are present in sheet XML', async () => {
       const builder = new XlsxBuilder();
@@ -114,6 +127,32 @@ describe('XlsxBuilder', () => {
 
       const sheetXml = await extractEntry(builder, 'xl/worksheets/sheet1.xml');
       assert.ok(sheetXml.includes('count="2"'), 'mergeCells count should be 2');
+    });
+  });
+
+  describe('setRowHeight', () => {
+    it('produces customHeight="1" and ht= in row XML', async () => {
+      const builder = new XlsxBuilder();
+      builder.addSheet('Heights', [['row0'], ['row1'], ['row2']]);
+      builder.setRowHeight(0, 1, 30); // row index 1, height 30 points
+
+      const sheetXml = await extractEntry(builder, 'xl/worksheets/sheet1.xml');
+      assert.ok(sheetXml.includes('customHeight="1"'), 'should contain customHeight="1"');
+      assert.ok(sheetXml.includes('ht="30"'), 'should contain ht="30"');
+    });
+
+    it('rows without setRowHeight do not have ht attribute', async () => {
+      const builder = new XlsxBuilder();
+      builder.addSheet('Heights', [['row0'], ['row1']]);
+      builder.setRowHeight(0, 0, 25);
+
+      const sheetXml = await extractEntry(builder, 'xl/worksheets/sheet1.xml');
+      // Row 1 (r="1") should have ht, row 2 (r="2") should not
+      assert.ok(sheetXml.includes('ht="25"'), 'row 1 should have ht="25"');
+      // Check that row 2 doesn't have customHeight
+      const row2Match = sheetXml.match(/<row r="2"([^>]*)>/);
+      assert.ok(row2Match, 'row 2 should exist');
+      assert.ok(!row2Match[1].includes('customHeight'), 'row 2 should not have customHeight');
     });
   });
 
@@ -183,6 +222,24 @@ describe('XlsxBuilder', () => {
 
       const stylesXml = await extractEntry(builder, 'xl/styles.xml');
       assert.ok(stylesXml.includes('#,##0.00'), 'styles should contain currency number format');
+    });
+
+    it('CellObject with $#,##0.00 currency format is included in output', async () => {
+      const builder = new XlsxBuilder();
+      builder.addSheet('Currency', [[
+        { value: 1250, type: 'number', style: { numberFormat: '$#,##0.00' } },
+      ]]);
+
+      const sheetXml = await extractEntry(builder, 'xl/worksheets/sheet1.xml');
+      assert.ok(sheetXml.includes('<v>1250</v>'), 'should contain numeric value 1250');
+
+      // Cell should have a style index applied
+      const cellMatch = sheetXml.match(/<c r="A1"([^>]*)>/);
+      assert.ok(cellMatch, 'cell A1 should exist');
+      assert.ok(cellMatch[1].includes('s='), 'currency cell should have a style index');
+
+      const stylesXml = await extractEntry(builder, 'xl/styles.xml');
+      assert.ok(stylesXml.includes('$#,##0.00'), 'styles should contain $#,##0.00 format');
     });
   });
 

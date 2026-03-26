@@ -175,16 +175,20 @@ describe('table-extractor', { skip: !extractTables && 'pdfjs-dist not available'
       const yCoords = [100, 130, 160, 190];
       const ops = gridOps(xCoords, yCoords);
 
-      // Place text in col 0 only in the first row (lowest Y in grid = y=100-130).
-      // The other two rows in col 0 are empty -> should produce mergeDown.
-      // Col 1 has text in all rows.
-      // After reversal (highest Y row first), the top row will be y=160-190.
-      // We need the filled cell to be at the TOP visually (highest Y), so put text at y=165.
+      // Grid layout (before reversal):
+      //   grid row 0: y=100-130 (lowest Y)
+      //   grid row 1: y=130-160
+      //   grid row 2: y=160-190 (highest Y)
+      //
+      // Vertical merge detection runs BEFORE reversal: it looks for a filled cell
+      // at grid row r with empty cells at grid rows r+1, r+2, etc.
+      // So we place "Merged" in grid row 0 col 0 (y=105) and leave grid rows 1,2 col 0 empty.
+      // Col 1 has text in all rows so the table is valid.
       const textItems = [
-        textItem('R1C2', 155, 105, 40, 10), // col 1, row at y=100-130
-        textItem('R2C2', 155, 135, 40, 10), // col 1, row at y=130-160
-        textItem('Merged', 55, 165, 40, 10), // col 0, row at y=160-190 (highest Y = visual top after reversal)
-        textItem('R3C2', 155, 165, 40, 10), // col 1, row at y=160-190
+        textItem('Merged', 55, 105, 40, 10), // col 0, grid row 0 (y=100-130)
+        textItem('R1C2', 155, 105, 40, 10),   // col 1, grid row 0
+        textItem('R2C2', 155, 135, 40, 10),   // col 1, grid row 1
+        textItem('R3C2', 155, 165, 40, 10),   // col 1, grid row 2
       ];
 
       const page = mockPage({ ...ops, textItems });
@@ -195,13 +199,14 @@ describe('table-extractor', { skip: !extractTables && 'pdfjs-dist not available'
       const table = tables[0];
       assert.equal(table.rows.length, 3, 'should have 3 rows');
 
-      // After reversal, first row is the one from highest Y (y=160-190).
-      // "Merged" should be in first row col 0 with mergeDown = 2 (two empty cells below).
-      const topLeftCell = table.rows[0][0];
-      assert.equal(topLeftCell.text, 'Merged', 'top-left cell should contain "Merged"');
+      // After reversal, grid row 0 (lowest Y) becomes the LAST output row.
+      // So "Merged" ends up in the last output row.
+      const lastRow = table.rows[table.rows.length - 1];
+      const mergedCell = lastRow[0];
+      assert.equal(mergedCell.text, 'Merged', 'cell should contain "Merged"');
       assert.ok(
-        topLeftCell.mergeDown >= 1,
-        `mergeDown should be >= 1, got: ${topLeftCell.mergeDown}`,
+        mergedCell.mergeDown >= 1,
+        `mergeDown should be >= 1, got: ${mergedCell.mergeDown}`,
       );
     });
   });
