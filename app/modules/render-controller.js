@@ -191,6 +191,7 @@ export function _updatePageUI(renderMs) {
     pushDiagnosticEvent('page.render', {
       page: renderedPage,
       zoom: Number(state.zoom.toFixed(2)),
+      rotation: state.rotation,
       ms: renderMs ?? 0,
     });
     // Notify app of page render for bookmark/thumbnail updates

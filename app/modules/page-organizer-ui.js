@@ -34,7 +34,8 @@ export function initPageOrganizerUI(deps) {
     if (orgStatus) orgStatus.textContent = 'Загрузка страниц...';
 
     try {
-      orgPdfBytes = await state.adapter.getRawBytes();
+      orgPdfBytes = state.pdfBytes || (state.file ? new Uint8Array(await state.file.arrayBuffer()) : null);
+      if (!orgPdfBytes) throw new Error('PDF bytes not available');
       const pages = await getPageInfoList(orgPdfBytes);
       orgState = createOrganizerState(pages);
       orgNewOrder = pages.map((_, i) => i);
