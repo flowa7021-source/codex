@@ -62,26 +62,39 @@ export function initNavigation(deps) {
   safeOn(els.fitPage, 'click', fitPage);
 
   safeOn(els.rotate, 'click', async () => {
+    const oldRotation = state.rotation;
     state.rotation = (state.rotation + 90) % 360;
-    clearOcrRuntimeCaches('rotation-changed');
-    // Evict the current page from the render cache so the stale (un-rotated)
-    // canvas is never shown as a placeholder — prevents "flicker then nothing".
-    evictPageFromCache(state.currentPage);
-    if (state.adapter) {
-      try {
-        const vp = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);
-        const scrollbarW = els.canvasWrap.offsetWidth - els.canvasWrap.clientWidth;
-        const available = Math.max(200, els.canvasWrap.clientWidth - Math.max(16, scrollbarW + 16));
-        const autoZoom = available / vp.width;
-        if (autoZoom > 0.3 && autoZoom < 4) {
-          state.zoom = Math.round(autoZoom * 100) / 100;
+    try {
+      clearOcrRuntimeCaches('rotation-changed');
+      evictPageFromCache(state.currentPage);
+      try { const { invalidateTiles } = await import('./tile-renderer.js'); invalidateTiles(); } catch (_e) { /* non-critical */ }
+      // Auto-fit zoom for rotated viewport
+      if (state.adapter) {
+        try {
+          const vp = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);
+          const cw = els.canvasWrap?.clientWidth || 800;
+          const sw = (els.canvasWrap?.offsetWidth || cw) - cw;
+          const available = Math.max(200, cw - Math.max(16, sw + 16));
+          const autoZoom = available / Math.max(1, vp.width);
+          if (autoZoom > 0.3 && autoZoom < 4) {
+            state.zoom = Math.round(autoZoom * 100) / 100;
+          }
+        } catch (err) {
+          console.warn('[nav] rotation viewport failed:', err?.message);
         }
-      } catch (_e) { /* keep current zoom */ }
+      }
+      // Skip page transition animation for rotation
+      if (els.canvas?.classList) els.canvas.classList.remove('page-transitioning');
+      await renderCurrentPage();
+      if (els.canvas?.classList) els.canvas.classList.remove('page-transitioning');
+      console.info(`[nav] rotated ${oldRotation}° → ${state.rotation}°, zoom=${state.zoom}`);
+      renderPagePreviews().catch((err) => { console.warn('[nav] preview error:', err?.message); });
+      if (state.settings?.backgroundOcr) scheduleBackgroundOcrScan('save-settings', 600);
+    } catch (err) {
+      console.error('[nav] rotation failed:', err);
+      // Revert rotation on failure so state stays consistent
+      state.rotation = oldRotation;
     }
-    await renderCurrentPage();
-    // Render thumbnails in background after main page is visible
-    renderPagePreviews().catch((err) => { console.warn('[nav] preview error:', err?.message); });
-    if (state.settings?.backgroundOcr) scheduleBackgroundOcrScan('save-settings', 600);
   });
 
   safeOn(els.fullscreen, 'click', async () => {

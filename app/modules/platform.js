@@ -126,8 +126,16 @@ export async function saveFileDialog(options = {}) {
  */
 export async function readFileAsBytes(pathOrFile) {
   if (_isTauri && typeof pathOrFile === 'string') {
-    const bytes = await _tauriInvoke('read_file_bytes', { path: pathOrFile });
-    return new Uint8Array(bytes);
+    // Try custom Rust command first (faster), fall back to FS plugin
+    try {
+      const bytes = await _tauriInvoke('read_file_bytes', { path: pathOrFile });
+      return new Uint8Array(bytes);
+    } catch (_e) {
+      if (_tauriFs?.readFile) {
+        return new Uint8Array(await _tauriFs.readFile(pathOrFile));
+      }
+      throw _e;
+    }
   }
 
   // Browser: File object → ArrayBuffer
@@ -200,7 +208,9 @@ export async function writeFileBytes(path, bytes) {
   if (!_isTauri || !_tauriFs) {
     throw new Error('writeFileBytes: only available in Tauri');
   }
-  await _tauriFs.writeBinaryFile(path, bytes);
+  // Tauri v2 FS plugin: writeFile(path, data, options)
+  // v1 had writeBinaryFile() which no longer exists in v2.
+  await _tauriFs.writeFile(path, bytes);
 }
 
 // ── Shell ────────────────────────────────────────────────────────────────────

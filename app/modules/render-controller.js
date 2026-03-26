@@ -95,6 +95,9 @@ let _preRenderTimer = 0;
  *  Used to discard stale renders when a newer render has started. */
 let _renderGeneration = 0;
 
+/** Last rendered page number — used to skip transition animation on same-page re-renders */
+let _lastRenderedPage = -1;
+
 /** Increment and return the render generation (also used by file-controller). */
 export function bumpRenderGeneration() { return ++_renderGeneration; }
 
@@ -188,6 +191,7 @@ export function _updatePageUI(renderMs) {
     pushDiagnosticEvent('page.render', {
       page: renderedPage,
       zoom: Number(state.zoom.toFixed(2)),
+      rotation: state.rotation,
       ms: renderMs ?? 0,
     });
     // Notify app of page render for bookmark/thumbnail updates
@@ -222,17 +226,22 @@ export async function renderCurrentPage() {
 
   els.emptyState.style.display = 'none';
 
-  // ── Trigger page transition animation (without forced reflow) ──
+  // ── Trigger page transition animation only for page navigation ──
+  // Skip for same-page re-renders (zoom, rotation) to avoid a confusing
+  // opacity:0 flash while the render completes.
   els.canvas.classList.remove('page-transitioning');
-  requestAnimationFrame(() => {
-    // Only apply transition if this is still the current render generation
-    if (_renderGeneration === generation) {
-      els.canvas.classList.add('page-transitioning');
-      els.canvas.addEventListener('animationend', () => {
-        els.canvas.classList.remove('page-transitioning');
-      }, { once: true });
-    }
-  });
+  const isPageChange = page !== _lastRenderedPage;
+  _lastRenderedPage = page;
+  if (isPageChange) {
+    requestAnimationFrame(() => {
+      if (_renderGeneration === generation) {
+        els.canvas.classList.add('page-transitioning');
+        els.canvas.addEventListener('animationend', () => {
+          els.canvas.classList.remove('page-transitioning');
+        }, { once: true });
+      }
+    });
+  }
 
   // ── Fast path: exact cache hit (same zoom & rotation) -> instant display ──
   const cached = getCachedPage(page);
