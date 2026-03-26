@@ -10,6 +10,7 @@
  *   - XlsxBuilder.addSheet(name, rows)
  *   - XlsxBuilder.setCellStyle(sheet, row, col, style)
  *   - XlsxBuilder.setColumnWidth(sheet, col, width)
+ *   - XlsxBuilder.setRowHeight(sheet, row, height)
  *   - XlsxBuilder.mergeCells(sheet, startRow, startCol, endRow, endCol)
  *   - XlsxBuilder.build() → Promise<Uint8Array>
  */
@@ -50,6 +51,7 @@ import { zipSync } from 'fflate';
  * @property {CellValue[][]} rows
  * @property {Map<string, CellStyle>} cellStyles  - key = "row,col"
  * @property {Map<number, number>}    colWidths   - col index → width
+ * @property {Map<number, number>}    [rowHeights] - row index → height in points
  * @property {Array<{sr: number, sc: number, er: number, ec: number}>} merges
  */
 
@@ -410,6 +412,7 @@ export class XlsxBuilder {
    * Add a worksheet with the given name and row data.
    * @param {string} name - Sheet tab name (max 31 chars, no special chars).
    * @param {CellValue[][]} rows - Array of rows, each row is an array of cell values.
+   * @returns {number} 0-based index of the added sheet
    */
   addSheet(name, rows) {
     // Sanitise sheet name: max 31 chars, strip characters not allowed in sheet names
@@ -426,6 +429,7 @@ export class XlsxBuilder {
       merges: [],
     };
     this._sheets.push(sheet);
+    return this._sheets.length - 1;
   }
 
   /**
@@ -451,6 +455,19 @@ export class XlsxBuilder {
     const sheet = this._sheets[sheetIndex];
     if (!sheet) return;
     sheet.colWidths.set(col, width);
+  }
+
+  /**
+   * Set the height of a row (in points).
+   * @param {number} sheetIndex - 0-based sheet index
+   * @param {number} row        - 0-based row index
+   * @param {number} height     - Row height in points
+   */
+  setRowHeight(sheetIndex, row, height) {
+    const sheet = this._sheets[sheetIndex];
+    if (!sheet) return;
+    if (!sheet.rowHeights) sheet.rowHeights = new Map();
+    sheet.rowHeights.set(row, height);
   }
 
   /**
@@ -595,12 +612,15 @@ export class XlsxBuilder {
     xml += '<sheetData>';
     for (let r = 0; r < sheet.rows.length; r++) {
       const row = sheet.rows[r];
+      const rh = sheet.rowHeights?.get(r);
+      const rowAttrs = rh ? ` ht="${rh}" customHeight="1"` : '';
+
       if (!row || row.length === 0) {
-        xml += `<row r="${r + 1}"/>`;
+        xml += `<row r="${r + 1}"${rowAttrs}/>`;
         continue;
       }
 
-      xml += `<row r="${r + 1}">`;
+      xml += `<row r="${r + 1}"${rowAttrs}>`;
       for (let c = 0; c < row.length; c++) {
         const raw = row[c];
         if (raw === null || raw === undefined) continue;
