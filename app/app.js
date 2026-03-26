@@ -78,7 +78,7 @@ import { initRenderControllerDeps, _ocrWordCache, renderCurrentPage, safeCreateO
 import { crashTelemetry, recordCrashEvent, recordSuccessfulOperation, getSessionHealth, initCrashTelemetry } from './modules/crash-telemetry.js';
 import { pdfEditState, initExportControllerDeps, setPageEdits, undoPageEdit, redoPageEdit, getEditHistory, persistEdits, loadPersistedEdits, generateDocxBlob, generateDocxWithImages, importDocxEdits, exportSessionHealthReport, capturePageAsImageData } from './modules/export-controller.js';
 import { ocrSearchIndex, searchOcrIndex, downloadOcrTextExport, canSearchCurrentDoc, loadSearchScope, saveSearchScope, copySearchResultsSummary, exportSearchResultsSummaryTxt, exportSearchResultsCsv, exportSearchResultsJson, importSearchResultsJson, importSearchResultsCsv, clearSearchResults, renderSearchResultsList, renderSearchHistory, exportSearchHistoryJson, exportSearchHistoryTxt, copySearchHistory, importSearchHistoryJson, clearSearchHistory, searchInPdf, jumpToSearchResult, initSearchControllerDeps } from './modules/search-controller.js';
-import { initOcrControllerDeps, getBatchOcrProgress, clearOcrRuntimeCaches, estimatePageSkewAngle, setOcrStatus, setOcrRegionMode, drawOcrSelectionPreview, runOcrOnRect, runOcrForCurrentPage, extractTextForPage, cancelAllOcrWork, scheduleBackgroundOcrScan } from './modules/ocr-controller.js';
+import { initOcrControllerDeps, getBatchOcrProgress, clearOcrRuntimeCaches, estimatePageSkewAngle, setOcrStatus, setOcrRegionMode, drawOcrSelectionPreview, runOcrOnRect, runOcrForCurrentPage, extractTextForPage, cancelAllOcrWork, scheduleBackgroundOcrScan, resetTesseractAvailability } from './modules/ocr-controller.js';
 import { initWorkspaceDeps, setWorkspaceStatus, setStage4Status, initReleaseGuards, loadCloudSyncUrl, saveCloudSyncUrl, loadOcrTextData, saveOcrTextData, pushWorkspaceToCloud, pullWorkspaceFromCloud, broadcastWorkspaceSnapshot, toggleCollaborationChannel, importOcrJson, exportWorkspaceBundleJson, importWorkspaceBundleJson } from './modules/workspace-controller.js';
 import { initReadingProgressDeps, noteKey, bookmarkKey, loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage, clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender, navigateHistoryBack, navigateHistoryForward, loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer, syncReadingTimerWithVisibility, resetReadingTime, _saveViewStateNow, saveViewState, renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress, saveRecent, clearRecent, renderRecent } from './modules/reading-progress-controller.js';
 import { initFileControllerDeps, revokeCurrentObjectUrl, saveDjvuData, openFile, reloadPdfFromBytes } from './modules/file-controller.js';
@@ -276,7 +276,7 @@ safeOn(els.importDocx, 'change', async (e) => {
 // ─── OCR & Text Processing (delegated to init-ocr.js) ────────────────────────
 const { refreshOcrStorageInfo } = initOcr({
   state, els, safeOn, setOcrStatus, getOcrLang,
-  runOcrForCurrentPage, setOcrRegionMode, cancelAllOcrWork,
+  runOcrForCurrentPage, setOcrRegionMode, cancelAllOcrWork, resetTesseractAvailability,
   markLowConfidenceWords, getPageQualitySummary,
   listOcrDocuments, getOcrStorageSize, deleteOcrData,
   undoPageEdit, redoPageEdit, setTextEditMode, saveCurrentPageTextEdits,

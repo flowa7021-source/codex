@@ -19,6 +19,7 @@ import {
 } from './ocr-image-processing.js';
 import { initOcrPipelineVariantsDeps } from './ocr-pipeline-variants.js';
 import { initOcrRegionDeps } from './ocr-region.js';
+import { terminateTesseract, terminateTesseractPool } from './tesseract-adapter.js';
 
 // Re-export image processing functions for backwards compatibility
 export {
@@ -42,6 +43,9 @@ export {
   extractTextForPage,
   scheduleBackgroundOcrScan, startBackgroundOcrScan,
 } from './ocr-region.js';
+
+// ─── Re-export Tesseract availability reset (used by retry button) ──────────
+export { resetTesseractAvailability } from './tesseract-adapter.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // These are injected from app.js to avoid circular imports.
@@ -239,6 +243,10 @@ export function cancelManualOcrTasks(reason = 'manual-stop') {
   state.ocrTaskId += 1;
   state.ocrLatestByReason = {};
   setOcrControlsBusy(false);
+  // Terminate the worker so any in-flight recognize() call throws immediately,
+  // unblocking the pipeline loop that may be stuck awaiting recognition.
+  terminateTesseract().catch(() => {});
+  terminateTesseractPool().catch(() => {});
   pushDiagnosticEvent('ocr.queue.cancel', { reason, queueEpoch: state.ocrQueueEpoch }, 'warn');
 }
 
