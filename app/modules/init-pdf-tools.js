@@ -19,7 +19,6 @@ export function initPdfTools(deps) {
     fillPdfForm,
     addWatermarkToPdf,
     addStampToPdf,
-    safeCreateObjectURL,
     handleImageInsertion,
     addWatermarkToPage,
     addStampToPage,
@@ -43,12 +42,8 @@ export function initPdfTools(deps) {
   safeOn(els.pdfFormExport, 'click', async () => {
     const data = formManager.exportFormData();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${state.docName || 'document'}-form-data.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const { saveOrDownload } = await import('./platform.js');
+    await saveOrDownload(blob, `${state.docName || 'document'}-form-data.json`, [{ name: 'JSON', extensions: ['json'] }]);
 
     if (state.adapter?.type === 'pdf' && state.file) {
       try {
@@ -65,12 +60,8 @@ export function initPdfTools(deps) {
         setOcrStatus('Сохранение заполненной формы в PDF...');
         const arrayBuffer = await state.file.arrayBuffer();
         const pdfBlob = await fillPdfForm(arrayBuffer, formData, false);
-        const pdfUrl = safeCreateObjectURL(pdfBlob);
-        const a2 = document.createElement('a');
-        a2.href = pdfUrl;
-        a2.download = `${state.docName || 'document'}-filled.pdf`;
-        a2.click();
-        URL.revokeObjectURL(pdfUrl);
+        const { saveOrDownload: saveFormPdf } = await import('./platform.js');
+        await saveFormPdf(pdfBlob, `${state.docName || 'document'}-filled.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
         setOcrStatus('Форма сохранена: JSON + заполненный PDF');
       } catch (err) {
         setOcrStatus(`JSON экспортирован (PDF ошибка: ${err?.message || 'неизвестная'})`);
@@ -132,12 +123,8 @@ export function initPdfTools(deps) {
       const canvasW = parseFloat(els.canvas.style.width) || els.canvas.width;
       const canvasH = parseFloat(els.canvas.style.height) || els.canvas.height;
       const pdfBlob = await blockEditor.exportBlocksToPdf(arrayBuffer, { width: canvasW, height: canvasH });
-      const url = safeCreateObjectURL(pdfBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${state.docName || 'document'}-edited.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const { saveOrDownload: savePdf } = await import('./platform.js');
+      await savePdf(pdfBlob, `${state.docName || 'document'}-edited.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
       setOcrStatus('Блоки экспортированы в PDF');
     } catch (err) {
       setOcrStatus(`Ошибка экспорта блоков: ${err?.message || 'неизвестная'}`);
@@ -188,12 +175,8 @@ export function initPdfTools(deps) {
           opacity: 0.25,
           rotation: -45,
         });
-        const url = safeCreateObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-watermark.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
+        const { saveOrDownload: saveWm } = await import('./platform.js');
+        await saveWm(blob, `${state.docName || 'document'}-watermark.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
         setOcrStatus(`Водяной знак "${text}" — PDF сохранён`);
       } catch (err) {
         setOcrStatus(`Водяной знак "${text}" добавлен на canvas (PDF ошибка: ${err.message})`);
@@ -217,12 +200,8 @@ export function initPdfTools(deps) {
         try {
           const arrayBuffer = await state.file.arrayBuffer();
           const blob = await addStampToPdf(arrayBuffer, types[idx], { pageNum: state.currentPage });
-          const url = safeCreateObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${state.docName || 'document'}-stamp.pdf`;
-          a.click();
-          URL.revokeObjectURL(url);
+          const { saveOrDownload: saveSt } = await import('./platform.js');
+          await saveSt(blob, `${state.docName || 'document'}-stamp.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
           setOcrStatus(`Штамп "${labels[idx]}" — PDF сохранён`);
         } catch (err) {
           console.warn('[ocr] error:', err?.message);

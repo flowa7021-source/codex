@@ -221,12 +221,8 @@ export function openSignaturePad() {
           width: 200,
           height: 100,
         });
-        const url = safeCreateObjectURL(pdfBlob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-signed.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
+        const { saveOrDownload } = await import('./platform.js');
+        await saveOrDownload(pdfBlob, `${state.docName || 'document'}-signed.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
         /** @type {any} */ (_deps).setOcrStatus?.('Подпись встроена в PDF и сохранена');
       } catch (err) {
         /** @type {any} */ (_deps).setOcrStatus?.(`Подпись на canvas (PDF ошибка: ${err?.message || 'неизвестная'})`);

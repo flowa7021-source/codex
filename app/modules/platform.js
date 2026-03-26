@@ -142,16 +142,25 @@ export async function readFileAsBytes(pathOrFile) {
 
 /**
  * Trigger a browser download for a Blob.
+ * In Tauri, shows a native save dialog instead (the `<a download>` trick
+ * does not work in Tauri's WebView — it has no browser download manager).
  *
  * @param {Blob} blob
  * @param {string} filename
+ * @param {Array<{name:string, extensions:string[]}>} [filters]
  */
-export function downloadBlob(blob, filename) {
+export async function downloadBlob(blob, filename, filters) {
+  if (_isTauri) {
+    await saveOrDownload(blob, filename, filters);
+    return;
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href     = url;
   a.download = filename;
+  try { document.body.appendChild(a); } catch (_e) { /* test env */ }
   a.click();
+  try { document.body.removeChild(a); } catch (_e) { /* test env */ }
   URL.revokeObjectURL(url);
 }
 

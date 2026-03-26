@@ -224,12 +224,8 @@ export function initPageOrganizerUI(deps) {
     const indices = [...orgState.selected].map(i => orgNewOrder[i]);
     const extracted = await extractPages(orgPdfBytes, indices);
     const blob = new Blob([/** @type {any} */ (extracted)], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `extracted_pages.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const { saveOrDownload } = await import('./platform.js');
+    await saveOrDownload(blob, 'extracted_pages.pdf', [{ name: 'PDF', extensions: ['pdf'] }]);
   });
 
   document.getElementById('pageOrgReverse')?.addEventListener('click', async () => {

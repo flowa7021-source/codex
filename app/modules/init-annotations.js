@@ -26,7 +26,6 @@ export function initAnnotations(deps) {
     exportAnnotationsAsPdf,
     exportAnnotationsIntoPdf,
     loadStrokes,
-    safeCreateObjectURL,
     setOcrStatus,
   } = deps;
 
@@ -54,18 +53,13 @@ export function initAnnotations(deps) {
   });
 
   // ── Annotation SVG export ──────────────────────────────────────────────
-  safeOn(els.exportAnnSvg, 'click', () => {
+  safeOn(els.exportAnnSvg, 'click', async () => {
     if (!state.adapter) return;
     const strokes = loadStrokes();
     const blob = exportAnnotationsAsSvg(strokes, els.annotationCanvas.width, els.annotationCanvas.height);
     if (!blob) { setOcrStatus('Ошибка экспорта SVG'); return; }
-    const url = safeCreateObjectURL(blob);
-    if (!url) return;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotations.svg`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const { saveOrDownload } = await import('./platform.js');
+    await saveOrDownload(blob, `${state.docName || 'document'}-page-${state.currentPage}-annotations.svg`, [{ name: 'SVG', extensions: ['svg'] }]);
   });
 
   // ── Annotation PDF export ──────────────────────────────────────────────
@@ -94,13 +88,8 @@ export function initAnnotations(deps) {
         }
         const canvasSize = { width: els.canvas.width, height: els.canvas.height };
         const blob = await exportAnnotationsIntoPdf(arrayBuffer, annotStore, canvasSize);
-        const url = safeCreateObjectURL(blob);
-        if (!url) return;
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${state.docName || 'document'}-annotated.pdf`;
-        a.click();
-        URL.revokeObjectURL(url);
+        const { saveOrDownload } = await import('./platform.js');
+        await saveOrDownload(blob, `${state.docName || 'document'}-annotated.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
         setOcrStatus(`PDF с аннотациями: ${annotStore.size} страниц, ${Math.round(blob.size / 1024)} КБ`);
         return;
       } catch (err) {
@@ -113,12 +102,7 @@ export function initAnnotations(deps) {
     const pageImageDataUrl = els.canvas.toDataURL('image/png');
     const blob = exportAnnotationsAsPdf(strokes, els.annotationCanvas.width, els.annotationCanvas.height, pageImageDataUrl);
     if (!blob) { setOcrStatus('Ошибка экспорта PDF'); return; }
-    const url = safeCreateObjectURL(blob);
-    if (!url) return;
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotations.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const { saveOrDownload: savePdf } = await import('./platform.js');
+    await savePdf(blob, `${state.docName || 'document'}-page-${state.currentPage}-annotations.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
   });
 }

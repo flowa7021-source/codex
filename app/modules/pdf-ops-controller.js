@@ -42,12 +42,8 @@ export async function mergePdfFiles() {
       _deps.setOcrStatus(`Объединение ${files.length} файлов (без потери данных)...`);
       const mergedBlob = await _deps.mergePdfDocuments(files);
 
-      const url = _deps.safeCreateObjectURL(mergedBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'merged.pdf';
-      a.click();
-      URL.revokeObjectURL(url);
+      const { saveOrDownload } = await import('./platform.js');
+      await saveOrDownload(mergedBlob, 'merged.pdf', [{ name: 'PDF', extensions: ['pdf'] }]);
       _deps.setOcrStatus(`Объединено: ${files.length} файлов (${Math.round(mergedBlob.size / 1024)} КБ)`);
       _deps.pushDiagnosticEvent('pdf.merge', { files: files.length, sizeKb: Math.round(mergedBlob.size / 1024) });
     } catch (err) {
@@ -101,12 +97,8 @@ export async function splitPdfPages() {
       return;
     }
 
-    const url = _deps.safeCreateObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${state.docName || 'document'}-pages-${rangeStr}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const { saveOrDownload } = await import('./platform.js');
+    await saveOrDownload(blob, `${state.docName || 'document'}-pages-${rangeStr}.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
     _deps.setOcrStatus(`Извлечено ${pageNums.length} страниц (${Math.round(blob.size / 1024)} КБ)`);
     _deps.pushDiagnosticEvent('pdf.split', { pages: pageNums.length, sizeKb: Math.round(blob.size / 1024) });
   } catch (err) {

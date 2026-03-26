@@ -461,15 +461,15 @@ describe('clearComments', () => {
 describe('exportAnnotationsJson', () => {
   beforeEach(resetState);
 
-  it('does nothing when no adapter', () => {
+  it('does nothing when no adapter', async () => {
     state.adapter = null;
-    assert.doesNotThrow(() => exportAnnotationsJson());
+    await assert.doesNotReject(() => exportAnnotationsJson());
   });
 
-  it('exports annotations as JSON blob', () => {
+  it('exports annotations as JSON blob', async () => {
     saveStrokes([{ tool: 'pen', color: '#f00', size: 1, points: [] }], 1);
     invalidateAnnotationCaches();
-    assert.doesNotThrow(() => exportAnnotationsJson());
+    await assert.doesNotReject(() => exportAnnotationsJson());
   });
 });
 
@@ -478,16 +478,16 @@ describe('exportAnnotationsJson', () => {
 describe('exportAnnotationBundleJson', () => {
   beforeEach(resetState);
 
-  it('does nothing when no adapter', () => {
+  it('does nothing when no adapter', async () => {
     state.adapter = null;
-    assert.doesNotThrow(() => exportAnnotationBundleJson());
+    await assert.doesNotReject(() => exportAnnotationBundleJson());
   });
 
-  it('exports bundle with multiple pages', () => {
+  it('exports bundle with multiple pages', async () => {
     saveStrokes([{ tool: 'pen', color: '#f00', size: 1, points: [] }], 1);
     saveStrokes([{ tool: 'pen', color: '#0f0', size: 2, points: [] }], 3);
     invalidateAnnotationCaches();
-    assert.doesNotThrow(() => exportAnnotationBundleJson());
+    await assert.doesNotReject(() => exportAnnotationBundleJson());
   });
 });
 

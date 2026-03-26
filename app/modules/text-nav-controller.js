@@ -183,12 +183,8 @@ export async function exportCurrentDocToWord() {
         includeFooter: true,
       });
 
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${title}.docx`;
-      a.click();
-      URL.revokeObjectURL(url);
+      const { saveOrDownload } = await import('./platform.js');
+      await saveOrDownload(blob, `${title}.docx`, [{ name: 'DOCX', extensions: ['docx'] }]);
       _deps.recordSuccessfulOperation();
       _deps.setOcrStatus(`Экспорт DOCX: готово (${Math.round(blob.size / 1024)} КБ, ${pageCount} стр.)`);
       _deps.pushDiagnosticEvent('export.docx', { pages: pageCount, sizeKb: Math.round(blob.size / 1024), engine: 'docx-lib' });
@@ -233,12 +229,8 @@ export async function exportCurrentDocToWord() {
     const blob = includeImages
       ? await _deps.generateDocxWithImages(title, textPages, true)
       : await _deps.generateDocxBlob(title, textPages);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${title}.docx`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const { saveOrDownload } = await import('./platform.js');
+    await saveOrDownload(blob, `${title}.docx`, [{ name: 'DOCX', extensions: ['docx'] }]);
     _deps.recordSuccessfulOperation();
     _deps.setOcrStatus(`Экспорт DOCX: готово (${Math.round(blob.size / 1024)} КБ${includeImages ? ', с изображениями' : ''})`);
     _deps.pushDiagnosticEvent('export.docx', { pages: maxPages, sizeKb: Math.round(blob.size / 1024), withImages: includeImages });

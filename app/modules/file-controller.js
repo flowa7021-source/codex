@@ -192,19 +192,15 @@ export async function reloadPdfFromBytes(bytes) {
 /**
  * Download the current pdfBytes as a file ("Save As" functionality).
  */
-export function saveCurrentPdfAs() {
+export async function saveCurrentPdfAs() {
   const bytes = state.pdfBytes;
   if (!bytes) {
     console.warn('saveCurrentPdfAs: no pdfBytes available');
     return;
   }
   const blob = new Blob([bytes], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = state.docName || 'document.pdf';
-  a.click();
-  URL.revokeObjectURL(url);
+  const { saveOrDownload } = await import('./platform.js');
+  await saveOrDownload(blob, state.docName || 'document.pdf', [{ name: 'PDF', extensions: ['pdf'] }]);
 }
 
 // ─── Open File ──────────────────────────────────────────────────────────────
