@@ -387,3 +387,104 @@ export class SmartCropPreview {
     this._cropRect = null;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Box editing functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Set the CropBox on specified pages.
+ * @param {Uint8Array|ArrayBuffer} pdfBytes
+ * @param {number[]} pageNums  1-based page numbers
+ * @param {{x: number, y: number, width: number, height: number}} cropBox
+ * @returns {Promise<Blob>}
+ */
+export async function setCropBox(pdfBytes, pageNums, cropBox) {
+  const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const pages = pdfDoc.getPages();
+  for (const num of pageNums) {
+    const page = pages[num - 1];
+    if (!page) continue;
+    page.setCropBox(cropBox.x, cropBox.y, cropBox.width, cropBox.height);
+  }
+  const bytes = await pdfDoc.save();
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
+}
+
+/**
+ * Set the TrimBox on specified pages.
+ * @param {Uint8Array|ArrayBuffer} pdfBytes
+ * @param {number[]} pageNums  1-based page numbers
+ * @param {{x: number, y: number, width: number, height: number}} trimBox
+ * @returns {Promise<Blob>}
+ */
+export async function setTrimBox(pdfBytes, pageNums, trimBox) {
+  const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const pages = pdfDoc.getPages();
+  for (const num of pageNums) {
+    const page = pages[num - 1];
+    if (!page) continue;
+    page.setTrimBox(trimBox.x, trimBox.y, trimBox.width, trimBox.height);
+  }
+  const bytes = await pdfDoc.save();
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
+}
+
+/**
+ * Set the BleedBox on specified pages.
+ * @param {Uint8Array|ArrayBuffer} pdfBytes
+ * @param {number[]} pageNums  1-based page numbers
+ * @param {{x: number, y: number, width: number, height: number}} bleedBox
+ * @returns {Promise<Blob>}
+ */
+export async function setBleedBox(pdfBytes, pageNums, bleedBox) {
+  const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const pages = pdfDoc.getPages();
+  for (const num of pageNums) {
+    const page = pages[num - 1];
+    if (!page) continue;
+    page.setBleedBox(bleedBox.x, bleedBox.y, bleedBox.width, bleedBox.height);
+  }
+  const bytes = await pdfDoc.save();
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
+}
+
+/**
+ * Set the ArtBox on specified pages.
+ * @param {Uint8Array|ArrayBuffer} pdfBytes
+ * @param {number[]} pageNums  1-based page numbers
+ * @param {{x: number, y: number, width: number, height: number}} artBox
+ * @returns {Promise<Blob>}
+ */
+export async function setArtBox(pdfBytes, pageNums, artBox) {
+  const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const pages = pdfDoc.getPages();
+  for (const num of pageNums) {
+    const page = pages[num - 1];
+    if (!page) continue;
+    page.setArtBox(artBox.x, artBox.y, artBox.width, artBox.height);
+  }
+  const bytes = await pdfDoc.save();
+  return new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' });
+}
+
+/**
+ * Auto-crop white margins using detectContentBounds on each page.
+ * Requires canvas rendering which may not be available in all environments.
+ *
+ * @param {Uint8Array|ArrayBuffer} pdfBytes
+ * @param {Object} [opts]
+ * @param {number} [opts.threshold=250]  Luminance threshold for white detection
+ * @param {number} [opts.padding=10]     Padding in PDF points to keep around content
+ * @param {Function} [opts.renderPage]   async (pageNum) => HTMLCanvasElement
+ * @returns {Promise<{blob: Blob, rects: CropRect[]}>}
+ */
+export async function autoCropWhiteMargins(pdfBytes, opts = {}) {
+  const threshold = opts.threshold ?? 250;
+  const padding = opts.padding ?? 10;
+  return smartCropAll(pdfBytes, {
+    threshold,
+    paddingPt: padding,
+    renderPage: opts.renderPage,
+  });
+}

@@ -3,7 +3,7 @@
 // Proper PDF merge/split/forms/annotations/watermarks without data loss.
 // Uses pdf-lib which operates on the PDF structure directly (no rasterization).
 
-import { PDFDocument, StandardFonts, rgb, degrees } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb, degrees, PDFName, PDFDict, PDFString, PDFArray, PDFNumber, decodePDFRawStream } from 'pdf-lib';
 
 // ─── Yield helper (keeps UI responsive during heavy loops) ──────────────────
 const yieldToUI = () => new Promise(r => setTimeout(r, 0));
@@ -460,4 +460,520 @@ export function parsePageRange(str, maxPage) {
     }
   }
   return [...new Set(result)].sort((a, b) => a - b);
+}
+
+// ─── Split by Bookmarks ─────────────────────────────────────────────────────
+// Splits a PDF into multiple files based on top-level bookmark (outline) entries.
+// Each bookmark defines a split point; pages between consecutive bookmarks form one file.
+export async function splitByBookmarks(pdfBytes) {
+  const data = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+  const pdfDoc = await PDFDocument.load(data, { ignoreEncryption: true });
+  const pageCount = pdfDoc.getPageCount();
+
+  // Read outline from catalog
+  const catalog = pdfDoc.catalog;
+  const outlinesRef = catalog.get(PDFName.of('Outlines'));
+  if (!outlinesRef) {
+    // No bookmarks — return entire document as single result
+    const bytes = await pdfDoc.save();
+    return [{ name: 'Full Document', blob: new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' }) }];
+  }
+
+  const ctx = pdfDoc.context;
+  const outlinesDict = ctx.lookup(outlinesRef);
+  if (!outlinesDict || !(outlinesDict instanceof PDFDict)) {
+    const bytes = await pdfDoc.save();
+    return [{ name: 'Full Document', blob: new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' }) }];
+  }
+
+  const firstRef = outlinesDict.get(PDFName.of('First'));
+  if (!firstRef) {
+    const bytes = await pdfDoc.save();
+    return [{ name: 'Full Document', blob: new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' }) }];
+  }
+
+  // Build page ref → index map
+  const pageRefs = pdfDoc.getPages().map(p => p.ref);
+  const pageRefMap = new Map();
+  for (let i = 0; i < pageRefs.length; i++) {
+    pageRefMap.set(pageRefs[i], i);
+  }
+
+  // Walk the linked list of top-level outline entries
+  const bookmarks = [];
+  let currentRef = firstRef;
+  const visited = new Set();
+  while (currentRef) {
+    const entryDict = ctx.lookup(currentRef);
+    if (!entryDict || !(entryDict instanceof PDFDict) || visited.has(currentRef)) break;
+    visited.add(currentRef);
+
+    const titleObj = entryDict.get(PDFName.of('Title'));
+    const title = titleObj instanceof PDFString ? titleObj.decodeText() : 'Untitled';
+
+    // Resolve destination page number
+    let destPageIndex = -1;
+    const dest = entryDict.get(PDFName.of('Dest'));
+    if (dest) {
+      const destResolved = ctx.lookup(dest);
+      if (destResolved instanceof PDFArray && destResolved.size() > 0) {
+        const pageRef = destResolved.get(0);
+        const idx = pageRefMap.get(pageRef);
+        if (idx !== undefined) destPageIndex = idx;
+      }
+    }
+
+    // If /Dest not found, try /A (action) → /D
+    if (destPageIndex === -1) {
+      const action = entryDict.get(PDFName.of('A'));
+      if (action) {
+        const actionDict = ctx.lookup(action);
+        if (actionDict instanceof PDFDict) {
+          const dVal = actionDict.get(PDFName.of('D'));
+          if (dVal) {
+            const dResolved = ctx.lookup(dVal);
+            if (dResolved instanceof PDFArray && dResolved.size() > 0) {
+              const pageRef = dResolved.get(0);
+              const idx = pageRefMap.get(pageRef);
+              if (idx !== undefined) destPageIndex = idx;
+            }
+          }
+        }
+      }
+    }
+
+    if (destPageIndex === -1) destPageIndex = 0; // fallback to first page
+
+    bookmarks.push({ title, pageIndex: destPageIndex });
+    currentRef = entryDict.get(PDFName.of('Next'));
+  }
+
+  if (bookmarks.length === 0) {
+    const bytes = await pdfDoc.save();
+    return [{ name: 'Full Document', blob: new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' }) }];
+  }
+
+  // Sort bookmarks by page index (just in case they aren't ordered)
+  bookmarks.sort((a, b) => a.pageIndex - b.pageIndex);
+
+  // Create split ranges
+  const results = [];
+  for (let i = 0; i < bookmarks.length; i++) {
+    const startPage = bookmarks[i].pageIndex + 1; // 1-based
+    const endPage = (i + 1 < bookmarks.length) ? bookmarks[i + 1].pageIndex : pageCount; // 1-based inclusive
+    const pages = [];
+    for (let p = startPage; p <= endPage; p++) pages.push(p);
+
+    const blob = await splitPdfDocument(data, pages);
+    if (blob) {
+      results.push({ name: bookmarks[i].title, blob });
+    }
+    await yieldToUI();
+  }
+
+  return results;
+}
+
+// ─── Split by File Size ─────────────────────────────────────────────────────
+// Splits a PDF so that each output file is at or under maxSizeBytes.
+// Uses a greedy approach: adds pages one by one until adding the next would exceed the limit.
+export async function splitByFileSize(pdfBytes, maxSizeBytes) {
+  const data = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+  const sourcePdf = await PDFDocument.load(data, { ignoreEncryption: true });
+  const pageCount = sourcePdf.getPageCount();
+
+  const results = [];
+  let startPage = 1;
+
+  while (startPage <= pageCount) {
+    let endPage = startPage;
+
+    // Try to include as many pages as possible
+    while (endPage <= pageCount) {
+      const pages = [];
+      for (let p = startPage; p <= endPage; p++) pages.push(p);
+
+      const blob = await splitPdfDocument(data, pages);
+      if (!blob) break;
+
+      if (blob.size > maxSizeBytes && pages.length > 1) {
+        // Back off by one page
+        endPage--;
+        break;
+      }
+
+      if (endPage === pageCount) break;
+      endPage++;
+    }
+
+    // Build the final chunk
+    const chunkPages = [];
+    for (let p = startPage; p <= endPage; p++) chunkPages.push(p);
+    const blob = await splitPdfDocument(data, chunkPages);
+    if (blob) {
+      results.push({ blob, pages: chunkPages });
+    }
+    startPage = endPage + 1;
+    await yieldToUI();
+  }
+
+  return results;
+}
+
+// ─── Split by Blank Pages ───────────────────────────────────────────────────
+// Splits a PDF at blank pages (pages with very little or no text content).
+// Blank pages are treated as separators and removed from output.
+export async function splitByBlankPages(pdfBytes, blankThreshold = 0.01) {
+  const data = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+  const sourcePdf = await PDFDocument.load(data, { ignoreEncryption: true });
+  const pageCount = sourcePdf.getPageCount();
+
+  // Determine which pages are blank by checking text operators in the content stream
+  const blankPages = new Set();
+  // Use a character-count threshold: if total extracted text length is below threshold
+  // fraction of a nominal page (~1000 chars), treat as blank. With default 0.01 → ~10 chars.
+  const charThreshold = Math.max(1, Math.floor(blankThreshold * 1000));
+
+  for (let i = 0; i < pageCount; i++) {
+    const page = sourcePdf.getPage(i);
+    // Extract raw content stream text operators
+    // pdf-lib doesn't have a full text extraction API, so we inspect the raw content
+    const contents = page.node.get(PDFName.of('Contents'));
+    let textLen = 0;
+    if (contents) {
+      const resolved = sourcePdf.context.lookup(contents);
+      if (resolved) {
+        try {
+          textLen = _measureTextInContentStreams(sourcePdf.context, resolved);
+        } catch (_) {
+          // If we can't decode, assume non-blank
+          textLen = charThreshold + 1;
+        }
+      }
+    }
+
+    if (textLen < charThreshold) {
+      blankPages.add(i + 1); // 1-based
+    }
+  }
+
+  // Split into sections at blank pages
+  const results = [];
+  let currentSection = [];
+
+  for (let p = 1; p <= pageCount; p++) {
+    if (blankPages.has(p)) {
+      // Blank page = separator
+      if (currentSection.length > 0) {
+        const blob = await splitPdfDocument(data, currentSection);
+        if (blob) results.push({ blob, pages: [...currentSection] });
+        currentSection = [];
+      }
+    } else {
+      currentSection.push(p);
+    }
+    await yieldToUI();
+  }
+
+  // Don't forget the last section
+  if (currentSection.length > 0) {
+    const blob = await splitPdfDocument(data, currentSection);
+    if (blob) results.push({ blob, pages: [...currentSection] });
+  }
+
+  return results;
+}
+
+// ─── Split by Range ─────────────────────────────────────────────────────────
+// Splits a PDF by explicit user-defined ranges.
+// ranges = [{ start, end, filename }] — start/end are 1-based page numbers.
+export async function splitByRange(pdfBytes, ranges) {
+  const data = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+  const results = [];
+
+  for (const range of ranges) {
+    const pages = [];
+    for (let p = range.start; p <= range.end; p++) pages.push(p);
+
+    const blob = await splitPdfDocument(data, pages);
+    if (blob) {
+      results.push({ blob, filename: range.filename || `pages_${range.start}-${range.end}.pdf` });
+    }
+    await yieldToUI();
+  }
+
+  return results;
+}
+
+// ─── Merge with Outlines ────────────────────────────────────────────────────
+// Merges multiple PDFs and creates a bookmark outline with each source file as a top-level entry.
+// Sub-entries from each file's original outline are preserved with adjusted page offsets.
+export async function mergePdfWithOutlines(files) {
+  const mergedPdf = await PDFDocument.create();
+  const ctx = mergedPdf.context;
+
+  // Track: { name, pageOffset, sourceOutlineEntries[] }
+  const fileMeta = [];
+
+  let pageOffset = 0;
+  for (const file of files) {
+    const arrayBuffer = await file.arrayBuffer();
+    await yieldToUI();
+
+    let sourcePdf;
+    try {
+      sourcePdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+    } catch (err) {
+      console.warn(`Skipping file ${file.name}: ${err.message}`);
+      continue;
+    }
+
+    const indices = sourcePdf.getPageIndices();
+    const copiedPages = await mergedPdf.copyPages(sourcePdf, indices);
+    copiedPages.forEach(page => mergedPdf.addPage(page));
+
+    // Read source outline entries for sub-bookmarks
+    const sourceOutline = _readOutlineFromDoc(sourcePdf);
+
+    fileMeta.push({
+      name: file.name,
+      pageOffset,
+      sourceOutline,
+      pageCount: indices.length,
+    });
+
+    pageOffset += indices.length;
+    await yieldToUI();
+  }
+
+  mergedPdf.setTitle('Merged Document');
+  mergedPdf.setCreator('NovaReader');
+  mergedPdf.setProducer('NovaReader + pdf-lib');
+
+  // Build outline tree
+  if (fileMeta.length > 0) {
+    const pageRefs = mergedPdf.getPages().map(p => p.ref);
+    const outlineTree = fileMeta.map(meta => ({
+      title: meta.name,
+      pageNum: meta.pageOffset + 1,
+      children: meta.sourceOutline.map(entry => _offsetOutlineItem(entry, meta.pageOffset)),
+      open: true,
+    }));
+
+    const outlinesRef = _buildMergeOutlineTree(ctx, outlineTree, pageRefs);
+    mergedPdf.catalog.set(PDFName.of('Outlines'), outlinesRef);
+  }
+
+  const mergedBytes = await mergedPdf.save();
+  return new Blob([/** @type {any} */ (mergedBytes)], { type: 'application/pdf' });
+}
+
+// ─── Internal helpers for extended operations ────────────────────────────────
+
+/** Read outline entries from a loaded PDFDocument (without pdf.js dependency). */
+function _readOutlineFromDoc(pdfDoc) {
+  const catalog = pdfDoc.catalog;
+  const outlinesRef = catalog.get(PDFName.of('Outlines'));
+  if (!outlinesRef) return [];
+
+  const ctx = pdfDoc.context;
+  const outlinesDict = ctx.lookup(outlinesRef);
+  if (!outlinesDict || !(outlinesDict instanceof PDFDict)) return [];
+
+  const firstRef = outlinesDict.get(PDFName.of('First'));
+  if (!firstRef) return [];
+
+  const pageRefs = pdfDoc.getPages().map(p => p.ref);
+  const pageRefMap = new Map();
+  for (let i = 0; i < pageRefs.length; i++) {
+    pageRefMap.set(pageRefs[i], i);
+  }
+
+  return _walkOutlineList(ctx, firstRef, pageRefMap);
+}
+
+/** Walk a linked list of outline entries, returning an array of { title, pageNum, children }. */
+function _walkOutlineList(ctx, firstRef, pageRefMap) {
+  const items = [];
+  let currentRef = firstRef;
+  const visited = new Set();
+
+  while (currentRef) {
+    const dict = ctx.lookup(currentRef);
+    if (!dict || !(dict instanceof PDFDict) || visited.has(currentRef)) break;
+    visited.add(currentRef);
+
+    const titleObj = dict.get(PDFName.of('Title'));
+    const title = titleObj instanceof PDFString ? titleObj.decodeText() : 'Untitled';
+
+    let pageNum = 1;
+    const dest = dict.get(PDFName.of('Dest'));
+    if (dest) {
+      const destResolved = ctx.lookup(dest);
+      if (destResolved instanceof PDFArray && destResolved.size() > 0) {
+        const idx = pageRefMap.get(destResolved.get(0));
+        if (idx !== undefined) pageNum = idx + 1;
+      }
+    }
+
+    // Recurse children
+    const childFirstRef = dict.get(PDFName.of('First'));
+    const children = childFirstRef ? _walkOutlineList(ctx, childFirstRef, pageRefMap) : [];
+
+    items.push({ title, pageNum, children, open: true });
+    currentRef = dict.get(PDFName.of('Next'));
+  }
+
+  return items;
+}
+
+/** Offset all pageNum values in an outline item tree. */
+function _offsetOutlineItem(item, offset) {
+  return {
+    title: item.title,
+    pageNum: item.pageNum + offset,
+    children: (item.children || []).map(child => _offsetOutlineItem(child, offset)),
+    open: item.open ?? true,
+  };
+}
+
+/** Build the PDF outline tree structure (same pattern as outline-editor.js _buildOutlineTree). */
+function _buildMergeOutlineTree(ctx, items, pageRefs) {
+  const outlinesDict = ctx.obj({ Type: 'Outlines' });
+  const outlinesRef = ctx.register(outlinesDict);
+
+  if (items.length === 0) return outlinesRef;
+
+  const refs = items.map(item => _buildMergeOutlineItem(ctx, item, pageRefs, outlinesRef));
+
+  for (let i = 0; i < refs.length; i++) {
+    const dict = ctx.lookup(refs[i]);
+    if (i > 0)              dict.set(PDFName.of('Prev'), refs[i - 1]);
+    if (i < refs.length - 1) dict.set(PDFName.of('Next'), refs[i + 1]);
+  }
+
+  outlinesDict.set(PDFName.of('First'), refs[0]);
+  outlinesDict.set(PDFName.of('Last'),  refs[refs.length - 1]);
+  outlinesDict.set(PDFName.of('Count'), PDFNumber.of(_countAll(items)));
+
+  return outlinesRef;
+}
+
+function _buildMergeOutlineItem(ctx, item, pageRefs, parentRef) {
+  const pageIdx = Math.max(0, Math.min((item.pageNum ?? 1) - 1, pageRefs.length - 1));
+  const pageRef = pageRefs[pageIdx];
+
+  const dest = ctx.obj([pageRef, PDFName.of('Fit')]);
+
+  const dict = ctx.obj({});
+  dict.set(PDFName.of('Title'),  PDFString.of(item.title ?? 'Untitled'));
+  dict.set(PDFName.of('Parent'), parentRef);
+  dict.set(PDFName.of('Dest'),   dest);
+
+  const ref = ctx.register(dict);
+
+  if (item.children?.length > 0) {
+    const childRefs = item.children.map(child =>
+      _buildMergeOutlineItem(ctx, child, pageRefs, ref),
+    );
+
+    for (let i = 0; i < childRefs.length; i++) {
+      const childDict = ctx.lookup(childRefs[i]);
+      if (i > 0)                    childDict.set(PDFName.of('Prev'), childRefs[i - 1]);
+      if (i < childRefs.length - 1) childDict.set(PDFName.of('Next'), childRefs[i + 1]);
+    }
+
+    dict.set(PDFName.of('First'), childRefs[0]);
+    dict.set(PDFName.of('Last'),  childRefs[childRefs.length - 1]);
+    dict.set(PDFName.of('Count'), PDFNumber.of(_countAll(item.children)));
+  }
+
+  return ref;
+}
+
+/** Count total outline items (including nested children). */
+function _countAll(items) {
+  let count = 0;
+  for (const item of items) {
+    count += 1;
+    if (item.children?.length) count += _countAll(item.children);
+  }
+  return count;
+}
+
+/**
+ * Measure text content length from a PDF content stream (or array of streams).
+ * Handles both PDFArray containers and individual stream objects,
+ * including FlateDecode-compressed streams via pdf-lib's decodePDFRawStream.
+ */
+function _measureTextInContentStreams(ctx, resolved) {
+  // Collect individual stream objects
+  const streams = [];
+  if (resolved instanceof PDFArray) {
+    for (let j = 0; j < resolved.size(); j++) {
+      const item = ctx.lookup(resolved.get(j));
+      if (item) streams.push(item);
+    }
+  } else {
+    streams.push(resolved);
+  }
+
+  let totalTextLen = 0;
+  for (const stream of streams) {
+    const s = /** @type {any} */ (stream);
+    let raw = null;
+
+    // Use pdf-lib's built-in decodePDFRawStream for decompression (handles FlateDecode etc.)
+    if (s.dict) {
+      try {
+        const decoded = decodePDFRawStream(s);
+        const bytes = decoded.decode();
+        raw = new TextDecoder('latin1').decode(bytes);
+      } catch (_) { /* fall through to other methods */ }
+    }
+
+    // Fallback: try high-level decode methods
+    if (!raw) {
+      if (typeof s.decodeText === 'function') {
+        totalTextLen += s.decodeText().trim().length;
+        continue;
+      }
+      if (typeof s.decode === 'function') {
+        try { raw = new TextDecoder('latin1').decode(s.decode()); } catch (_) { /* ignore */ }
+      }
+    }
+
+    if (raw) {
+      // Look for text-showing operators: Tj, TJ, ', "
+      // Match hex strings <...>Tj and literal strings (...)Tj
+      const hexMatches = raw.match(/<([0-9A-Fa-f]+)>\s*Tj/g);
+      const litMatches = raw.match(/\(([^)]*)\)\s*Tj/g);
+      if (hexMatches) {
+        // Each hex pair = 1 character
+        totalTextLen += hexMatches.reduce((sum, m) => {
+          const hex = m.match(/<([0-9A-Fa-f]+)>/);
+          return sum + (hex ? hex[1].length / 2 : 0);
+        }, 0);
+      }
+      if (litMatches) {
+        totalTextLen += litMatches.reduce((sum, m) => sum + m.length - 4, 0); // strip () and Tj
+      }
+      // Also check TJ arrays: [(...) ...] TJ or [<hex> ...] TJ
+      const tjArrays = raw.match(/\[([^\]]*)\]\s*TJ/g);
+      if (tjArrays) {
+        for (const arr of tjArrays) {
+          const hexInArr = arr.match(/<([0-9A-Fa-f]+)>/g);
+          if (hexInArr) {
+            totalTextLen += hexInArr.reduce((sum, h) => sum + (h.length - 2) / 2, 0);
+          }
+          const litInArr = arr.match(/\(([^)]*)\)/g);
+          if (litInArr) {
+            totalTextLen += litInArr.reduce((sum, m) => sum + m.length - 2, 0);
+          }
+        }
+      }
+    }
+  }
+
+  return totalTextLen;
 }

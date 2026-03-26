@@ -4,7 +4,7 @@
 // Permanently remove sensitive information from PDF documents
 // ═══════════════════════════════════════════════════════════════════════
 
-import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFName, PDFDict, PDFArray, rgb, StandardFonts } from 'pdf-lib';
 
 // Predefined patterns for common PII
 const REDACTION_PATTERNS = {
@@ -231,6 +231,112 @@ export class PdfRedactor {
       }
     }
     ctx.restore();
+  }
+
+  /**
+   * Sanitize a PDF by removing metadata, JavaScript, attachments, hidden layers,
+   * thumbnails, annotations, and bookmarks.
+   * @param {Uint8Array|ArrayBuffer} pdfBytes
+   * @returns {Promise<{blob: Blob, removedItems: object}>}
+   */
+  async sanitizeDocument(pdfBytes) {
+    const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+    const removedItems = { metadata: false, xmp: false, js: 0, attachments: 0, hiddenLayers: 0, thumbnails: 0, annotations: 0, bookmarks: false, scripts: 0 };
+
+    // 1. Clean metadata (Info dict)
+    try {
+      pdfDoc.setAuthor('');
+      pdfDoc.setSubject('');
+      pdfDoc.setKeywords([]);
+      pdfDoc.setProducer('NovaReader');
+      pdfDoc.setCreator('NovaReader');
+      removedItems.metadata = true;
+    } catch (_e) { /* skip */ }
+
+    // 2. Remove XMP metadata
+    try {
+      const catalog = pdfDoc.catalog;
+      if (catalog.get(PDFName.of('Metadata'))) {
+        catalog.delete(PDFName.of('Metadata'));
+        removedItems.xmp = true;
+      }
+    } catch (_e) { /* skip */ }
+
+    // 3. Remove JavaScript (/JS, /JavaScript entries)
+    try {
+      const catalog = pdfDoc.catalog;
+      const names = catalog.get(PDFName.of('Names'));
+      if (names instanceof PDFDict && names.get(PDFName.of('JavaScript'))) {
+        names.delete(PDFName.of('JavaScript'));
+        removedItems.js++;
+      }
+      // Remove OpenAction if JS
+      if (catalog.get(PDFName.of('OpenAction'))) {
+        const oa = catalog.get(PDFName.of('OpenAction'));
+        if (oa instanceof PDFDict) {
+          const s = oa.get(PDFName.of('S'));
+          if (s && s.toString() === '/JavaScript') {
+            catalog.delete(PDFName.of('OpenAction'));
+            removedItems.js++;
+          }
+        }
+      }
+      // Remove AA (additional actions)
+      if (catalog.get(PDFName.of('AA'))) {
+        catalog.delete(PDFName.of('AA'));
+        removedItems.scripts++;
+      }
+    } catch (_e) { /* skip */ }
+
+    // 4. Remove attached files (/EmbeddedFiles)
+    try {
+      const catalog = pdfDoc.catalog;
+      const names = catalog.get(PDFName.of('Names'));
+      if (names instanceof PDFDict && names.get(PDFName.of('EmbeddedFiles'))) {
+        names.delete(PDFName.of('EmbeddedFiles'));
+        removedItems.attachments++;
+      }
+    } catch (_e) { /* skip */ }
+
+    // 5. Remove hidden layers (OCProperties)
+    try {
+      if (pdfDoc.catalog.get(PDFName.of('OCProperties'))) {
+        pdfDoc.catalog.delete(PDFName.of('OCProperties'));
+        removedItems.hiddenLayers++;
+      }
+    } catch (_e) { /* skip */ }
+
+    // 6. Remove thumbnails from each page
+    for (const page of pdfDoc.getPages()) {
+      try {
+        if (page.node.get(PDFName.of('Thumb'))) {
+          page.node.delete(PDFName.of('Thumb'));
+          removedItems.thumbnails++;
+        }
+      } catch (_e) { /* skip */ }
+    }
+
+    // 7. Remove annotations from each page
+    for (const page of pdfDoc.getPages()) {
+      try {
+        if (page.node.get(PDFName.of('Annots'))) {
+          const annots = page.node.get(PDFName.of('Annots'));
+          removedItems.annotations += (annots instanceof PDFArray ? annots.size() : 1);
+          page.node.delete(PDFName.of('Annots'));
+        }
+      } catch (_e) { /* skip */ }
+    }
+
+    // 8. Remove bookmarks (optional by default)
+    try {
+      if (pdfDoc.catalog.get(PDFName.of('Outlines'))) {
+        pdfDoc.catalog.delete(PDFName.of('Outlines'));
+        removedItems.bookmarks = true;
+      }
+    } catch (_e) { /* skip */ }
+
+    const bytes = await pdfDoc.save({ useObjectStreams: true });
+    return { blob: new Blob([/** @type {any} */ (bytes)], { type: 'application/pdf' }), removedItems };
   }
 
   // ── Internal helpers ──

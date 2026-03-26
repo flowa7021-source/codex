@@ -2,6 +2,11 @@
 // ─── PDF Form Filling Module ─────────────────────────────────────────────────
 // Extract, fill, and export PDF form fields using PDF.js annotation API
 
+import {
+  exportFormDataFdf, exportFormDataXfdf, exportFormDataCsv, exportFormDataXml,
+  importFormDataFdf, importFormDataXfdf, importFormDataCsv,
+} from './form-data-io.js';
+
 export class PdfFormManager {
   constructor() {
     this.fields = new Map(); // pageNum -> [{name, type, value, rect, options, ...}]
@@ -343,6 +348,63 @@ export class PdfFormManager {
       }
     }
     return empty;
+  }
+
+  /**
+   * Export all field data in a specified format.
+   * @param {'fdf'|'xfdf'|'csv'|'xml'} format
+   * @returns {string}
+   */
+  exportData(format) {
+    const fields = this.getAllFields().map(f => ({
+      name: f.name,
+      value: String(f.value ?? ''),
+    }));
+
+    switch (format) {
+      case 'fdf':  return exportFormDataFdf(fields);
+      case 'xfdf': return exportFormDataXfdf(fields);
+      case 'csv':  return exportFormDataCsv(fields);
+      case 'xml':  return exportFormDataXml(fields);
+      default:     return exportFormDataFdf(fields);
+    }
+  }
+
+  /**
+   * Import field data from a string in the given format and fill matching fields.
+   * @param {string} data  The serialized form data string
+   * @param {'fdf'|'xfdf'|'csv'} format
+   * @returns {number} Number of fields updated
+   */
+  importData(data, format) {
+    /** @type {Map<string, string>} */
+    let parsed;
+
+    switch (format) {
+      case 'fdf':  parsed = importFormDataFdf(data); break;
+      case 'xfdf': parsed = importFormDataXfdf(data); break;
+      case 'csv':  parsed = importFormDataCsv(data); break;
+      default:     parsed = new Map(); break;
+    }
+
+    let count = 0;
+    for (const [name, value] of parsed) {
+      // Only set value if the field actually exists in the form
+      const exists = this.getAllFields().some(f => f.name === name);
+      if (exists) {
+        this.setFieldValue(name, value);
+        count++;
+      }
+    }
+    this._notify('import', count);
+    return count;
+  }
+
+  /**
+   * Reset all fields to their default values (alias for clearAll with event).
+   */
+  resetAll() {
+    this.clearAll();
   }
 
   _mapFieldType(fieldType, isCheckbox, isRadio) {

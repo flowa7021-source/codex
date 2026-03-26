@@ -467,6 +467,82 @@ function _buildOutlineItem(ctx, item, pageRefs, parentRef) {
   return ref;
 }
 
+// ---------------------------------------------------------------------------
+// Public API — Generate bookmarks from headings and write them into the PDF
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect headings in a PDF based on font size / bold and create bookmarks.
+ *
+ * @param {Uint8Array|ArrayBuffer} pdfBytes
+ * @param {Object} [options]
+ * @param {number} [options.minFontSize=14]  - minimum font size to be a heading
+ * @param {boolean} [options.detectBold=true] - treat bold text as potential headings
+ * @param {number} [options.maxLevels=3]     - maximum heading nesting depth
+ * @returns {Promise<{blob: Blob, bookmarkCount: number}>}
+ */
+export async function generateBookmarksFromHeadings(pdfBytes, options = {}) {
+  const minFontSize = options.minFontSize ?? 14;
+  const detectBold  = options.detectBold  ?? true;
+  const maxLevels   = options.maxLevels   ?? 3;
+
+  const data     = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+  const pdfJsDoc = await getDocument({ data: data.slice() }).promise;
+  const headings = [];
+
+  for (let i = 1; i <= pdfJsDoc.numPages; i++) {
+    const page    = await pdfJsDoc.getPage(i);
+    const content = await page.getTextContent();
+
+    for (const item of content.items) {
+      if (!item.str?.trim()) continue;
+
+      const fontSize = Math.abs(item.transform[0]);
+      const isBold   = detectBold && /bold/i.test(item.fontName ?? '');
+
+      // Qualify as heading if font size exceeds threshold or text is bold
+      // and at least meets a relaxed size threshold (minFontSize - 2)
+      const qualifies = fontSize >= minFontSize
+        || (isBold && fontSize >= minFontSize - 2);
+
+      if (qualifies) {
+        headings.push({
+          title:    item.str.trim().slice(0, 120),
+          pageNum:  i,
+          fontSize: isBold && fontSize < minFontSize ? fontSize + 2 : fontSize,
+        });
+      }
+    }
+  }
+
+  pdfJsDoc.destroy();
+
+  // Build hierarchical tree, then write into the PDF
+  const tree          = _buildHierarchy(headings, maxLevels);
+  const bookmarkCount = _countItems(tree);
+  const blob          = await writeOutline(data, tree);
+
+  return { blob, bookmarkCount };
+}
+
+/**
+ * Recursively count items in an outline tree.
+ * @param {OutlineItem[]} items
+ * @returns {number}
+ */
+function _countItems(items) {
+  let count = 0;
+  for (const item of items) {
+    count++;
+    if (item.children?.length) count += _countItems(item.children);
+  }
+  return count;
+}
+
+// ---------------------------------------------------------------------------
+// Internal UI helpers
+// ---------------------------------------------------------------------------
+
 function _miniBtn(label, onClick) {
   const btn = document.createElement('button');
   btn.textContent = label;
