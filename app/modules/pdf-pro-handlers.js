@@ -554,12 +554,8 @@ export function initPdfProHandlers() {
         const arrayBuffer = await file.arrayBuffer();
         const blob = await _deps.splitPdfDocument(arrayBuffer, pageNums);
         if (blob) {
-          const url = _deps.safeCreateObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${state.docName || 'document'}-extracted.pdf`;
-          a.click();
-          URL.revokeObjectURL(url);
+          const { saveOrDownload } = await import('./platform.js');
+          await saveOrDownload(blob, `${state.docName || 'document'}-extracted.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
           _deps.setOcrStatus(`Извлечено ${pageNums.length} страниц`);
         }
       } catch (err) {
@@ -583,8 +579,8 @@ export function initPdfProHandlers() {
             _deps.setOcrStatus(`Конвертация PDF в Excel: страница ${current} / ${total}...`);
           },
         });
-        const { downloadBlob } = await import('./platform.js');
-        downloadBlob(result.blob, `${state.docName || 'document'}.xlsx`);
+        const { saveOrDownload } = await import('./platform.js');
+        await saveOrDownload(result.blob, `${state.docName || 'document'}.xlsx`, [{ name: 'Excel', extensions: ['xlsx'] }]);
         _deps.toastSuccess(`Excel экспортирован: ${result.sheetCount} листов, ${result.tableCount} таблиц`);
         _deps.pushDiagnosticEvent('pdf.exportXlsx', { sheets: result.sheetCount, tables: result.tableCount });
       } catch (err) {

@@ -18,7 +18,7 @@ export function setRenderGenerationGetter(fn) { _getRenderGeneration = fn; }
 // ─── Configuration ──────────────────────────────────────────────────────────
 
 /** Threshold (in CSS pixels * devicePixelRatio) above which tile rendering kicks in. */
-const LARGE_PAGE_THRESHOLD_PX = 4000;
+const LARGE_PAGE_THRESHOLD_PX = 6000;
 
 /** Default tile size in pixels (each tile is a square of this dimension). */
 const DEFAULT_TILE_SIZE = 2048;
@@ -39,10 +39,10 @@ const DEFAULT_TILE_SIZE = 2048;
 const _tileCache = new Map();
 
 /** Maximum number of cached tiles to prevent unbounded memory growth. */
-const MAX_TILE_CACHE_ENTRIES = 32;
+const MAX_TILE_CACHE_ENTRIES = 48;
 
-/** Maximum total pixels across all cached tiles (~128 MB at 4 bytes/pixel). */
-const MAX_TILE_CACHE_PIXELS = 32_000_000;
+/** Maximum total pixels across all cached tiles (~256 MB at 4 bytes/pixel). */
+const MAX_TILE_CACHE_PIXELS = 64_000_000;
 
 /**
  * Build a unique cache key for a tile.

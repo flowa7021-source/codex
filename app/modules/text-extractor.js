@@ -201,14 +201,8 @@ export function extractMultiPageText(pages, options = {}) {
  * @param {string} text
  * @param {string} filename
  */
-export function downloadText(text, filename) {
+export async function downloadText(text, filename) {
   const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const { saveOrDownload } = await import('./platform.js');
+  await saveOrDownload(blob, filename, [{ name: 'Text', extensions: ['txt'] }]);
 }

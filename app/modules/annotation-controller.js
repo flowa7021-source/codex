@@ -730,8 +730,8 @@ export function clearComments() {
   renderCommentList();
 }
 
-/** @returns {void} */
-export function exportAnnotatedPng() {
+/** @returns {Promise<void>} */
+export async function exportAnnotatedPng() {
   if (!state.adapter) return;
   const exportCanvas = document.createElement('canvas');
   exportCanvas.width = els.canvas.width;
@@ -740,15 +740,15 @@ export function exportAnnotatedPng() {
   if (!ctx) return;
   ctx.drawImage(els.canvas, 0, 0);
   ctx.drawImage(els.annotationCanvas, 0, 0, els.annotationCanvas.width, els.annotationCanvas.height, 0, 0, els.canvas.width, els.canvas.height);
-  const url = exportCanvas.toDataURL('image/png');
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotated.png`;
-  a.click();
+  const dataUrl = exportCanvas.toDataURL('image/png');
+  const resp = await fetch(dataUrl);
+  const blob = await resp.blob();
+  const { saveOrDownload } = await import('./platform.js');
+  await saveOrDownload(blob, `${state.docName || 'document'}-page-${state.currentPage}-annotated.png`, [{ name: 'PNG', extensions: ['png'] }]);
 }
 
-/** @returns {void} */
-export function exportAnnotationsJson() {
+/** @returns {Promise<void>} */
+export async function exportAnnotationsJson() {
   if (!state.adapter) return;
   const payload = {
     app: 'NovaReader',
@@ -759,12 +759,8 @@ export function exportAnnotationsJson() {
     comments: loadComments(),
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${state.docName || 'document'}-page-${state.currentPage}-annotations.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const { saveOrDownload } = await import('./platform.js');
+  await saveOrDownload(blob, `${state.docName || 'document'}-page-${state.currentPage}-annotations.json`, [{ name: 'JSON', extensions: ['json'] }]);
 }
 
 /** @param {File} file @returns {Promise<void>} */
@@ -832,8 +828,8 @@ export function showShortcutsHelp() {
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 }
 
-/** @returns {void} */
-export function exportAnnotationBundleJson() {
+/** @returns {Promise<void>} */
+export async function exportAnnotationBundleJson() {
   if (!state.adapter) return;
   const pages = {};
   for (let page = 1; page <= state.pageCount; page += 1) {
@@ -853,12 +849,8 @@ export function exportAnnotationBundleJson() {
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${state.docName || 'document'}-annotations-bundle.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const { saveOrDownload } = await import('./platform.js');
+  await saveOrDownload(blob, `${state.docName || 'document'}-annotations-bundle.json`, [{ name: 'JSON', extensions: ['json'] }]);
 }
 
 /** @param {File} file @returns {Promise<void>} */

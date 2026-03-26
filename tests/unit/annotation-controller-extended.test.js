@@ -402,58 +402,34 @@ describe('clearComments', () => {
 describe('exportAnnotationsJson', () => {
   beforeEach(resetState);
 
-  it('does nothing without adapter', () => {
+  it('does nothing without adapter', async () => {
     state.adapter = null;
-    // Should not throw
-    exportAnnotationsJson();
+    await exportAnnotationsJson();
   });
 
-  it('does not throw with adapter and data', () => {
+  it('does not throw with adapter and data', async () => {
     state.adapter = { type: 'pdf' };
     saveStrokes([{ tool: 'pen', color: '#000', size: 1, points: [{ x: 0.5, y: 0.5 }] }], 1);
     saveComments([{ point: { x: 0.1, y: 0.1 }, text: 'note' }], 1);
     invalidateAnnotationCaches();
-
-    // Patch createElement to add click() to anchor elements
-    const origCreate = document.createElement;
-    document.createElement = (tag) => {
-      const el = origCreate(tag);
-      if (!el.click) el.click = () => {};
-      return el;
-    };
-    try {
-      exportAnnotationsJson();
-    } finally {
-      document.createElement = origCreate;
-    }
+    await exportAnnotationsJson();
   });
 });
 
 describe('exportAnnotationBundleJson', () => {
   beforeEach(resetState);
 
-  it('does nothing without adapter', () => {
+  it('does nothing without adapter', async () => {
     state.adapter = null;
-    exportAnnotationBundleJson();
+    await exportAnnotationBundleJson();
   });
 
-  it('does not throw with adapter and multi-page data', () => {
+  it('does not throw with adapter and multi-page data', async () => {
     state.adapter = { type: 'pdf' };
     saveStrokes([{ tool: 'pen', color: '#f00', size: 1, points: [] }], 1);
     saveStrokes([{ tool: 'pen', color: '#0f0', size: 2, points: [] }], 3);
     invalidateAnnotationCaches();
-
-    const origCreate = document.createElement;
-    document.createElement = (tag) => {
-      const el = origCreate(tag);
-      if (!el.click) el.click = () => {};
-      return el;
-    };
-    try {
-      exportAnnotationBundleJson();
-    } finally {
-      document.createElement = origCreate;
-    }
+    await exportAnnotationBundleJson();
   });
 });
 

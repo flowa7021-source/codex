@@ -249,7 +249,10 @@ export async function renderCurrentPage() {
   }
 
   // ── Show stale cache as placeholder while rendering ──
-  if (cached && cached.canvas.width > 0 && generation === _renderGeneration) {
+  // Only blit if the cached entry matches the target zoom & rotation to avoid
+  // showing a briefly wrong zoom level or rotation angle.
+  if (cached && cached.canvas.width > 0 && generation === _renderGeneration
+      && cached.zoom === zoom && cached.rotation === rotation) {
     _blitCacheToCanvas(cached, els.canvas);
   }
 
@@ -283,7 +286,10 @@ export async function renderCurrentPage() {
     if (skeleton) skeleton.remove();
     if (err?.name === 'RenderingCancelledException' || err?.message?.includes('Rendering cancelled')) return;
     const msg = String(err?.message || err || '');
-    if (/cannot use the same canvas/i.test(msg)) return;
+    if (/cannot use the same canvas/i.test(msg)) {
+      console.warn('[render] canvas conflict, will retry on next render:', msg);
+      return;
+    }
     throw err;
   }
 

@@ -32,6 +32,7 @@ function makeDeps(overrides = {}) {
     safeOn: mock.fn(),
     openFile: mock.fn(async () => {}),
     renderCurrentPage: mock.fn(async () => {}),
+    clearPageRenderCache: mock.fn(),
     TabManager: MockTabManager,
     ...overrides,
   };

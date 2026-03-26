@@ -29,10 +29,7 @@ function makeMockFile(name = 'test.pdf') {
 
 // Helper: create a minimal mock Blob
 function makeMockBlob() {
-  return {
-    arrayBuffer: async () => new ArrayBuffer(8),
-    type: 'application/pdf',
-  };
+  return new Blob([new Uint8Array(8)], { type: 'application/pdf' });
 }
 
 // ─── initPdfProHandlersDeps ───────────────────────────────────────────────────
@@ -899,15 +896,6 @@ describe('orgExtract handler', () => {
 
     const statusCalls = [];
     const mockBlob = makeMockBlob();
-    let anchorClicked = false;
-
-    const origCreateElement = document.createElement.bind(document);
-    document.createElement = (tag) => {
-      if (tag === 'a') {
-        return { href: '', download: '', click: () => { anchorClicked = true; } };
-      }
-      return origCreateElement(tag);
-    };
 
     initPdfProHandlersDeps({
       setOcrStatus: (m) => statusCalls.push(m),
@@ -919,9 +907,6 @@ describe('orgExtract handler', () => {
 
     await captureHandler('orgExtract')();
 
-    document.createElement = origCreateElement;
-
-    assert.ok(anchorClicked);
     assert.ok(statusCalls.some((m) => m.includes('Извлечено')));
   });
 

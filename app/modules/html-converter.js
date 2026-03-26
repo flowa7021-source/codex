@@ -2,7 +2,6 @@
 // ─── PDF → HTML Converter ───────────────────────────────────────────────────
 // Converts PDF pages to clean, responsive HTML with CSS positioning.
 
-import { safeTimeout } from './safe-timers.js';
 
 /**
  * Convert extracted page data to an HTML document.
@@ -207,14 +206,10 @@ export function pageToHtmlFragment(text, _pageNum) {
 /**
  * Export HTML as a downloadable file.
  */
-export function downloadHtml(htmlString, filename = 'document.html') {
+export async function downloadHtml(htmlString, filename = 'document.html') {
   const blob = new Blob([htmlString], { type: 'text/html;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  safeTimeout(() => URL.revokeObjectURL(url), 200);
+  const { saveOrDownload } = await import('./platform.js');
+  await saveOrDownload(blob, filename, [{ name: 'HTML', extensions: ['html', 'htm'] }]);
 }
 
 function escapeHtml(str) {

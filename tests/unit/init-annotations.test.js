@@ -248,16 +248,15 @@ describe('initAnnotations', () => {
       assert.equal(deps.exportAnnotationsAsSvg.mock.callCount(), 0);
     });
 
-    it('calls exportAnnotationsAsSvg and creates download link when adapter exists and blob returned', () => {
+    it('calls exportAnnotationsAsSvg when adapter exists and blob returned', async () => {
       const deps = makeDeps({ state: { drawEnabled: false, adapter: { type: 'pdf' }, docName: 'doc', currentPage: 2, pageCount: 1, file: null } });
       initAnnotations(deps);
       const call = deps.safeOn.mock.calls.find(
         c => c.arguments[0] === deps.els.exportAnnSvg && c.arguments[1] === 'click'
       );
-      call.arguments[2]();
+      await call.arguments[2]();
       assert.equal(deps.loadStrokes.mock.callCount(), 1);
       assert.equal(deps.exportAnnotationsAsSvg.mock.callCount(), 1);
-      assert.equal(deps.safeCreateObjectURL.mock.callCount(), 1);
     });
 
     it('calls setOcrStatus with error when exportAnnotationsAsSvg returns null', () => {
@@ -274,33 +273,16 @@ describe('initAnnotations', () => {
       assert.ok(deps.setOcrStatus.mock.calls[0].arguments[0].includes('SVG'));
     });
 
-    it('does nothing when safeCreateObjectURL returns null', () => {
-      const deps = makeDeps({
-        state: { drawEnabled: false, adapter: { type: 'pdf' }, docName: 'doc', currentPage: 1, pageCount: 1, file: null },
-        safeCreateObjectURL: mock.fn(() => null),
-      });
-      initAnnotations(deps);
-      const call = deps.safeOn.mock.calls.find(
-        c => c.arguments[0] === deps.els.exportAnnSvg && c.arguments[1] === 'click'
-      );
-      // Should not throw
-      assert.doesNotThrow(() => call.arguments[2]());
-    });
-
-    it('uses state.docName in the download filename', () => {
+    it('uses state.docName in the download filename', async () => {
       const deps = makeDeps({
         state: { drawEnabled: false, adapter: { type: 'pdf' }, docName: 'my-report', currentPage: 3, pageCount: 5, file: null },
       });
-      const appendedLinks = [];
-      const origCreateElement = document.createElement.bind(document);
-      // We don't need to intercept — just verify safeCreateObjectURL is called
       initAnnotations(deps);
       const call = deps.safeOn.mock.calls.find(
         c => c.arguments[0] === deps.els.exportAnnSvg && c.arguments[1] === 'click'
       );
-      call.arguments[2]();
-      // safeCreateObjectURL called means we got to that point
-      assert.equal(deps.safeCreateObjectURL.mock.callCount(), 1);
+      await call.arguments[2]();
+      assert.equal(deps.exportAnnotationsAsSvg.mock.callCount(), 1);
     });
   });
 
@@ -328,7 +310,6 @@ describe('initAnnotations', () => {
       await call.arguments[2]();
       assert.equal(deps.loadStrokes.mock.callCount(), 1);
       assert.equal(deps.exportAnnotationsAsPdf.mock.callCount(), 1);
-      assert.equal(deps.safeCreateObjectURL.mock.callCount(), 1);
     });
 
     it('legacy path: calls setOcrStatus with error when exportAnnotationsAsPdf returns null', async () => {
@@ -344,19 +325,6 @@ describe('initAnnotations', () => {
       await call.arguments[2]();
       assert.equal(deps.setOcrStatus.mock.callCount(), 1);
       assert.ok(deps.setOcrStatus.mock.calls[0].arguments[0].includes('PDF'));
-    });
-
-    it('legacy path: does nothing when safeCreateObjectURL returns null', async () => {
-      const deps = makeDeps({
-        state: { drawEnabled: false, adapter: { type: 'djvu' }, docName: 'doc', currentPage: 1, pageCount: 1, file: null },
-        safeCreateObjectURL: mock.fn(() => null),
-      });
-      deps.els.canvas.toDataURL = () => 'data:image/png;base64,abc';
-      initAnnotations(deps);
-      const call = deps.safeOn.mock.calls.find(
-        c => c.arguments[0] === deps.els.exportAnnPdf && c.arguments[1] === 'click'
-      );
-      await assert.doesNotReject(call.arguments[2]());
     });
 
     it('uses pdf-lib export when adapter type is pdf and file is present', async () => {

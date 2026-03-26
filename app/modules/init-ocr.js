@@ -153,6 +153,20 @@ export function initOcr(deps) {
 
   safeOn(els.exportHealthReport, 'click', exportSessionHealthReport);
   safeOn(els.toggleTextEdit, 'click', () => setTextEditMode(!state.textEditMode));
+
+  // Text layer erase mode: click to delete spans
+  safeOn(els.eraseTextLayer, 'click', async () => {
+    const { enableTextEraseMode, disableTextEraseMode, isTextEraseMode } = await import('./render-text-layer.js');
+    if (isTextEraseMode()) {
+      disableTextEraseMode();
+      if (els.eraseTextLayer) els.eraseTextLayer.classList.remove('active');
+      setOcrStatus('Режим стирания: ВЫКЛ');
+    } else {
+      enableTextEraseMode();
+      if (els.eraseTextLayer) els.eraseTextLayer.classList.add('active');
+      setOcrStatus('Режим стирания: кликните по словам для удаления');
+    }
+  });
   safeOn(els.saveTextEdits, 'click', saveCurrentPageTextEdits);
 
   return { refreshOcrStorageInfo };

@@ -321,7 +321,7 @@ describe('saveCurrentPdfAs', () => {
     saveCurrentPdfAs();
   });
 
-  it('creates download link and triggers click when pdfBytes exist', () => {
+  it('creates download link and triggers click when pdfBytes exist', async () => {
     state.pdfBytes = new Uint8Array([1, 2, 3]);
     state.docName = 'test.pdf';
 
@@ -336,18 +336,24 @@ describe('saveCurrentPdfAs', () => {
       if (tag === 'a') return fakeAnchor;
       return origCreateElement(tag);
     };
+    const origAppend = document.body.appendChild;
+    const origRemove = document.body.removeChild;
+    document.body.appendChild = () => fakeAnchor;
+    document.body.removeChild = () => fakeAnchor;
 
     try {
-      saveCurrentPdfAs();
+      await saveCurrentPdfAs();
       assert.ok(clickCalled, 'click should have been called');
       assert.equal(fakeAnchor.download, 'test.pdf');
       assert.ok(fakeAnchor.href, 'href should be set');
     } finally {
       document.createElement = origCreateElement;
+      document.body.appendChild = origAppend;
+      document.body.removeChild = origRemove;
     }
   });
 
-  it('uses default filename when docName is null', () => {
+  it('uses default filename when docName is null', async () => {
     state.pdfBytes = new Uint8Array([1, 2, 3]);
     state.docName = null;
 
@@ -357,12 +363,18 @@ describe('saveCurrentPdfAs', () => {
       if (tag === 'a') return fakeAnchor;
       return origCreateElement(tag);
     };
+    const origAppend = document.body.appendChild;
+    const origRemove = document.body.removeChild;
+    document.body.appendChild = () => fakeAnchor;
+    document.body.removeChild = () => fakeAnchor;
 
     try {
-      saveCurrentPdfAs();
+      await saveCurrentPdfAs();
       assert.equal(fakeAnchor.download, 'document.pdf');
     } finally {
       document.createElement = origCreateElement;
+      document.body.appendChild = origAppend;
+      document.body.removeChild = origRemove;
     }
   });
 });

@@ -70,11 +70,7 @@ export function loadImage(url) {
  * @param {Blob} blob
  * @param {string} filename
  */
-export function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  safeTimeout(() => URL.revokeObjectURL(url), 200);
+export async function downloadBlob(blob, filename) {
+  const { downloadBlob: platformDownload } = await import('./platform.js');
+  return platformDownload(blob, filename);
 }

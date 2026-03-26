@@ -14,6 +14,7 @@ import { setPageEdits, persistEdits } from './export-controller.js';
 import { blockEditor } from './pdf-advanced-edit.js';
 import { renderConfidenceOverlay } from './ocr-confidence-map.js';
 import { PixelPerfectTextLayer, FontWidthProvider } from './pixel-perfect-text-layer.js';
+import { estimatePageSkewAngle } from './ocr-image-processing.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 const _deps = {
@@ -214,11 +215,24 @@ export async function renderTextLayer(pageNum, zoom, rotation) {
     } catch (err) {
       console.warn('Text layer render failed:', err);
     }
+    // Re-enable active modes after DOM rebuild
+    if (state.textEditMode) enableInlineTextEditing();
+    if (_eraseMode) enableTextEraseMode();
     return;
   }
 
   // ── Path 2: OCR-based text layer ──
   await _renderOcrTextLayer(pageNum, zoom, dpr);
+
+  // ── Re-enable active modes after DOM rebuild ──
+  // renderTextLayer clears and rebuilds the container (innerHTML = ''),
+  // which strips classes and event listeners. Re-attach them.
+  if (state.textEditMode) {
+    enableInlineTextEditing();
+  }
+  if (_eraseMode) {
+    enableTextEraseMode();
+  }
 }
 
 /** @param {any} pageNum @param {any} zoom @param {any} dpr @returns {Promise<any>} */
@@ -271,20 +285,31 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
     const w = (word.bbox.x1 - word.bbox.x0) * displayW;
     const h = (word.bbox.y1 - word.bbox.y0) * displayH;
 
-    // Improved font-size fitting: use measureText to find optimal size
-    let fontSize = Math.max(6, h * 0.78);
+    // Improved font-size fitting: iterative measurement for precise sizing
+    let fontSize = Math.max(6, h * 0.85);
     if (word.text.length > 0 && h > 6) {
-      // Try to match text height more accurately
       measureCtx.font = `${fontSize}px sans-serif`;
       const metrics = measureCtx.measureText(word.text);
-      const actualH = (metrics.actualBoundingBoxAscent || fontSize * 0.8) + (metrics.actualBoundingBoxDescent || fontSize * 0.2);
+      const ascent = metrics.actualBoundingBoxAscent ?? (fontSize * 0.78);
+      const descent = metrics.actualBoundingBoxDescent ?? (fontSize * 0.22);
+      const actualH = ascent + descent;
       if (actualH > 0) {
-        fontSize = Math.max(6, fontSize * (h / actualH) * 0.92);
+        // Scale font to match bounding box height precisely
+        fontSize = Math.max(6, fontSize * (h / actualH) * 0.96);
+      }
+      // Second pass: refine for long words where width matters
+      if (word.text.length >= 3) {
+        measureCtx.font = `${fontSize}px sans-serif`;
+        const m2 = measureCtx.measureText(word.text);
+        const a2 = (m2.actualBoundingBoxAscent ?? (fontSize * 0.78)) + (m2.actualBoundingBoxDescent ?? (fontSize * 0.22));
+        if (a2 > 0) {
+          fontSize = Math.max(6, fontSize * (h / a2));
+        }
       }
     }
 
-    // Baseline alignment correction: shift down slightly for better overlap
-    const baselineShift = h * 0.05;
+    // Baseline alignment: shift so text baseline matches OCR-detected baseline
+    const baselineShift = h * 0.02;
 
     span.style.left = `${x}px`;
     span.style.top = `${y + baselineShift}px`;
@@ -323,6 +348,22 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
 
   container.appendChild(fragment);
 
+  // ── Apply global deskew rotation to the OCR text layer ──
+  // OCR variants are internally deskewed, so word positions are relative to
+  // the straightened canvas.  Apply the inverse skew to the text layer
+  // container so the overlay aligns with the original (skewed) page image.
+  try {
+    const skewDeg = await estimatePageSkewAngle(pageNum);
+    if (Math.abs(skewDeg) >= 0.35) {
+      container.style.transform = `rotate(${skewDeg.toFixed(2)}deg)`;
+      container.style.transformOrigin = 'center center';
+    } else {
+      container.style.transform = '';
+    }
+  } catch (_e) {
+    container.style.transform = '';
+  }
+
   // ── Render confidence overlay if enabled ──
   if (state.ocrConfidenceMode && sortedWords.length) {
     const annotCanvas = els.annotationCanvas;
@@ -330,6 +371,39 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
       renderConfidenceOverlay(sortedWords, annotCanvas, displayW, displayH);
     }
   }
+}
+
+// ─── Text Layer Erase Mode ──────────────────────────────────────────────────
+// Click-to-delete: clicks on text spans remove them from the overlay and
+// update the stored OCR text for the page.
+
+let _eraseMode = false;
+
+export function isTextEraseMode() { return _eraseMode; }
+
+export function enableTextEraseMode() {
+  const container = els.textLayerDiv;
+  if (!container) return;
+  _eraseMode = true;
+  container.classList.add('erase-mode');
+  container.addEventListener('click', _handleEraseClick);
+}
+
+export function disableTextEraseMode() {
+  const container = els.textLayerDiv;
+  if (!container) return;
+  _eraseMode = false;
+  container.classList.remove('erase-mode');
+  container.removeEventListener('click', _handleEraseClick);
+}
+
+function _handleEraseClick(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  const span = e.target.closest('span');
+  if (!span) return;
+  span.remove();
+  _syncTextLayerToStorage();
 }
 
 // ─── Inline Text Editor (Acrobat-style) ────────────────────────────────────

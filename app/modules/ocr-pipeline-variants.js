@@ -99,12 +99,17 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
       ? [
         [0, 'otsu', false, 1],
         [0, 'mean', false, 1],
+        [16, 'otsu', false, 1],
       ]
       : [
         [0, 'otsu', false, 1],
         [0, 'mean', false, 1],
         [16, 'otsu', false, 1],
         [-16, 'mean', false, 1],
+        [10, 'otsu', true, 1],
+        [-10, 'otsu', false, 1],
+        [28, 'otsu', false, 1],
+        [-32, 'mean', false, 1],
       ]);
 
   let preprocessDone = 0;
@@ -163,9 +168,11 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   }
 
   const sourceMegaPixels = Number(((canvas.width * canvas.height) / 1_000_000).toFixed(2));
+  // Variant budget: more variants = higher OCR quality but slower.
+  // Raised from previous conservative values to improve recognition accuracy.
   const variantBudget = isAccurate
-    ? (sourceMegaPixels >= 6 ? 6 : sourceMegaPixels >= 3.5 ? 8 : 12)
-    : (sourceMegaPixels >= 6 ? 3 : sourceMegaPixels >= 3.5 ? 4 : 6);
+    ? (sourceMegaPixels >= 6 ? 10 : sourceMegaPixels >= 3.5 ? 14 : 18)
+    : (sourceMegaPixels >= 6 ? 5 : sourceMegaPixels >= 3.5 ? 8 : 10);
   if (variants.length > variantBudget) {
     variants = pickVariantsByBudget(variants, variantBudget);
   }

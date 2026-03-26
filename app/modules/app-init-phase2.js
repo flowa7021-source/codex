@@ -367,12 +367,8 @@ export function initPhase2Modules(deps) {
         try {
           const result = await convertToPdfA(state.pdfBytes, { title: state.docName });
           const filename = (state.docName || 'document').replace(/\.[^.]+$/, '') + '-pdfa.pdf';
-          const url = URL.createObjectURL(result.blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          a.click();
-          URL.revokeObjectURL(url);
+          const { saveOrDownload } = await import('./platform.js');
+          await saveOrDownload(result.blob, filename, [{ name: 'PDF', extensions: ['pdf'] }]);
           toastSuccess('PDF/A \u044d\u043a\u0441\u043f\u043e\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u043d');
           if (result.report.issues.length > 0) {
             toastWarning(`\u041f\u0440\u0435\u0434\u0443\u043f\u0440\u0435\u0436\u0434\u0435\u043d\u0438\u044f: ${result.report.issues.join('; ')}`);

@@ -7,7 +7,7 @@ import { emit, on, once, removeAllListeners as removeAllBusListeners } from './m
 import { debounce } from './modules/utils.js';
 import { state, defaultHotkeys, hotkeys, setHotkeys, els } from './modules/state.js';
 import { ensurePdfJs, preloadPdfRuntime } from './modules/loaders.js';
-import { getCachedPage, clearPageRenderCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
+import { getCachedPage, clearPageRenderCache, evictPageFromCache, revokeAllTrackedUrls, pageRenderCache, objectUrlRegistry } from './modules/perf.js';
 import { toolStateMachine, initToolModeDeps } from './modules/tool-modes.js';
 import { pushDiagnosticEvent, clearDiagnostics, exportDiagnostics, runRuntimeSelfCheck, setupRuntimeDiagnostics, initDiagnosticsDeps, novaLog, exportLogsAsJson, copyLogsToClipboard, clearActivityLog, getLogEntries } from './modules/diagnostics.js';
 import { setLanguage, getLanguage, loadLanguage, applyI18nToDOM } from './modules/i18n.js';
@@ -242,7 +242,7 @@ if (els.fileInput) {
 initNavigation({
   state, els, debounce, safeOn,
   renderCurrentPage, renderPagePreviews, goToPage, fitWidth, fitPage,
-  clearOcrRuntimeCaches, scheduleBackgroundOcrScan,
+  clearOcrRuntimeCaches, scheduleBackgroundOcrScan, evictPageFromCache,
 });
 
 // ─── Complex handlers kept in app.js ─────────────────────────────────────────
@@ -719,7 +719,7 @@ window._bootstrapAdvancedTools = () => {
 
 // ─── Tab Manager (delegated to init-tabs.js) ─────────────────────────────────
 initTabs({
-  state, els, safeOn, openFile, renderCurrentPage, TabManager,
+  state, els, safeOn, openFile, renderCurrentPage, clearPageRenderCache, TabManager,
 });
 
 // ─── Bookmark & Notes Controllers ────────────────────────────────────────
