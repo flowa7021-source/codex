@@ -302,6 +302,7 @@ export const els = {
   redoTextEdit: document.getElementById('redoTextEdit'),
   exportHealthReport: document.getElementById('exportHealthReport'),
   toggleTextEdit: document.getElementById('toggleTextEdit'),
+  eraseTextLayer: document.getElementById('eraseTextLayer'),
   saveTextEdits: document.getElementById('saveTextEdits'),
   ocrCurrentPage: document.getElementById('ocrCurrentPage'),
   ocrRegionMode: document.getElementById('ocrRegionMode'),

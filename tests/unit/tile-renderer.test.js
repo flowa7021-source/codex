@@ -24,23 +24,23 @@ describe('shouldUseTileRendering', () => {
   });
 
   it('returns true when width exceeds threshold', () => {
-    assert.equal(shouldUseTileRendering({ width: 5000, height: 1000 }), true);
+    assert.equal(shouldUseTileRendering({ width: 7000, height: 1000 }), true);
   });
 
   it('returns true when height exceeds threshold', () => {
-    assert.equal(shouldUseTileRendering({ width: 1000, height: 5000 }), true);
+    assert.equal(shouldUseTileRendering({ width: 1000, height: 7000 }), true);
   });
 
   it('returns true when both exceed threshold', () => {
-    assert.equal(shouldUseTileRendering({ width: 5000, height: 5000 }), true);
+    assert.equal(shouldUseTileRendering({ width: 7000, height: 7000 }), true);
   });
 
-  it('returns false at exactly 4000px', () => {
-    assert.equal(shouldUseTileRendering({ width: 4000, height: 4000 }), false);
+  it('returns false at exactly 6000px', () => {
+    assert.equal(shouldUseTileRendering({ width: 6000, height: 6000 }), false);
   });
 
-  it('returns true at 4001px', () => {
-    assert.equal(shouldUseTileRendering({ width: 4001, height: 1000 }), true);
+  it('returns true at 6001px', () => {
+    assert.equal(shouldUseTileRendering({ width: 6001, height: 1000 }), true);
   });
 });
 

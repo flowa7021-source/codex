@@ -29,6 +29,7 @@ function makeDeps(overrides = {}) {
     fitPage: mock.fn(),
     clearOcrRuntimeCaches: mock.fn(),
     scheduleBackgroundOcrScan: mock.fn(),
+    evictPageFromCache: mock.fn(),
     ...overrides,
   };
 }

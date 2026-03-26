@@ -183,8 +183,8 @@ export function runInWorker(type, payload) {
 // ─── Phase 1: Enhanced Memory Management ───────────────────────────────────
 export const pageRenderCache = {
   entries: new Map(),
-  maxEntries: 16,             // increased from 8 for large docs with frequent navigation
-  maxTotalPixels: 64_000_000, // increased from 32M — safe with 4GB heap limit
+  maxEntries: 24,             // generous for large docs with frequent navigation
+  maxTotalPixels: 128_000_000, // ~128 million pixels for high-res renders at scale
   totalPixels: 0,
 };
 

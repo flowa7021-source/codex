@@ -21,6 +21,7 @@ export function initNavigation(deps) {
     fitPage,
     clearOcrRuntimeCaches,
     scheduleBackgroundOcrScan,
+    evictPageFromCache,
   } = deps;
 
   safeOn(els.prevPage, 'click', async () => {
@@ -63,6 +64,9 @@ export function initNavigation(deps) {
   safeOn(els.rotate, 'click', async () => {
     state.rotation = (state.rotation + 90) % 360;
     clearOcrRuntimeCaches('rotation-changed');
+    // Evict the current page from the render cache so the stale (un-rotated)
+    // canvas is never shown as a placeholder — prevents "flicker then nothing".
+    evictPageFromCache(state.currentPage);
     if (state.adapter) {
       try {
         const vp = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);

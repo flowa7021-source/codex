@@ -160,6 +160,16 @@
   background: rgba(255, 255, 100, 0.5);
   outline: 1px solid #3b82f6;
 }
+/* Erase mode: click to delete spans */
+.text-layer.erase-mode > span {
+  cursor: crosshair;
+  pointer-events: all;
+}
+.text-layer.erase-mode > span:hover {
+  background: rgba(255, 60, 60, 0.35);
+  color: rgba(200, 0, 0, 0.6);
+  outline: 1px dashed rgba(255, 0, 0, 0.5);
+}
 /* Search highlights */
 .text-layer .search-highlight {
   background: rgba(255, 216, 77, 0.6) !important;
