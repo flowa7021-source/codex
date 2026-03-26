@@ -240,6 +240,7 @@
   "text.exportTitle": "Export",
   "ocr.recognition": "OCR Recognition",
   "ocr.ocrPage": "OCR page",
+  "ocr.retry": "Retry OCR",
   "ocr.stop": "Stop",
   "ocr.quality": "Quality",
   "ocr.batchOcr": "Batch OCR",

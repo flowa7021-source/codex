@@ -52,16 +52,6 @@ let _poolSize = 0;
 let _poolInitializing = false;
 let _poolInitPromise = null;
 
-// Resolve local paths relative to this module
-function resolveVendorPath(relativePath) {
-  try {
-    return new URL(relativePath, import.meta.url).href;
-  } catch (err) {
-    console.warn('[ocr] error:', err?.message);
-    return relativePath;
-  }
-}
-
 /**
  * Resolve a path under the public vendor/tesseract directory.
  * In dev mode, Vite serves `app/public/` at the root.
@@ -77,11 +67,11 @@ function resolvePublicTesseractPath(filename) {
   }
 }
 
-// Worker and core files are served from app/public/vendor/tesseract/ so they
-// load from the app's own origin — no external CDN requests.
-// Language data stays in app/vendor/tesseract/lang-data (bundled by Vite).
+// All Tesseract assets (worker, WASM core, lang data) are served from
+// app/public/vendor/tesseract/ so they load from the app's own origin —
+// no external CDN requests — and are present in the production dist build.
 const PATHS = {
-  langDataDir: resolveVendorPath('../vendor/tesseract/lang-data'),
+  langDataDir: resolvePublicTesseractPath('lang-data'),
   workerPath: resolvePublicTesseractPath('worker.min.js'),
   corePath: resolvePublicTesseractPath(''),
 };
@@ -190,7 +180,10 @@ export function getTesseractWorkerOpts() {
     workerPath: PATHS.workerPath,
     corePath: PATHS.corePath,
     langPath: PATHS.langDataDir,
-    workerBlobURL: true,
+    // workerBlobURL: false — load worker directly from its URL so the
+    // worker script inherits the correct origin and can fetch WASM/lang
+    // data without cross-origin restrictions (Tauri WebView issue).
+    workerBlobURL: false,
     cacheMethod: 'none',
     gzip: false,
   };

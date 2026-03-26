@@ -240,6 +240,7 @@
   "text.exportTitle": "Экспорт",
   "ocr.recognition": "OCR Распознавание",
   "ocr.ocrPage": "OCR страницы",
+  "ocr.retry": "Повтор OCR",
   "ocr.stop": "Остановить",
   "ocr.quality": "Качество",
   "ocr.batchOcr": "Пакетное OCR",

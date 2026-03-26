@@ -305,6 +305,7 @@ export const els = {
   saveTextEdits: document.getElementById('saveTextEdits'),
   ocrCurrentPage: document.getElementById('ocrCurrentPage'),
   ocrRegionMode: document.getElementById('ocrRegionMode'),
+  continueOcrPage: document.getElementById('continueOcrPage'),
   copyOcrText: document.getElementById('copyOcrText'),
   cancelBackgroundOcr: document.getElementById('cancelBackgroundOcr'),
   ocrStatus: document.getElementById('ocrStatus'),

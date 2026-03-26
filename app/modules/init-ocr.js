@@ -18,6 +18,7 @@ export function initOcr(deps) {
     runOcrForCurrentPage,
     setOcrRegionMode,
     cancelAllOcrWork,
+    resetTesseractAvailability,
     markLowConfidenceWords,
     getPageQualitySummary,
     listOcrDocuments,
@@ -101,6 +102,14 @@ export function initOcr(deps) {
 
   // ── OCR Controls ───────────────────────────────────────────────────────
   safeOn(els.ocrCurrentPage, 'click', async () => {
+    await runOcrForCurrentPage();
+  });
+
+  // "Continue / retry OCR of current page" — resets Tesseract failure state
+  // before starting so a previous init error doesn't permanently block OCR.
+  safeOn(els.continueOcrPage, 'click', async () => {
+    resetTesseractAvailability();
+    setOcrStatus('OCR: повтор...');
     await runOcrForCurrentPage();
   });
 
