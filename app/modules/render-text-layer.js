@@ -215,19 +215,23 @@ export async function renderTextLayer(pageNum, zoom, rotation) {
     } catch (err) {
       console.warn('Text layer render failed:', err);
     }
-    // Re-enable inline editing after DOM rebuild
+    // Re-enable active modes after DOM rebuild
     if (state.textEditMode) enableInlineTextEditing();
+    if (_eraseMode) enableTextEraseMode();
     return;
   }
 
   // ── Path 2: OCR-based text layer ──
   await _renderOcrTextLayer(pageNum, zoom, dpr);
 
-  // ── Re-enable inline editing if text edit mode is active ──
+  // ── Re-enable active modes after DOM rebuild ──
   // renderTextLayer clears and rebuilds the container (innerHTML = ''),
-  // which strips the 'editing' class and event listeners. Re-attach them.
+  // which strips classes and event listeners. Re-attach them.
   if (state.textEditMode) {
     enableInlineTextEditing();
+  }
+  if (_eraseMode) {
+    enableTextEraseMode();
   }
 }
 

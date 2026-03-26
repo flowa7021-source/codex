@@ -16,6 +16,7 @@ export function initTabs(deps) {
     safeOn,
     openFile,
     renderCurrentPage,
+    clearPageRenderCache,
     TabManager,
   } = deps;
 
@@ -24,6 +25,8 @@ export function initTabs(deps) {
     tabBar: tabBarEl,
     onActivate: async (tab) => {
       if (!tab.bytes) return;
+      // Clear the render cache — it contains pages from the previous tab's document.
+      clearPageRenderCache();
       const type = tab.type || 'pdf';
       const file = new File([tab.bytes], tab.name, {
         type: type === 'pdf' ? 'application/pdf' : 'application/octet-stream',

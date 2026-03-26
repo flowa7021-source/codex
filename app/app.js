@@ -719,7 +719,7 @@ window._bootstrapAdvancedTools = () => {
 
 // ─── Tab Manager (delegated to init-tabs.js) ─────────────────────────────────
 initTabs({
-  state, els, safeOn, openFile, renderCurrentPage, TabManager,
+  state, els, safeOn, openFile, renderCurrentPage, clearPageRenderCache, TabManager,
 });
 
 // ─── Bookmark & Notes Controllers ────────────────────────────────────────
