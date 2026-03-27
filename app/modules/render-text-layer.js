@@ -285,6 +285,102 @@ function _pickFontFamily(word) {
   return _FONT_DEFAULT_SANS;
 }
 
+/**
+ * Detect table grid lines on the page and clip text spans to cell boundaries.
+ * Works by finding horizontal & vertical ruled lines from the OCR word cache
+ * or from PDF.js operator list, then shrinking any span that bleeds across a line.
+ */
+function _clipSpansToTableCells(container, displayW, displayH, _pageNum) {
+  // Collect all span bounding rects
+  const spans = container.querySelectorAll('span');
+  if (spans.length < 4) return; // too few words for table detection
+
+  // Heuristic: detect table grid from word alignment patterns.
+  // Group word left-edges and right-edges to find vertical separators.
+  // Group word top-edges and bottom-edges to find horizontal separators.
+  const lefts = [];
+  const rights = [];
+  const tops = [];
+  const bottoms = [];
+
+  for (const s of spans) {
+    const l = parseFloat(s.style.left) || 0;
+    const t = parseFloat(s.style.top) || 0;
+    const w = parseFloat(s.style.width) || 0;
+    const h = parseFloat(s.style.height) || 0;
+    lefts.push(l);
+    rights.push(l + w);
+    tops.push(t);
+    bottoms.push(t + h);
+  }
+
+  // Find vertical column boundaries: cluster right-edges and left-edges
+  const vLines = _findAlignmentLines([...rights, ...lefts], displayW, 3);
+  const hLines = _findAlignmentLines([...bottoms, ...tops], displayH, 3);
+
+  if (vLines.length < 2 && hLines.length < 2) return; // no table structure
+
+  // For each span, find the tightest cell that contains it and clip
+  for (const s of spans) {
+    const sl = parseFloat(s.style.left) || 0;
+    const st = parseFloat(s.style.top) || 0;
+    const sw = parseFloat(s.style.width) || 0;
+    const sh = parseFloat(s.style.height) || 0;
+    const sr = sl + sw;
+    const sb = st + sh;
+
+    // Find the cell: left boundary = largest vLine <= sl, right = smallest vLine >= sr
+    let cellLeft = 0;
+    let cellRight = displayW;
+    for (const v of vLines) {
+      if (v <= sl + 2) cellLeft = Math.max(cellLeft, v);
+      if (v >= sr - 2) cellRight = Math.min(cellRight, v);
+    }
+    let cellTop = 0;
+    let cellBottom = displayH;
+    for (const h of hLines) {
+      if (h <= st + 2) cellTop = Math.max(cellTop, h);
+      if (h >= sb - 2) cellBottom = Math.min(cellBottom, h);
+    }
+
+    // If the span overflows its cell, clip it
+    const overLeft = Math.max(0, cellLeft - sl);
+    const overTop = Math.max(0, cellTop - st);
+    const overRight = Math.max(0, sr - cellRight);
+    const overBottom = Math.max(0, sb - cellBottom);
+
+    if (overLeft > 1 || overTop > 1 || overRight > 1 || overBottom > 1) {
+      const clipW = Math.max(1, sw - overLeft - overRight);
+      const clipH = Math.max(1, sh - overTop - overBottom);
+      s.style.clip = `rect(${overTop}px, ${overLeft + clipW}px, ${overTop + clipH}px, ${overLeft}px)`;
+    }
+  }
+}
+
+/**
+ * Find alignment lines (vertical or horizontal) by clustering edge positions.
+ * Returns sorted array of pixel positions where 3+ edges align within tolerance.
+ */
+function _findAlignmentLines(positions, maxVal, minCount) {
+  if (positions.length < minCount) return [];
+  const sorted = [...positions].sort((a, b) => a - b);
+  const tolerance = maxVal * 0.005; // 0.5% of dimension
+  const lines = [];
+  let i = 0;
+  while (i < sorted.length) {
+    let j = i + 1;
+    while (j < sorted.length && sorted[j] - sorted[i] < tolerance) j++;
+    if (j - i >= minCount) {
+      // Average position of this cluster
+      let sum = 0;
+      for (let k = i; k < j; k++) sum += sorted[k];
+      lines.push(sum / (j - i));
+    }
+    i = j;
+  }
+  return lines;
+}
+
 /** @param {any} pageNum @param {any} zoom @param {any} dpr @returns {Promise<any>} */
 export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
   const container = els.textLayerDiv;
@@ -341,21 +437,30 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
     const fontWeight = word.font_bold ? 'bold' : 'normal';
     const fontStyle = word.font_italic ? 'italic' : 'normal';
 
-    // ── Font sizing: 3-pass iterative fitting for precise bbox match ──
+    // ── Font sizing: use bbox height directly, correct with scaleY ──
     const fontSpec = `${fontStyle} ${fontWeight} Xpx ${fontFamily}`;
     let fontSize = Math.max(5, h * 0.90);
     if (word.text.length > 0 && h > 5) {
-      for (let pass = 0; pass < 3; pass++) {
-        measureCtx.font = fontSpec.replace('X', String(fontSize));
-        const m = measureCtx.measureText(word.text);
-        const asc = m.actualBoundingBoxAscent ?? (fontSize * 0.76);
-        const dsc = m.actualBoundingBoxDescent ?? (fontSize * 0.24);
-        const actualH = asc + dsc;
-        if (actualH > 0) fontSize = Math.max(5, fontSize * (h / actualH));
-      }
-      // Final 2% shrink to avoid overflow
-      fontSize *= 0.98;
+      // Single measurement pass to get actual font metrics
+      measureCtx.font = fontSpec.replace('X', String(fontSize));
+      const m = measureCtx.measureText(word.text);
+      const asc = m.actualBoundingBoxAscent ?? (fontSize * 0.76);
+      const dsc = m.actualBoundingBoxDescent ?? (fontSize * 0.24);
+      const actualH = asc + dsc;
+      if (actualH > 0) fontSize = Math.max(5, fontSize * (h / actualH));
     }
+
+    // Measure final metrics for precise 2D scaling
+    measureCtx.font = fontSpec.replace('X', String(fontSize));
+    const finalMetrics = measureCtx.measureText(word.text);
+    const finalW = finalMetrics.width || 1;
+    const finalAsc = finalMetrics.actualBoundingBoxAscent ?? (fontSize * 0.76);
+    const finalDsc = finalMetrics.actualBoundingBoxDescent ?? (fontSize * 0.24);
+    const finalH = finalAsc + finalDsc || 1;
+
+    // Compute precise 2D scale factors
+    const sx = w / finalW;
+    const sy = h / finalH;
 
     span.style.left = `${x}px`;
     span.style.top = `${y}px`;
@@ -367,27 +472,35 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
     span.style.height = `${h}px`;
     span.style.lineHeight = `${h}px`;
 
-    // ── Width fitting: always use scaleX for precise horizontal match ──
-    if (word.text.length >= 1) {
-      measureCtx.font = fontSpec.replace('X', String(fontSize));
-      const measuredWidth = measureCtx.measureText(word.text).width;
-      if (measuredWidth > 0) {
-        const ratio = w / measuredWidth;
-        span.style.transform = `scaleX(${ratio.toFixed(4)})`;
-        span.style.transformOrigin = 'left top';
-      }
+    // ── 2D fitting: scaleX + scaleY for pixel-precise bbox match ──
+    let transform = '';
+    if (word.text.length >= 1 && finalW > 0) {
+      transform = `scale(${sx.toFixed(4)}, ${sy.toFixed(4)})`;
     }
 
     // Per-word skew correction from Tesseract baseline data
-    if (word.baseline?.angle && Math.abs(word.baseline.angle) > 0.3) {
-      span.style.transform = (span.style.transform || '') + ` rotate(${(-word.baseline.angle).toFixed(2)}deg)`;
-      if (!span.style.transformOrigin) span.style.transformOrigin = 'left top';
+    if (word.baseline?.angle && Math.abs(word.baseline.angle) > 0.2) {
+      transform += ` rotate(${(-word.baseline.angle).toFixed(2)}deg)`;
     }
+
+    if (transform) {
+      span.style.transform = transform;
+      span.style.transformOrigin = 'left top';
+    }
+
+    // Clip to bbox — prevents text from bleeding into adjacent table cells
+    span.style.overflow = 'hidden';
+    span.style.clip = `rect(0, ${w}px, ${h}px, 0)`;
 
     fragment.appendChild(span);
   }
 
   container.appendChild(fragment);
+
+  // ── Table cell alignment: tighten spans that overlap cell borders ──
+  // If the page has line/rect annotations from PDF.js (ruled tables), we
+  // detect horizontal/vertical lines and clip any span that crosses them.
+  _clipSpansToTableCells(container, displayW, displayH, pageNum);
 
   // ── Apply global deskew rotation to the OCR text layer ──
   // OCR variants are internally deskewed, so word positions are relative to
