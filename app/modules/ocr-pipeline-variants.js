@@ -135,7 +135,8 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   let skewProbeDeg = 0;
   let skewRotateCount = 0;
   let skewToApply = 0;
-  if (Math.abs(preferredSkew) >= 0.25) {
+  // Apply deskew for any detectable skew — no minimum threshold.
+  if (Math.abs(preferredSkew) >= 0.05) {
     skewToApply = preferredSkew;
   } else if (!fast) {
     const probe = variants[Math.min(2, variants.length - 1)];
@@ -144,12 +145,12 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
       const probeImg = probeCtx.getImageData(0, 0, probe.width, probe.height);
       const skew = estimateSkewAngleFromBinary(probeImg);
       skewProbeDeg = Number(skew.toFixed(2));
-      if (Math.abs(skew) >= 0.25) {
+      if (Math.abs(skew) >= 0.05) {
         skewToApply = skew;
       }
     }
   }
-  if (Math.abs(skewToApply) >= 0.25) {
+  if (Math.abs(skewToApply) >= 0.05) {
     const expanded = [];
     const totalSteps = recipeList.length + variants.length;
     for (let i = 0; i < variants.length; i += 1) {

@@ -235,6 +235,56 @@ export async function renderTextLayer(pageNum, zoom, rotation) {
   }
 }
 
+// ─── Font family selection for OCR text overlay ─────────────────────────────
+// Maps Tesseract font names to CSS font stacks. Covers the most common
+// document fonts (serif, sans-serif, monospace, display).
+const _FONT_MAP = {
+  'times': '"Times New Roman", Times, Georgia, serif',
+  'georgia': 'Georgia, "Times New Roman", serif',
+  'garamond': 'Garamond, Georgia, serif',
+  'palatino': '"Palatino Linotype", Palatino, Georgia, serif',
+  'arial': 'Arial, Helvetica, sans-serif',
+  'helvetica': 'Helvetica, Arial, sans-serif',
+  'verdana': 'Verdana, Geneva, sans-serif',
+  'tahoma': 'Tahoma, Geneva, sans-serif',
+  'calibri': 'Calibri, "Segoe UI", Tahoma, sans-serif',
+  'trebuchet': '"Trebuchet MS", Verdana, sans-serif',
+  'courier': '"Courier New", Courier, monospace',
+  'consolas': 'Consolas, "Courier New", monospace',
+  'impact': 'Impact, "Arial Black", sans-serif',
+  'comic': '"Comic Sans MS", cursive, sans-serif',
+};
+const _FONT_DEFAULT_SANS = 'Arial, Helvetica, "Liberation Sans", sans-serif';
+const _FONT_DEFAULT_SERIF = '"Times New Roman", Times, "Liberation Serif", serif';
+const _FONT_DEFAULT_MONO = '"Courier New", Courier, monospace';
+
+/**
+ * Pick the best CSS font-family for a Tesseract word.
+ * Uses the word's font_name if available, otherwise falls back to serif
+ * for languages that typically use serif (Cyrillic documents) and
+ * sans-serif for others.
+ * @param {any} word
+ * @returns {string}
+ */
+function _pickFontFamily(word) {
+  const rawFont = String(word.font_name || word.fontName || '').toLowerCase();
+  if (rawFont) {
+    for (const [key, stack] of Object.entries(_FONT_MAP)) {
+      if (rawFont.includes(key)) return stack;
+    }
+    // Heuristic: mono fonts have fixed-width hints
+    if (rawFont.includes('mono') || rawFont.includes('fixed') || rawFont.includes('code')) {
+      return _FONT_DEFAULT_MONO;
+    }
+    // Heuristic: serif detection
+    if (rawFont.includes('serif') && !rawFont.includes('sans')) {
+      return _FONT_DEFAULT_SERIF;
+    }
+  }
+  // Default: sans-serif is the safest cross-platform choice
+  return _FONT_DEFAULT_SANS;
+}
+
 /** @param {any} pageNum @param {any} zoom @param {any} dpr @returns {Promise<any>} */
 export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
   const container = els.textLayerDiv;
@@ -285,59 +335,53 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
     const w = (word.bbox.x1 - word.bbox.x0) * displayW;
     const h = (word.bbox.y1 - word.bbox.y0) * displayH;
 
+    // ── Font selection: pick best-matching family for this word ──
+    // Tesseract may report font_name on the word; use it to pick a CSS font.
+    const fontFamily = _pickFontFamily(word);
+    const fontWeight = word.font_bold ? 'bold' : 'normal';
+    const fontStyle = word.font_italic ? 'italic' : 'normal';
+
     // ── Font sizing: 3-pass iterative fitting for precise bbox match ──
-    // Use a serif/sans mix that better matches typical document fonts
-    const fontFamily = 'Arial, Helvetica, sans-serif';
-    let fontSize = Math.max(6, h * 0.88);
-    if (word.text.length > 0 && h > 6) {
-      // Pass 1: measure at initial guess
-      measureCtx.font = `${fontSize}px ${fontFamily}`;
-      const m1 = measureCtx.measureText(word.text);
-      const a1 = (m1.actualBoundingBoxAscent ?? (fontSize * 0.76)) + (m1.actualBoundingBoxDescent ?? (fontSize * 0.24));
-      if (a1 > 0) fontSize = Math.max(6, fontSize * (h / a1));
-      // Pass 2: refine with corrected size
-      measureCtx.font = `${fontSize}px ${fontFamily}`;
-      const m2 = measureCtx.measureText(word.text);
-      const a2 = (m2.actualBoundingBoxAscent ?? (fontSize * 0.76)) + (m2.actualBoundingBoxDescent ?? (fontSize * 0.24));
-      if (a2 > 0) fontSize = Math.max(6, fontSize * (h / a2));
-      // Pass 3: final nudge
-      measureCtx.font = `${fontSize}px ${fontFamily}`;
-      const m3 = measureCtx.measureText(word.text);
-      const a3 = (m3.actualBoundingBoxAscent ?? (fontSize * 0.76)) + (m3.actualBoundingBoxDescent ?? (fontSize * 0.24));
-      if (a3 > 0) fontSize = Math.max(6, fontSize * (h / a3) * 0.98);
+    const fontSpec = `${fontStyle} ${fontWeight} Xpx ${fontFamily}`;
+    let fontSize = Math.max(5, h * 0.90);
+    if (word.text.length > 0 && h > 5) {
+      for (let pass = 0; pass < 3; pass++) {
+        measureCtx.font = fontSpec.replace('X', String(fontSize));
+        const m = measureCtx.measureText(word.text);
+        const asc = m.actualBoundingBoxAscent ?? (fontSize * 0.76);
+        const dsc = m.actualBoundingBoxDescent ?? (fontSize * 0.24);
+        const actualH = asc + dsc;
+        if (actualH > 0) fontSize = Math.max(5, fontSize * (h / actualH));
+      }
+      // Final 2% shrink to avoid overflow
+      fontSize *= 0.98;
     }
 
     span.style.left = `${x}px`;
     span.style.top = `${y}px`;
     span.style.fontSize = `${fontSize}px`;
     span.style.fontFamily = fontFamily;
+    span.style.fontWeight = fontWeight;
+    span.style.fontStyle = fontStyle;
     span.style.width = `${w}px`;
     span.style.height = `${h}px`;
     span.style.lineHeight = `${h}px`;
 
-    // ── Width fitting: scaleX transform for precise horizontal match ──
-    if (word.text.length > 1) {
-      measureCtx.font = `${fontSize}px ${fontFamily}`;
+    // ── Width fitting: always use scaleX for precise horizontal match ──
+    if (word.text.length >= 1) {
+      measureCtx.font = fontSpec.replace('X', String(fontSize));
       const measuredWidth = measureCtx.measureText(word.text).width;
-      if (measuredWidth > 0 && Math.abs(w - measuredWidth) > 0.5) {
+      if (measuredWidth > 0) {
         const ratio = w / measuredWidth;
-        if (ratio > 0.4 && ratio < 2.5) {
-          span.style.transform = `scaleX(${ratio.toFixed(4)})`;
-          span.style.transformOrigin = 'left top';
-        } else {
-          const spacing = (w - measuredWidth) / (word.text.length - 1);
-          const clampedSpacing = Math.max(-fontSize * 0.3, Math.min(fontSize * 0.5, spacing));
-          span.style.letterSpacing = `${clampedSpacing}px`;
-        }
+        span.style.transform = `scaleX(${ratio.toFixed(4)})`;
+        span.style.transformOrigin = 'left top';
       }
-    } else if (word.text.length === 1) {
-      span.style.textAlign = 'center';
     }
 
-    // Skew correction: apply rotation if word has baseline angle data
-    if (word.baseline?.angle && Math.abs(word.baseline.angle) > 0.5) {
-      span.style.transform = (span.style.transform || '') + ` rotate(${(-word.baseline.angle).toFixed(1)}deg)`;
-      span.style.transformOrigin = span.style.transformOrigin || 'left bottom';
+    // Per-word skew correction from Tesseract baseline data
+    if (word.baseline?.angle && Math.abs(word.baseline.angle) > 0.3) {
+      span.style.transform = (span.style.transform || '') + ` rotate(${(-word.baseline.angle).toFixed(2)}deg)`;
+      if (!span.style.transformOrigin) span.style.transformOrigin = 'left top';
     }
 
     fragment.appendChild(span);
@@ -351,7 +395,7 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
   // container so the overlay aligns with the original (skewed) page image.
   try {
     const skewDeg = await estimatePageSkewAngle(pageNum);
-    if (Math.abs(skewDeg) >= 0.25) {
+    if (Math.abs(skewDeg) >= 0.05) {
       container.style.transform = `rotate(${skewDeg.toFixed(2)}deg)`;
       container.style.transformOrigin = 'center center';
     } else {
