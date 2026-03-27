@@ -168,17 +168,11 @@ export async function exportCurrentDocToWord() {
       _deps.setOcrStatus('Экспорт DOCX: извлечение структуры...');
       const pageCount = state.pageCount || 1;
 
-      // Capture page image function for text+images mode
-      const captureImage = async (pageNum) => {
-        const imgData = await _deps.capturePageAsImageData(pageNum);
-        if (!imgData || typeof imgData !== 'string') return null;
-        return Uint8Array.from(atob(imgData), c => c.charCodeAt(0));
-      };
-
-      const includeImages = pageCount <= 30;
       const blob = await _deps.convertPdfToDocx(state.adapter.pdfDoc, title, pageCount, {
-        mode: includeImages ? 'text+images' : 'text',
-        capturePageImage: includeImages ? captureImage : null,
+        // 'text' mode extracts structured text + inline images/figures from the PDF.
+        // Do NOT use 'text+images' — it appends redundant full-page PNG screenshots.
+        mode: 'text',
+        capturePageImage: null,
         ocrWordCache: _deps._ocrWordCache,
         includeFooter: true,
       });
