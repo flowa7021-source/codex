@@ -770,9 +770,9 @@ describe('PDFAdapter – renderPage uses window.devicePixelRatio when no dpr ove
 
     // Pass no dpr override — zoom=1, rotation=0
     await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
-    // renderScale = zoom * dpr = 1 * 2 = 2, viewport = 400x200
-    assert.equal(canvas.width, 400);
-    assert.equal(canvas.height, 200);
+    // renderScale = zoom * dpr * qualityBoost = 1 * 2 * 1.25 = 2.5, viewport = 500x250
+    assert.equal(canvas.width, 500);
+    assert.equal(canvas.height, 250);
 
     window.devicePixelRatio = origDpr;
   });

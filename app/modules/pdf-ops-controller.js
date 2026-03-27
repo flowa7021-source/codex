@@ -28,24 +28,33 @@ export function initPdfOpsDeps(deps) {
 
 // ─── PDF Merge (via pdf-lib - preserves text, fonts, links, forms) ─────────
 export async function mergePdfFiles() {
+  // If a PDF is currently open, let the user pick ONE file to append.
+  // Otherwise, pick 2+ files from scratch.
+  const currentFile = state.file && state.adapter?.type === 'pdf' ? state.file : null;
+
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.pdf';
-  input.multiple = true;
+  input.multiple = !currentFile; // single file if we already have one open
   input.addEventListener('change', async () => {
-    const files = Array.from(input.files || []);
-    if (files.length < 2) {
-      _deps.setOcrStatus('Выберите 2+ PDF файла для объединения');
+    const picked = Array.from(input.files || []);
+    if (!picked.length) return;
+
+    const filesToMerge = currentFile ? [currentFile, ...picked] : picked;
+    if (filesToMerge.length < 2) {
+      _deps.setOcrStatus('Выберите PDF файл для объединения с текущим документом');
       return;
     }
+
     try {
-      _deps.setOcrStatus(`Объединение ${files.length} файлов (без потери данных)...`);
-      const mergedBlob = await _deps.mergePdfDocuments(files);
+      _deps.setOcrStatus(`Объединение ${filesToMerge.length} файлов (без потери данных)...`);
+      const mergedBlob = await _deps.mergePdfDocuments(filesToMerge);
 
       const { saveOrDownload } = await import('./platform.js');
-      await saveOrDownload(mergedBlob, 'merged.pdf', [{ name: 'PDF', extensions: ['pdf'] }]);
-      _deps.setOcrStatus(`Объединено: ${files.length} файлов (${Math.round(mergedBlob.size / 1024)} КБ)`);
-      _deps.pushDiagnosticEvent('pdf.merge', { files: files.length, sizeKb: Math.round(mergedBlob.size / 1024) });
+      const baseName = (state.docName || 'merged').replace(/\.[^.]+$/, '');
+      await saveOrDownload(mergedBlob, `${baseName}-merged.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
+      _deps.setOcrStatus(`Объединено: ${filesToMerge.length} файлов (${Math.round(mergedBlob.size / 1024)} КБ)`);
+      _deps.pushDiagnosticEvent('pdf.merge', { files: filesToMerge.length, sizeKb: Math.round(mergedBlob.size / 1024) });
     } catch (err) {
       _deps.setOcrStatus(`Ошибка объединения: ${err?.message || 'неизвестная'}`);
       _deps.pushDiagnosticEvent('pdf.merge.error', { message: err?.message }, 'error');
