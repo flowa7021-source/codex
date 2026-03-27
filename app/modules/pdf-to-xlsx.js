@@ -305,6 +305,46 @@ function applyMergesForTable(builder, sheetIdx, table, rowOffset) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Text fallback: group PDF.js text items into lines                 */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Group PDF.js textContent items into lines by Y-coordinate proximity.
+ * Returns an array of strings, one per detected line.
+ * @param {any[]} items
+ * @returns {string[]}
+ */
+function _groupTextItemsIntoLines(items) {
+  if (!items?.length) return [];
+  // Each item has .str, .transform[5] = Y position
+  const sorted = [...items]
+    .filter(it => it.str && it.str.trim())
+    .sort((a, b) => {
+      const dy = (b.transform?.[5] ?? 0) - (a.transform?.[5] ?? 0); // top-to-bottom (PDF Y is bottom-up)
+      if (Math.abs(dy) > 3) return dy;
+      return (a.transform?.[4] ?? 0) - (b.transform?.[4] ?? 0); // left-to-right
+    });
+
+  const lines = [];
+  let currentLine = '';
+  let lastY = null;
+
+  for (const item of sorted) {
+    const y = item.transform?.[5] ?? 0;
+    if (lastY !== null && Math.abs(y - lastY) > 3) {
+      // New line
+      if (currentLine.trim()) lines.push(currentLine.trim());
+      currentLine = '';
+    }
+    currentLine += (currentLine ? ' ' : '') + item.str;
+    lastY = y;
+  }
+  if (currentLine.trim()) lines.push(currentLine.trim());
+
+  return lines;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main public API                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -368,10 +408,20 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
     }
 
     if (!tables || tables.length === 0) {
-      // Yield every 5 pages to keep UI responsive
-      if (idx % 5 === 0) {
-        await yieldToUI();
+      // No tables detected — fall back to extracting all text content
+      // as a single-column sheet so the XLSX is never empty.
+      const page = await pdfDoc.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      if (textContent?.items?.length) {
+        const lines = _groupTextItemsIntoLines(textContent.items);
+        if (lines.length > 0) {
+          const sheetName = sanitizeSheetName(`Page ${pageNum}`);
+          const sheetRows = lines.map(line => [line]);
+          builder.addSheet(sheetName, sheetRows);
+          sheetCount++;
+        }
       }
+      if (idx % 5 === 0) await yieldToUI();
       continue;
     }
 

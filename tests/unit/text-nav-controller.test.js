@@ -676,7 +676,7 @@ describe('text-nav-controller', () => {
       assert.ok(recordCalled);
     });
 
-    it('uses text+images mode for <= 30 pages', async () => {
+    it('uses text mode with inline images for <= 30 pages', async () => {
       state.adapter = { type: 'pdf', pdfDoc: {} };
       state.pageCount = 10;
       state.docName = 'doc.pdf';
@@ -686,15 +686,10 @@ describe('text-nav-controller', () => {
         return new Blob(['docx']);
       };
       initTextNavDeps(_deps);
-      const origCreate = document.createElement.bind(document);
-      document.createElement = (tag) => {
-        const el = origCreate(tag);
-        if (tag === 'a') el.click = () => {};
-        return el;
-      };
       await exportCurrentDocToWord();
-      document.createElement = origCreate;
-      assert.equal(mode, 'text+images');
+      // Mode should be 'text' (extracts structured text + inline images,
+      // NOT 'text+images' which appends redundant full-page PNG screenshots)
+      assert.equal(mode, 'text');
     });
 
     it('uses text-only mode for > 30 pages', async () => {
