@@ -285,47 +285,44 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
     const w = (word.bbox.x1 - word.bbox.x0) * displayW;
     const h = (word.bbox.y1 - word.bbox.y0) * displayH;
 
-    // Improved font-size fitting: iterative measurement for precise sizing
-    let fontSize = Math.max(6, h * 0.85);
+    // ── Font sizing: 3-pass iterative fitting for precise bbox match ──
+    // Use a serif/sans mix that better matches typical document fonts
+    const fontFamily = 'Arial, Helvetica, sans-serif';
+    let fontSize = Math.max(6, h * 0.88);
     if (word.text.length > 0 && h > 6) {
-      measureCtx.font = `${fontSize}px sans-serif`;
-      const metrics = measureCtx.measureText(word.text);
-      const ascent = metrics.actualBoundingBoxAscent ?? (fontSize * 0.78);
-      const descent = metrics.actualBoundingBoxDescent ?? (fontSize * 0.22);
-      const actualH = ascent + descent;
-      if (actualH > 0) {
-        // Scale font to match bounding box height precisely
-        fontSize = Math.max(6, fontSize * (h / actualH) * 0.96);
-      }
-      // Second pass: refine for long words where width matters
-      if (word.text.length >= 3) {
-        measureCtx.font = `${fontSize}px sans-serif`;
-        const m2 = measureCtx.measureText(word.text);
-        const a2 = (m2.actualBoundingBoxAscent ?? (fontSize * 0.78)) + (m2.actualBoundingBoxDescent ?? (fontSize * 0.22));
-        if (a2 > 0) {
-          fontSize = Math.max(6, fontSize * (h / a2));
-        }
-      }
+      // Pass 1: measure at initial guess
+      measureCtx.font = `${fontSize}px ${fontFamily}`;
+      const m1 = measureCtx.measureText(word.text);
+      const a1 = (m1.actualBoundingBoxAscent ?? (fontSize * 0.76)) + (m1.actualBoundingBoxDescent ?? (fontSize * 0.24));
+      if (a1 > 0) fontSize = Math.max(6, fontSize * (h / a1));
+      // Pass 2: refine with corrected size
+      measureCtx.font = `${fontSize}px ${fontFamily}`;
+      const m2 = measureCtx.measureText(word.text);
+      const a2 = (m2.actualBoundingBoxAscent ?? (fontSize * 0.76)) + (m2.actualBoundingBoxDescent ?? (fontSize * 0.24));
+      if (a2 > 0) fontSize = Math.max(6, fontSize * (h / a2));
+      // Pass 3: final nudge
+      measureCtx.font = `${fontSize}px ${fontFamily}`;
+      const m3 = measureCtx.measureText(word.text);
+      const a3 = (m3.actualBoundingBoxAscent ?? (fontSize * 0.76)) + (m3.actualBoundingBoxDescent ?? (fontSize * 0.24));
+      if (a3 > 0) fontSize = Math.max(6, fontSize * (h / a3) * 0.98);
     }
 
-    // Baseline alignment: shift so text baseline matches OCR-detected baseline
-    const baselineShift = h * 0.02;
-
     span.style.left = `${x}px`;
-    span.style.top = `${y + baselineShift}px`;
+    span.style.top = `${y}px`;
     span.style.fontSize = `${fontSize}px`;
+    span.style.fontFamily = fontFamily;
     span.style.width = `${w}px`;
     span.style.height = `${h}px`;
     span.style.lineHeight = `${h}px`;
 
+    // ── Width fitting: scaleX transform for precise horizontal match ──
     if (word.text.length > 1) {
-      measureCtx.font = `${fontSize}px sans-serif`;
+      measureCtx.font = `${fontSize}px ${fontFamily}`;
       const measuredWidth = measureCtx.measureText(word.text).width;
-      if (measuredWidth > 0 && Math.abs(w - measuredWidth) > 1) {
-        // Use scaleX transform if width difference is large
+      if (measuredWidth > 0 && Math.abs(w - measuredWidth) > 0.5) {
         const ratio = w / measuredWidth;
-        if (ratio > 0.5 && ratio < 2.0) {
-          span.style.transform = `scaleX(${ratio.toFixed(3)})`;
+        if (ratio > 0.4 && ratio < 2.5) {
+          span.style.transform = `scaleX(${ratio.toFixed(4)})`;
           span.style.transformOrigin = 'left top';
         } else {
           const spacing = (w - measuredWidth) / (word.text.length - 1);
@@ -354,7 +351,7 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
   // container so the overlay aligns with the original (skewed) page image.
   try {
     const skewDeg = await estimatePageSkewAngle(pageNum);
-    if (Math.abs(skewDeg) >= 0.35) {
+    if (Math.abs(skewDeg) >= 0.25) {
       container.style.transform = `rotate(${skewDeg.toFixed(2)}deg)`;
       container.style.transformOrigin = 'center center';
     } else {

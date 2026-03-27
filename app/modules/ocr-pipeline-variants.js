@@ -135,7 +135,7 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   let skewProbeDeg = 0;
   let skewRotateCount = 0;
   let skewToApply = 0;
-  if (Math.abs(preferredSkew) >= 0.35) {
+  if (Math.abs(preferredSkew) >= 0.25) {
     skewToApply = preferredSkew;
   } else if (!fast) {
     const probe = variants[Math.min(2, variants.length - 1)];
@@ -144,12 +144,12 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
       const probeImg = probeCtx.getImageData(0, 0, probe.width, probe.height);
       const skew = estimateSkewAngleFromBinary(probeImg);
       skewProbeDeg = Number(skew.toFixed(2));
-      if (Math.abs(skew) >= 0.35) {
+      if (Math.abs(skew) >= 0.25) {
         skewToApply = skew;
       }
     }
   }
-  if (Math.abs(skewToApply) >= 0.35) {
+  if (Math.abs(skewToApply) >= 0.25) {
     const expanded = [];
     const totalSteps = recipeList.length + variants.length;
     for (let i = 0; i < variants.length; i += 1) {
@@ -261,12 +261,12 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
         bestVariantH = variant?.height || 0;
         detectedLang = effectiveLang;
       }
-      // Early exit: if the first variant already produces good text, skip the rest.
-      // For multi-lang OCR (slow), also exit after the second variant.
-      if (i === 0 && best.length >= 20 && bestScore > 50) {
+      // Early exit only when quality is clearly excellent — prefer trying
+      // more variants for better accuracy over marginal speed gains.
+      if (i === 0 && best.length >= 60 && bestScore > 80) {
         break;
       }
-      if (isMultiLang && i >= 1 && best.length >= 10 && bestScore > 30) {
+      if (isMultiLang && i >= 2 && best.length >= 30 && bestScore > 50) {
         break;
       }
       await yieldToMainThread();

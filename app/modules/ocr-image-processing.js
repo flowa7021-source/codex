@@ -476,7 +476,7 @@ export async function buildOcrSourceCanvas(pageNumber) {
   canvas.width = 1;
   canvas.height = 1;
   // Use adaptive DPI: render a small probe first, analyze text density, then render at optimal zoom
-  let adaptiveZoom = state.settings?.ocrQualityMode === 'accurate' ? 1.7 : 1.35;
+  let adaptiveZoom = state.settings?.ocrQualityMode === 'accurate' ? 2.2 : 1.8;
   try {
     const probeCanvas = document.createElement('canvas');
     probeCanvas.width = 1;
@@ -487,7 +487,7 @@ export async function buildOcrSourceCanvas(pageNumber) {
     // Boost zoom for pages with very small text
 // @ts-ignore
     const smallText = hasSmallText(probeCanvas);
-    if (smallText && adaptiveZoom < 3.0) adaptiveZoom = Math.min(3.0, adaptiveZoom * 1.4);
+    if (smallText && adaptiveZoom < 3.5) adaptiveZoom = Math.min(3.5, adaptiveZoom * 1.5);
     probeCanvas.width = 0; probeCanvas.height = 0; // free memory
     pushDiagnosticEvent('ocr.adaptive-dpi', { page: pageNumber, suggestedScale: analysis.suggestedScale, zoom: adaptiveZoom, density: analysis.density, strokeWidth: analysis.avgStrokeWidth, smallText });
   } catch (err) { console.warn('[app] adaptive zoom fallback:', err?.message); }
@@ -594,7 +594,7 @@ export function preprocessOcrCanvas(/** @type {any} */ inputCanvas, thresholdBia
   const spread = Math.max(1, p95 - p5);
   for (let i = 0; i < d.length; i += 4) {
     const stretched = ((d[i] - p5) * 255) / spread;
-    const contrastBoost = stdDev < 36 ? 1.18 : 1.0;
+    const contrastBoost = stdDev < 45 ? 1.22 : (stdDev < 60 ? 1.08 : 1.0);
     const centered = (stretched - 127) * contrastBoost + 127;
     const g = Math.max(0, Math.min(255, Math.round(centered)));
     d[i] = d[i + 1] = d[i + 2] = g;
