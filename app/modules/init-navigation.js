@@ -71,15 +71,20 @@ export function initNavigation(deps) {
       clearOcrRuntimeCaches('rotation-changed');
       evictPageFromCache(state.currentPage);
       try { const { invalidateTiles } = await import('./tile-renderer.js'); invalidateTiles(); } catch (_e) { /* non-critical */ }
-      // Auto-fit zoom for rotated viewport
+      // Auto-fit: use fitPage logic so landscape pages fill the viewport
+      // instead of shrinking to fit width (which makes them tiny).
       if (state.adapter) {
         try {
           const vp = await state.adapter.getPageViewport(state.currentPage, 1, state.rotation);
           const cw = els.canvasWrap?.clientWidth || 800;
+          const ch = els.canvasWrap?.clientHeight || 600;
           const sw = (els.canvasWrap?.offsetWidth || cw) - cw;
-          const available = Math.max(200, cw - Math.max(16, sw + 16));
-          const autoZoom = available / Math.max(1, vp.width);
-          if (autoZoom > 0.3 && autoZoom < 4) {
+          const sh = (els.canvasWrap?.offsetHeight || ch) - ch;
+          const availW = Math.max(200, cw - Math.max(16, sw + 16));
+          const availH = Math.max(200, ch - Math.max(16, sh + 16));
+          // Fit the page to whichever dimension is the binding constraint
+          const autoZoom = Math.min(availW / Math.max(1, vp.width), availH / Math.max(1, vp.height));
+          if (autoZoom > 0.2 && autoZoom < 5) {
             state.zoom = Math.round(autoZoom * 100) / 100;
           }
         } catch (err) {
