@@ -18,26 +18,42 @@ let _tauriFs = null;
 let _tauriShell = null;
 let _tauriInvoke = null;
 
+/** @type {Promise<void>|null} */
+let _initPromise = null;
+
 // ── Initialization ───────────────────────────────────────────────────────────
 
 /**
  * Detect runtime environment and load Tauri APIs if available.
  * Must be called once at app startup before any other platform function.
+ * Safe to call multiple times — subsequent calls return the first promise.
  */
-export async function initPlatform() {
-  try {
-    if (/** @type {any} */ (window).__TAURI_INTERNALS__) {
-      _isTauri = true;
-      const { invoke } = await import('@tauri-apps/api/core');
-      _tauriInvoke = invoke;
-      _tauriDialog = await import('@tauri-apps/plugin-dialog');
-      _tauriFs = await import('@tauri-apps/plugin-fs');
-      _tauriShell = await import('@tauri-apps/plugin-shell');
+export function initPlatform() {
+  if (_initPromise) return _initPromise;
+  _initPromise = (async () => {
+    try {
+      if (/** @type {any} */ (window).__TAURI_INTERNALS__) {
+        _isTauri = true;
+        const { invoke } = await import('@tauri-apps/api/core');
+        _tauriInvoke = invoke;
+        _tauriDialog = await import('@tauri-apps/plugin-dialog');
+        _tauriFs = await import('@tauri-apps/plugin-fs');
+        _tauriShell = await import('@tauri-apps/plugin-shell');
+      }
+    } catch (err) {
+      console.warn('[platform] Running in browser mode', err);
+      _isTauri = false;
     }
-  } catch (err) {
-    console.warn('[platform] Running in browser mode', err);
-    _isTauri = false;
-  }
+  })();
+  return _initPromise;
+}
+
+/**
+ * Ensure platform is fully initialized before using Tauri APIs.
+ * Returns immediately in browser mode.
+ */
+async function ensurePlatformReady() {
+  if (_initPromise) await _initPromise;
 }
 
 /** @returns {boolean} true if running inside Tauri, false if plain browser */
@@ -58,6 +74,7 @@ export function isTauri() {
  *   Tauri: file path(s) as string(s).  Browser: File object(s).
  */
 export async function openFileDialog(options = {}) {
+  await ensurePlatformReady();
   const filters = options.filters || [
     { name: 'Documents', extensions: ['pdf', 'djvu', 'djv', 'epub', 'cbz', 'xps'] },
     { name: 'PDF', extensions: ['pdf'] },
@@ -101,6 +118,7 @@ export async function openFileDialog(options = {}) {
  * @returns {Promise<string|null>}  Tauri: save path. Browser: null (download handled separately).
  */
 export async function saveFileDialog(options = {}) {
+  await ensurePlatformReady();
   if (_isTauri) {
     return _tauriDialog.save({
       filters: options.filters || [
@@ -125,6 +143,7 @@ export async function saveFileDialog(options = {}) {
  * @returns {Promise<Uint8Array>}
  */
 export async function readFileAsBytes(pathOrFile) {
+  await ensurePlatformReady();
   if (_isTauri && typeof pathOrFile === 'string') {
     // Try custom Rust command first (faster), fall back to FS plugin
     try {
@@ -158,6 +177,7 @@ export async function readFileAsBytes(pathOrFile) {
  * @param {Array<{name:string, extensions:string[]}>} [filters]
  */
 export async function downloadBlob(blob, filename, filters) {
+  await ensurePlatformReady();
   if (_isTauri) {
     await saveOrDownload(blob, filename, filters);
     return;
@@ -182,6 +202,7 @@ export async function downloadBlob(blob, filename, filters) {
  * @returns {Promise<boolean>} true if saved/downloaded successfully
  */
 export async function saveOrDownload(blob, filename, filters) {
+  await ensurePlatformReady();
   if (_isTauri) {
     const path = await saveFileDialog({ defaultPath: filename, filters });
     if (path) {

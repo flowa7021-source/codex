@@ -4,6 +4,7 @@ import { state, els as _els } from './state.js';
 import { toastSuccess, toastError } from './toast.js';
 import {
   getPageInfoList, reorderPages, rotatePages, extractPages,
+  deletePages, duplicatePages,
   insertBlankPage, createOrganizerState, togglePageSelection,
   selectPageRange, computeReorderFromDrag,
 } from './page-organizer.js';
@@ -192,23 +193,37 @@ export function initPageOrganizerUI(deps) {
   });
 
   document.getElementById('pageOrgDelete')?.addEventListener('click', async () => {
-    if (!orgState?.selected.size) return;
-    const toDelete = new Set([...orgState.selected]);
-    orgNewOrder = orgNewOrder.filter((_, i) => !toDelete.has(i));
-    orgState.selected.clear();
-    orgState = createOrganizerState(orgNewOrder.map((_, i) => ({ index: i })));
-    await renderOrgGrid();
+    if (!orgPdfBytes || !orgState?.selected.size) return;
+    // Map selected UI indices to actual PDF page indices
+    const pdfPageIndices = [...orgState.selected].map(i => orgNewOrder[i]);
+    try {
+      orgPdfBytes = await deletePages(orgPdfBytes, pdfPageIndices);
+      // Rebuild order array from the now-smaller PDF
+      const pages = await getPageInfoList(orgPdfBytes);
+      orgNewOrder = pages.map((_, i) => i);
+      orgState.selected.clear();
+      orgState = createOrganizerState(pages);
+      await renderOrgGrid();
+    } catch (err) {
+      toastError(`Ошибка удаления: ${err?.message || 'неизвестная'}`);
+    }
   });
 
   document.getElementById('pageOrgDuplicate')?.addEventListener('click', async () => {
     if (!orgPdfBytes || !orgState?.selected.size) return;
-    const indices = [...orgState.selected].sort((a, b) => b - a);
-    for (const i of indices) {
-      orgNewOrder.splice(i + 1, 0, orgNewOrder[i]);
+    // Map selected UI indices to actual PDF page indices
+    const pdfPageIndices = [...orgState.selected].map(i => orgNewOrder[i]).sort((a, b) => a - b);
+    try {
+      orgPdfBytes = await duplicatePages(orgPdfBytes, pdfPageIndices);
+      // Rebuild order array from the now-larger PDF
+      const pages = await getPageInfoList(orgPdfBytes);
+      orgNewOrder = pages.map((_, i) => i);
+      orgState.selected.clear();
+      orgState = createOrganizerState(pages);
+      await renderOrgGrid();
+    } catch (err) {
+      toastError(`Ошибка дублирования: ${err?.message || 'неизвестная'}`);
     }
-    orgState.selected.clear();
-    orgState = createOrganizerState(orgNewOrder.map((_, i) => ({ index: i })));
-    await renderOrgGrid();
   });
 
   document.getElementById('pageOrgInsertBlank')?.addEventListener('click', async () => {

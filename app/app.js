@@ -1,6 +1,9 @@
 // ─── Platform Detection (must be first) ─────────────────────────────────────
+// initPlatform() starts async Tauri API detection. All platform functions
+// call ensurePlatformReady() internally, so they're safe even if this
+// hasn't resolved yet when event handlers fire.
 import { initPlatform } from './modules/platform.js';
-initPlatform().catch(err => console.warn('[platform] init:', err?.message));   // non-blocking; fallback to browser mode
+initPlatform().catch(err => console.warn('[platform] init:', err?.message));
 
 // ─── Module Imports ─────────────────────────────────────────────────────────
 import { emit, on, once, removeAllListeners as removeAllBusListeners } from './modules/event-bus.js';

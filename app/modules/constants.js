@@ -47,12 +47,12 @@ export const TOOLBAR_SECTION_CONFIG = [
 // ─── OCR Configuration ─────────────────────────────────────────────────────
 export const OCR_MIN_DPI = 300;
 export const CSS_BASE_DPI = 96;
-export const OCR_MAX_SIDE_PX = 4096;
-export const OCR_MAX_PIXELS = 8_500_000;
+export const OCR_MAX_SIDE_PX = 5120;
+export const OCR_MAX_PIXELS = 12_000_000;
 export const OCR_SLOW_TASK_WARN_MS = 3500;
 export const OCR_HANG_WARN_MS = 7000;
-export const OCR_SOURCE_MAX_PIXELS = 4_800_000;
-export const OCR_SOURCE_CACHE_MAX_PIXELS = 12_000_000;
-export const OCR_SOURCE_CACHE_TTL_MS = 2 * 60 * 1000;
+export const OCR_SOURCE_MAX_PIXELS = 7_200_000;
+export const OCR_SOURCE_CACHE_MAX_PIXELS = 16_000_000;
+export const OCR_SOURCE_CACHE_TTL_MS = 3 * 60 * 1000;
 export const OCR_MAX_CONCURRENT_WORKERS = 2;
 export const OCR_CONFIDENCE_THRESHOLD = 60;

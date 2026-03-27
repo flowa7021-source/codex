@@ -226,14 +226,15 @@ export function morphologyCloseMonochrome(imageData) {
 export function estimateSkewAngleFromBinary(imageData) {
   const { width, height, data } = imageData;
   const darkPoints = [];
-  const step = Math.max(1, Math.floor(Math.max(width, height) / 900));
+  // Denser sampling for better skew accuracy
+  const step = Math.max(1, Math.floor(Math.max(width, height) / 1200));
   for (let y = 0; y < height; y += step) {
     for (let x = 0; x < width; x += step) {
       const idx = (y * width + x) * 4;
       if (data[idx] < 128) darkPoints.push([x, y]);
     }
   }
-  if (darkPoints.length < 200) return 0;
+  if (darkPoints.length < 100) return 0;
 
   // Helper: compute projection variance for a given angle
   function projectionVariance(deg) {
@@ -254,10 +255,10 @@ export function estimateSkewAngleFromBinary(imageData) {
     return variance;
   }
 
-  // Coarse pass: -15 to +15 in 1 increments
+  // Coarse pass: full -45° to +45° in 1° steps — catches any realistic skew
   let bestAngle = 0;
   let bestScore = -Infinity;
-  for (let deg = -15; deg <= 15; deg += 1) {
+  for (let deg = -45; deg <= 45; deg += 1) {
     const variance = projectionVariance(deg);
     if (variance > bestScore) {
       bestScore = variance;
@@ -265,14 +266,23 @@ export function estimateSkewAngleFromBinary(imageData) {
     }
   }
 
-  // Fine pass: +/-1.5 around best in 0.25 increments
-  const fineStart = bestAngle - 1.5;
-  const fineEnd = bestAngle + 1.5;
-  for (let deg = fineStart; deg <= fineEnd; deg += 0.25) {
+  // Fine pass: ±2° around best in 0.2° increments
+  for (let deg = bestAngle - 2; deg <= bestAngle + 2; deg += 0.2) {
     const variance = projectionVariance(deg);
     if (variance > bestScore) {
       bestScore = variance;
-      bestAngle = deg;
+      bestAngle = Number(deg.toFixed(1));
+    }
+  }
+
+  // Ultra-fine pass: ±0.3° around best in 0.05° increments
+  const ultraStart = bestAngle - 0.3;
+  const ultraEnd = bestAngle + 0.3;
+  for (let deg = ultraStart; deg <= ultraEnd; deg += 0.05) {
+    const variance = projectionVariance(deg);
+    if (variance > bestScore) {
+      bestScore = variance;
+      bestAngle = Number(deg.toFixed(2));
     }
   }
 
@@ -476,7 +486,7 @@ export async function buildOcrSourceCanvas(pageNumber) {
   canvas.width = 1;
   canvas.height = 1;
   // Use adaptive DPI: render a small probe first, analyze text density, then render at optimal zoom
-  let adaptiveZoom = state.settings?.ocrQualityMode === 'accurate' ? 1.7 : 1.35;
+  let adaptiveZoom = state.settings?.ocrQualityMode === 'accurate' ? 2.2 : 1.8;
   try {
     const probeCanvas = document.createElement('canvas');
     probeCanvas.width = 1;
@@ -487,7 +497,7 @@ export async function buildOcrSourceCanvas(pageNumber) {
     // Boost zoom for pages with very small text
 // @ts-ignore
     const smallText = hasSmallText(probeCanvas);
-    if (smallText && adaptiveZoom < 3.0) adaptiveZoom = Math.min(3.0, adaptiveZoom * 1.4);
+    if (smallText && adaptiveZoom < 3.5) adaptiveZoom = Math.min(3.5, adaptiveZoom * 1.5);
     probeCanvas.width = 0; probeCanvas.height = 0; // free memory
     pushDiagnosticEvent('ocr.adaptive-dpi', { page: pageNumber, suggestedScale: analysis.suggestedScale, zoom: adaptiveZoom, density: analysis.density, strokeWidth: analysis.avgStrokeWidth, smallText });
   } catch (err) { console.warn('[app] adaptive zoom fallback:', err?.message); }
@@ -594,7 +604,7 @@ export function preprocessOcrCanvas(/** @type {any} */ inputCanvas, thresholdBia
   const spread = Math.max(1, p95 - p5);
   for (let i = 0; i < d.length; i += 4) {
     const stretched = ((d[i] - p5) * 255) / spread;
-    const contrastBoost = stdDev < 36 ? 1.18 : 1.0;
+    const contrastBoost = stdDev < 45 ? 1.22 : (stdDev < 60 ? 1.08 : 1.0);
     const centered = (stretched - 127) * contrastBoost + 127;
     const g = Math.max(0, Math.min(255, Math.round(centered)));
     d[i] = d[i + 1] = d[i + 2] = g;

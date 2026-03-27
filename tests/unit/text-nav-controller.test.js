@@ -236,7 +236,7 @@ describe('text-nav-controller', () => {
   // ── exportPageText ───────────────────────────────────────────────────────
 
   describe('exportPageText', () => {
-    it('creates a download link with correct filename', () => {
+    it('creates a download link with correct filename', async () => {
       els.pageText.value = 'some text';
       const clicks = [];
       const origCreate = document.createElement.bind(document);
@@ -245,14 +245,14 @@ describe('text-nav-controller', () => {
         if (tag === 'a') el.click = () => clicks.push(el);
         return el;
       };
-      exportPageText();
+      await exportPageText();
       document.createElement = origCreate;
       assert.equal(clicks.length, 1);
       assert.ok(clicks[0].download.includes('page-1'));
       assert.ok(clicks[0].download.endsWith('.txt'));
     });
 
-    it('uses docName in filename', () => {
+    it('uses docName in filename', async () => {
       state.docName = 'mybook.pdf';
       state.currentPage = 5;
       els.pageText.value = 'text';
@@ -263,13 +263,13 @@ describe('text-nav-controller', () => {
         if (tag === 'a') el.click = () => clicks.push(el);
         return el;
       };
-      exportPageText();
+      await exportPageText();
       document.createElement = origCreate;
       assert.ok(clicks[0].download.includes('mybook.pdf'));
       assert.ok(clicks[0].download.includes('page-5'));
     });
 
-    it('uses "document" fallback when no docName', () => {
+    it('uses "document" fallback when no docName', async () => {
       state.docName = null;
       els.pageText.value = 'text';
       const clicks = [];
@@ -279,7 +279,7 @@ describe('text-nav-controller', () => {
         if (tag === 'a') el.click = () => clicks.push(el);
         return el;
       };
-      exportPageText();
+      await exportPageText();
       document.createElement = origCreate;
       assert.ok(clicks[0].download.includes('document'));
     });
@@ -586,7 +586,7 @@ describe('text-nav-controller', () => {
       assert.doesNotThrow(() => downloadCurrentFile());
     });
 
-    it('creates download link with file name', () => {
+    it('creates download link with file name', async () => {
       state.file = { name: 'doc.pdf', size: 1024 };
       const clicks = [];
       const origCreate = document.createElement.bind(document);
@@ -595,7 +595,7 @@ describe('text-nav-controller', () => {
         if (tag === 'a') el.click = () => clicks.push(el);
         return el;
       };
-      downloadCurrentFile();
+      await downloadCurrentFile();
       document.createElement = origCreate;
       assert.equal(clicks.length, 1);
       assert.equal(clicks[0].download, 'doc.pdf');
