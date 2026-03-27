@@ -2,6 +2,8 @@
 // ─── Page Navigation & Zoom Controls ────────────────────────────────────────
 // Extracted from app.js — pure refactor, no behavior changes.
 
+import { pushDiagnosticEvent } from './diagnostics.js';
+
 /**
  * Wire up prev/next page handlers, go-to-page, zoom controls, fit buttons,
  * rotation, fullscreen toggle and Ctrl+wheel zoom.
@@ -64,6 +66,7 @@ export function initNavigation(deps) {
   safeOn(els.rotate, 'click', async () => {
     const oldRotation = state.rotation;
     state.rotation = (state.rotation + 90) % 360;
+    pushDiagnosticEvent('page.rotate', { from: oldRotation, to: state.rotation, page: state.currentPage });
     try {
       clearOcrRuntimeCaches('rotation-changed');
       evictPageFromCache(state.currentPage);
@@ -92,6 +95,7 @@ export function initNavigation(deps) {
       if (state.settings?.backgroundOcr) scheduleBackgroundOcrScan('save-settings', 600);
     } catch (err) {
       console.error('[nav] rotation failed:', err);
+      pushDiagnosticEvent('page.rotate.error', { message: err?.message, from: oldRotation, to: state.rotation }, 'error');
       // Revert rotation on failure so state stays consistent
       state.rotation = oldRotation;
     }
