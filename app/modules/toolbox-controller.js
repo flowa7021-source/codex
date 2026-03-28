@@ -71,8 +71,9 @@ async function runOcrPipeline(file, idx, total) {
   const bytes = new Uint8Array(await file.arrayBuffer());
 
   // Lazy imports to keep initial bundle small
-  const { default: pdfjs } = await import('pdfjs-dist');
-  const pdfDoc = await pdfjs.getDocument({ data: bytes }).promise;
+  const pdfjsMod = await import('pdfjs-dist');
+  const getDocument = pdfjsMod.getDocument || pdfjsMod.default?.getDocument;
+  const pdfDoc = await getDocument({ data: bytes }).promise;
   const { createSearchablePdf } = await import('./ocr-batch.js');
   // Run OCR on each page and build searchable PDF
   const { initTesseract, recognizeTesseract } = await import('./tesseract-adapter.js');
@@ -107,8 +108,9 @@ async function runConversion(file, format) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   switch (format) {
     case 'docx': {
-      const pdfjs = await import('pdfjs-dist');
-      const pdfDoc = await pdfjs.getDocument({ data: bytes }).promise;
+      const pdfjsMod = await import('pdfjs-dist');
+      const getDoc = pdfjsMod.getDocument || pdfjsMod.default?.getDocument;
+      const pdfDoc = await getDoc({ data: bytes }).promise;
       const { convertPdfToDocx } = await import('./docx-converter.js');
       return convertPdfToDocx(pdfDoc, file.name, pdfDoc.numPages, { mode: 'text' });
     }
