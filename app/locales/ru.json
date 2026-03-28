@@ -255,6 +255,7 @@
   "security.title": "Безопасность PDF",
   "security.cleanMeta": "Очистить метаданные",
   "security.sanitize": "Санитизировать",
+  "security.protect": "Защитить PDF",
   "forms.pdfForms": "PDF Формы",
   "forms.exportData": "Экспорт данных",
   "forms.importData": "Импорт данных",

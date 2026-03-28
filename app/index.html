@@ -109,6 +109,9 @@
           <button class="cb-tool-btn" data-tool="tools" title="Инструменты" aria-label="Инструменты">
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 2.5a4 4 0 015 5l3 3-2 2-3-3a4 4 0 01-5-5l2 2 1.5-1.5z" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linejoin="round"/></svg>
           </button>
+          <button class="cb-tool-btn" data-tool="toolbox" title="Toolbox" aria-label="Toolbox">
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12v9H2z" stroke="currentColor" stroke-width="1.1" fill="none" rx="1"/><path d="M5 4V2.5A1.5 1.5 0 016.5 1h3A1.5 1.5 0 0111 2.5V4" stroke="currentColor" stroke-width="1.1" fill="none"/><path d="M2 7h12" stroke="currentColor" stroke-width="1.1"/></svg>
+          </button>
           <button class="cb-tool-btn" data-tool="organize" title="Организация страниц" aria-label="Организация страниц">
             <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="1" y="1" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="8" y="1" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="1" y="9" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/><rect x="8" y="9" width="5" height="6" rx="1" stroke="currentColor" stroke-width="1.1" fill="none"/></svg>
           </button>
@@ -602,7 +605,14 @@
             <div class="rp-actions">
               <button id="cleanMetadata" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3l6 6-4 4H5l-2-2 4-4"/><path d="M10 6l-4 4"/></svg> <span data-i18n="security.cleanMeta">Очистить метаданные</span></button>
               <button id="sanitizePdf" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2l6 2v4c0 4-3 6-6 8-3-2-6-4-6-8V4z"/></svg> <span data-i18n="security.sanitize">Санитизировать</span></button>
+              <button id="protectPdf" class="btn-xs btn-accent"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1"/><path d="M5 7V5a3 3 0 016 0v2"/></svg> <span data-i18n="security.protect">Защитить PDF</span></button>
               <button id="exportPdfA" class="btn-xs"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 2h5l4 4v7a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M9 2v4h4"/></svg> PDF/A</button>
+            </div>
+            <!-- Protection presets -->
+            <div class="rp-actions">
+              <button id="protectFullLock" class="btn-xs" title="Запретить всё: печать, копирование, редактирование, аннотации">Полная защита</button>
+              <button id="protectReadOnly" class="btn-xs" title="Разрешить только просмотр и печать">Только чтение</button>
+              <button id="protectNoPrint" class="btn-xs" title="Запретить печать, разрешить всё остальное">Без печати</button>
             </div>
           </div>
         </div>
@@ -704,6 +714,43 @@
               </label>
             </div>
             <p class="status-line muted" data-i18n="organize.dragHint">Перетаскивайте миниатюры для переупорядочивания</p>
+          </div>
+        </div>
+
+        <!-- Panel: Toolbox (PDF24-style batch processing) -->
+        <div class="rp-panel" data-rp-panel="toolbox">
+          <div class="rp-section">
+            <h3 class="rp-section-title">Toolbox</h3>
+            <div id="toolboxDropZone" style="border:2px dashed var(--border);border-radius:8px;padding:24px;text-align:center;cursor:pointer;margin-bottom:8px;transition:border-color .2s">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+              <p style="margin:8px 0 0;font-size:13px;opacity:0.7">Перетащите файлы или нажмите для выбора</p>
+              <input id="toolboxFileInput" type="file" multiple accept=".pdf,.djvu,.epub,.png,.jpg,.jpeg,.tiff,.bmp,.webp" style="display:none" />
+            </div>
+            <ul id="toolboxFileList" style="list-style:none;padding:0;margin:0 0 8px;max-height:150px;overflow-y:auto;font-size:12px"></ul>
+          </div>
+          <div class="rp-section">
+            <h3 class="rp-section-title">Инструмент</h3>
+            <select id="toolboxAction" style="width:100%;padding:6px;border-radius:6px;border:1px solid var(--border);font-size:13px;margin-bottom:8px">
+              <option value="ocr">OCR + текстовый слой</option>
+              <option value="deskew">Выравнивание (deskew)</option>
+              <option value="docx">Конвертация в DOCX</option>
+              <option value="xlsx">Конвертация в XLSX</option>
+              <option value="pptx">Конвертация в PPTX</option>
+              <option value="pdfa">Конвертация в PDF/A</option>
+              <option value="merge">Объединить в один PDF</option>
+              <option value="protect">Защитить паролем</option>
+              <option value="optimize">Оптимизировать</option>
+            </select>
+            <div class="rp-actions">
+              <button id="toolboxRun" class="btn-xs btn-accent" style="flex:1">▶ Запустить</button>
+              <button id="toolboxCancel" class="btn-xs" style="flex:0">Отмена</button>
+            </div>
+            <div id="toolboxProgress" style="margin-top:8px;display:none">
+              <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                <div id="toolboxProgressBar" style="height:100%;background:var(--accent);width:0%;transition:width .3s"></div>
+              </div>
+              <p id="toolboxStatus" class="status-line" style="margin-top:4px;font-size:12px"></p>
+            </div>
           </div>
         </div>
 
@@ -1070,6 +1117,34 @@
     </div>
 
     <script type="module" src="./app.js"></script>
+    <!-- Protect PDF Modal -->
+    <div id="protectPdfModal" class="modal" style="display:none" role="dialog" aria-label="Защита PDF">
+      <div class="modal-card" style="max-width:420px">
+        <h3>Защита PDF паролем</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin:12px 0">
+          <label>Пароль владельца <small>(для снятия защиты)</small>
+            <input id="protectOwnerPwd" type="password" autocomplete="new-password" style="width:100%;margin-top:4px" />
+          </label>
+          <label>Пароль пользователя <small>(для открытия, необязательно)</small>
+            <input id="protectUserPwd" type="password" autocomplete="new-password" style="width:100%;margin-top:4px" />
+          </label>
+        </div>
+        <fieldset style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin:8px 0">
+          <legend style="font-size:13px;padding:0 6px">Разрешения</legend>
+          <label style="display:block;margin:4px 0"><input type="checkbox" id="permPrint" /> Печать</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" id="permCopy" /> Копирование текста</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" id="permModify" /> Редактирование</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" id="permAnnotate" /> Аннотации</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" id="permForms" /> Заполнение форм</label>
+          <label style="display:block;margin:4px 0"><input type="checkbox" id="permAssemble" /> Сборка страниц</label>
+        </fieldset>
+        <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+          <button id="protectPdfCancel" class="btn-ghost">Отмена</button>
+          <button id="protectPdfApply" class="btn-xs btn-accent">Защитить и сохранить</button>
+        </div>
+      </div>
+    </div>
+
     <script>
     if (!window.__TAURI_INTERNALS__ && 'serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js').catch(() => {});
