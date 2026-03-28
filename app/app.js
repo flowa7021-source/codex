@@ -729,6 +729,9 @@ initTabs({
 initBookmarkController();
 initNotesController();
 
+// ─── Toolbox (PDF24-style batch processing) ──────────────────────────────
+import('./modules/toolbox-controller.js').then(m => m.initToolbox()).catch(() => {});
+
 // Listen for page navigation events from bookmark-controller
 on('novareader-goto-page', async (detail) => {
   const page = detail?.page;

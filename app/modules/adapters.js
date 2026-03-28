@@ -50,15 +50,19 @@ export class PDFAdapter {
   async renderPage(pageNumber, canvas, { zoom, rotation, dpr: dprOverride }) {
     const page = await this.pdfDoc.getPage(pageNumber);
     const dpr = dprOverride ?? Math.max(1, window.devicePixelRatio || 1);
-    // Render at higher resolution for sharper text: use ceil to avoid
-    // sub-pixel truncation that causes blurry edges on text glyphs.
-    const renderScale = zoom * dpr;
+    // Render at 1.5× device pixel ratio for sharper text on HiDPI screens.
+    // The extra resolution is downscaled by the browser via CSS, producing
+    // crisp text and smooth image edges.
+    const qualityBoost = 1.25;
+    const renderScale = zoom * dpr * qualityBoost;
     const viewport = page.getViewport({ scale: renderScale, rotation });
 
     canvas.width = Math.ceil(viewport.width);
     canvas.height = Math.ceil(viewport.height);
-    canvas.style.width = `${Math.round(viewport.width / dpr)}px`;
-    canvas.style.height = `${Math.round(viewport.height / dpr)}px`;
+    canvas.style.width = `${Math.round(viewport.width / (dpr * qualityBoost))}px`;
+    canvas.style.height = `${Math.round(viewport.height / (dpr * qualityBoost))}px`;
+
+    console.info(`[pdf-render] page=${pageNumber} rotation=${rotation} pageRotate=${page.rotate} viewport=${Math.round(viewport.width)}×${Math.round(viewport.height)} css=${canvas.style.width}×${canvas.style.height}`);
 
     const ctx = canvas.getContext('2d', { alpha: false });
     // High quality image scaling for embedded images in the PDF

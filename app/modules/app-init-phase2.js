@@ -11,7 +11,7 @@ import { initMinimap, saveReadingPosition } from './navigation.js';
 import { initErrorHandler, registerRecovery, onError, ERROR_CODES } from './error-handler.js';
 import { openDatabase } from './indexed-storage.js';
 import { findAndReplace } from './pdf-text-edit.js';
-import { cleanMetadata, sanitizePdf } from './pdf-security.js';
+import { cleanMetadata, sanitizePdf, setPassword, LOCKED_PERMISSIONS, DEFAULT_PERMISSIONS } from './pdf-security.js';
 import { downloadText } from './text-extractor.js';
 import { initMemoryManager, forceCleanup } from './memory-manager.js';
 import { MODULE_STATUS as CLOUD_STATUS } from './cloud-integration.js';
@@ -269,6 +269,90 @@ export function initPhase2Modules(deps) {
         }
       });
     }
+  }
+
+  // ─── PDF Protection Handlers ─────────────────────────────────────────────
+  {
+    const modal = document.getElementById('protectPdfModal');
+    const ownerPwdInput = /** @type {HTMLInputElement} */ (document.getElementById('protectOwnerPwd'));
+    const userPwdInput = /** @type {HTMLInputElement} */ (document.getElementById('protectUserPwd'));
+    const permCheckboxes = {
+      printing: /** @type {HTMLInputElement} */ (document.getElementById('permPrint')),
+      copying: /** @type {HTMLInputElement} */ (document.getElementById('permCopy')),
+      modifying: /** @type {HTMLInputElement} */ (document.getElementById('permModify')),
+      annotating: /** @type {HTMLInputElement} */ (document.getElementById('permAnnotate')),
+      fillingForms: /** @type {HTMLInputElement} */ (document.getElementById('permForms')),
+      assembling: /** @type {HTMLInputElement} */ (document.getElementById('permAssemble')),
+    };
+
+    function setPresetPermissions(perms) {
+      for (const [key, cb] of Object.entries(permCheckboxes)) {
+        if (cb) cb.checked = !!perms[key];
+      }
+    }
+
+    function openProtectModal(presetPerms) {
+      if (!state.pdfBytes) { toastWarning('Откройте PDF документ'); return; }
+      if (!modal) return;
+      if (ownerPwdInput) ownerPwdInput.value = '';
+      if (userPwdInput) userPwdInput.value = '';
+      setPresetPermissions(presetPerms || DEFAULT_PERMISSIONS);
+      modal.style.display = '';
+      ownerPwdInput?.focus();
+    }
+
+    // Main "Защитить PDF" button → open modal with default permissions
+    const protectBtn = document.getElementById('protectPdf');
+    if (protectBtn) protectBtn.addEventListener('click', () => openProtectModal(DEFAULT_PERMISSIONS));
+
+    // Preset buttons — one-click protection with pre-filled permissions
+    const fullLockBtn = document.getElementById('protectFullLock');
+    if (fullLockBtn) fullLockBtn.addEventListener('click', () => openProtectModal(LOCKED_PERMISSIONS));
+
+    const readOnlyBtn = document.getElementById('protectReadOnly');
+    if (readOnlyBtn) readOnlyBtn.addEventListener('click', () => openProtectModal({
+      ...LOCKED_PERMISSIONS, printing: true, printHighQuality: true, contentAccess: true,
+    }));
+
+    const noPrintBtn = document.getElementById('protectNoPrint');
+    if (noPrintBtn) noPrintBtn.addEventListener('click', () => openProtectModal({
+      ...DEFAULT_PERMISSIONS, printing: false, printHighQuality: false,
+    }));
+
+    // Cancel
+    const cancelBtn = document.getElementById('protectPdfCancel');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => { if (modal) modal.style.display = 'none'; });
+
+    // Apply protection
+    const applyBtn = document.getElementById('protectPdfApply');
+    if (applyBtn) applyBtn.addEventListener('click', async () => {
+      const ownerPwd = ownerPwdInput?.value || '';
+      if (!ownerPwd) { toastWarning('Введите пароль владельца'); return; }
+      if (!state.pdfBytes) return;
+
+      const perms = {};
+      for (const [key, cb] of Object.entries(permCheckboxes)) {
+        perms[key] = cb?.checked ?? false;
+      }
+      perms.printHighQuality = perms.printing;
+      perms.contentAccess = true; // always allow accessibility
+
+      try {
+        const result = await setPassword(state.pdfBytes, ownerPwd, userPwdInput?.value || '', perms);
+        if (modal) modal.style.display = 'none';
+        const { saveOrDownload } = await import('./platform.js');
+        const name = (state.docName || 'document').replace(/\.[^.]+$/, '') + '-protected.pdf';
+        await saveOrDownload(result.blob, name, [{ name: 'PDF', extensions: ['pdf'] }]);
+        toastSuccess('PDF защищён паролем');
+      } catch (err) {
+        toastError('Ошибка защиты: ' + err.message);
+      }
+    });
+
+    // Close modal on backdrop click
+    if (modal) modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.style.display = 'none';
+    });
   }
 
   // ─── Plain Text Export Handler ────────────────────────────────────────────
