@@ -2,6 +2,8 @@
 // ─── Context Menu System ────────────────────────────────────────────────────
 // Custom right-click context menus for the viewer, annotations, and thumbnails.
 
+import { state } from './state.js';
+import { getSelectedPages, selectedPages } from './thumbnail-renderer.js';
 import { addWord } from './ocr-user-dictionary.js';
 
 let menuEl = null;
@@ -186,10 +188,84 @@ function buildContextItems(target) {
     return items;
   }
 
-  // Thumbnail panel
-  if (target.closest('.page-preview-list')) {
-    items.push({ label: 'Перейти к странице', action: () => { /* handled by click */ } });
-    items.push({ label: 'Повернуть страницу', action: () => { document.getElementById('rotate')?.click(); } });
+  // Thumbnail panel (page previews)
+  const thumbWrapper = target.closest('.thumb-wrapper, .page-preview-list, #pagePreviewList');
+  if (thumbWrapper) {
+    // Determine which page was right-clicked
+    const pageEl = target.closest('[data-page]');
+    const pageNum = pageEl ? parseInt(pageEl.dataset.page, 10) : null;
+
+    if (pageNum && pageNum >= 1) {
+      // If right-clicked page isn't in selection, select it alone
+      if (!selectedPages.has(pageNum)) {
+        selectedPages.clear();
+        selectedPages.add(pageNum);
+      }
+      const sel = getSelectedPages();
+      const label = sel.length > 1 ? `${sel.length} страниц выделено` : `Страница ${pageNum}`;
+      items.push({ label, action: () => {}, shortcut: '', icon: '📄' });
+      items.push({ separator: true });
+
+      // 0-based indices for pdf-lib operations
+      const indices = sel.map(p => p - 1);
+
+      items.push({
+        label: `Повернуть по часовой ↻ (${sel.length})`,
+        icon: '↻',
+        action: async () => {
+          try {
+            const { rotatePages } = await import('./page-organizer.js');
+            if (!state.pdfBytes) return;
+            state.pdfBytes = /** @type {any} */ (await rotatePages(state.pdfBytes, indices, 90));
+            const file = new File([state.pdfBytes], state.docName || 'doc.pdf', { type: 'application/pdf' });
+            document.dispatchEvent(new CustomEvent('novareader-reopen-file', { detail: { file } }));
+          } catch (err) { console.warn('[ctx-menu] rotate error:', err?.message); }
+        },
+      });
+
+      items.push({
+        label: `Повернуть против часовой ↺ (${sel.length})`,
+        icon: '↺',
+        action: async () => {
+          try {
+            const { rotatePages } = await import('./page-organizer.js');
+            if (!state.pdfBytes) return;
+            state.pdfBytes = /** @type {any} */ (await rotatePages(state.pdfBytes, indices, 270));
+            const file = new File([state.pdfBytes], state.docName || 'doc.pdf', { type: 'application/pdf' });
+            document.dispatchEvent(new CustomEvent('novareader-reopen-file', { detail: { file } }));
+          } catch (err) { console.warn('[ctx-menu] rotate error:', err?.message); }
+        },
+      });
+
+      items.push({
+        label: sel.length > 1 ? `OCR ${sel.length} страниц` : 'OCR этой страницы',
+        icon: '🔍',
+        action: () => {
+          state.currentPage = sel[0];
+          document.getElementById('ocrCurrentPage')?.click();
+        },
+      });
+
+      items.push({ separator: true });
+
+      items.push({
+        label: sel.length > 1 ? `Удалить ${sel.length} страниц` : 'Удалить страницу',
+        icon: '🗑️',
+        action: async () => {
+          if (!state.pdfBytes || state.pageCount <= sel.length) return;
+          const msg = sel.length > 1 ? `Удалить ${sel.length} страниц?` : `Удалить страницу ${pageNum}?`;
+          if (!confirm(msg)) return;
+          try {
+            const { deletePages } = await import('./page-organizer.js');
+            state.pdfBytes = /** @type {any} */ (await deletePages(state.pdfBytes, indices));
+            selectedPages.clear();
+            const file = new File([state.pdfBytes], state.docName || 'doc.pdf', { type: 'application/pdf' });
+            document.dispatchEvent(new CustomEvent('novareader-reopen-file', { detail: { file } }));
+          } catch (err) { console.warn('[ctx-menu] delete error:', err?.message); }
+        },
+      });
+    }
+
     return items;
   }
 

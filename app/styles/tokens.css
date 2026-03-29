@@ -1,0 +1,183 @@
+/* ═══════════════════════════════════════════════════
+   NovaReader — Carbon & Amethyst Design Tokens
+   ═══════════════════════════════════════════════════ */
+
+:root {
+  /* ── Базовые поверхности ─────────────────────────── */
+  --bg-base:        #0C0C10;
+  --bg-sidebar:     #111117;
+  --bg-surface-1:   #18181F;
+  --bg-surface-2:   #1F1F29;
+  --bg-surface-3:   #262634;
+  --bg-overlay:     rgba(12, 12, 16, 0.88);
+
+  /* ── Границы ─────────────────────────────────────── */
+  --border-subtle:  rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.09);
+  --border-strong:  rgba(255, 255, 255, 0.16);
+
+  /* ── Текст ───────────────────────────────────────── */
+  --text-primary:   #ECEDF2;
+  --text-secondary: #8A8A9E;
+  --text-tertiary:  #52526A;
+  --text-inverse:   #0C0C10;
+
+  /* ── Акцент (Аметист) ────────────────────────────── */
+  --accent:         #8B6EF5;
+  --accent-hover:   #9D82FF;
+  --accent-pressed: #7A5FE0;
+  --accent-subtle:  rgba(139, 110, 245, 0.10);
+  --accent-glow:    rgba(139, 110, 245, 0.20);
+  --accent-border:  rgba(139, 110, 245, 0.30);
+
+  /* ── Семантические цвета ─────────────────────────── */
+  --color-success:  #3DD68C;
+  --color-warning:  #F5A623;
+  --color-error:    #F56565;
+  --color-info:     #5A9CF5;
+
+  /* ── Документ ────────────────────────────────────── */
+  --doc-bg:         #FFFFFF;
+  --doc-shadow:     0 4px 32px rgba(0, 0, 0, 0.60);
+
+  /* ── Типографика ─────────────────────────────────── */
+  --font-ui:        'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-mono:      'Fira Code', 'JetBrains Mono', 'Courier New', monospace;
+
+  --text-xs:        11px;
+  --text-sm:        12px;
+  --text-base:      13px;
+  --text-md:        14px;
+  --text-lg:        16px;
+
+  --weight-regular: 400;
+  --weight-medium:  500;
+  --weight-semibold: 600;
+
+  --tracking-tight: -0.01em;
+  --tracking-wide:  0.06em;
+  --tracking-wider: 0.10em;
+
+  /* ── Радиусы ─────────────────────────────────────── */
+  --radius-sm:  3px;
+  --radius-md:  6px;
+  --radius-lg:  10px;
+  --radius-xl:  14px;
+  --radius-pill: 999px;
+
+  /* ── Отступы ─────────────────────────────────────── */
+  --gap-1:  4px;
+  --gap-2:  8px;
+  --gap-3:  12px;
+  --gap-4:  16px;
+  --gap-5:  20px;
+  --gap-6:  24px;
+
+  /* ── Тени ────────────────────────────────────────── */
+  --shadow-xs:  0 1px 2px rgba(0,0,0,0.40);
+  --shadow-sm:  0 2px 6px rgba(0,0,0,0.50);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.60);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,0.70);
+  --shadow-xl:  0 16px 48px rgba(0,0,0,0.80);
+
+  /* ── Анимации ────────────────────────────────────── */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:    cubic-bezier(0.4, 0, 1, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast:   120ms;
+  --duration-base:   200ms;
+  --duration-slow:   350ms;
+
+  /* ── Размеры layout ─────────────────────────────── */
+  --toolbar-h:      40px;
+  --statusbar-h:    26px;
+  --sidebar-w:      240px;
+  --sidebar-collapsed-w: 48px;
+  --right-panel-w:  272px;
+  --tab-bar-h:      32px;
+
+  /* ── Backward compatibility aliases ──────────────── */
+  --bg:             var(--bg-base);
+  --bg-elev:        var(--bg-surface-1);
+  --panel:          var(--bg-sidebar);
+  --panel-2:        var(--bg-surface-2);
+  --panel-3:        var(--bg-surface-3);
+  --text:           var(--text-primary);
+  --muted:          var(--text-secondary);
+  --success:        var(--color-success);
+  --danger:         var(--color-error);
+  --warn:           var(--color-warning);
+  --border:         var(--border-default);
+  --shadow:         var(--shadow-md);
+  --viewport-bg:    var(--bg-base);
+  --left-panel-width: var(--sidebar-w);
+  --right-panel-width: 0px;
+  --command-bar-height: var(--toolbar-h);
+  --status-bar-height: var(--statusbar-h);
+  --radius:         var(--radius-md);
+  --radius-full:    var(--radius-pill);
+  --space-xs:       var(--gap-1);
+  --space-sm:       var(--gap-2);
+  --space-md:       var(--gap-4);
+  --space-lg:       var(--gap-6);
+  --font-xs:        var(--text-xs);
+  --font-sm:        var(--text-sm);
+  --font-base:      var(--text-base);
+  --font-md:        var(--text-md);
+  --font-lg:        var(--text-lg);
+  --transition-fast: var(--duration-fast) ease;
+  --transition-normal: var(--duration-base) ease;
+  --transition-slow: var(--duration-slow) ease;
+}
+
+/* ── Light Theme ── */
+[data-theme="light"] {
+  --bg-base:        #F4F4F8;
+  --bg-sidebar:     #EAEAF0;
+  --bg-surface-1:   #FFFFFF;
+  --bg-surface-2:   #F0F0F6;
+  --bg-surface-3:   #E4E4EC;
+  --bg-overlay:     rgba(244, 244, 248, 0.88);
+  --border-subtle:  rgba(0, 0, 0, 0.05);
+  --border-default: rgba(0, 0, 0, 0.10);
+  --border-strong:  rgba(0, 0, 0, 0.18);
+  --text-primary:   #1A1A2E;
+  --text-secondary: #5A5A72;
+  --text-tertiary:  #8A8AA2;
+  --text-inverse:   #FFFFFF;
+  --accent:         #7C5CE7;
+  --accent-hover:   #6C4AD8;
+  --accent-pressed: #5B3AC7;
+  --accent-subtle:  rgba(124, 92, 231, 0.08);
+  --accent-glow:    rgba(124, 92, 231, 0.15);
+  --accent-border:  rgba(124, 92, 231, 0.25);
+  --doc-shadow:     0 2px 16px rgba(0, 0, 0, 0.12);
+  --shadow-xs:  0 1px 2px rgba(0,0,0,0.06);
+  --shadow-sm:  0 2px 4px rgba(0,0,0,0.08);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.10);
+  --shadow-lg:  0 8px 24px rgba(0,0,0,0.14);
+  --shadow-xl:  0 12px 40px rgba(0,0,0,0.18);
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0.01ms;
+    --duration-base: 0.01ms;
+    --duration-slow: 0.01ms;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── High Contrast ── */
+@media (forced-colors: active) {
+  :root {
+    --accent: Highlight;
+    --text-primary: CanvasText;
+    --bg-base: Canvas;
+    --border-default: CanvasText;
+  }
+}

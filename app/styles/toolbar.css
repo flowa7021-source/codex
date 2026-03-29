@@ -6,11 +6,11 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 0 8px;
-  height: var(--command-bar-height);
-  min-height: var(--command-bar-height);
-  background: var(--panel);
-  border-bottom: 1px solid var(--border);
+  padding: 0 var(--gap-2);
+  height: var(--toolbar-h);
+  min-height: var(--toolbar-h);
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border-subtle);
   z-index: 20;
   user-select: none;
 }
@@ -25,32 +25,37 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid transparent;
+  border: none;
   background: transparent;
-  color: var(--muted);
-  border-radius: 5px;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: all 0.12s;
+  transition: background var(--duration-fast), color var(--duration-fast);
   font-size: 14px;
 }
 .cb-btn:hover {
-  background: var(--panel-3);
-  color: var(--text);
-  border-color: var(--border);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
 }
+.cb-btn:active { background: var(--bg-surface-3); }
 .cb-btn.active, .cb-btn.cb-toggle.active {
+  background: var(--accent-subtle);
   color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+.cb-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .cb-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
 
 .cb-sep {
   width: 1px;
   height: 20px;
-  background: var(--border);
+  background: var(--border-subtle);
   margin: 0 4px;
   flex-shrink: 0;
   opacity: 0.5;

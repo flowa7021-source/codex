@@ -306,8 +306,21 @@ export function initPhase2Modules(deps) {
     if (protectBtn) protectBtn.addEventListener('click', () => openProtectModal(DEFAULT_PERMISSIONS));
 
     // Preset buttons — one-click protection with pre-filled permissions
+    // "Полная защита" — skip modal, just ask for password
     const fullLockBtn = document.getElementById('protectFullLock');
-    if (fullLockBtn) fullLockBtn.addEventListener('click', () => openProtectModal(LOCKED_PERMISSIONS));
+    if (fullLockBtn) fullLockBtn.addEventListener('click', async () => {
+      if (!state.pdfBytes) { toastWarning('Откройте PDF документ'); return; }
+      const { nrPrompt } = await import('./modal-prompt.js');
+      const pwd = await nrPrompt('Введите пароль для полной защиты PDF:');
+      if (!pwd) return;
+      try {
+        const result = await setPassword(state.pdfBytes, pwd, '', LOCKED_PERMISSIONS);
+        const { saveOrDownload } = await import('./platform.js');
+        const name = (state.docName || 'document').replace(/\.[^.]+$/, '') + '-protected.pdf';
+        await saveOrDownload(result.blob, name, [{ name: 'PDF', extensions: ['pdf'] }]);
+        toastSuccess('PDF полностью защищён');
+      } catch (err) { toastError('Ошибка: ' + err.message); }
+    });
 
     const readOnlyBtn = document.getElementById('protectReadOnly');
     if (readOnlyBtn) readOnlyBtn.addEventListener('click', () => openProtectModal({

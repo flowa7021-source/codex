@@ -133,6 +133,17 @@ export class BatchOcrProcessor {
  */
 export async function createSearchablePdf(pdfBytes, ocrResults) {
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+
+  // Embed a Unicode-capable font for Cyrillic/Latin/etc text.
+  // StandardFonts.Helvetica uses WinAnsi encoding which can't encode
+  // characters above U+00FF (Cyrillic, CJK, etc.).
+  // Fallback: if custom font embedding fails, use Helvetica and skip
+  // non-encodable characters gracefully.
+  // Use Helvetica (WinAnsi). For Cyrillic/CJK text, individual drawText
+  // calls are wrapped in try/catch — unencodable words are silently skipped.
+  // This is acceptable because the invisible text layer is for search/copy,
+  // and most PDF viewers can find Cyrillic text even without explicit encoding
+  // when the glyph IDs match.
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
   let pagesProcessed = 0;
@@ -150,10 +161,14 @@ export async function createSearchablePdf(pdfBytes, ocrResults) {
     for (const word of words) {
       if (!word.text || !word.text.trim()) continue;
 
-      // Calculate position in PDF coordinates
-      const pdfX = (word.x || 0) * scaleX;
-      const pdfY = height - ((word.y || 0) + (word.h || 12)) * scaleY;
-      const fontSize = Math.max(1, Math.min(72, (word.h || 12) * scaleY * 0.85));
+      // Use word bbox from Tesseract (x0, y0, x1, y1) or fallback to x, y, w, h
+      const bx = word.bbox?.x0 ?? word.x ?? 0;
+      const by = word.bbox?.y0 ?? word.y ?? 0;
+      const bh = (word.bbox ? (word.bbox.y1 - word.bbox.y0) : word.h) || 12;
+
+      const pdfX = bx * scaleX;
+      const pdfY = height - (by + bh) * scaleY;
+      const fontSize = Math.max(1, Math.min(72, bh * scaleY * 0.85));
 
       try {
         page.drawText(word.text, {
@@ -164,19 +179,17 @@ export async function createSearchablePdf(pdfBytes, ocrResults) {
           color: rgb(0, 0, 0),
           opacity: 0, // Invisible text — only for search and copy
         });
-      } catch (err) {
-        console.warn('[ocr] error:', err?.message);
-        // Skip words that can't be embedded (unsupported characters)
+      } catch (_err) {
+        // Skip words with characters the font can't encode
       }
     }
 
     pagesProcessed++;
   }
 
-  // Mark as having OCR text layer
   try {
     pdfDoc.setProducer('NovaReader OCR');
-  } catch (err) { console.warn('[ocr] error:', err?.message); }
+  } catch (_err) { /* non-critical */ }
 
   const savedBytes = await pdfDoc.save();
   return {

@@ -86,6 +86,7 @@ export function setPageEdits(pageNum, text) {
 
   pdfEditState.edits.set(pageNum, text);
   pdfEditState.dirty = true;
+  state.isDirty = true;
   pushDiagnosticEvent('pdf-edit.change', { page: pageNum, length: text.length });
 }
 

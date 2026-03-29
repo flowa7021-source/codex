@@ -101,6 +101,17 @@ export function initKeyboard(deps) {
         }
       }
     }
+    // Ctrl+S — save current document with modifications
+    if ((e.ctrlKey || e.metaKey) && key === 's' && !e.shiftKey) {
+      e.preventDefault();
+      deps.saveCurrentFile?.();
+    }
+    // Ctrl+Shift+S — save as (choose new path)
+    if ((e.ctrlKey || e.metaKey) && key === 's' && e.shiftKey) {
+      e.preventDefault();
+      deps.saveCurrentFileAs?.();
+    }
+
     if (combo && combo === hotkeys.annotate) {
       e.preventDefault();
       setDrawMode(!state.drawEnabled);

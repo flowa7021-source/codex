@@ -20,6 +20,9 @@
       }
     }
     </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles/index.css" />
   </head>
   <body>
@@ -188,6 +191,10 @@
 
           <section data-sidebar-section="previews" class="lp-thumbnails-section">
             <h2 class="section-toggle" data-i18n="sidebar.pages">Страницы</h2>
+            <div style="display:flex;gap:4px;padding:2px 4px;justify-content:center">
+              <button id="selectAllPages" class="btn-ghost btn-xs" title="Выделить все страницы">Все</button>
+              <button id="clearPageSelection" class="btn-ghost btn-xs" title="Снять выделение">Снять</button>
+            </div>
             <ul id="pagePreviewList" class="thumbnail-grid"></ul>
           </section>
 

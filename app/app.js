@@ -94,7 +94,7 @@ import { initLayoutControllerDeps, uiLayoutKey, applyAdvancedPanelsState, toggle
 import { initPdfProHandlersDeps, initPdfProHandlers } from './modules/pdf-pro-handlers.js';
 import { initBookmarkController, updateBookmarkButton } from './modules/bookmark-controller.js';
 import { initNotesController } from './modules/notes-controller.js';
-import { highlightCurrentPage as highlightThumbPage } from './modules/thumbnail-renderer.js';
+import { highlightCurrentPage as highlightThumbPage, selectAllPages, clearPageSelection } from './modules/thumbnail-renderer.js';
 import { convertCurrentToPdf } from './modules/convert-to-pdf.js';
 import { initUiBlocks } from './modules/ui-init-blocks.js';
 import { initPhase2Modules } from './modules/app-init-phase2.js';
@@ -429,6 +429,29 @@ initKeyboard({
   setDrawMode, setOcrRegionMode, setOcrStatus,
   undoStroke, undoPageEdit, redoPageEdit, showShortcutsHelp,
   closeSettingsModal, blockEditor, renderCurrentPage,
+  saveCurrentFile: async () => {
+    if (!state.pdfBytes) return;
+    const { saveOrDownload } = await import('./modules/platform.js');
+    const blob = new Blob([state.pdfBytes], { type: 'application/pdf' });
+    await saveOrDownload(blob, state.docName || 'document.pdf', [{ name: 'PDF', extensions: ['pdf'] }]);
+    state.isDirty = false;
+  },
+  saveCurrentFileAs: async () => {
+    if (!state.pdfBytes) return;
+    const { saveOrDownload } = await import('./modules/platform.js');
+    const blob = new Blob([state.pdfBytes], { type: 'application/pdf' });
+    const baseName = (state.docName || 'document').replace(/\.[^.]+$/, '');
+    await saveOrDownload(blob, `${baseName}-copy.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
+    state.isDirty = false;
+  },
+});
+
+// Warn on close if unsaved changes
+window.addEventListener('beforeunload', (e) => {
+  if (state.isDirty) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
 });
 
 safeOn(document, 'visibilitychange', syncReadingTimerWithVisibility);
@@ -743,6 +766,16 @@ on('novareader-goto-page', async (detail) => {
   }
 });
 
+// Page multi-select buttons
+document.getElementById('selectAllPages')?.addEventListener('click', selectAllPages);
+document.getElementById('clearPageSelection')?.addEventListener('click', clearPageSelection);
+
+// Re-open file after page operations (rotate, delete from context menu)
+document.addEventListener('novareader-reopen-file', async (e) => {
+  const file = /** @type {any} */ (e).detail?.file;
+  if (file) await openFile(file);
+});
+
 // Hook page navigation to update bookmark button and thumbnails
 on('page-rendered', () => {
   updateBookmarkButton();
@@ -798,6 +831,56 @@ window._floatingSearch = initFloatingSearch(
         return { total: results.length, matches: results };
       }
       return { total: 0, matches: [] };
+    },
+    onReplace: async (replaceText, matchIndex) => {
+      // Replace single match in the current page's text
+      if (!state.adapter || !replaceText) return;
+      const pageText = String(els.pageText?.value || '');
+      const query = window._floatingSearch?.getQuery?.() || '';
+      if (!query || !pageText) return;
+      // Find the Nth occurrence and replace it
+      let count = 0;
+      const updated = pageText.replace(new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), (m) => {
+        return count++ === matchIndex ? replaceText : m;
+      });
+      if (updated !== pageText) {
+        /** @type {any} */ (els.pageText).value = updated;
+        setPageEdits(state.currentPage, updated);
+        persistEdits();
+        state.isDirty = true;
+        setOcrStatus(`Заменено: "${query}" → "${replaceText}"`);
+      }
+    },
+    onReplaceAll: async (replaceText) => {
+      if (!state.adapter || !replaceText) return;
+      const query = window._floatingSearch?.getQuery?.() || '';
+      if (!query) return;
+      const regex = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      let totalReplaced = 0;
+      // Replace across all pages
+      for (let p = 1; p <= state.pageCount; p++) {
+        let text = '';
+        try { text = await state.adapter.getText(p) || ''; } catch (_e) { continue; }
+        const ocrCache = _ocrWordCache.get(p);
+        if (!text && ocrCache) {
+          text = ocrCache.map(w => w.text).join(' ');
+        }
+        if (!text) continue;
+        const updated = text.replace(regex, () => { totalReplaced++; return replaceText; });
+        if (updated !== text) {
+          setPageEdits(p, updated);
+        }
+      }
+      if (totalReplaced > 0) {
+        persistEdits();
+        state.isDirty = true;
+        // Update current page display
+        const currentEdits = /** @type {any} */ (window).__pdfEditState?.edits?.get(state.currentPage);
+        if (currentEdits && els.pageText) /** @type {any} */ (els.pageText).value = currentEdits;
+        setOcrStatus(`Заменено ${totalReplaced} вхождений "${query}" → "${replaceText}"`);
+      } else {
+        setOcrStatus(`"${query}" не найдено`);
+      }
     },
     onClose: () => {},
   }
