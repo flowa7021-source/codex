@@ -3,30 +3,31 @@
    ═══════════════════════════════════════════════════ */
 .toast-container {
   position: fixed;
-  bottom: 40px;
-  right: 16px;
-  z-index: 10000;
+  bottom: calc(var(--statusbar-h) + var(--gap-3));
+  right: var(--gap-4);
+  z-index: 1100;
   display: flex;
   flex-direction: column-reverse;
-  gap: 8px;
+  gap: var(--gap-2);
+  min-width: 260px;
   max-width: 380px;
   pointer-events: none;
 }
 .toast {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 10px 14px;
-  border-radius: var(--radius);
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow);
-  font-size: 0.85rem;
+  align-items: center;
+  gap: var(--gap-3);
+  padding: 10px var(--gap-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-md);
+  font-size: var(--text-sm);
   line-height: 1.4;
   pointer-events: auto;
   cursor: pointer;
-  animation: toast-in 0.25s ease;
+  animation: toast-in var(--duration-base) var(--ease-spring);
   position: relative;
   overflow: hidden;
 }
@@ -37,14 +38,14 @@
 .toast-message { flex: 1; }
 .toast-close { background: none; border: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; padding: 0 2px; line-height: 1; }
 .toast-close:hover { color: var(--text); }
-.toast-success { border-left: 3px solid var(--success); }
-.toast-success .toast-icon { color: var(--success); }
-.toast-error { border-left: 3px solid var(--danger); }
-.toast-error .toast-icon { color: var(--danger); }
-.toast-warning { border-left: 3px solid var(--warn); }
-.toast-warning .toast-icon { color: var(--warn); }
-.toast-info { border-left: 3px solid var(--accent); }
-.toast-info .toast-icon { color: var(--accent); }
+.toast-success { border-left: 3px solid var(--color-success); }
+.toast-success .toast-icon { color: var(--color-success); }
+.toast-error { border-left: 3px solid var(--color-error); }
+.toast-error .toast-icon { color: var(--color-error); }
+.toast-warning { border-left: 3px solid var(--color-warning); }
+.toast-warning .toast-icon { color: var(--color-warning); }
+.toast-info { border-left: 3px solid var(--color-info); }
+.toast-info .toast-icon { color: var(--color-info); }
 .toast-progress-bar-wrap, .toast-progress { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--border); }
 .toast-progress-bar { height: 100%; background: var(--accent); transition: width 0.3s ease; border-radius: 0 0 var(--radius) var(--radius); }
 .toast-spinner { animation: spin 1s linear infinite; }

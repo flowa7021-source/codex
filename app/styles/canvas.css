@@ -3,7 +3,7 @@
    ═══════════════════════════════════════════════════ */
 .document-viewport {
   position: relative;
-  background: var(--viewport-bg);
+  background: var(--bg-base);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -18,10 +18,18 @@
   align-items: center;
   overflow: auto;
   flex: 1;
-  padding: 24px 32px;
+  padding: var(--gap-5) var(--gap-4);
   scroll-behavior: smooth;
   min-height: 0;
 }
+/* Thin custom scrollbar */
+.canvas-wrap::-webkit-scrollbar { width: 6px; height: 6px; }
+.canvas-wrap::-webkit-scrollbar-track { background: transparent; }
+.canvas-wrap::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-pill);
+}
+.canvas-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
 .canvas-stack {
   position: relative;
@@ -30,13 +38,11 @@
   flex-shrink: 0;
 }
 
-/* Page canvas — white sheet with shadow (Acrobat Pro style) */
+/* Page canvas — white sheet with deep shadow (Carbon & Amethyst) */
 #viewerCanvas, #annotationCanvas {
   border-radius: 2px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.2), 0 4px 16px rgba(0,0,0,0.12);
-  background: white;
-  /* Crisp downscaling: browser applies high-quality bicubic/bilinear filtering
-     on the supersampled canvas for sharp text and smooth image edges */
+  box-shadow: var(--doc-shadow);
+  background: var(--doc-bg);
   image-rendering: auto;
   -webkit-image-rendering: high-quality;
   -webkit-font-smoothing: antialiased;

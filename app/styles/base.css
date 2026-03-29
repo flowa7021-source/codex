@@ -1,130 +1,46 @@
 /* ═══════════════════════════════════════════════════
-   NovaReader 4.0 — Acrobat Pro-inspired UI
+   NovaReader — Carbon & Amethyst UI
+   Design tokens imported from tokens.css
    ═══════════════════════════════════════════════════ */
 
 :root {
-  /* ── Color Tokens (Dark theme default) ── */
-  --bg: #1b1b1f;
-  --bg-elev: #232328;
-  --panel: #1e1e23;
-  --panel-2: #27272d;
-  --panel-3: #303038;
-  --text: #e8e8ed;
-  --muted: #9e9ea8;
-  --accent: #4f9cff;
-  --accent-2: #3b82f6;
-  --success: #6ee7b7;
-  --danger: #ff8b8b;
-  --warn: #f59e0b;
-  --border: #3a3a44;
-  --shadow: 0 4px 24px rgba(0,0,0,0.35);
-  --viewport-bg: #525659;
-
-  /* ── Spacing Tokens ── */
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
-  --space-2xl: 48px;
-
-  /* ── Border Radius Tokens ── */
-  --radius: 6px;
-  --radius-sm: 4px;
-  --radius-lg: 10px;
-  --radius-xl: 16px;
-  --radius-full: 9999px;
-
-  /* ── Elevation (Shadow) Tokens ── */
-  --elevation-1: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
-  --elevation-2: 0 3px 6px rgba(0,0,0,0.16), 0 3px 6px rgba(0,0,0,0.23);
-  --elevation-3: 0 10px 20px rgba(0,0,0,0.19), 0 6px 6px rgba(0,0,0,0.23);
-  --elevation-4: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
-
-  /* ── Typography Tokens ── */
-  --font-xs: 0.7rem;
-  --font-sm: 0.78rem;
-  --font-base: 0.85rem;
-  --font-md: 1rem;
-  --font-lg: 1.15rem;
-  --font-xl: 1.35rem;
-  --font-2xl: 1.6rem;
-  --line-height-tight: 1.2;
-  --line-height-normal: 1.45;
-  --line-height-relaxed: 1.65;
-
-  /* ── Transition Tokens ── */
-  --transition-fast: 0.1s ease;
-  --transition-normal: 0.2s ease;
-  --transition-slow: 0.35s ease;
-  --transition-spring: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* ── Layout Tokens ── */
-  --left-panel-width: 260px;
-  --right-panel-width: 0px;
-  --command-bar-height: 40px;
-  --status-bar-height: 26px;
-
+  /* Layout compat — used by app-shell grid */
   --ui-toolbar-scale: 1;
   --ui-text-min-height: 50px;
   --search-toolbar-rows: 1;
   --search-toolbar-row-height: 28px;
-  --ui-toolbar-top-height: 40px;
+  --ui-toolbar-top-height: var(--toolbar-h);
   --ui-toolbar-bottom-height: auto;
   --ui-text-panel-height: 140px;
-  --sidebar-width: 260px;
+  --sidebar-width: var(--sidebar-w);
 }
 
-/* ── Light Theme (data-theme attribute) ── */
-[data-theme="light"] {
-  --bg: #f0f0f4;
-  --bg-elev: #e8e8ed;
-  --panel: #ffffff;
-  --panel-2: #f5f5fa;
-  --panel-3: #eaeaf0;
-  --text: #1a1a24;
-  --muted: #6b6b78;
-  --accent: #1a6de0;
-  --accent-2: #1558b8;
-  --success: #108a57;
-  --danger: #d73d46;
-  --warn: #b47a0a;
-  --border: #d4d4de;
-  --shadow: 0 4px 20px rgba(0,0,0,0.1);
-  --viewport-bg: #c8c8cc;
-  --elevation-1: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.12);
-  --elevation-2: 0 3px 6px rgba(0,0,0,0.08), 0 3px 6px rgba(0,0,0,0.12);
-  --elevation-3: 0 10px 20px rgba(0,0,0,0.1), 0 6px 6px rgba(0,0,0,0.08);
-  --elevation-4: 0 14px 28px rgba(0,0,0,0.12), 0 10px 10px rgba(0,0,0,0.08);
+/* Light theme: handled by tokens.css [data-theme="light"] */
+body.light { /* compat: apply data-theme attribute */ }
+[data-theme="light"], body.light {
+  --bg: var(--bg-base);
+  --bg-elev: var(--bg-surface-1);
+  --panel: var(--bg-sidebar);
+  --panel-2: var(--bg-surface-2);
+  --panel-3: var(--bg-surface-3);
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+  --border: var(--border-default);
+  --shadow: var(--shadow-md);
+  --viewport-bg: var(--bg-base);
 }
 
-/* ── Light theme ── */
-body.light {
-  --bg: #f0f0f4;
-  --bg-elev: #e8e8ed;
-  --panel: #ffffff;
-  --panel-2: #f5f5fa;
-  --panel-3: #eaeaf0;
-  --text: #1a1a24;
-  --muted: #6b6b78;
-  --accent: #1a6de0;
-  --accent-2: #1558b8;
-  --success: #108a57;
-  --danger: #d73d46;
-  --warn: #b47a0a;
-  --border: #d4d4de;
-  --shadow: 0 4px 20px rgba(0,0,0,0.1);
-  --viewport-bg: #c8c8cc;
-}
-
-/* ── Base ── */
-* { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+/* ── Base Reset ── */
+*, *::before, *::after { box-sizing: border-box; }
+* { font-family: var(--font-ui); }
 
 body {
   margin: 0;
-  color: var(--text);
-  background: var(--bg);
-  font-size: 13px;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  font-size: var(--text-base);
+  font-family: var(--font-ui);
+  font-weight: var(--weight-regular);
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
