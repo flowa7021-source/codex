@@ -66,11 +66,29 @@ function hideProgress() {
 
 // ─── Pipeline runners ───────────────────────────────────────────────────────
 
+/**
+ * Convert DjVu file bytes to PDF bytes if needed.
+ * Returns original bytes unchanged if already a PDF.
+ */
+async function ensurePdfBytes(file) {
+  const name = file.name.toLowerCase();
+  if (name.endsWith('.djvu') || name.endsWith('.djv')) {
+    const { ensureDjVuJs } = await import('./loaders.js');
+    const DjVu = await ensureDjVuJs();
+    const data = await file.arrayBuffer();
+    const doc = new DjVu.Document(new Uint8Array(data));
+    const { DjVuNativeAdapter } = await import('./adapters.js');
+    const adapter = new DjVuNativeAdapter(doc, file.name);
+    const { djvuToPdf } = await import('./convert-to-pdf.js');
+    return djvuToPdf(adapter, undefined);
+  }
+  return new Uint8Array(await file.arrayBuffer());
+}
+
 async function runOcrPipeline(file, idx, total) {
   showProgress(`OCR: ${file.name} (${idx + 1}/${total})`, (idx / total) * 100);
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytes = await ensurePdfBytes(file);
 
-  // Lazy imports to keep initial bundle small
   const pdfjsMod = await import('pdfjs-dist');
   const getDocument = pdfjsMod.getDocument || pdfjsMod.default?.getDocument;
   const pdfDoc = await getDocument({ data: bytes }).promise;
@@ -105,7 +123,7 @@ async function runOcrPipeline(file, idx, total) {
 }
 
 async function runConversion(file, format) {
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytes = await ensurePdfBytes(file);
   switch (format) {
     case 'docx': {
       const pdfjsMod = await import('pdfjs-dist');
@@ -144,15 +162,14 @@ async function runProtect(file) {
   const { nrPrompt } = await import('./modal-prompt.js');
   const pwd = await nrPrompt('Введите пароль для защиты:');
   if (!pwd) throw new Error('Пароль не указан');
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytes = await ensurePdfBytes(file);
   const result = await setPassword(bytes, pwd, '', LOCKED_PERMISSIONS);
   return result.blob;
 }
 
 async function runOptimize(file) {
-  // pdf-lib re-save strips unused objects, compresses streams
   const { PDFDocument } = await import('pdf-lib');
-  const bytes = new Uint8Array(await file.arrayBuffer());
+  const bytes = await ensurePdfBytes(file);
   const doc = await PDFDocument.load(bytes, { ignoreEncryption: true });
   const saved = await doc.save();
   return new Blob([/** @type {any} */ (saved)], { type: 'application/pdf' });

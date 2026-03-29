@@ -394,6 +394,21 @@ export async function _renderOcrTextLayer(pageNum, zoom, dpr) {
       words = ocr.pagesWords[pageNum - 1];
     }
   }
+  // Fallback: if no word-level data, try adapter.getText() for DjVu/other formats
+  if ((!words || !words.length) && state.adapter && state.adapter.type !== 'pdf') {
+    try {
+      const plainText = await state.adapter.getText(pageNum);
+      if (plainText && plainText.trim()) {
+        const h = parseFloat(els.canvas.style.height) || (els.canvas.height / dpr);
+        const span = document.createElement('span');
+        span.textContent = plainText.trim();
+        span.style.cssText = `position:absolute;left:8px;top:8px;right:8px;bottom:8px;font-size:${Math.max(10, h * 0.015)}px;color:transparent;white-space:pre-wrap;word-break:break-word;pointer-events:all;overflow:hidden;`;
+        container.appendChild(span);
+        container.classList.add('ocr-text-layer');
+        return;
+      }
+    } catch (_e) { /* no text available */ }
+  }
   if (!words || !words.length) return;
 
   // Word bboxes are in [0,1] normalized coordinates (relative to OCR source canvas).
