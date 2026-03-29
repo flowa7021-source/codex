@@ -93,6 +93,7 @@ export function loadStrokes(page = state.currentPage) {
 export function saveStrokes(strokes, page = state.currentPage) {
   _strokesCache.delete(page);
   localStorage.setItem(annotationKey(page), JSON.stringify(strokes));
+  state.isDirty = true;
   _deps.renderDocStats();
   _deps.renderReadingGoalStatus();
   _deps.renderEtaStatus();

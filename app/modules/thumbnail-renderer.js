@@ -7,6 +7,65 @@ const THUMB_WIDTH = 150;
 const THUMB_ZOOM = 0.2;
 const PRELOAD_MARGIN = 5; // render ±5 pages around viewport
 
+// ─── Multi-select state ──────────────────────────────────────────────────────
+/** @type {Set<number>} */
+export const selectedPages = new Set();
+let _lastClickedPage = -1;
+
+/** @returns {number[]} sorted array of selected page numbers */
+export function getSelectedPages() {
+  return [...selectedPages].sort((a, b) => a - b);
+}
+
+function _togglePageSelection(page, ctrlKey, shiftKey) {
+  const container = els.pagePreviewList;
+  if (!container) return;
+
+  if (shiftKey && _lastClickedPage > 0) {
+    // Range select
+    const from = Math.min(_lastClickedPage, page);
+    const to = Math.max(_lastClickedPage, page);
+    for (let p = from; p <= to; p++) selectedPages.add(p);
+  } else if (ctrlKey) {
+    // Toggle single
+    if (selectedPages.has(page)) selectedPages.delete(page);
+    else selectedPages.add(page);
+  } else {
+    // Single select (clear others)
+    selectedPages.clear();
+    selectedPages.add(page);
+  }
+  _lastClickedPage = page;
+  _updateSelectionVisuals(container);
+}
+
+export function selectAllPages() {
+  for (let i = 1; i <= state.pageCount; i++) selectedPages.add(i);
+  const container = els.pagePreviewList;
+  if (container) _updateSelectionVisuals(container);
+}
+
+export function clearPageSelection() {
+  selectedPages.clear();
+  const container = els.pagePreviewList;
+  if (container) _updateSelectionVisuals(container);
+}
+
+function _updateSelectionVisuals(container) {
+  const wrappers = container.querySelectorAll('.thumb-wrapper');
+  for (const w of wrappers) {
+    const p = Number(/** @type {HTMLElement} */ (w).dataset.page);
+    const isSelected = selectedPages.has(p);
+    const isCurrent = p === state.currentPage;
+    /** @type {HTMLElement} */ (w).style.borderColor = isSelected
+      ? 'var(--accent, #3b82f6)'
+      : (isCurrent ? 'var(--accent-dim, #60a5fa)' : 'transparent');
+    /** @type {HTMLElement} */ (w).style.background = isSelected
+      ? 'rgba(59,130,246,0.12)'
+      : '';
+  }
+}
+
 /** @type {Map<number, HTMLCanvasElement>} */
 const thumbCache = new Map();
 let observer = null;
@@ -71,8 +130,17 @@ export async function renderPagePreviews() {
     label.style.cssText = 'font-size:11px;color:var(--text-muted,#888);margin-top:2px;';
     wrapper.appendChild(label);
 
-    wrapper.addEventListener('click', () => {
-      emit('novareader-goto-page', { page: i });
+    wrapper.addEventListener('click', (e) => {
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        // Multi-select mode
+        _togglePageSelection(i, e.ctrlKey || e.metaKey, e.shiftKey);
+      } else {
+        // Normal click — navigate + single select
+        selectedPages.clear();
+        selectedPages.add(i);
+        _updateSelectionVisuals(container);
+        emit('novareader-goto-page', { page: i });
+      }
     });
 
     container.appendChild(wrapper);

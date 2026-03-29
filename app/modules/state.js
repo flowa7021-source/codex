@@ -129,6 +129,7 @@ export const state = createReactiveState({
   lastDocxImportBlocks: null,
   eventListenerRegistry: new Map(),
   minimapEnabled: true,
+  isDirty: false,
   initComplete: false,
   diagnostics: { events: [], maxEvents: 500, sessionId: `nr-${Date.now().toString(36)}` },
 });
