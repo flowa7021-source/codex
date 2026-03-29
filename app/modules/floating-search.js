@@ -241,5 +241,6 @@ export function initFloatingSearch(container, callbacks = {}) {
     panel: search.panel,
     state: search.state,
     updateResults: search.updateResults,
+    getQuery: () => search.state.query || '',
   };
 }

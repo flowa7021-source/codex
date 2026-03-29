@@ -203,9 +203,14 @@ export function openSignaturePad() {
     }
     const canvasW = parseFloat(els.canvas.style.width) || 400;
     const canvasH = parseFloat(els.canvas.style.height) || 600;
-    blockEditor.addImageBlock(state.currentPage, canvasW * 0.5, canvasH * 0.75, dataUrl, 200, 100);
+    // Place at center — user can drag to reposition via block editor
+    const sigX = canvasW * 0.5;
+    const sigY = canvasH * 0.7;
+    const sigW = 200;
+    const sigH = 100;
+    blockEditor.addImageBlock(state.currentPage, sigX, sigY, dataUrl, sigW, sigH);
     blockEditor.refreshOverlay(els.canvasWrap, els.canvas);
-    /** @type {any} */ (_deps).setOcrStatus?.('Подпись вставлена на canvas');
+    /** @type {any} */ (_deps).setOcrStatus?.('Подпись вставлена — перетащите на нужное место, затем сохраните PDF');
 
     // Also embed into actual PDF via pdf-lib
     if (state.adapter?.type === 'pdf' && state.file) {
@@ -214,12 +219,22 @@ export function openSignaturePad() {
         const pngBlob = await (await fetch(dataUrl)).blob();
         const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
         const arrayBuffer = await state.file.arrayBuffer();
+        // Use the block editor's position if the block was already moved by the user
+        const blocks = blockEditor.exportAllBlocks();
+        const pageBlocks = blocks[state.currentPage] || [];
+        const sigBlock = pageBlocks.find(b => b.type === 'image' && b.dataUrl === dataUrl);
+        const pdfScaleX = 595 / canvasW; // approximate PDF pts / CSS px
+        const pdfScaleY = 842 / canvasH;
+        const finalX = sigBlock ? sigBlock.x * pdfScaleX : 350;
+        const finalY = sigBlock ? (canvasH - sigBlock.y - sigBlock.height) * pdfScaleY : 50;
+        const finalW = sigBlock ? sigBlock.width * pdfScaleX : sigW;
+        const finalH = sigBlock ? sigBlock.height * pdfScaleY : sigH;
         const pdfBlob = await addSignatureToPdf(arrayBuffer, pngBytes, {
           pageNum: state.currentPage,
-          x: 350,
-          y: 50,
-          width: 200,
-          height: 100,
+          x: finalX,
+          y: finalY,
+          width: finalW,
+          height: finalH,
         });
         const { saveOrDownload } = await import('./platform.js');
         await saveOrDownload(pdfBlob, `${state.docName || 'document'}-signed.pdf`, [{ name: 'PDF', extensions: ['pdf'] }]);
