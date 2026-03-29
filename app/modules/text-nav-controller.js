@@ -162,13 +162,23 @@ export async function exportCurrentDocToWord() {
   if (!state.adapter) return;
   const title = String(state.docName || 'document').replace(/\.[^.]+$/, '');
 
-  // Use the new docx library converter for PDF files with native text
-  if (state.adapter?.type === 'pdf' && state.adapter.pdfDoc) {
+  // Use the docx library converter for PDF files or DjVu (via converted pdfBytes)
+  const hasPdfSource = (state.adapter?.type === 'pdf' && state.adapter.pdfDoc) || state.pdfBytes;
+  if (hasPdfSource) {
     try {
       _deps.setOcrStatus('Экспорт DOCX: извлечение структуры...');
       const pageCount = state.pageCount || 1;
 
-      const blob = await _deps.convertPdfToDocx(state.adapter.pdfDoc, title, pageCount, {
+      // Get PDF.js document proxy — from adapter for native PDF, or load from converted bytes for DjVu
+      let pdfDoc = state.adapter?.pdfDoc;
+      if (!pdfDoc && state.pdfBytes) {
+        const pdfjs = await import('pdfjs-dist');
+        const getDoc = pdfjs.getDocument || pdfjs.default?.getDocument;
+        pdfDoc = await getDoc({ data: state.pdfBytes }).promise;
+      }
+      if (!pdfDoc) throw new Error('PDF source not available');
+
+      const blob = await _deps.convertPdfToDocx(pdfDoc, title, pageCount, {
         // 'text' mode extracts structured text + inline images/figures from the PDF.
         // Do NOT use 'text+images' — it appends redundant full-page PNG screenshots.
         mode: 'text',

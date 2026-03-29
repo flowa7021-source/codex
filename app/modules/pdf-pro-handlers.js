@@ -42,11 +42,11 @@ export function initPdfProHandlersDeps(deps) {
 const pdfRedactor = new PdfRedactor();
 
 function requirePdfFile() {
-  if (!state.file || state.adapter?.type !== 'pdf') {
-    _deps.setOcrStatus('Откройте PDF-файл для использования этого инструмента');
-    return null;
-  }
-  return state.file;
+  // Accept PDF files directly, or DjVu files that have been converted to PDF bytes
+  if (state.adapter?.type === 'pdf' && state.file) return state.file;
+  if (state.pdfBytes) return new File([state.pdfBytes], state.docName || 'document.pdf', { type: 'application/pdf' });
+  _deps.setOcrStatus('Откройте PDF или DjVu файл для использования этого инструмента');
+  return null;
 }
 
 /** Extract Uint8Array from a Blob */

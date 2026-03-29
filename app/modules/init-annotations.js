@@ -66,11 +66,14 @@ export function initAnnotations(deps) {
   safeOn(els.exportAnnPdf, 'click', async () => {
     if (!state.adapter) return;
 
-    // If we have the original PDF file, use pdf-lib to embed annotations directly
-    if (state.adapter?.type === 'pdf' && state.file) {
+    // If we have PDF bytes (native PDF or DjVu→PDF converted), embed annotations
+    const hasPdfBytes = (state.adapter?.type === 'pdf' && state.file) || state.pdfBytes;
+    if (hasPdfBytes) {
       try {
         setOcrStatus('Экспорт PDF с аннотациями (pdf-lib)...');
-        const arrayBuffer = await state.file.arrayBuffer();
+        const arrayBuffer = state.pdfBytes
+          ? state.pdfBytes.buffer.slice(state.pdfBytes.byteOffset, state.pdfBytes.byteOffset + state.pdfBytes.byteLength)
+          : await state.file.arrayBuffer();
         const annotStore = new Map();
         for (let p = 1; p <= state.pageCount; p++) {
           const key = `annotations_${state.docName}_page_${p}`;

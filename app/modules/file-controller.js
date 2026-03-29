@@ -324,6 +324,16 @@ const _openFileImpl = async function openFileImpl(file) {
 
     if (openedByNative) {
       saveDjvuData({});
+      // Generate PDF bytes from DjVu so all PDF operations (organize, export,
+      // watermark, protect, annotations export) work seamlessly with DjVu files.
+      try {
+        const { djvuToPdf } = await import('./convert-to-pdf.js');
+        state.pdfBytes = await djvuToPdf(state.adapter, undefined);
+        pushDiagnosticEvent('djvu.pdf-conversion', { pages: state.adapter.getPageCount(), sizeKb: Math.round(state.pdfBytes.length / 1024) });
+      } catch (err) {
+        console.warn('[file-controller] DjVu→PDF conversion failed:', err?.message);
+        state.pdfBytes = null;
+      }
     }
   } else if (lower.endsWith('.epub')) {
     try {
