@@ -743,6 +743,12 @@ on('novareader-goto-page', async (detail) => {
   }
 });
 
+// Re-open file after page operations (rotate, delete from context menu)
+document.addEventListener('novareader-reopen-file', async (e) => {
+  const file = /** @type {any} */ (e).detail?.file;
+  if (file) await openFile(file);
+});
+
 // Hook page navigation to update bookmark button and thumbnails
 on('page-rendered', () => {
   updateBookmarkButton();

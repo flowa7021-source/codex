@@ -148,8 +148,8 @@ export async function fillPdfForm(pdfArrayBuffer, formData, flatten = false) {
 export async function addWatermarkToPdf(pdfArrayBuffer, text, options = {}) {
   const {
     fontSize = 60,
-    opacity = 0.25,
-    color = { r: 0.6, g: 0.6, b: 0.6 },
+    opacity = 0.4,
+    color = { r: 0.5, g: 0.5, b: 0.5 },
     rotation = -45,
     pages = null, // null = all pages, or array of 1-based page numbers
   } = options;

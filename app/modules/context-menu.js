@@ -2,6 +2,7 @@
 // ─── Context Menu System ────────────────────────────────────────────────────
 // Custom right-click context menus for the viewer, annotations, and thumbnails.
 
+import { state } from './state.js';
 import { addWord } from './ocr-user-dictionary.js';
 
 let menuEl = null;
@@ -186,10 +187,73 @@ function buildContextItems(target) {
     return items;
   }
 
-  // Thumbnail panel
-  if (target.closest('.page-preview-list')) {
-    items.push({ label: 'Перейти к странице', action: () => { /* handled by click */ } });
-    items.push({ label: 'Повернуть страницу', action: () => { document.getElementById('rotate')?.click(); } });
+  // Thumbnail panel (page previews)
+  const thumbWrapper = target.closest('.thumb-wrapper, .page-preview-list, #pagePreviewList');
+  if (thumbWrapper) {
+    // Determine which page was right-clicked
+    const pageEl = target.closest('[data-page]');
+    const pageNum = pageEl ? parseInt(pageEl.dataset.page, 10) : null;
+
+    if (pageNum && pageNum >= 1) {
+      items.push({ label: `Страница ${pageNum}`, action: () => {}, shortcut: '', icon: '📄' });
+      items.push({ separator: true });
+
+      items.push({
+        label: 'Повернуть по часовой ↻',
+        icon: '↻',
+        action: async () => {
+          try {
+            const { rotatePages } = await import('./page-organizer.js');
+            if (!state.pdfBytes) return;
+            state.pdfBytes = /** @type {any} */ (await rotatePages(state.pdfBytes, [pageNum - 1], 90));
+            const file = new File([state.pdfBytes], state.docName || 'doc.pdf', { type: 'application/pdf' });
+            document.dispatchEvent(new CustomEvent('novareader-reopen-file', { detail: { file } }));
+          } catch (err) { console.warn('[ctx-menu] rotate error:', err?.message); }
+        },
+      });
+
+      items.push({
+        label: 'Повернуть против часовой ↺',
+        icon: '↺',
+        action: async () => {
+          try {
+            const { rotatePages } = await import('./page-organizer.js');
+            if (!state.pdfBytes) return;
+            state.pdfBytes = /** @type {any} */ (await rotatePages(state.pdfBytes, [pageNum - 1], 270));
+            const file = new File([state.pdfBytes], state.docName || 'doc.pdf', { type: 'application/pdf' });
+            document.dispatchEvent(new CustomEvent('novareader-reopen-file', { detail: { file } }));
+          } catch (err) { console.warn('[ctx-menu] rotate error:', err?.message); }
+        },
+      });
+
+      items.push({
+        label: 'OCR этой страницы',
+        icon: '🔍',
+        action: () => {
+          // Navigate to page, then trigger OCR
+          state.currentPage = pageNum;
+          document.getElementById('ocrCurrentPage')?.click();
+        },
+      });
+
+      items.push({ separator: true });
+
+      items.push({
+        label: 'Удалить страницу',
+        icon: '🗑️',
+        action: async () => {
+          if (!state.pdfBytes || state.pageCount <= 1) return;
+          if (!confirm(`Удалить страницу ${pageNum}?`)) return;
+          try {
+            const { deletePages } = await import('./page-organizer.js');
+            state.pdfBytes = /** @type {any} */ (await deletePages(state.pdfBytes, [pageNum - 1]));
+            const file = new File([state.pdfBytes], state.docName || 'doc.pdf', { type: 'application/pdf' });
+            document.dispatchEvent(new CustomEvent('novareader-reopen-file', { detail: { file } }));
+          } catch (err) { console.warn('[ctx-menu] delete error:', err?.message); }
+        },
+      });
+    }
+
     return items;
   }
 

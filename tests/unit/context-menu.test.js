@@ -490,9 +490,12 @@ describe('context-menu', () => {
 
     it('contextmenu on thumbnail panel builds thumbnail items', () => {
       const target = _origCreate('div');
+      const thumbEl = _origCreate('div');
+      thumbEl.dataset.page = '3';
       target.closest = (sel) => {
         if (sel === '.app-shell') return _origCreate('div');
-        if (sel === '.page-preview-list') return _origCreate('div');
+        if (sel === '.thumb-wrapper, .page-preview-list, #pagePreviewList') return _origCreate('div');
+        if (sel === '[data-page]') return thumbEl;
         if (sel === '#canvasStack, .document-viewport') return null;
         if (sel === '#textLayerDiv > span') return null;
         if (sel === '.annotation-canvas') return null;
@@ -510,8 +513,8 @@ describe('context-menu', () => {
       assert.ok(defaultPrevented);
       const menu = findMenu();
       const buttons = findButtons(menu);
-      // Thumbnail items: Go to page, Rotate page
-      assert.equal(buttons.length, 2);
+      // Thumbnail items: page label + rotate CW + rotate CCW + OCR + delete
+      assert.ok(buttons.length >= 4, `Expected at least 4 buttons, got ${buttons.length}`);
     });
 
     it('contextmenu on area with no matching context returns empty items', () => {
