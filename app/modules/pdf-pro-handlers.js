@@ -41,9 +41,14 @@ export function initPdfProHandlersDeps(deps) {
 
 const pdfRedactor = new PdfRedactor();
 
-function requirePdfFile() {
-  // Accept PDF files directly, or DjVu files that have been converted to PDF bytes
+async function requirePdfFile() {
+  // Accept PDF files directly
   if (state.adapter?.type === 'pdf' && state.file) return state.file;
+  // DjVu: trigger lazy conversion if needed
+  if (!state.pdfBytes && state._djvuPdfConverter) {
+    _deps.setOcrStatus('Конвертация DjVu → PDF...');
+    await state._djvuPdfConverter();
+  }
   if (state.pdfBytes) return new File([state.pdfBytes], state.docName || 'document.pdf', { type: 'application/pdf' });
   _deps.setOcrStatus('Откройте PDF или DjVu файл для использования этого инструмента');
   return null;
@@ -68,7 +73,7 @@ export function initPdfProHandlers() {
 
   // ── PDF Redaction ──
   { const _el = document.getElementById('pdfRedact'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
 
       // Show pattern selection modal instead of text prompt
@@ -152,7 +157,7 @@ export function initPdfProHandlers() {
 
   // ── PDF Optimize ──
   { const _el = document.getElementById('pdfOptimize'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
 
       try {
@@ -169,7 +174,7 @@ export function initPdfProHandlers() {
 
   // ── PDF Flatten ──
   { const _el = document.getElementById('pdfFlatten'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
 
       try {
@@ -186,7 +191,7 @@ export function initPdfProHandlers() {
 
   // ── Accessibility Check ──
   { const _el = document.getElementById('pdfAccessibility'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
 
       try {
@@ -422,7 +427,7 @@ export function initPdfProHandlers() {
 
   // ── Header/Footer ──
   { const _el = document.getElementById('pdfHeaderFooter'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
 
       const format = await _deps.nrPrompt(
@@ -450,7 +455,7 @@ export function initPdfProHandlers() {
 
   // ── Bates Numbering ──
   { const _el = document.getElementById('pdfBatesNumber'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
 
       const prefix = await _deps.nrPrompt('Префикс Бейтса (напр. "DOC-"):', 'DOC-');
@@ -477,7 +482,7 @@ export function initPdfProHandlers() {
 
   // ── Page Organizer Buttons ──
   { const _el = document.getElementById('orgRotateCW'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
       try {
         _deps.setOcrStatus('Поворот страницы по часовой стрелке...');
@@ -493,7 +498,7 @@ export function initPdfProHandlers() {
   }
 
   { const _el = document.getElementById('orgRotateCCW'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
       try {
         _deps.setOcrStatus('Поворот страницы против часовой стрелки...');
@@ -509,7 +514,7 @@ export function initPdfProHandlers() {
   }
 
   { const _el = document.getElementById('orgDelete'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
       if (state.pageCount <= 1) {
         _deps.setOcrStatus('Невозможно удалить единственную страницу');
@@ -538,7 +543,7 @@ export function initPdfProHandlers() {
   }
 
   { const _el = document.getElementById('orgExtract'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
       const rangeStr = await _deps.nrPrompt(`Извлечь страницы (напр. "1-3" или "2,5,7").\nТекущая: ${state.currentPage}, Всего: ${state.pageCount}`, String(state.currentPage));
       if (!rangeStr) return;
@@ -566,7 +571,7 @@ export function initPdfProHandlers() {
 
   // ── Export XLSX ──
   { const _el = document.getElementById('exportXlsx'); if (_el) _el.addEventListener('click', async () => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
 
       try {
@@ -590,7 +595,7 @@ export function initPdfProHandlers() {
   }
 
   { const _el = document.getElementById('orgInsertPages'); if (_el) _el.addEventListener('change', async (e) => {
-      const file = requirePdfFile();
+      const file = await requirePdfFile();
       if (!file) return;
       const insertFile = /** @type {HTMLInputElement} */ (e.target).files?.[0];
       if (!insertFile) return;

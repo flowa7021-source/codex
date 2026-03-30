@@ -77,16 +77,22 @@ export async function djvuToPdf(adapter, onProgress) {
   pdfDoc.setCreator('NovaReader');
   pdfDoc.setProducer('NovaReader — DJVU to PDF');
 
+  // Use JPEG instead of PNG for 3-5× smaller output and lower memory.
+  // Reuse a single canvas to avoid allocation pressure.
+  const canvas = document.createElement('canvas');
+
   for (let i = 1; i <= pageCount; i++) {
     if (onProgress) onProgress(i, pageCount);
 
-    const canvas = document.createElement('canvas');
+    // Yield every page so the UI stays responsive on large files
+    await new Promise((r) => setTimeout(r, 0));
+
     await adapter.renderPage(i, canvas, { zoom: 1, rotation: 0 });
 
-    // Get page image as PNG
-    const pngBlob = await new Promise(r => canvas.toBlob(r, 'image/png'));
-    const pngBytes = new Uint8Array(await pngBlob.arrayBuffer());
-    const image = await pdfDoc.embedPng(pngBytes);
+    // JPEG is much smaller than PNG for scanned/photographic DjVu pages
+    const jpgBlob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+    const jpgBytes = new Uint8Array(await /** @type {Blob} */ (jpgBlob).arrayBuffer());
+    const image = await pdfDoc.embedJpg(jpgBytes);
 
     const page = pdfDoc.addPage([image.width, image.height]);
     page.drawImage(image, {
@@ -96,24 +102,23 @@ export async function djvuToPdf(adapter, onProgress) {
       height: image.height,
     });
 
-    // Get text for this page and add invisible text layer
+    // Add invisible text layer for searchability
     try {
       const text = await adapter.getText(i);
       if (text && text.trim()) {
-        // Add text as a simple content stream (for searchability)
         page.drawText(text.substring(0, 5000), {
           x: 0,
-          y: -1000, // off-screen but present in text extraction
+          y: -1000,
           size: 1,
           opacity: 0,
         });
       }
-    } catch (err) { console.warn('[convert-to-pdf] error:', err?.message); }
-
-    // Release canvas memory
-    canvas.width = 0;
-    canvas.height = 0;
+    } catch (_err) { /* skip text on error */ }
   }
+
+  // Free canvas memory
+  canvas.width = 0;
+  canvas.height = 0;
 
   return new Uint8Array(await pdfDoc.save());
 }

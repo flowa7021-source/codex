@@ -35,6 +35,8 @@ export function initPageOrganizerUI(deps) {
     if (orgStatus) orgStatus.textContent = 'Загрузка страниц...';
 
     try {
+      // Trigger lazy DjVu→PDF conversion if needed
+      if (!state.pdfBytes && state._djvuPdfConverter) await state._djvuPdfConverter();
       orgPdfBytes = state.pdfBytes || (state.file ? new Uint8Array(await state.file.arrayBuffer()) : null);
       if (!orgPdfBytes) throw new Error('PDF bytes not available');
       const pages = await getPageInfoList(orgPdfBytes);

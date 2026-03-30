@@ -388,32 +388,34 @@ export class DjVuNativeAdapter {
     this.fileName = fileName;
     this.type = 'djvu';
     this.mode = 'native';
-    // Get page count first (cheap — reads DIRM header only)
     this.pageCount = Number(doc?.getPagesQuantity?.() || 1);
-    // Defer expensive getPagesSizes() — it decompresses every page.
-    // We'll lazily populate sizes on first getPageViewport() call.
-    this._pageSizesLoaded = false;
-    this.pageSizes = [];
+    // Per-page size cache — loaded lazily, one page at a time.
+    // NEVER call doc.getPagesSizes() — it decompresses ALL pages synchronously.
+    /** @type {Map<number, {width: number, height: number}>} */
+    this._pageSizeCache = new Map();
   }
 
   /**
-   * Lazily load page sizes. Wraps the synchronous getPagesSizes() call
-   * in a microtask yield so it doesn't block the main thread on large files.
-   * Returns a promise; callers must await it.
+   * Get the size of a single page by decompressing just that page.
+   * Caches the result so subsequent calls are instant.
    */
-  async _ensurePageSizes() {
-    if (this._pageSizesLoaded) return;
-    // Yield to the event loop before heavy synchronous decompression
+  async _getPageSize(pageNumber) {
+    if (this._pageSizeCache.has(pageNumber)) return this._pageSizeCache.get(pageNumber);
+    // Yield before potentially expensive decompression
     await new Promise((r) => setTimeout(r, 0));
+    let w = 1200, h = 1600;
     try {
-      const sizes = this.doc?.getPagesSizes?.();
-      this.pageSizes = Array.isArray(sizes) ? sizes : [];
+      const page = this.doc.getPage(pageNumber);
+      const imgData = page.getImageData(true);
+      w = imgData?.width || 1200;
+      h = imgData?.height || 1600;
+      page.reset?.();
     } catch (err) {
-      console.warn('[DjVuNativeAdapter] getPagesSizes failed:', err?.message);
-      pushDiagnosticEvent('djvu.getPagesSizes.error', { message: err?.message });
-      this.pageSizes = [];
+      console.warn(`[DjVuNativeAdapter] page ${pageNumber} size fallback:`, err?.message);
     }
-    this._pageSizesLoaded = true;
+    const size = { width: w, height: h };
+    this._pageSizeCache.set(pageNumber, size);
+    return size;
   }
 
   getPageCount() {
@@ -421,8 +423,7 @@ export class DjVuNativeAdapter {
   }
 
   async getPageViewport(pageNumber, scale, rotation) {
-    await this._ensurePageSizes();
-    const size = this.pageSizes[pageNumber - 1] || {};
+    const size = await this._getPageSize(pageNumber);
     const baseW = Number(size.width) > 0 ? Number(size.width) : 1200;
     const baseH = Number(size.height) > 0 ? Number(size.height) : 1600;
     const w = baseW * scale;

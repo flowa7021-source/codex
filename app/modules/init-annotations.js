@@ -67,6 +67,8 @@ export function initAnnotations(deps) {
     if (!state.adapter) return;
 
     // If we have PDF bytes (native PDF or DjVu→PDF converted), embed annotations
+    // Trigger lazy DjVu→PDF conversion if needed
+    if (!state.pdfBytes && state._djvuPdfConverter) await state._djvuPdfConverter();
     const hasPdfBytes = (state.adapter?.type === 'pdf' && state.file) || state.pdfBytes;
     if (hasPdfBytes) {
       try {
