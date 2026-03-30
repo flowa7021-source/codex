@@ -309,39 +309,99 @@ function applyMergesForTable(builder, sheetIdx, table, rowOffset) {
 /* ------------------------------------------------------------------ */
 
 /**
- * Group PDF.js textContent items into lines by Y-coordinate proximity.
- * Returns an array of strings, one per detected line.
+ * Group PDF.js textContent items into rows of cells.
+ * Groups by Y-coordinate proximity into lines, then splits each line
+ * into columns based on X-position gaps (for tabular data).
  * @param {any[]} items
- * @returns {string[]}
+ * @returns {string[][]} array of rows, each row is array of cell strings
  */
-function _groupTextItemsIntoLines(items) {
+function _groupTextItemsIntoRows(items) {
   if (!items?.length) return [];
-  // Each item has .str, .transform[5] = Y position
-  const sorted = [...items]
-    .filter(it => it.str && it.str.trim())
-    .sort((a, b) => {
-      const dy = (b.transform?.[5] ?? 0) - (a.transform?.[5] ?? 0); // top-to-bottom (PDF Y is bottom-up)
-      if (Math.abs(dy) > 3) return dy;
-      return (a.transform?.[4] ?? 0) - (b.transform?.[4] ?? 0); // left-to-right
-    });
+  const filtered = items.filter(it => it.str && it.str.trim());
+  if (!filtered.length) return [];
 
+  // Sort: top-to-bottom (PDF Y is bottom-up), then left-to-right
+  const sorted = [...filtered].sort((a, b) => {
+    const dy = (b.transform?.[5] ?? 0) - (a.transform?.[5] ?? 0);
+    if (Math.abs(dy) > 3) return dy;
+    return (a.transform?.[4] ?? 0) - (b.transform?.[4] ?? 0);
+  });
+
+  // Group into lines by Y proximity
+  /** @type {Array<Array<{text: string, x: number, w: number}>>} */
   const lines = [];
-  let currentLine = '';
+  let currentLine = [];
   let lastY = null;
 
   for (const item of sorted) {
     const y = item.transform?.[5] ?? 0;
+    const x = item.transform?.[4] ?? 0;
+    const w = item.width || 0;
     if (lastY !== null && Math.abs(y - lastY) > 3) {
-      // New line
-      if (currentLine.trim()) lines.push(currentLine.trim());
-      currentLine = '';
+      if (currentLine.length) lines.push(currentLine);
+      currentLine = [];
     }
-    currentLine += (currentLine ? ' ' : '') + item.str;
+    currentLine.push({ text: item.str, x, w });
     lastY = y;
   }
-  if (currentLine.trim()) lines.push(currentLine.trim());
+  if (currentLine.length) lines.push(currentLine);
 
-  return lines;
+  // Detect column boundaries from X-gaps across ALL lines
+  // Collect all gap positions where X-gap > avg char width * 2
+  const allGaps = [];
+  for (const line of lines) {
+    for (let i = 1; i < line.length; i++) {
+      const gap = line[i].x - (line[i - 1].x + line[i - 1].w);
+      if (gap > 8) { // significant gap (>8pt ≈ >1 char width)
+        allGaps.push(line[i].x);
+      }
+    }
+  }
+  // Cluster gap positions to find column boundaries
+  const colBoundaries = _clusterValues(allGaps, 5);
+
+  // Split each line into columns
+  return lines.map(line => {
+    if (colBoundaries.length === 0) {
+      // No columns detected — single cell per line
+      return [line.map(it => it.text).join(' ')];
+    }
+    const cells = new Array(colBoundaries.length + 1).fill('');
+    for (const item of line) {
+      let colIdx = colBoundaries.length; // last column by default
+      for (let c = 0; c < colBoundaries.length; c++) {
+        if (item.x < colBoundaries[c]) { colIdx = c; break; }
+      }
+      cells[colIdx] = (cells[colIdx] ? cells[colIdx] + ' ' : '') + item.text;
+    }
+    return cells.map(c => c.trim());
+  });
+}
+
+/**
+ * Cluster numeric values within tolerance, returning sorted centroids.
+ * @param {number[]} values
+ * @param {number} tolerance
+ * @returns {number[]}
+ */
+function _clusterValues(values, tolerance) {
+  if (!values.length) return [];
+  const sorted = [...values].sort((a, b) => a - b);
+  const clusters = [];
+  let clusterStart = 0;
+  for (let i = 1; i <= sorted.length; i++) {
+    if (i === sorted.length || sorted[i] - sorted[i - 1] > tolerance) {
+      // Cluster complete — take centroid if cluster has 2+ members
+      const size = i - clusterStart;
+      if (size >= 2) {
+        let sum = 0;
+        for (let j = clusterStart; j < i; j++) sum += sorted[j];
+        clusters.push(sum / size);
+      }
+      clusterStart = i;
+    }
+  }
+  return clusters;
 }
 
 /* ------------------------------------------------------------------ */
@@ -413,11 +473,14 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
       const page = await pdfDoc.getPage(pageNum);
       const textContent = await page.getTextContent();
       if (textContent?.items?.length) {
-        const lines = _groupTextItemsIntoLines(textContent.items);
-        if (lines.length > 0) {
+        const rows = _groupTextItemsIntoRows(textContent.items);
+        if (rows.length > 0) {
           const sheetName = sanitizeSheetName(`Page ${pageNum}`);
-          const sheetRows = lines.map(line => [line]);
-          builder.addSheet(sheetName, sheetRows);
+          // Apply number detection to each cell
+          const typedRows = rows.map(row =>
+            row.map(cell => typeCellToXlsx(cell, numberDetection))
+          );
+          builder.addSheet(sheetName, typedRows);
           sheetCount++;
         }
       }

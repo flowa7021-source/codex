@@ -269,9 +269,24 @@ async function extractPageImages(page, viewport) {
       paintImageXObjectRepeat: 87,
     };
     const pageWidth = viewport.width;
-    const _pageHeight = viewport.height;
+    const pageHeight = viewport.height;
+
+    // Track CTM (Current Transform Matrix) for image positioning
+    // PDF.js operator list includes setTransform, translate, etc.
+    const OPS_TRANSFORM = { setTransform: 12, transform: 13 };
+    const ctmStack = [[1, 0, 0, 1, 0, 0]]; // identity
 
     for (let i = 0; i < ops.fnArray.length; i++) {
+      // Track transform matrix changes for image position
+      if (ops.fnArray[i] === 10) { // save
+        ctmStack.push([...ctmStack[ctmStack.length - 1]]);
+      } else if (ops.fnArray[i] === 11) { // restore
+        if (ctmStack.length > 1) ctmStack.pop();
+      } else if (ops.fnArray[i] === OPS_TRANSFORM.setTransform || ops.fnArray[i] === OPS_TRANSFORM.transform) {
+        const args = ops.argsArray[i];
+        if (args && args.length >= 6) ctmStack[ctmStack.length - 1] = [args[0], args[1], args[2], args[3], args[4], args[5]];
+      }
+
       if (ops.fnArray[i] === OPS.paintImageXObject ||
           ops.fnArray[i] === OPS.paintInlineImageXObject) {
         const imgName = ops.argsArray[i]?.[0];
@@ -327,9 +342,16 @@ async function extractPageImages(page, viewport) {
 
           const pngData = new Uint8Array(await pngBlob.arrayBuffer());
 
-          // Estimate position in page coordinates (approximate — centered)
-          const displayW = Math.min(w, pageWidth * 0.9);
-          const displayH = h * (displayW / w);
+          // Compute position from current transform matrix
+          const ctm = ctmStack[ctmStack.length - 1];
+          const imgX = ctm[4] || 0;
+          const imgYpdf = ctm[5] || 0;
+          // Convert from PDF coords (bottom-up) to top-down
+          const imgY = pageHeight - imgYpdf;
+          const scaleW = Math.abs(ctm[0]) || 1;
+          const scaleH = Math.abs(ctm[3]) || 1;
+          const displayW = Math.min(Math.max(scaleW, w), pageWidth * 0.95);
+          const displayH = (scaleH > 1 ? scaleH : h) * (displayW / Math.max(1, scaleW > 1 ? scaleW : w));
 
           images.push({
             data: pngData,
@@ -337,6 +359,8 @@ async function extractPageImages(page, viewport) {
             height: Math.round(displayH),
             originalWidth: w,
             originalHeight: h,
+            x: Math.round(imgX),
+            y: Math.round(imgY),
           });
         } catch (err) {
           console.warn('[docx-structure-detector] error:', err?.message);
