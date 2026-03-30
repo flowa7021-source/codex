@@ -615,7 +615,8 @@ async function extractStructuredContent(pdfDoc, pageNum) {
     const item = items[i];
     // Use the average font size of the current line for the threshold
     const lineAvgFs = currentLine.reduce((s, it) => s + it.fontSize, 0) / currentLine.length;
-    const threshold = Math.max(3, lineAvgFs * 0.45);
+    // Tighter tolerance prevents merging subscripts/superscripts onto main line
+    const threshold = Math.min(Math.max(3, lineAvgFs * 0.35), 6);
     if (Math.abs(item.y - currentLineY) <= threshold) {
       currentLine.push(item);
       // Update running average Y
@@ -728,8 +729,12 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
     const xPositions = line.map(i => i.x);
     const xSpan = Math.max(...xPositions) - Math.min(...xPositions);
     const hasMultipleColumns = line.length >= 2 && xSpan > pageWidth * 0.25;
+    // Compute average character width from this line's items for accurate gap detection
+    const lineCharCount = line.reduce((s, it) => s + (it.text?.length || 0), 0);
+    const lineTextWidth = line.reduce((s, it) => s + (it.width || 0), 0);
+    const avgCharW = lineCharCount > 0 && lineTextWidth > 0 ? lineTextWidth / lineCharCount : avgFontSize * 0.5;
     const hasLargeGap = line.some((item, idx) => idx > 0 &&
-      item.x - (rawLine[idx-1].x + (rawLine[idx-1].width || 0)) > avgFontSize * 2.5);
+      item.x - (rawLine[idx-1].x + (rawLine[idx-1].width || 0)) > avgCharW * 6);
     const tabSeparated = lineText.includes('\t');
 
     // Additional table heuristic: check if items form distinct aligned columns

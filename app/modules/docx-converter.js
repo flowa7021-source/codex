@@ -105,7 +105,8 @@ function makeRunsWithSpaces(runs, opts = {}) {
     result.push(makeTextRun(runs[i], opts));
     if (i < runs.length - 1) {
       const spaceFont = PDF_TO_DOCX_FONT_MAP[runs[i].fontFamily] || mapPdfFont(runs[i].fontFamily || '');
-      result.push(new _docx.TextRun({ text: ' ', font: spaceFont, size: Math.round(runs[i].fontSize * 2) }));
+      const nextSize = runs[i + 1]?.fontSize || runs[i].fontSize;
+      result.push(new _docx.TextRun({ text: ' ', font: spaceFont, size: Math.round(Math.min(runs[i].fontSize, nextSize) * 2) }));
     }
   }
   return result;
@@ -208,7 +209,7 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
         if (block.type === 'heading') {
           const headingPara = new _docx.Paragraph({
             heading: block.level,
-            children: makeRunsWithSpaces(block.runs, { bold: true, minSize: 20, maxSize: 56 }),
+            children: makeRunsWithSpaces(block.runs, { bold: true }),
             spacing: { before: 240, after: 120 },
             alignment: block.alignment || _docx.AlignmentType.LEFT,
           });
@@ -232,8 +233,11 @@ export async function convertPdfToDocx(pdfDoc, title, pageCount, options = {}) {
                 paraChildren.push(makeTextRun(run));
               }
               if (i < block.runs.length - 1) {
+                // Use the SMALLER of adjacent run sizes for the space
+                const nextRun = block.runs[i + 1];
+                const spSize = Math.round(Math.min(run.fontSize, nextRun?.fontSize || run.fontSize) * 2);
                 const spFont = PDF_TO_DOCX_FONT_MAP[run.fontFamily] || mapPdfFont(run.fontFamily || '');
-                paraChildren.push(new _docx.TextRun({ text: ' ', font: spFont, size: Math.round(run.fontSize * 2) }));
+                paraChildren.push(new _docx.TextRun({ text: ' ', font: spFont, size: spSize }));
               }
             }
           }

@@ -12,6 +12,10 @@
 
 import { state, els } from './state.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
+
+// Safe a11y announce — imported lazily to avoid test environment issues
+let _announce = /** @type {(msg: string, priority?: string) => void} */ (() => {});
+import('./a11y.js').then(m => { _announce = m.announce; }).catch(() => {});
 import { recordPerfMetric, cacheRenderedPage, getCachedPage, pageRenderCache } from './perf.js';
 import { recordSuccessfulOperation } from './crash-telemetry.js';
 import { blockEditor } from './pdf-advanced-edit.js';
@@ -171,6 +175,12 @@ export function _updatePageUI(renderMs) {
   els.pageStatus.textContent = `${state.currentPage} / ${state.pageCount}`;
   els.zoomStatus.textContent = `${Math.round(state.zoom * 100)}%`;
   /** @type {any} */ (els.pageInput).value = String(state.currentPage);
+
+  // Accessibility: update ARIA labels and announce page change
+  try {
+    if (els.canvas?.setAttribute) els.canvas.setAttribute('aria-label', `${state.docName || 'Документ'}, страница ${state.currentPage} из ${state.pageCount}`);
+    _announce(`Страница ${state.currentPage} из ${state.pageCount}`);
+  } catch (_e) { /* test environment */ }
   _deps.capturePageHistoryOnRender?.();
   _deps.saveViewState?.();
   // Update status bar

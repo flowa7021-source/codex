@@ -320,24 +320,35 @@ function _groupTextItemsIntoRows(items) {
   const filtered = items.filter(it => it.str && it.str.trim());
   if (!filtered.length) return [];
 
+  // Estimate average item height for adaptive Y-tolerance
+  let avgItemH = 12;
+  if (filtered.length > 0) {
+    const heights = filtered.map(it => it.height || Math.sqrt((it.transform?.[0] ?? 12) ** 2 + (it.transform?.[1] ?? 0) ** 2));
+    avgItemH = heights.reduce((a, b) => a + b, 0) / heights.length || 12;
+  }
+
   // Sort: top-to-bottom (PDF Y is bottom-up), then left-to-right
   const sorted = [...filtered].sort((a, b) => {
     const dy = (b.transform?.[5] ?? 0) - (a.transform?.[5] ?? 0);
-    if (Math.abs(dy) > 3) return dy;
+    const yTol = Math.max(3, avgItemH * 0.3);
+    if (Math.abs(dy) > yTol) return dy;
     return (a.transform?.[4] ?? 0) - (b.transform?.[4] ?? 0);
   });
 
-  // Group into lines by Y proximity
+  // Group into lines by Y proximity (adaptive tolerance)
   /** @type {Array<Array<{text: string, x: number, w: number}>>} */
   const lines = [];
   let currentLine = [];
   let lastY = null;
+  const yTolerance = Math.max(3, avgItemH * 0.3);
 
   for (const item of sorted) {
     const y = item.transform?.[5] ?? 0;
     const x = item.transform?.[4] ?? 0;
-    const w = item.width || 0;
-    if (lastY !== null && Math.abs(y - lastY) > 3) {
+    const fontSize = Math.sqrt((item.transform?.[0] ?? 12) ** 2 + (item.transform?.[1] ?? 0) ** 2);
+    // Fallback width for items with width=0
+    const w = item.width || (item.str.length * fontSize * 0.5);
+    if (lastY !== null && Math.abs(y - lastY) > yTolerance) {
       if (currentLine.length) lines.push(currentLine);
       currentLine = [];
     }
@@ -347,12 +358,17 @@ function _groupTextItemsIntoRows(items) {
   if (currentLine.length) lines.push(currentLine);
 
   // Detect column boundaries from X-gaps across ALL lines
-  // Collect all gap positions where X-gap > avg char width * 2
+  // Adaptive gap threshold based on average character width
+  const totalChars = lines.flat().reduce((s, it) => s + (it.text?.length || 0), 0);
+  const totalW = lines.flat().reduce((s, it) => s + it.w, 0);
+  const avgCharWidth = totalChars > 0 && totalW > 0 ? totalW / totalChars : avgItemH * 0.5;
+  const gapThreshold = Math.max(8, avgCharWidth * 2.5);
+
   const allGaps = [];
   for (const line of lines) {
     for (let i = 1; i < line.length; i++) {
       const gap = line[i].x - (line[i - 1].x + line[i - 1].w);
-      if (gap > 8) { // significant gap (>8pt ≈ >1 char width)
+      if (gap > gapThreshold) {
         allGaps.push(line[i].x);
       }
     }
