@@ -71,6 +71,7 @@ export const state = createReactiveState({
   file: null,
   pdfBytes: null,
   pdfLibDoc: null,
+  _djvuPdfConverter: null,
   docName: null,
   currentPage: 1,
   pageCount: 0,

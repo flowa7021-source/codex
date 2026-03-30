@@ -269,9 +269,24 @@ async function extractPageImages(page, viewport) {
       paintImageXObjectRepeat: 87,
     };
     const pageWidth = viewport.width;
-    const _pageHeight = viewport.height;
+    const pageHeight = viewport.height;
+
+    // Track CTM (Current Transform Matrix) for image positioning
+    // PDF.js operator list includes setTransform, translate, etc.
+    const OPS_TRANSFORM = { setTransform: 12, transform: 13 };
+    const ctmStack = [[1, 0, 0, 1, 0, 0]]; // identity
 
     for (let i = 0; i < ops.fnArray.length; i++) {
+      // Track transform matrix changes for image position
+      if (ops.fnArray[i] === 10) { // save
+        ctmStack.push([...ctmStack[ctmStack.length - 1]]);
+      } else if (ops.fnArray[i] === 11) { // restore
+        if (ctmStack.length > 1) ctmStack.pop();
+      } else if (ops.fnArray[i] === OPS_TRANSFORM.setTransform || ops.fnArray[i] === OPS_TRANSFORM.transform) {
+        const args = ops.argsArray[i];
+        if (args && args.length >= 6) ctmStack[ctmStack.length - 1] = [args[0], args[1], args[2], args[3], args[4], args[5]];
+      }
+
       if (ops.fnArray[i] === OPS.paintImageXObject ||
           ops.fnArray[i] === OPS.paintInlineImageXObject) {
         const imgName = ops.argsArray[i]?.[0];
@@ -327,9 +342,16 @@ async function extractPageImages(page, viewport) {
 
           const pngData = new Uint8Array(await pngBlob.arrayBuffer());
 
-          // Estimate position in page coordinates (approximate — centered)
-          const displayW = Math.min(w, pageWidth * 0.9);
-          const displayH = h * (displayW / w);
+          // Compute position from current transform matrix
+          const ctm = ctmStack[ctmStack.length - 1];
+          const imgX = ctm[4] || 0;
+          const imgYpdf = ctm[5] || 0;
+          // Convert from PDF coords (bottom-up) to top-down
+          const imgY = pageHeight - imgYpdf;
+          const scaleW = Math.abs(ctm[0]) || 1;
+          const scaleH = Math.abs(ctm[3]) || 1;
+          const displayW = Math.min(Math.max(scaleW, w), pageWidth * 0.95);
+          const displayH = (scaleH > 1 ? scaleH : h) * (displayW / Math.max(1, scaleW > 1 ? scaleW : w));
 
           images.push({
             data: pngData,
@@ -337,6 +359,8 @@ async function extractPageImages(page, viewport) {
             height: Math.round(displayH),
             originalWidth: w,
             originalHeight: h,
+            x: Math.round(imgX),
+            y: Math.round(imgY),
           });
         } catch (err) {
           console.warn('[docx-structure-detector] error:', err?.message);
@@ -352,12 +376,171 @@ async function extractPageImages(page, viewport) {
 }
 
 // ─── Extract structured text content from PDF page via PDF.js ───────────────
+// ─── Operator-list text style extraction ─────────────────────────────────────
+// Parses PDF.js operator list to extract text color, underline, strikethrough,
+// and bold-via-font-descriptor — data that getTextContent() doesn't provide.
+
+const _OPS = {
+  save: 10, restore: 11,
+  setFont: 37, setTextRenderingMode: 38, setTextMatrix: 42,
+  showText: 44, showSpacedText: 45,
+  nextLineShowText: 46, nextLineSetSpacingShowText: 47,
+  setFillRGBColor: 95, setFillGray: 97, setFillCMYKColor: 99,
+  lineTo: 14, rectangle: 19, stroke: 20, closeStroke: 21,
+  moveTo: 13,
+};
+
+/**
+ * Build a spatial index of text colors, underlines, and font info
+ * from the PDF.js operator list.
+ */
+async function _extractTextStylesFromOps(page, pageHeight) {
+  /** @type {Array<{x: number, y: number, color: string, bold: boolean, renderMode: number}>} */
+  const textPoints = [];
+  /** @type {Array<{x1: number, y: number, x2: number, thickness: number}>} */
+  const hLines = [];
+
+  try {
+    const ops = await page.getOperatorList();
+
+    // Graphics state stack
+    let fillColor = '#000000';
+    let renderMode = 0;
+    let currentFontBold = false;
+    const stateStack = [];
+    let pathX = 0, pathY = 0;
+
+    // Font bold detection from font descriptor
+    const fontBoldCache = new Map();
+    function isFontBold(fontName) {
+      if (fontBoldCache.has(fontName)) return fontBoldCache.get(fontName);
+      let bold = false;
+      try {
+        const fd = page.commonObjs.get(fontName);
+        if (fd?.data) {
+          bold = !!fd.data.bold || (fd.data.stemV && fd.data.stemV > 80);
+        }
+      } catch (_e) { /* font not found */ }
+      if (!bold) bold = /bold|black|heavy|demi/i.test(fontName);
+      fontBoldCache.set(fontName, bold);
+      return bold;
+    }
+
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      const op = ops.fnArray[i];
+      const args = ops.argsArray[i];
+
+      switch (op) {
+        case _OPS.save:
+          stateStack.push({ fillColor, renderMode, currentFontBold });
+          break;
+        case _OPS.restore:
+          if (stateStack.length) {
+            const s = stateStack.pop();
+            fillColor = s.fillColor;
+            renderMode = s.renderMode;
+            currentFontBold = s.currentFontBold;
+          }
+          break;
+        case _OPS.setFillRGBColor:
+          if (args?.length >= 3) {
+            const r = Math.round(args[0] * 255);
+            const g = Math.round(args[1] * 255);
+            const b = Math.round(args[2] * 255);
+            fillColor = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+          }
+          break;
+        case _OPS.setFillGray:
+          if (args?.length >= 1) {
+            const g = Math.round(args[0] * 255);
+            fillColor = `#${g.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}`;
+          }
+          break;
+        case _OPS.setFillCMYKColor:
+          if (args?.length >= 4) {
+            const r = Math.round(255 * (1 - args[0]) * (1 - args[3]));
+            const g = Math.round(255 * (1 - args[1]) * (1 - args[3]));
+            const b = Math.round(255 * (1 - args[2]) * (1 - args[3]));
+            fillColor = `#${Math.max(0, r).toString(16).padStart(2, '0')}${Math.max(0, g).toString(16).padStart(2, '0')}${Math.max(0, b).toString(16).padStart(2, '0')}`;
+          }
+          break;
+        case _OPS.setTextRenderingMode:
+          renderMode = args?.[0] ?? 0;
+          break;
+        case _OPS.setFont:
+          if (args?.[0]) currentFontBold = isFontBold(args[0]);
+          break;
+        case _OPS.showText:
+        case _OPS.showSpacedText:
+        case _OPS.nextLineShowText:
+        case _OPS.nextLineSetSpacingShowText:
+          // Record text point with current fill color and bold state
+          // Position comes from text matrix — we'll match by proximity later
+          textPoints.push({ x: 0, y: 0, color: fillColor, bold: currentFontBold || renderMode === 2, renderMode });
+          break;
+        // Track horizontal lines for underline/strikethrough detection
+        case _OPS.moveTo:
+          if (args?.length >= 2) { pathX = args[0]; pathY = args[1]; }
+          break;
+        case _OPS.lineTo:
+          if (args?.length >= 2) {
+            const lx = args[0], ly = args[1];
+            // Horizontal line?
+            if (Math.abs(ly - pathY) < 1.5 && Math.abs(lx - pathX) > 10) {
+              hLines.push({ x1: Math.min(pathX, lx), y: pathY, x2: Math.max(pathX, lx), thickness: 1 });
+            }
+            pathX = lx; pathY = ly;
+          }
+          break;
+        case _OPS.rectangle:
+          if (args?.length >= 4 && args[3] < 3 && args[2] > 10) {
+            // Thin horizontal rectangle = underline/strikethrough
+            hLines.push({ x1: args[0], y: args[1], x2: args[0] + args[2], thickness: args[3] });
+          }
+          break;
+      }
+    }
+  } catch (_e) { /* operator list unavailable */ }
+
+  // Build spatial lookup
+  let textIdx = 0;
+  return {
+    /**
+     * Get style at a given PDF coordinate position.
+     * @param {number} x @param {number} pdfY @param {number} fontSize
+     */
+    getStyleAt(x, pdfY, fontSize) {
+      // Match text color: use sequential matching (operator list order matches text order)
+      const color = (textIdx < textPoints.length) ? textPoints[textIdx++].color : '#000000';
+      const bold = (textIdx > 0 && textIdx <= textPoints.length) ? textPoints[textIdx - 1].bold : false;
+
+      // Check for underline: horizontal line within 2pt below text baseline
+      let underline = false;
+      let strikethrough = false;
+      for (const line of hLines) {
+        if (x >= line.x1 - 2 && x <= line.x2 + 2) {
+          const lineYtd = pageHeight - line.y; // convert to top-down
+          const textYtd = pageHeight - pdfY;
+          const belowText = lineYtd - textYtd;
+          if (belowText > 0 && belowText < fontSize * 0.3) underline = true;
+          if (belowText > fontSize * 0.3 && belowText < fontSize * 0.7) strikethrough = true;
+        }
+      }
+
+      return { color, bold, underline, strikethrough };
+    },
+  };
+}
+
 async function extractStructuredContent(pdfDoc, pageNum) {
   const page = await pdfDoc.getPage(pageNum);
   const textContent = await page.getTextContent({ includeMarkedContent: false });
   const viewport = page.getViewport({ scale: 1 });
   const pageWidth = viewport.width;
   const pageHeight = viewport.height;
+
+  // ── Extract text styling from operator list (color, underline, bold) ──
+  const textStyles = await _extractTextStylesFromOps(page, pageHeight);
 
   // Extract link annotations from the page
   let linkAnnotations = [];
@@ -397,6 +580,9 @@ async function extractStructuredContent(pdfDoc, pageNum) {
         }
       }
 
+      // Match against operator-list styles by position
+      const style = textStyles.getStyleAt(x, pageHeight - tx[5], fontSize);
+
       return {
         text: item.str,
         x, y,
@@ -405,6 +591,10 @@ async function extractStructuredContent(pdfDoc, pageNum) {
         fontSize,
         fontName: item.fontName || '',
         url,
+        color: style.color,
+        underline: style.underline,
+        strikethrough: style.strikethrough,
+        boldFromDescriptor: style.bold,
       };
     })
     .sort((a, b) => {
@@ -425,7 +615,8 @@ async function extractStructuredContent(pdfDoc, pageNum) {
     const item = items[i];
     // Use the average font size of the current line for the threshold
     const lineAvgFs = currentLine.reduce((s, it) => s + it.fontSize, 0) / currentLine.length;
-    const threshold = Math.max(3, lineAvgFs * 0.45);
+    // Tighter tolerance prevents merging subscripts/superscripts onto main line
+    const threshold = Math.min(Math.max(3, lineAvgFs * 0.35), 6);
     if (Math.abs(item.y - currentLineY) <= threshold) {
       currentLine.push(item);
       // Update running average Y
@@ -538,8 +729,12 @@ function processLinesToBlocks(lines, bodyFontSize, avgFontSize, leftMargin, page
     const xPositions = line.map(i => i.x);
     const xSpan = Math.max(...xPositions) - Math.min(...xPositions);
     const hasMultipleColumns = line.length >= 2 && xSpan > pageWidth * 0.25;
+    // Compute average character width from this line's items for accurate gap detection
+    const lineCharCount = line.reduce((s, it) => s + (it.text?.length || 0), 0);
+    const lineTextWidth = line.reduce((s, it) => s + (it.width || 0), 0);
+    const avgCharW = lineCharCount > 0 && lineTextWidth > 0 ? lineTextWidth / lineCharCount : avgFontSize * 0.5;
     const hasLargeGap = line.some((item, idx) => idx > 0 &&
-      item.x - (rawLine[idx-1].x + (rawLine[idx-1].width || 0)) > avgFontSize * 2.5);
+      item.x - (rawLine[idx-1].x + (rawLine[idx-1].width || 0)) > avgCharW * 6);
     const tabSeparated = lineText.includes('\t');
 
     // Additional table heuristic: check if items form distinct aligned columns
@@ -731,16 +926,16 @@ function buildRuns(lineItems) {
 
     return {
       text: item.text,
-      bold: isBoldFont(item.fontName),
+      bold: item.boldFromDescriptor || isBoldFont(item.fontName),
       italic: isItalicFont(item.fontName),
-      underline: isUnderlineFont(item.fontName),
-      strikethrough: isStrikethroughFont(item.fontName),
+      underline: item.underline || isUnderlineFont(item.fontName),
+      strikethrough: item.strikethrough || isStrikethroughFont(item.fontName),
       superscript,
       subscript,
       monospace: isMonospaceFont(item.fontName),
       fontFamily: mapPdfFont(item.fontName),
       fontSize: item.fontSize,
-      color: item.color || null,
+      color: (item.color && item.color !== '#000000') ? item.color : null,
       url: item.url || null,
     };
   });

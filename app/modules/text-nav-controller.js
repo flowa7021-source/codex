@@ -162,7 +162,8 @@ export async function exportCurrentDocToWord() {
   if (!state.adapter) return;
   const title = String(state.docName || 'document').replace(/\.[^.]+$/, '');
 
-  // Use the docx library converter for PDF files or DjVu (via converted pdfBytes)
+  // Trigger lazy DjVu→PDF conversion if needed
+  if (!state.pdfBytes && state._djvuPdfConverter) await state._djvuPdfConverter();
   const hasPdfSource = (state.adapter?.type === 'pdf' && state.adapter.pdfDoc) || state.pdfBytes;
   if (hasPdfSource) {
     try {

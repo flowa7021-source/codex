@@ -477,7 +477,7 @@ describe('DjVuNativeAdapter – constructor', () => {
     assert.equal(adapter.mode, 'native');
     assert.equal(adapter.pageCount, 5);
     assert.equal(adapter.fileName, 'test.djvu');
-    assert.equal(adapter._pageSizesLoaded, false);
+    assert.ok(adapter._pageSizeCache instanceof Map);
   });
 
   it('defaults to 1 page when getPagesQuantity is missing', () => {
@@ -486,45 +486,49 @@ describe('DjVuNativeAdapter – constructor', () => {
   });
 });
 
-describe('DjVuNativeAdapter – _ensurePageSizes', () => {
-  it('loads sizes lazily', async () => {
-    let called = false;
+describe('DjVuNativeAdapter – _getPageSize (lazy per-page)', () => {
+  it('loads size for a single page on demand', async () => {
+    let pagesAccessed = [];
     const adapter = new DjVuNativeAdapter({
-      getPagesQuantity: () => 2,
-      getPagesSizes: () => {
-        called = true;
-        return [{ width: 800, height: 600 }, { width: 900, height: 700 }];
+      getPagesQuantity: () => 3,
+      getPage: (n) => {
+        pagesAccessed.push(n);
+        return {
+          getImageData: () => ({ width: 800, height: 600 }),
+          reset: () => {},
+        };
       },
     }, 'test.djvu');
 
-    assert.equal(called, false);
-    await adapter._ensurePageSizes();
-    assert.equal(called, true);
-    assert.equal(adapter._pageSizesLoaded, true);
-    assert.equal(adapter.pageSizes.length, 2);
+    const size = await adapter._getPageSize(1);
+    assert.equal(size.width, 800);
+    assert.equal(size.height, 600);
+    // Only page 1 should be accessed, not all pages
+    assert.deepEqual(pagesAccessed, [1]);
   });
 
-  it('does not reload if already loaded', async () => {
+  it('caches result — does not decompress twice', async () => {
     let callCount = 0;
     const adapter = new DjVuNativeAdapter({
       getPagesQuantity: () => 1,
-      getPagesSizes: () => { callCount++; return []; },
+      getPage: () => { callCount++; return { getImageData: () => ({ width: 100, height: 200 }), reset: () => {} }; },
     }, 'test.djvu');
 
-    await adapter._ensurePageSizes();
-    await adapter._ensurePageSizes();
+    await adapter._getPageSize(1);
+    await adapter._getPageSize(1);
     assert.equal(callCount, 1);
   });
 
-  it('handles getPagesSizes failure gracefully', async () => {
+  it('handles page decompression failure gracefully', async () => {
     const adapter = new DjVuNativeAdapter({
       getPagesQuantity: () => 1,
-      getPagesSizes: () => { throw new Error('corrupt'); },
+      getPage: () => { throw new Error('corrupt'); },
     }, 'test.djvu');
 
-    await adapter._ensurePageSizes();
-    assert.deepEqual(adapter.pageSizes, []);
-    assert.equal(adapter._pageSizesLoaded, true);
+    const size = await adapter._getPageSize(1);
+    // Falls back to defaults
+    assert.equal(size.width, 1200);
+    assert.equal(size.height, 1600);
   });
 });
 
@@ -532,12 +536,32 @@ describe('DjVuNativeAdapter – getPageViewport', () => {
   it('returns scaled viewport', async () => {
     const adapter = new DjVuNativeAdapter({
       getPagesQuantity: () => 1,
-      getPagesSizes: () => [{ width: 500, height: 700 }],
+      getPage: () => ({ getImageData: () => ({ width: 500, height: 700 }), reset: () => {} }),
     }, 'test.djvu');
 
     const vp = await adapter.getPageViewport(1, 2, 0);
     assert.equal(vp.width, 1000);
     assert.equal(vp.height, 1400);
+  });
+
+  it('swaps dims for 90 rotation', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: () => ({ getImageData: () => ({ width: 500, height: 700 }), reset: () => {} }),
+    }, 'test.djvu');
+    const vp = await adapter.getPageViewport(1, 1, 90);
+    assert.equal(vp.width, 700);
+    assert.equal(vp.height, 500);
+  });
+
+  it('keeps dims for 180 rotation', async () => {
+    const adapter = new DjVuNativeAdapter({
+      getPagesQuantity: () => 1,
+      getPage: () => ({ getImageData: () => ({ width: 500, height: 700 }), reset: () => {} }),
+    }, 'test.djvu');
+    const vp = await adapter.getPageViewport(1, 1, 180);
+    assert.equal(vp.width, 500);
+    assert.equal(vp.height, 700);
   });
 });
 
@@ -1157,37 +1181,15 @@ describe('DjVuNativeAdapter – renderPage', () => {
 });
 
 describe('DjVuNativeAdapter – getPageViewport edge cases', () => {
-  it('falls back to 1200x1600 when no page size data', async () => {
+  it('falls back to 1200x1600 when page decompression fails', async () => {
     const adapter = new DjVuNativeAdapter({
       getPagesQuantity: () => 1,
-      getPagesSizes: () => [],
+      getPage: () => { throw new Error('corrupt'); },
     }, 'test.djvu');
 
     const vp = await adapter.getPageViewport(1, 1, 0);
     assert.equal(vp.width, 1200);
     assert.equal(vp.height, 1600);
-  });
-
-  it('swaps dims for 90 rotation', async () => {
-    const adapter = new DjVuNativeAdapter({
-      getPagesQuantity: () => 1,
-      getPagesSizes: () => [{ width: 500, height: 700 }],
-    }, 'test.djvu');
-
-    const vp = await adapter.getPageViewport(1, 1, 90);
-    assert.equal(vp.width, 700);
-    assert.equal(vp.height, 500);
-  });
-
-  it('keeps dims for 180 rotation', async () => {
-    const adapter = new DjVuNativeAdapter({
-      getPagesQuantity: () => 1,
-      getPagesSizes: () => [{ width: 500, height: 700 }],
-    }, 'test.djvu');
-
-    const vp = await adapter.getPageViewport(1, 1, 180);
-    assert.equal(vp.width, 500);
-    assert.equal(vp.height, 700);
   });
 });
 
@@ -1307,27 +1309,15 @@ describe('DjVuNativeAdapter – resolveDestToPage edge cases', () => {
   });
 });
 
-describe('DjVuNativeAdapter – _ensurePageSizes with non-array result', () => {
-  it('handles getPagesSizes returning non-array', async () => {
+describe('DjVuNativeAdapter – _getPageSize edge cases', () => {
+  it('handles missing getPage', async () => {
     const adapter = new DjVuNativeAdapter({
       getPagesQuantity: () => 1,
-      getPagesSizes: () => 'not-an-array',
     }, 'test.djvu');
-
-    await adapter._ensurePageSizes();
-    assert.deepEqual(adapter.pageSizes, []);
-    assert.equal(adapter._pageSizesLoaded, true);
-  });
-
-  it('handles getPagesSizes missing from doc', async () => {
-    const adapter = new DjVuNativeAdapter({
-      getPagesQuantity: () => 1,
-      // no getPagesSizes
-    }, 'test.djvu');
-
-    await adapter._ensurePageSizes();
-    assert.deepEqual(adapter.pageSizes, []);
-    assert.equal(adapter._pageSizesLoaded, true);
+    // Should fall back to defaults without crashing
+    const size = await adapter._getPageSize(1);
+    assert.equal(size.width, 1200);
+    assert.equal(size.height, 1600);
   });
 });
 
