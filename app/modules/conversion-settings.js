@@ -116,12 +116,15 @@ export function getXlsxProfile() {
 
 /**
  * Options to pass to convertPdfToXlsx().
- * @returns {{ mode: string, addFormulas: boolean, autoFilter: boolean, freezeHeader: boolean }}
+ * @returns {{ mode: 'auto'|'manual', addFormulas: boolean, autoFilter: boolean, freezeHeader: boolean }}
  */
 export function getXlsxOptions() {
   const cfg = s();
+  // pdf-to-xlsx.js accepts 'auto'|'manual'; map named profiles to this binary switch
+  const profile = getXlsxProfile();
+  const mode = /** @type {'auto'|'manual'} */ (profile === 'auto' ? 'auto' : 'manual');
   return {
-    mode:        getXlsxProfile(),
+    mode,
     addFormulas: cfg.convXlsxFormulas !== false,
     autoFilter:  cfg.convXlsxAutoFilter !== false,
     freezeHeader: cfg.convXlsxFreeze !== false,
