@@ -1,17 +1,17 @@
 {
-  "timestamp": "2026-03-24T18:25:24.076Z",
-  "totalRaw": 2169584,
-  "totalGzip": 699133,
+  "timestamp": "2026-04-04T21:57:29.187Z",
+  "totalRaw": 2403950,
+  "totalGzip": 779688,
   "files": [
     {
-      "file": "js/index-B2udakOd.js",
-      "raw": 842176,
-      "gzip": 250372
+      "file": "js/index-Bl8AXbpS.js",
+      "raw": 952660,
+      "gzip": 286855
     },
     {
-      "file": "chunks/pdf-lib-BKUboW6q.js",
-      "raw": 525053,
-      "gzip": 209062
+      "file": "chunks/pdf-lib-ev5cB01V.js",
+      "raw": 527995,
+      "gzip": 210214
     },
     {
       "file": "chunks/docx-BZndvtqa.js",
@@ -24,14 +24,54 @@
       "gzip": 105809
     },
     {
+      "file": "chunks/docx-converter-CeON4ugb.js",
+      "raw": 29608,
+      "gzip": 10500
+    },
+    {
+      "file": "chunks/pdf-to-xlsx-CbYK9mdR.js",
+      "raw": 23622,
+      "gzip": 8664
+    },
+    {
       "file": "chunks/tesseract-BtMKiGAI.js",
       "raw": 16966,
       "gzip": 7195
     },
     {
-      "file": "chunks/fflate-NDoNn75I.js",
-      "raw": 5293,
-      "gzip": 2657
+      "file": "chunks/fflate-BbY9fC45.js",
+      "raw": 12284,
+      "gzip": 5997
+    },
+    {
+      "file": "chunks/toolbox-grid-CF9rgmIG.js",
+      "raw": 13047,
+      "gzip": 4364
+    },
+    {
+      "file": "chunks/toolbox-controller-BevZVvkM.js",
+      "raw": 9730,
+      "gzip": 3510
+    },
+    {
+      "file": "chunks/window-9HUIpSzj.js",
+      "raw": 13156,
+      "gzip": 3260
+    },
+    {
+      "file": "chunks/context-menu-handler-CFr2ie8k.js",
+      "raw": 7613,
+      "gzip": 2883
+    },
+    {
+      "file": "chunks/pdf-to-pptx-UkPKlL14.js",
+      "raw": 9565,
+      "gzip": 2750
+    },
+    {
+      "file": "chunks/pdf-to-djvu-BE0vfScu.js",
+      "raw": 5720,
+      "gzip": 2691
     },
     {
       "file": "chunks/index-ChM5wRko.js",
@@ -49,19 +89,29 @@
       "gzip": 812
     },
     {
+      "file": "chunks/event-CnyWr2tN.js",
+      "raw": 1333,
+      "gzip": 657
+    },
+    {
+      "file": "chunks/conversion-settings-55xT4M3L.js",
+      "raw": 1021,
+      "gzip": 538
+    },
+    {
       "file": "chunks/index-D7bH7vXg.js",
       "raw": 1273,
       "gzip": 436
     },
     {
-      "file": "chunks/erase-tool-DL1naTzD.js",
-      "raw": 658,
-      "gzip": 393
+      "file": "chunks/index-BMoAeB5e.js",
+      "raw": 503,
+      "gzip": 363
     },
     {
-      "file": "chunks/index-Zca5do7_.js",
-      "raw": 503,
-      "gzip": 364
+      "file": "chunks/index-yW3ljqrP.js",
+      "raw": 192,
+      "gzip": 157
     }
   ]
 }
