@@ -162,9 +162,11 @@ export async function renderPageProgressive(options, ctx, callbacks = {}) {
   const { page, zoom, rotation, adapter } = options;
   const realDPR = DPR;
 
-  // Only use progressive rendering for high-DPR screens with PDF adapter
+  // Use progressive rendering for PDF on high-DPR screens, and always for
+  // DjVuWorkerAdapter (which does its own two-phase decode internally).
   const isPdf = adapter?.type === 'pdf' || adapter?.pdfDoc;
-  if (!isPdf || realDPR <= 1) {
+  const isDjvuWorker = adapter?.mode === 'native-worker';
+  if ((!isPdf && !isDjvuWorker) || (!isDjvuWorker && realDPR <= 1)) {
     return renderPage(options, ctx, callbacks);
   }
 
@@ -190,7 +192,27 @@ export async function renderPageProgressive(options, ctx, callbacks = {}) {
     callbacks.onAnnotations(page, ctx.annotationCanvas);
   }
 
-  // Phase 2: High-res upgrade in idle time
+  // Phase 2: High-res upgrade in idle time.
+  // For DjVuWorkerAdapter, the adapter's own onPageReady callback drives
+  // the upgrade, so we register it here and let the adapter call us back.
+  if (isDjvuWorker) {
+    const prevCb = adapter.onPageReady;
+    const renderToken = Symbol('render');
+    /** @type {any} */ (ctx.canvas)._pipelineRenderToken = renderToken;
+    adapter.onPageReady = (readyPage) => {
+      // Restore previous callback (might be null or from a prior page)
+      adapter.onPageReady = prevCb;
+      if (readyPage !== page) return;
+      if (/** @type {any} */ (ctx.canvas)._pipelineRenderToken !== renderToken) return;
+      adapter.renderPage(page, ctx.canvas, { zoom, rotation, dpr: realDPR }).then(() => {
+        if (ctx.annotationCanvas) updateAnnotationCanvasSize(ctx.annotationCanvas, ctx.canvas);
+        if (ctx.annotationCanvas && callbacks.onAnnotations) callbacks.onAnnotations(page, ctx.annotationCanvas);
+        if (callbacks.onHighRes) callbacks.onHighRes(page, { renderMs: Math.round(performance.now() - start) });
+      }).catch(() => {});
+    };
+    return /** @type {any} */ ({ width: ctx.canvas.width, height: ctx.canvas.height, fromCache: false, renderMs: Math.round(performance.now() - start) });
+  }
+
   const scheduleIdle = typeof requestIdleCallback === 'function'
     ? requestIdleCallback
     : (cb) => safeTimeout(cb, 16);

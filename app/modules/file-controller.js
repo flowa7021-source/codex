@@ -8,6 +8,7 @@ import { loadImage } from './utils.js';
 import { ensurePdfJs, ensureDjVuJs } from './loaders.js';
 import { clearPageRenderCache, revokeAllTrackedUrls, recordPerfMetric } from './perf.js';
 import { _ocrWordCache } from './render-text-layer.js';
+import { DjVuWorkerAdapter } from './djvu-worker-adapter.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
 import { parseEpub, EpubAdapter } from './epub-adapter.js';
 import { progressiveLoader } from './progressive-loader.js';
@@ -281,22 +282,12 @@ const _openFileImpl = async function openFileImpl(file) {
     try {
       const DjVu = await ensureDjVuJs();
       const data = await progressiveLoader.loadFileProgressive(file);
-      // Wrap synchronous DjVu parsing in a macrotask so the UI can update
-      // before the potentially heavy Document constructor runs.
-      // Use raw setTimeout (not safeTimeout) because clearAllTimers() was
-      // called earlier in openFile and would cancel a document-scoped timer.
-      const doc = await new Promise((resolve, reject) => {
-        setTimeout(() => {
-          try {
-            resolve(new DjVu.Document(data));
-          } catch (err) {
-            reject(err);
-          }
-        }, 0);
-      });
-      state.adapter = new _deps.DjVuNativeAdapter(doc, file.name);
+      // Open via DjVuWorkerAdapter: all page decoding runs in a Web Worker,
+      // preventing UI freezes on large documents (100-1000 pages).
+      const buffer = data instanceof ArrayBuffer ? data : data.buffer;
+      state.adapter = await DjVuWorkerAdapter.open(DjVu, buffer, file.name);
       openedByNative = true;
-      els.searchStatus.textContent = 'DjVu файл открыт встроенным runtime.';
+      els.searchStatus.textContent = 'DjVu файл открыт встроенным runtime (Worker).';
     } catch (err) {
       console.warn('[file-controller] error:', err?.message);
       const hasPageData = Array.isArray(djvuData?.pagesImages) && djvuData.pagesImages.length > 0;
