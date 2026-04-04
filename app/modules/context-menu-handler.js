@@ -13,6 +13,10 @@
 //   --settings                   → (opens settings panel — handled separately)
 
 import { initPlatform, isTauri, readFileAsBytes, writeFileBytes } from './platform.js';
+import {
+  getPreprocessOptions, getOcrDpi, getOcrConfidence,
+  getDocxMode, getDjvuQuality,
+} from './conversion-settings.js';
 
 // ── Progress overlay (injected into document.body) ───────────────────────────
 
@@ -168,7 +172,7 @@ async function convertToDocx(bytes, fileName) {
   const pdfDoc = await getDoc({ data: bytes }).promise;
   updateProgress('Конвертация в Word…', 20);
   const { convertPdfToDocxCompat } = await import('./conversion-pipeline.js');
-  return convertPdfToDocxCompat(pdfDoc, fileName, pdfDoc.numPages, { mode: 'text' });
+  return convertPdfToDocxCompat(pdfDoc, fileName, pdfDoc.numPages, { mode: getDocxMode() });
 }
 
 /** @param {Uint8Array} bytes @param {string} _fileName */
@@ -183,7 +187,7 @@ async function convertToXlsx(bytes, _fileName) {
 async function convertToDjvu(bytes, _fileName) {
   const { convertPdfToDjvu } = await import('./pdf-to-djvu.js');
   const result = await convertPdfToDjvu(bytes, {
-    quality: 'balanced',
+    quality: getDjvuQuality(),
     onProgress: (cur, tot, stage) => {
       updateProgress(
         `DjVu ${stage}: стр. ${cur}/${tot}`,
@@ -205,7 +209,7 @@ async function convertOcr(bytes, _fileName) {
   const { recognizeTesseract } = await import('./ocr-engine.js');
   const { createSearchablePdf } = await import('./ocr-batch.js');
 
-  const OCR_SCALE = 300 / 72;
+  const OCR_SCALE = getOcrDpi() / 72;
   /** @type {Map<number, any>} */
   const ocrResults = new Map();
 
@@ -221,7 +225,7 @@ async function convertOcr(bytes, _fileName) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
-    const preprocessed = preprocessForOcr(canvas, { deskew: true, denoise: true, binarize: false, removeBorders: true });
+    const preprocessed = preprocessForOcr(canvas, getPreprocessOptions());
     const result = await recognizeTesseract(preprocessed);
     ocrResults.set(p, {
       text: result.text, words: result.words,
@@ -232,7 +236,7 @@ async function convertOcr(bytes, _fileName) {
   }
 
   updateProgress('Создание текстового слоя…', 85);
-  const { blob } = await createSearchablePdf(bytes, ocrResults, { minConfidence: 30 });
+  const { blob } = await createSearchablePdf(bytes, ocrResults, { minConfidence: getOcrConfidence() });
   return blob;
 }
 
