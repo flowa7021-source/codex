@@ -50,6 +50,23 @@ const RE_CURRENCY_SUFFIX = /^([\d.,\s]+)\s*([$€£¥₽])$/;
 /** @type {RegExp} */
 const RE_PERCENTAGE = /^([\d.,]+)\s*%$/;
 
+/** Matches financial negative numbers in parentheses: (1,234.56) → -1234.56 */
+const RE_NEGATIVE_PARENS = /^\(([0-9][0-9\s,.']*)\)$/;
+
+// ── Structure-detection keywords (total/subtotal rows) ─────────────────────
+const TOTAL_KEYWORDS = new Set([
+  'итого', 'итог', 'всего', 'сумма', 'subtotal', 'total', 'grand total',
+  'итого:', 'всего:', 'total:',
+]);
+
+// ── Cell styles for structured tables ─────────────────────────────────────
+/** @type {import('./xlsx-builder.js').CellStyle} */
+const STYLE_HEADER = { bold: true, bgColor: '2F5597', fontColor: 'FFFFFF', borders: true, alignment: 'center' };
+/** @type {import('./xlsx-builder.js').CellStyle} */
+const STYLE_TOTAL  = { bold: true, bgColor: 'E2EFDA', borders: true };
+/** @type {import('./xlsx-builder.js').CellStyle} */
+const STYLE_DATA   = { borders: true };
+
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
 /* ------------------------------------------------------------------ */
@@ -61,6 +78,13 @@ const RE_PERCENTAGE = /^([\d.,]+)\s*%$/;
  * @returns {number}
  */
 function parseNumeric(raw) {
+  // Handle financial parenthesised negatives: (1 234,56) → -1234.56
+  const parenMatch = raw.trim().match(RE_NEGATIVE_PARENS);
+  if (parenMatch) {
+    const inner = parseNumeric(parenMatch[1]);
+    return isFinite(inner) ? -inner : NaN;
+  }
+
   // Remove spaces used as thousands separators
   const noSpaces = raw.replace(/\s/g, '');
 
@@ -92,6 +116,12 @@ function typeCell(raw, numberDetection) {
 
   if (!numberDetection || text === '') {
     return { value: text, type: 'string' };
+  }
+
+  // Financial parenthesised negatives: (1 234,56) → -1234.56
+  if (RE_NEGATIVE_PARENS.test(text)) {
+    const num = parseNumeric(text);
+    if (isFinite(num)) return { value: num, type: 'number' };
   }
 
   // Percentage (check before plain number so "50%" isn't caught as number)
@@ -421,6 +451,179 @@ function _clusterValues(values, tolerance) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Structural analysis helpers                                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Detect how many leading rows are header rows.
+ * Heuristic: a row is a header when it contains NO numeric cells and has
+ * non-empty text in the majority of its columns.
+ * @param {string[][]} rawRows
+ * @returns {number}
+ */
+function detectHeaderRows(rawRows) {
+  if (!rawRows || rawRows.length === 0) return 0;
+  const colCount = Math.max(...rawRows.map(r => r.length));
+  let headerCount = 0;
+
+  for (let i = 0; i < Math.min(5, rawRows.length); i++) {
+    const row = rawRows[i];
+    const nonEmpty = row.filter(c => String(c || '').trim().length > 0).length;
+    if (nonEmpty < Math.max(1, colCount * 0.4)) break; // mostly empty → stop
+
+    const hasNumeric = row.some(c => {
+      const t = String(c || '').trim();
+      if (!t || t === '-' || t === '—') return false;
+      const { type } = typeCell(t, true);
+      return type === 'number' || type === 'currency';
+    });
+    if (!hasNumeric) {
+      headerCount = i + 1;
+    } else {
+      break;
+    }
+  }
+  return headerCount;
+}
+
+/**
+ * Detect which data rows (after headers) are total/subtotal rows.
+ * Returns a Set of row indices (0-based, relative to the rawRows array).
+ * @param {string[][]} rawRows
+ * @param {number} headerCount
+ * @returns {Set<number>}
+ */
+function detectTotalRows(rawRows, headerCount) {
+  const totalRowIndices = new Set();
+  for (let i = headerCount; i < rawRows.length; i++) {
+    const row = rawRows[i];
+    const label = String(row[0] || '').trim().toLowerCase();
+    if (!label) continue;
+    if ([...TOTAL_KEYWORDS].some(kw => label.startsWith(kw))) {
+      totalRowIndices.add(i);
+    }
+  }
+  return totalRowIndices;
+}
+
+/**
+ * Fill empty first-column cells downward (rowspan gap filling).
+ * Used for financial reports where a category label spans multiple rows.
+ * @param {string[][]} rawRows
+ * @param {number} headerCount
+ * @returns {string[][]}
+ */
+function fillRowspanGaps(rawRows, headerCount) {
+  let lastLabel = '';
+  return rawRows.map((row, i) => {
+    if (i < headerCount) return row;
+    const cell = String(row[0] || '').trim();
+    if (cell) {
+      lastLabel = cell;
+      return row;
+    }
+    if (lastLabel) {
+      return [lastLabel, ...row.slice(1)];
+    }
+    return row;
+  });
+}
+
+/**
+ * Build column widths from content (text length-based, clamped 8–45 chars).
+ * Applies to the builder immediately.
+ * @param {XlsxBuilder} builder
+ * @param {number} sheetIdx
+ * @param {string[][]} rawRows
+ */
+function autoFitFromContent(builder, sheetIdx, rawRows) {
+  if (!rawRows.length) return;
+  const colCount = Math.max(...rawRows.map(r => r.length));
+  for (let c = 0; c < colCount; c++) {
+    let maxLen = 0;
+    for (const row of rawRows) {
+      const v = String(row[c] || '');
+      if (v.length > maxLen) maxLen = v.length;
+    }
+    const w = Math.min(45, Math.max(8, maxLen + 2));
+    builder.setColumnWidth(sheetIdx, c, w);
+  }
+}
+
+/**
+ * Convert a column index to an Excel letter (A, B, … Z, AA, …).
+ * @param {number} col - 0-based
+ * @returns {string}
+ */
+function colLetter(col) {
+  let result = '';
+  let n = col + 1;
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    result = String.fromCharCode(65 + rem) + result;
+    n = Math.floor((n - 1) / 26);
+  }
+  return result;
+}
+
+/**
+ * Build a SUBTOTAL(9,...) formula string for a column range.
+ * @param {string} col - column letter, e.g. "B"
+ * @param {number} dataStartRow - 1-based Excel row where data starts
+ * @param {number} dataEndRow   - 1-based Excel row where data ends (inclusive)
+ * @returns {string}
+ */
+function subtotalFormula(col, dataStartRow, dataEndRow) {
+  return `=SUBTOTAL(9,${col}${dataStartRow}:${col}${dataEndRow})`;
+}
+
+/**
+ * Generate a clean sheet name from a table caption, falling back to
+ * "Page N - Tbl M". Ensures uniqueness via the usedNames set.
+ * @param {string|null} caption
+ * @param {number} pageNum
+ * @param {number} tableIdx
+ * @param {Set<string>} usedNames
+ * @returns {string}
+ */
+function makeSheetName(caption, pageNum, tableIdx, usedNames) {
+  let base = (caption && caption.length >= 3)
+    ? caption.replace(/[\\/?*[\]:]/g, '_').slice(0, 28)
+    : `Стр.${pageNum} Табл.${tableIdx}`;
+  base = base.trim() || `Стр.${pageNum} Табл.${tableIdx}`;
+  let name = base;
+  let suffix = 2;
+  while (usedNames.has(name)) {
+    name = `${base.slice(0, 28)} ${suffix++}`;
+  }
+  usedNames.add(name);
+  return name;
+}
+
+/**
+ * Add an index (table of contents) sheet as the first sheet in the workbook.
+ * @param {XlsxBuilder} builder
+ * @param {Array<{sheetName: string, caption: string|null, pageNum: number}>} tableInfos
+ */
+function addIndexSheet(builder, tableInfos) {
+  /** @type {import('./xlsx-builder.js').CellValue[][]} */
+  const rows = [
+    [{ value: 'Содержание', type: 'string', style: { bold: true } }],
+    [],
+  ];
+  for (const info of tableInfos) {
+    rows.push([
+      `${info.caption || info.sheetName}  →  лист "${info.sheetName}"`,
+      `Стр. ${info.pageNum}`,
+    ]);
+  }
+  const idx = builder.addSheet('Оглавление', rows);
+  builder.setColumnWidth(idx, 0, 45);
+  builder.setColumnWidth(idx, 1, 10);
+  builder.setCellStyle(idx, 0, 0, { bold: true });
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main public API                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -454,29 +657,27 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
     pagesToProcess = parseSimpleRange(pageRange, totalPages);
   } else {
     pagesToProcess = [];
-    for (let i = 1; i <= totalPages; i++) {
-      pagesToProcess.push(i);
-    }
+    for (let i = 1; i <= totalPages; i++) pagesToProcess.push(i);
   }
 
   const builder = new XlsxBuilder();
+  const usedSheetNames = new Set();
 
   let sheetCount = 0;
   let tableCount = 0;
+
+  // Collect table infos for index sheet
+  /** @type {Array<{sheetName: string, caption: string|null, pageNum: number}>} */
+  const allTableInfos = [];
 
   /* ---- 3. Iterate pages ----------------------------------------- */
   for (let idx = 0; idx < pagesToProcess.length; idx++) {
     const pageNum = pagesToProcess[idx];
 
-    // Report progress
-    if (onProgress) {
-      onProgress(idx + 1, pagesToProcess.length);
-    }
+    if (onProgress) onProgress(idx + 1, pagesToProcess.length);
 
-    // FIX B1 & B2: call extractTables(pdfDoc, pageNum, ...) — NOT extractAllTables(page)
     /** @type {import('./table-extractor.js').Table[]} */
     let tables;
-
     if (mode === 'manual' && selectedArea) {
       tables = await extractTables(pdfDoc, pageNum, /** @type {any} */ ({ area: selectedArea }));
     } else {
@@ -484,15 +685,13 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
     }
 
     if (!tables || tables.length === 0) {
-      // No tables detected — fall back to extracting all text content
-      // as a single-column sheet so the XLSX is never empty.
+      // No tables detected — fall back to text extraction as a plain sheet
       const page = await pdfDoc.getPage(pageNum);
       const textContent = await page.getTextContent();
       if (textContent?.items?.length) {
         const rows = _groupTextItemsIntoRows(textContent.items);
         if (rows.length > 0) {
-          const sheetName = sanitizeSheetName(`Page ${pageNum}`);
-          // Apply number detection to each cell
+          const sheetName = makeSheetName(null, pageNum, 0, usedSheetNames);
           const typedRows = rows.map(row =>
             row.map(cell => typeCellToXlsx(cell, numberDetection))
           );
@@ -507,74 +706,135 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
     tableCount += tables.length;
 
     if (sheetsPerPage) {
-      /* -- One sheet per page: merge all tables on this page ------- */
-      const sheetName = sanitizeSheetName(`Page ${pageNum}`);
+      /* -- One sheet per page: all tables stacked vertically -------- */
+      const sheetName = makeSheetName(null, pageNum, 0, usedSheetNames);
       /** @type {import('./xlsx-builder.js').CellValue[][]} */
       const sheetRows = [];
-
       /** @type {Array<{table: import('./table-extractor.js').Table, rowOffset: number}>} */
       const mergeQueue = [];
 
       for (const table of tables) {
+        const rawRows = table.rows.map(r => r.map(c => c.text));
+        const cleanRows = fillRowspanGaps(rawRows, 0);
         const rowOffset = sheetRows.length;
         mergeQueue.push({ table, rowOffset });
-
-        // FIX B3: iterate table.rows, not table directly
-        for (const row of table.rows) {
-          // FIX B4: pass cell.text (string), not cell (object)
-          // FIX B5: typeCellToXlsx maps currency/percentage to XlsxBuilder-compatible format
-          const typedRow = row.map((cell) => typeCellToXlsx(cell.text, numberDetection));
-          sheetRows.push(typedRow);
+        for (const row of cleanRows) {
+          sheetRows.push(row.map(cell => typeCellToXlsx(cell, numberDetection)));
         }
-
-        // Blank separator row between tables on the same sheet
         sheetRows.push([]);
       }
 
       builder.addSheet(sheetName, sheetRows);
-
-      // A5: Set column widths from the first table's cell rects
-      if (tables.length > 0) {
-        setColumnWidthsFromTable(builder, sheetCount, tables[0]);
-      }
-
-      // Apply merged cells after the sheet exists in the builder
+      if (tables.length > 0) setColumnWidthsFromTable(builder, sheetCount, tables[0]);
       for (const { table, rowOffset } of mergeQueue) {
         applyMergesForTable(builder, sheetCount, table, rowOffset);
       }
-
       sheetCount++;
+
     } else {
-      /* -- One sheet per table ------------------------------------ */
+      /* -- One sheet per table (with structure detection) ----------- */
       for (let t = 0; t < tables.length; t++) {
         const table = tables[t];
-        const sheetName = sanitizeSheetName(
-          `Page ${pageNum} - Table ${t + 1}`,
-        );
 
-        // FIX B3: iterate table.rows, not table
-        // FIX B4: pass cell.text (string), not cell (object)
-        // FIX B5: typeCellToXlsx maps currency/percentage to XlsxBuilder format
-        const sheetRows = table.rows.map((row) =>
-          row.map((cell) => typeCellToXlsx(cell.text, numberDetection)),
-        );
+        // Raw text matrix
+        const rawRows = table.rows.map(r => r.map(c => c.text));
 
-        builder.addSheet(sheetName, sheetRows);
+        // Structure detection
+        const headerCount = detectHeaderRows(rawRows);
+        const totalRowSet = detectTotalRows(rawRows, headerCount);
+        const filledRows = fillRowspanGaps(rawRows, headerCount);
+        const colCount = Math.max(...filledRows.map(r => r.length));
 
-        // A5: Set column widths from table cell rects
-        setColumnWidthsFromTable(builder, sheetCount, table);
+        const sheetName = makeSheetName(null, pageNum, t + 1, usedSheetNames);
+        allTableInfos.push({ sheetName, caption: null, pageNum });
 
-        // Merged cells
-        applyMergesForTable(builder, sheetCount, table, 0);
+        // Build typed rows
+        /** @type {import('./xlsx-builder.js').CellValue[][]} */
+        const sheetRows = filledRows.map((row, rIdx) => {
+          const isTotal = totalRowSet.has(rIdx);
+          if (isTotal) {
+            // Total row: first cell as text, rest will get SUBTOTAL formulas below
+            return row.map((cell, cIdx) => {
+              if (cIdx === 0) return cell;
+              // placeholder — will be replaced with formula
+              return typeCellToXlsx(cell, numberDetection);
+            });
+          }
+          return row.map(cell => typeCellToXlsx(cell, numberDetection));
+        });
+
+        const sheetIdx = builder.addSheet(sheetName, sheetRows);
+
+        // Apply cell styles
+        for (let r = 0; r < sheetRows.length; r++) {
+          const isHeader = r < headerCount;
+          const isTotal = totalRowSet.has(r);
+          for (let c = 0; c < colCount; c++) {
+            if (isHeader) {
+              builder.setCellStyle(sheetIdx, r, c, STYLE_HEADER);
+            } else if (isTotal) {
+              builder.setCellStyle(sheetIdx, r, c, STYLE_TOTAL);
+            } else {
+              builder.setCellStyle(sheetIdx, r, c, STYLE_DATA);
+            }
+          }
+        }
+
+        // Replace total-row numeric cells with SUBTOTAL(9,...) formulas
+        if (totalRowSet.size > 0) {
+          for (const totalRowIdx of totalRowSet) {
+            const excelTotalRow = totalRowIdx + 1; // 1-based
+
+            // Find the preceding data range (from after last total or after header)
+            let dataStart = headerCount;
+            for (const prevTotalIdx of totalRowSet) {
+              if (prevTotalIdx < totalRowIdx) dataStart = prevTotalIdx + 1;
+            }
+            const dataStartExcel = dataStart + 1;  // 1-based
+            const dataEndExcel   = excelTotalRow - 1;
+
+            if (dataEndExcel >= dataStartExcel) {
+              for (let c = 1; c < colCount; c++) {
+                const cell = filledRows[totalRowIdx]?.[c];
+                const { type } = typeCell(cell || '', numberDetection);
+                if (type === 'number' || type === 'currency' || type === 'percentage' || !cell?.trim() || cell.trim() === '-') {
+                  const formula = subtotalFormula(colLetter(c), dataStartExcel, dataEndExcel);
+                  builder._sheets[sheetIdx].rows[totalRowIdx][c] = {
+                    value: formula, type: 'formula',
+                    style: STYLE_TOTAL,
+                  };
+                }
+              }
+            }
+          }
+        }
+
+        // Column widths: prefer PDF bbox, fall back to content-based
+        if (table.rows.some(r => r.some(c => c.rect?.w))) {
+          setColumnWidthsFromTable(builder, sheetIdx, table);
+        } else {
+          autoFitFromContent(builder, sheetIdx, filledRows);
+        }
+
+        // Merged cells from table-extractor
+        applyMergesForTable(builder, sheetIdx, table, 0);
+
+        // Freeze panes: freeze header rows
+        if (headerCount > 0) {
+          builder.setFreezePanes(sheetIdx, headerCount, 0);
+        }
+
+        // Auto-filter on header row (last header row)
+        if (headerCount > 0 && filledRows.length > headerCount) {
+          const filterRow = headerCount - 1;
+          builder.setAutoFilter(sheetIdx, filterRow, 0, filledRows.length - 1, colCount - 1);
+        }
 
         sheetCount++;
       }
     }
 
-    // Yield to UI every 5 pages so the browser stays responsive
-    if (idx % 5 === 0) {
-      await yieldToUI();
-    }
+    if (idx % 5 === 0) await yieldToUI();
   }
 
   /* ---- 4. Handle edge-case: no tables found at all -------------- */
@@ -583,7 +843,15 @@ export async function convertPdfToXlsx(pdfBytes, options = {}) {
     sheetCount = 1;
   }
 
-  /* ---- 5. Build XLSX -------------------------------------------- */
+  /* ---- 5. Prepend index sheet when > 3 tables ------------------- */
+  if (allTableInfos.length > 3 && !sheetsPerPage) {
+    addIndexSheet(builder, allTableInfos);
+    // Move index sheet to position 0
+    const last = builder._sheets.pop();
+    if (last) builder._sheets.unshift(last);
+  }
+
+  /* ---- 6. Build XLSX -------------------------------------------- */
   const xlsxBytes = await builder.build();
 
   const blob = new Blob([/** @type {any} */ (xlsxBytes)], {
