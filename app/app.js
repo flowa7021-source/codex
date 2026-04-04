@@ -754,6 +754,8 @@ initNotesController();
 
 // ─── Toolbox (PDF24-style batch processing) ──────────────────────────────
 import('./modules/toolbox-controller.js').then(m => m.initToolbox()).catch(() => {});
+// ─── Full Toolbox Overlay (PDF24-style grid) ──────────────────────────────
+import('./modules/toolbox-grid.js').then(m => m.initToolboxOverlay()).catch(() => {});
 
 // ─── Windows Shell Context Menu Handler ──────────────────────────────────
 // Listens for 'cli-action' events emitted by Tauri when launched from Explorer.
