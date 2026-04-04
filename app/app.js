@@ -22,7 +22,7 @@ import { parseDocxAdvanced, formattedBlocksToHtml, mergeDocxIntoWorkspace } from
 import { getPageQualitySummary, markLowConfidenceWords } from './modules/ocr-word-confidence.js';
 import { deleteOcrData, listOcrDocuments, getOcrStorageSize } from './modules/ocr-storage.js';
 import { recognizeWithBoxes, terminateTesseract } from './modules/tesseract-adapter.js';
-import { convertPdfToDocx } from './modules/docx-converter.js';
+import { convertPdfToDocxCompat as convertPdfToDocx } from './modules/conversion-pipeline.js';
 import { mergePdfDocuments, splitPdfDocument, fillPdfForm, addWatermarkToPdf, addStampToPdf, exportAnnotationsIntoPdf, rotatePdfPages, parsePageRange as parsePageRangeLib } from './modules/pdf-operations.js';
 import { pdfCompare } from './modules/pdf-compare.js';
 import { pdfOptimizer } from './modules/pdf-optimize.js';

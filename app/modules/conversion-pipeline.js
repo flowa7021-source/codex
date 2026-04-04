@@ -244,6 +244,10 @@ export async function convertPdfToDocxCompat(
 ) {
   try {
     const result = await convertPdfToDocxV2(pdfDoc, { ...options, title });
+    // Surface QA metrics to caller if a callback was provided
+    if (typeof options.qaCallback === 'function' && result.qa) {
+      options.qaCallback(result.qa);
+    }
     return result.blob;
   } catch (err) {
     console.warn('[conversion-pipeline] V2 failed, falling back to V1:', err);
