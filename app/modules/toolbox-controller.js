@@ -86,40 +86,95 @@ async function ensurePdfBytes(file) {
 }
 
 async function runOcrPipeline(file, idx, total) {
-  showProgress(`OCR: ${file.name} (${idx + 1}/${total})`, (idx / total) * 100);
+  // Render at 300 DPI for optimal OCR accuracy (PDF native unit = 72 dpi)
+  const OCR_SCALE = 300 / 72;
+  const baseProgress = (idx / total) * 100;
+  const pageSlot = 90 / total; // progress share for this file's pages
+
+  showProgress(`OCR: ${file.name} (${idx + 1}/${total})`, baseProgress);
   const bytes = await ensurePdfBytes(file);
 
   const pdfjsMod = await import('pdfjs-dist');
   const getDocument = pdfjsMod.getDocument || pdfjsMod.default?.getDocument;
   const pdfDoc = await getDocument({ data: bytes }).promise;
   const { createSearchablePdf } = await import('./ocr-batch.js');
-  // Run OCR on each page and build searchable PDF
   const { initTesseract, recognizeTesseract } = await import('./tesseract-adapter.js');
+  const { preprocessForOcr } = await import('./ocr-preprocess.js');
+
   await initTesseract('auto');
+
   /** @type {Map<number, any>} */
   const ocrResults = new Map();
-  for (let p = 1; p <= pdfDoc.numPages; p++) {
+  const numPages = pdfDoc.numPages;
+
+  for (let p = 1; p <= numPages; p++) {
     if (_cancelled) break;
-    const pct = (idx / total) * 100 + (p / pdfDoc.numPages) * (100 / total);
-    showProgress(`OCR: ${file.name} — стр. ${p}/${pdfDoc.numPages}`, pct);
+
+    const pageFrac = (p - 1) / numPages;
+
+    // ── Stage 1: Render ──────────────────────────────────────────────────────
+    showProgress(
+      `OCR стр. ${p}/${numPages} — Рендеринг (300 DPI)…`,
+      baseProgress + pageFrac * pageSlot,
+    );
     try {
-      const canvas = document.createElement('canvas');
-      // @ts-ignore — adapter-like render for standalone use
       const page = await pdfDoc.getPage(p);
-      const vp = page.getViewport({ scale: 2 });
-      canvas.width = vp.width;
-      canvas.height = vp.height;
+      const vp = page.getViewport({ scale: OCR_SCALE });
+      const w = Math.round(vp.width);
+      const h = Math.round(vp.height);
+      if (w <= 0 || h <= 0) { ocrResults.set(p, { text: '', words: [], imageWidth: w, imageHeight: h, confidence: 0 }); continue; }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d');
+      if (!ctx) { ocrResults.set(p, { text: '', words: [], imageWidth: w, imageHeight: h, confidence: 0 }); continue; }
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      const result = await recognizeTesseract(canvas);
-      ocrResults.set(p, { text: result.text, words: result.words, imageWidth: vp.width, imageHeight: vp.height });
+
+      // ── Stage 2: Preprocess (grayscale + deskew + denoise; no binarize — LSTM prefers grayscale) ──
+      showProgress(
+        `OCR стр. ${p}/${numPages} — Предобработка (наклон, шум)…`,
+        baseProgress + (pageFrac + 0.3 / numPages) * pageSlot,
+      );
+      const preprocessed = preprocessForOcr(canvas, { deskew: true, denoise: true, binarize: false, removeBorders: true });
+
+      // ── Stage 3: OCR ──────────────────────────────────────────────────────
+      showProgress(
+        `OCR стр. ${p}/${numPages} — Распознавание текста…`,
+        baseProgress + (pageFrac + 0.6 / numPages) * pageSlot,
+      );
+      const result = await recognizeTesseract(preprocessed);
+
+      ocrResults.set(p, {
+        text: result.text,
+        words: result.words,
+        imageWidth: preprocessed.width,
+        imageHeight: preprocessed.height,
+        confidence: result.confidence,
+      });
+
+      // Free canvas memory
       canvas.width = 0; canvas.height = 0;
+      if (preprocessed !== canvas) { preprocessed.width = 0; preprocessed.height = 0; }
     } catch (_e) {
-      ocrResults.set(p, { text: '', words: [], imageWidth: 0, imageHeight: 0 });
+      ocrResults.set(p, { text: '', words: [], imageWidth: 0, imageHeight: 0, confidence: 0 });
     }
   }
-  const searchable = await createSearchablePdf(bytes, ocrResults);
-  return new Blob([/** @type {any} */ (searchable).blob ?? searchable], { type: 'application/pdf' });
+
+  // ── Stage 4: Build searchable PDF ─────────────────────────────────────────
+  showProgress(`OCR: Создание текстового слоя…`, baseProgress + pageSlot);
+  const searchable = await createSearchablePdf(bytes, ocrResults, { minConfidence: 30 });
+
+  // Brief QA summary
+  const qa = searchable.stats;
+  if (qa) {
+    const acc = qa.avgConfidence.toFixed(0);
+    toastSuccess(`OCR: ${qa.acceptedWords} слов, точность ~${acc}% (стр. ${qa.pagesProcessed}/${numPages})`);
+  }
+
+  return new Blob([/** @type {any} */ (searchable.blob ?? searchable)], { type: 'application/pdf' });
 }
 
 async function runConversion(file, format) {
