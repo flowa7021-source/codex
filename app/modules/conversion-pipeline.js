@@ -106,7 +106,7 @@ export async function convertPdfToDocxV2(pdfDoc, options = {}) {
     includeHeader = false,
     includeFooter = true,
     capturePageImage = null,
-    ocrWordCache = null,
+    ocrLanguage = 'auto',
     onProgress = _noop,
     runQA = false,
   } = options;
@@ -114,6 +114,30 @@ export async function convertPdfToDocxV2(pdfDoc, options = {}) {
   const pageCount = pdfDoc.numPages;
   const pagesToConvert =
     pageRange || Array.from({ length: pageCount }, (_, i) => i + 1);
+
+  // -----------------------------------------------------------------------
+  // OCR fallback — created lazily on the first scanned page encountered.
+  // Uses tesseract-adapter via dynamic import to keep it off the critical path.
+  // -----------------------------------------------------------------------
+  let _ocrInitialized = false;
+  let _ocrAvailable = null; // null = unknown, true/false after first check
+  let _scannedPageCount = 0;
+
+  /** @param {any} canvas */
+  const ocrPageFn = async (canvas) => {
+    // One-time availability check + initialization
+    if (_ocrAvailable === false) return null;
+    if (!_ocrInitialized) {
+      const { isTesseractAvailable, initTesseract } = await import('./tesseract-adapter.js');
+      _ocrAvailable = await isTesseractAvailable();
+      if (!_ocrAvailable) return null;
+      const langOk = await initTesseract(ocrLanguage);
+      if (!langOk) { _ocrAvailable = false; return null; }
+      _ocrInitialized = true;
+    }
+    const { recognizeTesseract } = await import('./tesseract-adapter.js');
+    return recognizeTesseract(canvas, { lang: ocrLanguage });
+  };
 
   // -----------------------------------------------------------------------
   // Stage 1 – Extract content from every requested page
@@ -124,12 +148,23 @@ export async function convertPdfToDocxV2(pdfDoc, options = {}) {
   for (let i = 0; i < pagesToConvert.length; i++) {
     const pageNum = pagesToConvert[i];
     const pdfPage = await pdfDoc.getPage(pageNum);
-    // @ts-ignore - extractPageContent accepts options as second arg
-    const extracted = await extractPageContent(pdfPage, { ocrWordCache });
+    const extracted = await extractPageContent(pdfPage, { ocrPageFn });
     extractedPages.push(extracted);
 
-    const pct = ((i + 1) / pagesToConvert.length) * 100;
-    onProgress('extract', pct, `Page ${pageNum}/${pageCount}`);
+    if (extracted.isScanned) {
+      _scannedPageCount++;
+      onProgress('extract', ((i + 1) / pagesToConvert.length) * 100,
+        `Page ${pageNum}/${pageCount} (OCR)`);
+    } else {
+      const pct = ((i + 1) / pagesToConvert.length) * 100;
+      onProgress('extract', pct, `Page ${pageNum}/${pageCount}`);
+    }
+  }
+
+  // Report scan mode summary after extraction
+  if (_scannedPageCount > 0) {
+    onProgress('extract', 100,
+      `OCR применён к ${_scannedPageCount} из ${pagesToConvert.length} страниц`);
   }
 
   // -----------------------------------------------------------------------
@@ -203,6 +238,8 @@ export async function convertPdfToDocxV2(pdfDoc, options = {}) {
     qa = {
       textMetrics,
       pipelineVersion: PIPELINE_VERSION,
+      scannedPageCount: _scannedPageCount,
+      totalPageCount: pagesToConvert.length,
     };
 
     onProgress(

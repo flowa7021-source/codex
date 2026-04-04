@@ -196,6 +196,7 @@ export async function exportCurrentDocToWord() {
         mode: 'text',
         capturePageImage: null,
         ocrWordCache: _deps._ocrWordCache,
+        ocrLanguage: state.settings?.ocrLang || 'auto',
         includeFooter: true,
         runQA: true,
         onProgress: (stage, pct, msg) => {
@@ -210,6 +211,9 @@ export async function exportCurrentDocToWord() {
       _deps.recordSuccessfulOperation();
 
       let statusMsg = `Экспорт DOCX: готово (${Math.round(blob.size / 1024)} КБ, ${pageCount} стр.)`;
+      if (_qaResult?.scannedPageCount > 0) {
+        statusMsg += ` — OCR: ${_qaResult.scannedPageCount} стр.`;
+      }
       if (_qaResult?.textMetrics) {
         const cer = _qaResult.textMetrics.cer ?? 0;
         const accuracy = ((1 - cer) * 100).toFixed(1);
@@ -217,7 +221,13 @@ export async function exportCurrentDocToWord() {
         if (cer > 0.15) statusMsg += ' ⚠ низкое качество, проверьте документ';
       }
       _deps.setOcrStatus(statusMsg);
-      _deps.pushDiagnosticEvent('export.docx', { pages: pageCount, sizeKb: Math.round(blob.size / 1024), engine: 'v2-pipeline', cer: _qaResult?.textMetrics?.cer });
+      _deps.pushDiagnosticEvent('export.docx', {
+        pages: pageCount,
+        sizeKb: Math.round(blob.size / 1024),
+        engine: 'v2-pipeline',
+        cer: _qaResult?.textMetrics?.cer,
+        scannedPages: _qaResult?.scannedPageCount ?? 0,
+      });
       return;
     } catch (err) {
       console.warn('New DOCX converter failed, falling back to legacy:', err);
