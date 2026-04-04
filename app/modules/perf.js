@@ -2,6 +2,7 @@
 // ─── Performance Metrics, Worker Pool, Page Cache, Object URL Registry ──────
 
 import { reportBudgetViolation } from './perf-budgets.js';
+import { DegradationDetector } from './perf-utils.js';
 
 // ─── Phase 0: Performance Metrics Collector (p95) ──────────────────────────
 export const perfMetrics = {
@@ -12,12 +13,34 @@ export const perfMetrics = {
   maxSamples: 200,
 };
 
+/** @type {Map<string, DegradationDetector>} */
+const _degradationDetectors = new Map();
+
 export function recordPerfMetric(category, ms) {
   const arr = perfMetrics[category];
   if (!arr) return;
   arr.push(ms);
   if (arr.length > perfMetrics.maxSamples) arr.shift();
   reportBudgetViolation(category, ms);
+
+  // Track degradation per category
+  if (!_degradationDetectors.has(category)) {
+    _degradationDetectors.set(category, new DegradationDetector({
+      onDegrade: (ratio) => {
+        console.warn(`[perf] degradation detected in "${category}": ${ratio.toFixed(2)}× baseline`);
+      },
+    }));
+  }
+  _degradationDetectors.get(category)?.record(ms);
+}
+
+/**
+ * Get the degradation detector for a given metric category.
+ * @param {string} category
+ * @returns {DegradationDetector|undefined}
+ */
+export function getDegradationDetector(category) {
+  return _degradationDetectors.get(category);
 }
 
 export function computePercentile(arr, p) {

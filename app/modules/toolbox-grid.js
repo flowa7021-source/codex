@@ -9,6 +9,7 @@ import {
   getDocxMode, getXlsxOptions, getDjvuQuality, getOutputDirectory,
 } from './conversion-settings.js';
 import { toastError, toastSuccess } from './toast.js';
+import { BatchedProgress, CancellationManager } from './perf-utils.js';
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,10 @@ const _els = {
 /** @type {Array<{file: File|null, path: string, name: string}>} */
 const _files = [];
 let _selectedIdx = -1;
+
+// ── Cancellation ──────────────────────────────────────────────────────────────
+
+const _cancel = new CancellationManager();
 
 // ── Overlay open/close ────────────────────────────────────────────────────────
 
@@ -426,6 +431,9 @@ async function _onTileClick(toolId) {
     return;
   }
 
+  // Cancel any previous operation on this (or another) tile
+  const signal = _cancel.begin();
+
   // Merge operates on all files; others operate per-file
   const targets = toolId === 'merge' ? [_files[0]] : _files;
   const totalFiles = targets.length;
@@ -434,18 +442,33 @@ async function _onTileClick(toolId) {
   _setTileState(toolId, 'running', 'Запуск…', 0);
   _setStatus(`${toolId}: запуск…`);
 
+  // Batch tile progress updates to ≤1 per 250ms so rapid file loops don't
+  // saturate the DOM with style recalculations.
+  const bp = new BatchedProgress(
+    (/** @type {string} */ label, /** @type {number} */ pct) => _setTileState(toolId, 'running', label, pct),
+  );
+
   try {
     for (const entry of targets) {
-      _setTileState(toolId, 'running', entry.name, Math.round((done / totalFiles) * 95));
+      if (signal.aborted) break;
+      bp.report(entry.name, Math.round((done / totalFiles) * 95));
       await _runTool(toolId, entry);
       done++;
-      _setTileState(toolId, 'running', `${done}/${totalFiles}`, Math.round((done / totalFiles) * 100));
+      bp.report(`${done}/${totalFiles}`, Math.round((done / totalFiles) * 100));
+    }
+
+    bp.done();
+
+    if (signal.aborted) {
+      _setTileState(toolId, 'idle');
+      return;
     }
 
     _setTileState(toolId, 'success', '✓ Готово', 100);
     _setStatus(`✓ ${toolId}: готово`);
     toastSuccess(`Готово: ${done} файл${done === 1 ? '' : 'а/ов'}`);
   } catch (err) {
+    bp.cancel();
     const msg = err instanceof Error ? err.message : String(err);
     _setTileState(toolId, 'error', '✗ Ошибка', 100);
     _setStatus(`✗ Ошибка: ${msg}`);
