@@ -79,12 +79,10 @@ const BATCH_INTERVAL_MS = 250;
  *   bp.report(1, 10, 'page 1');
  *   bp.report(2, 10, 'page 2');   // may be skipped if called within 250ms
  *   bp.done();                    // flush final state
- *
- * @template {any[]} TArgs
  */
 export class BatchedProgress {
   /**
-   * @param {(...args: TArgs) => void} callback
+   * @param {Function} callback
    * @param {number} [intervalMs]
    */
   constructor(callback, intervalMs = BATCH_INTERVAL_MS) {
@@ -92,7 +90,7 @@ export class BatchedProgress {
     this._interval = intervalMs;
     this._lastEmit = 0;
     this._timer = null;
-    /** @type {TArgs|null} */
+    /** @type {any[]|null} */
     this._pending = null;
     this._flushed = false;
   }
@@ -100,11 +98,11 @@ export class BatchedProgress {
   /**
    * Queue a progress update. Emits immediately if interval has elapsed;
    * otherwise schedules a deferred emit.
-   * @param {...TArgs} args
+   * @param {...any} args
    */
   report(...args) {
     const now = performance.now();
-    this._pending = /** @type {TArgs} */ (args);
+    this._pending = args;
     this._flushed = false;
 
     if (now - this._lastEmit >= this._interval) {

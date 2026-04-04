@@ -593,12 +593,12 @@ export async function convertPdfToDjvu(pdfBytes, options = {}) {
     // ── 5. Inject TXTa text layer (makes the DjVu searchable/copyable) ──────
     if (txtaChunks.some(Boolean)) {
       if (onProgress) onProgress(total, total, 'Текстовый слой');
-      djvuBytes = injectTextLayer(djvuBytes.buffer, txtaChunks);
+      djvuBytes = injectTextLayer(/** @type {ArrayBuffer} */ (djvuBytes.buffer), txtaChunks);
     }
 
     const hasText = txtaChunks.some(Boolean);
     return {
-      blob: new Blob([djvuBytes], { type: 'image/vnd.djvu' }),
+      blob: new Blob([/** @type {any} */ (djvuBytes)], { type: 'image/vnd.djvu' }),
       pageCount: pagesEncoded,
       stats: {
         pageCount: pagesEncoded,

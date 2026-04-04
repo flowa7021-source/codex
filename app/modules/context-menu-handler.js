@@ -206,7 +206,7 @@ async function convertOcr(bytes, _fileName) {
   const numPages = pdfDoc.numPages;
 
   const { preprocessForOcr } = await import('./ocr-preprocess.js');
-  const { recognizeTesseract } = await import('./ocr-engine.js');
+  const { recognizeTesseract } = await import('./tesseract-adapter.js');
   const { createSearchablePdf } = await import('./ocr-batch.js');
 
   const OCR_SCALE = getOcrDpi() / 72;

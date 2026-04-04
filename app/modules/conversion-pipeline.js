@@ -71,6 +71,9 @@ const _STAGE_LABELS = {
  *   `(stage: string, percent: number, message: string) => void`.
  * @property {boolean}   [runQA=false] - When `true`, the pipeline runs
  *   Layer 5 (quality assurance) and returns metrics alongside the DOCX blob.
+ * @property {string}    [ocrLanguage='auto'] - Tesseract language code passed
+ *   to `initTesseract()` / `recognizeTesseract()` for inline OCR within the
+ *   pipeline.
  */
 
 /**

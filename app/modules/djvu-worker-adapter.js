@@ -52,7 +52,7 @@ export class DjVuWorkerAdapter {
 
     // Active decode concurrency semaphore
     this._active      = 0;
-    /** @type {Array<()=>void>} */
+    /** @type {Array<(value?: any) => void>} */
     this._waiters     = [];
 
     // Callbacks registered by the render pipeline to receive progressive updates
