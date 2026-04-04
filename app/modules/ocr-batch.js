@@ -128,44 +128,60 @@ export class BatchOcrProcessor {
  * The text is positioned to match the original scan, making it searchable and copyable.
  *
  * @param {ArrayBuffer|Uint8Array} pdfBytes - Original PDF bytes
- * @param {Map<number, Object>} ocrResults - Map of pageNum → { words, imageWidth, imageHeight }
- * @returns {Promise<{blob: Blob, pagesProcessed: number}>}
+ * @param {Map<number, Object>} ocrResults - Map of pageNum → { words, imageWidth, imageHeight, confidence }
+ * @param {object} [options]
+ * @param {number} [options.minConfidence=30] - Skip words below this Tesseract confidence (0–100)
+ * @returns {Promise<{blob: Blob, pagesProcessed: number, stats: object}>}
  */
-export async function createSearchablePdf(pdfBytes, ocrResults) {
+export async function createSearchablePdf(pdfBytes, ocrResults, options = {}) {
+  const minConfidence = options.minConfidence ?? 30;
+
   const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
 
-  // Embed a Unicode-capable font for Cyrillic/Latin/etc text.
-  // StandardFonts.Helvetica uses WinAnsi encoding which can't encode
-  // characters above U+00FF (Cyrillic, CJK, etc.).
-  // Fallback: if custom font embedding fails, use Helvetica and skip
-  // non-encodable characters gracefully.
-  // Use Helvetica (WinAnsi). For Cyrillic/CJK text, individual drawText
-  // calls are wrapped in try/catch — unencodable words are silently skipped.
-  // This is acceptable because the invisible text layer is for search/copy,
-  // and most PDF viewers can find Cyrillic text even without explicit encoding
-  // when the glyph IDs match.
+  // Helvetica (WinAnsi) — covers Latin characters.
+  // Cyrillic words: drawText throws on unencodable chars → caught and skipped.
+  // The invisible text layer still benefits Latin OCR output; Cyrillic results
+  // are embedded where pdf-lib successfully encodes them.
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
   let pagesProcessed = 0;
+  let totalWords = 0;
+  let acceptedWords = 0;
+  let confidenceSum = 0;
+  let confidenceCount = 0;
 
   for (const [pageNum, ocrData] of ocrResults) {
     const page = pdfDoc.getPage(pageNum - 1);
     if (!page) continue;
 
     const { width, height } = page.getSize();
-    const scaleX = width / (ocrData.imageWidth || width);
-    const scaleY = height / (ocrData.imageHeight || height);
+    const imgW = ocrData.imageWidth || width;
+    const imgH = ocrData.imageHeight || height;
+    const scaleX = width / imgW;
+    const scaleY = height / imgH;
+
+    // Accumulate page-level confidence for QA
+    if (typeof ocrData.confidence === 'number' && ocrData.confidence > 0) {
+      confidenceSum += ocrData.confidence;
+      confidenceCount++;
+    }
 
     const words = ocrData.words || [];
+    totalWords += words.length;
 
     for (const word of words) {
       if (!word.text || !word.text.trim()) continue;
 
-      // Use word bbox from Tesseract (x0, y0, x1, y1) or fallback to x, y, w, h
+      // Skip low-confidence words — they add noise to the text layer
+      const conf = word.confidence ?? 100;
+      if (conf < minConfidence) continue;
+
+      // Tesseract bbox: { x0, y0, x1, y1 } in image pixels (y0=top)
       const bx = word.bbox?.x0 ?? word.x ?? 0;
       const by = word.bbox?.y0 ?? word.y ?? 0;
       const bh = (word.bbox ? (word.bbox.y1 - word.bbox.y0) : word.h) || 12;
 
+      // PDF coordinate origin is bottom-left; Tesseract is top-left → flip Y
       const pdfX = bx * scaleX;
       const pdfY = height - (by + bh) * scaleY;
       const fontSize = Math.max(1, Math.min(72, bh * scaleY * 0.85));
@@ -177,10 +193,11 @@ export async function createSearchablePdf(pdfBytes, ocrResults) {
           size: fontSize,
           font,
           color: rgb(0, 0, 0),
-          opacity: 0, // Invisible text — only for search and copy
+          opacity: 0,   // Invisible — for search and copy only
         });
+        acceptedWords++;
       } catch (_err) {
-        // Skip words with characters the font can't encode
+        // Characters outside WinAnsi range (Cyrillic, CJK) → silently skip
       }
     }
 
@@ -188,13 +205,19 @@ export async function createSearchablePdf(pdfBytes, ocrResults) {
   }
 
   try {
-    pdfDoc.setProducer('NovaReader OCR');
+    pdfDoc.setProducer('NovaReader OCR (Tesseract)');
   } catch (_err) { /* non-critical */ }
 
   const savedBytes = await pdfDoc.save();
   return {
     blob: new Blob([/** @type {any} */ (savedBytes)], { type: 'application/pdf' }),
     pagesProcessed,
+    stats: {
+      pagesProcessed,
+      totalWords,
+      acceptedWords,
+      avgConfidence: confidenceCount > 0 ? confidenceSum / confidenceCount : 0,
+    },
   };
 }
 
