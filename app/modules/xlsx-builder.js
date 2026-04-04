@@ -28,6 +28,8 @@ import { zipSync } from 'fflate';
 /**
  * @typedef {Object} CellStyle
  * @property {boolean}  [bold]
+ * @property {string}   [bgColor]   - background fill hex color, e.g. "2F5597" (no #)
+ * @property {string}   [fontColor] - font hex color, e.g. "FFFFFF" (no #)
  * @property {boolean}  [italic]
  * @property {string}   [alignment]    - 'left'|'center'|'right'
  * @property {string}   [numberFormat] - e.g. '#,##0.00', '0%', 'dd.mm.yyyy'
@@ -53,6 +55,8 @@ import { zipSync } from 'fflate';
  * @property {Map<number, number>}    colWidths   - col index → width
  * @property {Map<number, number>}    [rowHeights] - row index → height in points
  * @property {Array<{sr: number, sc: number, er: number, ec: number}>} merges
+ * @property {{frozenRows: number, frozenCols: number}|null} [freezePanes]
+ * @property {string|null} [autoFilter]  - cell range ref, e.g. "A1:D1"
  */
 
 // ---------------------------------------------------------------------------
@@ -211,6 +215,8 @@ function detectType(val) {
  * @property {string}  alignment
  * @property {string}  numberFormat
  * @property {boolean} borders
+ * @property {string}  bgColor    - hex fill color (no #), empty = none
+ * @property {string}  fontColor  - hex font color (no #), empty = default black
  */
 
 class StyleRegistry {
@@ -231,7 +237,7 @@ class StyleRegistry {
     this._nextNumFmtId = 167; // next available after our 3 custom ones
 
     // Default xf at index 0 (no special formatting)
-    this._register({ bold: false, italic: false, alignment: '', numberFormat: '', borders: false });
+    this._register({ bold: false, italic: false, alignment: '', numberFormat: '', borders: false, bgColor: '', fontColor: '' });
   }
 
   /**
@@ -248,6 +254,8 @@ class StyleRegistry {
       alignment: (style && style.alignment) || '',
       numberFormat: (style && style.numberFormat) || '',
       borders: !!(style && style.borders),
+      bgColor: (style && style.bgColor) || '',
+      fontColor: (style && style.fontColor) || '',
     };
     // Apply default date format when no explicit format given
     if (cellType === 'date' && !resolved.numberFormat) {
@@ -261,7 +269,7 @@ class StyleRegistry {
    * @returns {number}
    */
   _register(rs) {
-    const key = `${rs.bold}|${rs.italic}|${rs.alignment}|${rs.numberFormat}|${rs.borders}`;
+    const key = `${rs.bold}|${rs.italic}|${rs.alignment}|${rs.numberFormat}|${rs.borders}|${rs.bgColor||''}|${rs.fontColor||''}`;
     const existing = this._xfMap.get(key);
     if (existing !== undefined) return existing;
 
@@ -284,19 +292,40 @@ class StyleRegistry {
     const numFmts = [...this._numFmtMap.entries()];
     const hasCustomFmts = numFmts.length > 0;
 
-    // Fonts: 0 = default, 1 = bold, 2 = italic, 3 = bold+italic
-    const fonts = [
-      '<font><sz val="11"/><name val="Calibri"/><family val="2"/></font>',
-      '<font><b/><sz val="11"/><name val="Calibri"/><family val="2"/></font>',
-      '<font><i/><sz val="11"/><name val="Calibri"/><family val="2"/></font>',
-      '<font><b/><i/><sz val="11"/><name val="Calibri"/><family val="2"/></font>',
-    ];
+    // ── Dynamic fonts: one entry per unique (bold × italic × fontColor) ──
+    /** @type {Map<string, number>} fontKey → fontId */
+    const fontMap = new Map();
+    /** @type {string[]} */
+    const fonts = ['<font><sz val="10"/><name val="Calibri"/><family val="2"/></font>'];
+    fontMap.set('false|false|', 0);
 
-    // Fills (minimum 2 required by Excel)
+    for (const rs of this._xfs) {
+      const fontKey = `${rs.bold}|${rs.italic}|${rs.fontColor || ''}`;
+      if (!fontMap.has(fontKey)) {
+        const bold = rs.bold ? '<b/>' : '';
+        const italic = rs.italic ? '<i/>' : '';
+        const color = rs.fontColor ? `<color rgb="FF${rs.fontColor}"/>` : '';
+        fonts.push(`<font>${bold}${italic}${color}<sz val="10"/><name val="Calibri"/><family val="2"/></font>`);
+        fontMap.set(fontKey, fonts.length - 1);
+      }
+    }
+
+    // ── Dynamic fills: first two entries are required by Excel ────────────
+    /** @type {Map<string, number>} bgColor → fillId */
+    const fillMap = new Map();
+    fillMap.set('', 0);
     const fills = [
       '<fill><patternFill patternType="none"/></fill>',
       '<fill><patternFill patternType="gray125"/></fill>',
     ];
+
+    for (const rs of this._xfs) {
+      const bg = rs.bgColor || '';
+      if (bg && !fillMap.has(bg)) {
+        fills.push(`<fill><patternFill patternType="solid"><fgColor rgb="FF${bg}"/></patternFill></fill>`);
+        fillMap.set(bg, fills.length - 1);
+      }
+    }
 
     // Borders: 0 = none, 1 = thin all sides
     const borders = [
@@ -310,17 +339,20 @@ class StyleRegistry {
       '</border>',
     ];
 
-    // cellXfs
+    // cellXfs — use dynamic font/fill indices
     const xfEntries = this._xfs.map((rs) => {
-      const fontId = (rs.bold && rs.italic) ? 3 : rs.bold ? 1 : rs.italic ? 2 : 0;
+      const fontKey = `${rs.bold}|${rs.italic}|${rs.fontColor || ''}`;
+      const fontId = fontMap.get(fontKey) ?? 0;
+      const fillId = rs.bgColor ? (fillMap.get(rs.bgColor) ?? 0) : 0;
       const borderId = rs.borders ? 1 : 0;
       const numFmtId = rs.numberFormat ? (this._numFmtMap.get(rs.numberFormat) || 0) : 0;
       const applyFont = fontId > 0 ? ' applyFont="1"' : '';
+      const applyFill = fillId > 0 ? ' applyFill="1"' : '';
       const applyBorder = borderId > 0 ? ' applyBorder="1"' : '';
       const applyNumFmt = numFmtId > 0 ? ' applyNumberFormat="1"' : '';
       const applyAlignment = rs.alignment ? ' applyAlignment="1"' : '';
 
-      let xf = `<xf numFmtId="${numFmtId}" fontId="${fontId}" fillId="0" borderId="${borderId}"${applyFont}${applyBorder}${applyNumFmt}${applyAlignment}`;
+      let xf = `<xf numFmtId="${numFmtId}" fontId="${fontId}" fillId="${fillId}" borderId="${borderId}"${applyFont}${applyFill}${applyBorder}${applyNumFmt}${applyAlignment}`;
       if (rs.alignment) {
         xf += `><alignment horizontal="${escapeXml(rs.alignment)}"/></xf>`;
       } else {
@@ -427,6 +459,8 @@ export class XlsxBuilder {
       cellStyles: new Map(),
       colWidths: new Map(),
       merges: [],
+      freezePanes: null,
+      autoFilter: null,
     };
     this._sheets.push(sheet);
     return this._sheets.length - 1;
@@ -468,6 +502,32 @@ export class XlsxBuilder {
     if (!sheet) return;
     if (!sheet.rowHeights) sheet.rowHeights = new Map();
     sheet.rowHeights.set(row, height);
+  }
+
+  /**
+   * Freeze the top N rows and/or left M columns of a sheet.
+   * @param {number} sheetIndex  - 0-based sheet index
+   * @param {number} frozenRows  - number of rows to freeze (0 = none)
+   * @param {number} [frozenCols=0] - number of columns to freeze
+   */
+  setFreezePanes(sheetIndex, frozenRows, frozenCols = 0) {
+    const sheet = this._sheets[sheetIndex];
+    if (!sheet) return;
+    sheet.freezePanes = { frozenRows, frozenCols };
+  }
+
+  /**
+   * Set an auto-filter on a sheet.
+   * @param {number} sheetIndex - 0-based sheet index
+   * @param {number} startRow   - 0-based first row of the filter header
+   * @param {number} startCol   - 0-based first column
+   * @param {number} endRow     - 0-based last row
+   * @param {number} endCol     - 0-based last column
+   */
+  setAutoFilter(sheetIndex, startRow, startCol, endRow, endCol) {
+    const sheet = this._sheets[sheetIndex];
+    if (!sheet) return;
+    sheet.autoFilter = `${cellRef(startRow, startCol)}:${cellRef(endRow, endCol)}`;
   }
 
   /**
@@ -597,6 +657,22 @@ export class XlsxBuilder {
     let xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
     xml += '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">';
 
+    // Freeze panes (sheetViews must come before cols and sheetData)
+    if (sheet.freezePanes && (sheet.freezePanes.frozenRows > 0 || sheet.freezePanes.frozenCols > 0)) {
+      const fr = sheet.freezePanes.frozenRows;
+      const fc = sheet.freezePanes.frozenCols;
+      const topLeft = cellRef(fr, fc);
+      let paneXml = '';
+      if (fr > 0 && fc > 0) {
+        paneXml = `<pane xSplit="${fc}" ySplit="${fr}" topLeftCell="${topLeft}" activePane="bottomRight" state="frozen"/>`;
+      } else if (fr > 0) {
+        paneXml = `<pane ySplit="${fr}" topLeftCell="${topLeft}" activePane="bottomLeft" state="frozen"/>`;
+      } else {
+        paneXml = `<pane xSplit="${fc}" topLeftCell="${topLeft}" activePane="topRight" state="frozen"/>`;
+      }
+      xml += `<sheetViews><sheetView tabSelected="1" workbookViewId="0">${paneXml}</sheetView></sheetViews>`;
+    }
+
     // Column widths
     if (sheet.colWidths.size > 0) {
       xml += '<cols>';
@@ -675,6 +751,11 @@ export class XlsxBuilder {
       xml += '</row>';
     }
     xml += '</sheetData>';
+
+    // Auto-filter
+    if (sheet.autoFilter) {
+      xml += `<autoFilter ref="${escapeXml(sheet.autoFilter)}"/>`;
+    }
 
     // Merge cells
     if (sheet.merges.length > 0) {
