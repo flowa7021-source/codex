@@ -961,13 +961,23 @@ describe('openFile', () => {
     }
   });
 
-  it('opens a .djvu file via DjVuNativeAdapter when DjVu runtime is available', async () => {
+  it('opens a .djvu file via DjVuWorkerAdapter when DjVu runtime is available', async () => {
     // Set up window.DjVu mock so ensureDjVuJs succeeds.
+    // Worker mock must satisfy DjVuWorkerAdapter.open():
+    //   new djvuLib.Worker() → instance with createDocument() + doc.getPagesQuantity().run()
     // This test must run AFTER the fallback tests (above) because once
     // djvuLib is cached, ensureDjVuJs never creates a new script element.
     /** @type {any} */ (window).DjVu = {
       Document: class MockDjVuDocument {
         constructor(_data) { this.pages = [{}]; }
+      },
+      Worker: class MockDjVuWorker {
+        createDocument(_buf) { return Promise.resolve(); }
+        get doc() {
+          return {
+            getPagesQuantity: () => ({ run: () => Promise.resolve(3) }),
+          };
+        }
       },
     };
 
@@ -985,7 +995,9 @@ describe('openFile', () => {
 
       assert.equal(state.docName, 'book.djvu');
       assert.ok(state.adapter, 'adapter should be set');
-      assert.equal(state.adapter.type, 'djvu-native');
+      // DjVuWorkerAdapter uses type = 'djvu' (mode = 'native-worker')
+      assert.equal(state.adapter.type, 'djvu');
+      assert.equal(/** @type {any} */ (state.adapter).mode, 'native-worker');
     } finally {
       document.head.appendChild = origAppendChild;
       // Don't delete window.DjVu - djvuLib is now cached and references it
