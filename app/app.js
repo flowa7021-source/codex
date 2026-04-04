@@ -755,6 +755,10 @@ initNotesController();
 // ─── Toolbox (PDF24-style batch processing) ──────────────────────────────
 import('./modules/toolbox-controller.js').then(m => m.initToolbox()).catch(() => {});
 
+// ─── Windows Shell Context Menu Handler ──────────────────────────────────
+// Listens for 'cli-action' events emitted by Tauri when launched from Explorer.
+import('./modules/context-menu-handler.js').then(m => m.initContextMenuHandler()).catch(() => {});
+
 // Listen for page navigation events from bookmark-controller
 on('novareader-goto-page', async (detail) => {
   const page = detail?.page;
