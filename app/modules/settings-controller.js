@@ -45,6 +45,36 @@ export function defaultSettings() {
     uiAnnotationCanvasScale: 90,
     sidebarSections: Object.fromEntries(SIDEBAR_SECTION_CONFIG.map((x) => [x.key, true])),
     toolbarSections: Object.fromEntries(TOOLBAR_SECTION_CONFIG.map((x) => [x.key, true])),
+
+    // ── Conversion settings ───────────────────────────────────────────────
+    // Preprocessing (OCR pipeline image preparation)
+    convDeskew:   true,    // run deskew in preprocessForOcr
+    convDenoise:  1,       // 0=off 1=weak 2=strong (fastNlMeansDenoising)
+    convSharpen:  false,   // unsharp mask before OCR
+    convDpi:      300,     // render DPI for OCR (150 / 300 / 400)
+    // OCR engine
+    convOem:      3,       // Tesseract --oem (0=legacy 1=lstm 3=combo)
+    convPsm:      3,       // Tesseract --psm (3=auto 6=block 11=sparse)
+    convConfidence: 60,    // min word confidence threshold (0–100)
+    // DOCX output
+    convDocxMode:    'editable', // 'editable'|'layout'|'text-only'
+    convDocxImages:  true,       // include images in DOCX
+    convDocxColors:  true,       // preserve text/background colors
+    convDocxHighlight: false,    // highlight uncertain OCR words in yellow
+    // XLSX output
+    convXlsxProfile:  'auto',  // 'auto'|'lines'|'text'|'spatial'
+    convXlsxFormulas: true,    // replace totals with =SUBTOTAL(9,...)
+    convXlsxAutoFilter: true,  // add auto-filter on header row
+    convXlsxFreeze:   true,    // freeze header row (freeze panes)
+    // DjVu output
+    convDjvuQuality:   'balanced', // 'compact'|'balanced'|'quality'|'archive'
+    convDjvuTextLayer: true,       // inject TXTa text layer
+    // Output handling
+    convOutputLocation: 'same',    // 'same'|'desktop'|'downloads'|'custom'
+    convCustomFolder:   '',
+    convFileExists:     'ask',     // 'ask'|'overwrite'|'rename'
+    convOpenFolder:     true,      // reveal output in Explorer after save
+    convPreserveMetadata: true,    // copy PDF metadata to output file
   };
 }
 

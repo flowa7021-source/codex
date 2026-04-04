@@ -120,6 +120,14 @@ export function applySectionVisibilitySettings() {
 }
 
 
+/** Show/hide the custom folder input row based on the output location select */
+function _syncConvCustomFolderRow() {
+  const row = document.getElementById('cfgConvCustomFolderRow');
+  if (!row) return;
+  const loc = els.cfgConvOutputLocation?.value || 'same';
+  row.style.display = loc === 'custom' ? '' : 'none';
+}
+
 /** All UI size input IDs that should trigger live preview on change */
 const _uiSizeInputIds = [
   'cfgSidebarWidth', 'cfgToolbarScale', 'cfgTextMinHeight',
@@ -171,6 +179,32 @@ export function openSettingsModal() {
   if (els.cfgBottomToolbarHeight) els.cfgBottomToolbarHeight.value = String(state.settings?.uiToolbarBottomPx || 86);
   if (els.cfgTextPanelHeight) els.cfgTextPanelHeight.value = String(state.settings?.uiTextPanelPx || 120);
   if (els.cfgAnnotationCanvasScale) els.cfgAnnotationCanvasScale.value = String(state.settings?.uiAnnotationCanvasScale || 90);
+  // ── Conversion settings ────────────────────────────────────────────────────
+  const cfg = state.settings || {};
+  if (els.cfgConvDeskew)          els.cfgConvDeskew.checked          = cfg.convDeskew !== false;
+  if (els.cfgConvSharpen)         els.cfgConvSharpen.checked         = !!cfg.convSharpen;
+  if (els.cfgConvDenoise)         els.cfgConvDenoise.value           = String(cfg.convDenoise ?? 1);
+  if (els.cfgConvDpi)             els.cfgConvDpi.value               = String(cfg.convDpi ?? 300);
+  if (els.cfgConvOem)             els.cfgConvOem.value               = String(cfg.convOem ?? 3);
+  if (els.cfgConvPsm)             els.cfgConvPsm.value               = String(cfg.convPsm ?? 3);
+  if (els.cfgConvConfidence)      els.cfgConvConfidence.value        = String(cfg.convConfidence ?? 60);
+  if (els.cfgConvDocxMode)        els.cfgConvDocxMode.value          = cfg.convDocxMode || 'editable';
+  if (els.cfgConvDocxImages)      els.cfgConvDocxImages.checked      = cfg.convDocxImages !== false;
+  if (els.cfgConvDocxColors)      els.cfgConvDocxColors.checked      = cfg.convDocxColors !== false;
+  if (els.cfgConvDocxHighlight)   els.cfgConvDocxHighlight.checked   = !!cfg.convDocxHighlight;
+  if (els.cfgConvXlsxProfile)     els.cfgConvXlsxProfile.value       = cfg.convXlsxProfile || 'auto';
+  if (els.cfgConvXlsxFormulas)    els.cfgConvXlsxFormulas.checked    = cfg.convXlsxFormulas !== false;
+  if (els.cfgConvXlsxAutoFilter)  els.cfgConvXlsxAutoFilter.checked  = cfg.convXlsxAutoFilter !== false;
+  if (els.cfgConvXlsxFreeze)      els.cfgConvXlsxFreeze.checked      = cfg.convXlsxFreeze !== false;
+  if (els.cfgConvDjvuQuality)     els.cfgConvDjvuQuality.value       = cfg.convDjvuQuality || 'balanced';
+  if (els.cfgConvDjvuTextLayer)   els.cfgConvDjvuTextLayer.checked   = cfg.convDjvuTextLayer !== false;
+  if (els.cfgConvOutputLocation)  els.cfgConvOutputLocation.value    = cfg.convOutputLocation || 'same';
+  if (els.cfgConvCustomFolder)    els.cfgConvCustomFolder.value      = cfg.convCustomFolder || '';
+  if (els.cfgConvFileExists)      els.cfgConvFileExists.value        = cfg.convFileExists || 'ask';
+  if (els.cfgConvOpenFolder)      els.cfgConvOpenFolder.checked      = cfg.convOpenFolder !== false;
+  if (els.cfgConvPreserveMetadata) els.cfgConvPreserveMetadata.checked = cfg.convPreserveMetadata !== false;
+  _syncConvCustomFolderRow();
+
   renderSectionVisibilityControls();
   previewUiSizeFromModal();
 
@@ -190,6 +224,11 @@ export function openSettingsModal() {
       el.addEventListener('input', () => previewUiSizeFromModal(), { signal: psignal });
     }
   });
+
+  // Show/hide custom folder row when output location changes
+  if (els.cfgConvOutputLocation) {
+    els.cfgConvOutputLocation.addEventListener('change', () => _syncConvCustomFolderRow(), { signal: psignal });
+  }
 
   // Populate OCR storage info when modal opens
   if (typeof _deps.refreshOcrStorageInfo === 'function') _deps.refreshOcrStorageInfo();
@@ -302,6 +341,30 @@ export function saveSettingsFromModal() {
     const el = /** @type {HTMLInputElement} */ (input);
     state.settings.toolbarSections[el.dataset.sectionKey] = !!el.checked;
   });
+
+  // ── Conversion settings ────────────────────────────────────────────────────
+  if (els.cfgConvDeskew)          state.settings.convDeskew          = !!els.cfgConvDeskew.checked;
+  if (els.cfgConvSharpen)         state.settings.convSharpen         = !!els.cfgConvSharpen.checked;
+  if (els.cfgConvDenoise)         state.settings.convDenoise         = Number(els.cfgConvDenoise.value) || 0;
+  if (els.cfgConvDpi)             state.settings.convDpi             = Number(els.cfgConvDpi.value) || 300;
+  if (els.cfgConvOem)             state.settings.convOem             = Number(els.cfgConvOem.value);
+  if (els.cfgConvPsm)             state.settings.convPsm             = Number(els.cfgConvPsm.value);
+  if (els.cfgConvConfidence)      state.settings.convConfidence      = Math.max(0, Math.min(100, Number(els.cfgConvConfidence.value) || 60));
+  if (els.cfgConvDocxMode)        state.settings.convDocxMode        = els.cfgConvDocxMode.value || 'editable';
+  if (els.cfgConvDocxImages)      state.settings.convDocxImages      = !!els.cfgConvDocxImages.checked;
+  if (els.cfgConvDocxColors)      state.settings.convDocxColors      = !!els.cfgConvDocxColors.checked;
+  if (els.cfgConvDocxHighlight)   state.settings.convDocxHighlight   = !!els.cfgConvDocxHighlight.checked;
+  if (els.cfgConvXlsxProfile)     state.settings.convXlsxProfile     = els.cfgConvXlsxProfile.value || 'auto';
+  if (els.cfgConvXlsxFormulas)    state.settings.convXlsxFormulas    = !!els.cfgConvXlsxFormulas.checked;
+  if (els.cfgConvXlsxAutoFilter)  state.settings.convXlsxAutoFilter  = !!els.cfgConvXlsxAutoFilter.checked;
+  if (els.cfgConvXlsxFreeze)      state.settings.convXlsxFreeze      = !!els.cfgConvXlsxFreeze.checked;
+  if (els.cfgConvDjvuQuality)     state.settings.convDjvuQuality     = els.cfgConvDjvuQuality.value || 'balanced';
+  if (els.cfgConvDjvuTextLayer)   state.settings.convDjvuTextLayer   = !!els.cfgConvDjvuTextLayer.checked;
+  if (els.cfgConvOutputLocation)  state.settings.convOutputLocation  = els.cfgConvOutputLocation.value || 'same';
+  if (els.cfgConvCustomFolder)    state.settings.convCustomFolder    = els.cfgConvCustomFolder.value.trim();
+  if (els.cfgConvFileExists)      state.settings.convFileExists      = els.cfgConvFileExists.value || 'ask';
+  if (els.cfgConvOpenFolder)      state.settings.convOpenFolder      = !!els.cfgConvOpenFolder.checked;
+  if (els.cfgConvPreserveMetadata) state.settings.convPreserveMetadata = !!els.cfgConvPreserveMetadata.checked;
 
   _deps.saveAppSettings();
   if (typeof _deps.applyLayoutWithTransition === 'function') _deps.applyLayoutWithTransition();

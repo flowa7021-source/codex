@@ -5,6 +5,10 @@
 
 import { pushDiagnosticEvent } from './diagnostics.js';
 import { toastSuccess, toastError, toastWarning } from './toast.js';
+import {
+  getPreprocessOptions, getOcrDpi, getOcrConfidence,
+  getDocxMode, getXlsxOptions, getDjvuQuality,
+} from './conversion-settings.js';
 
 /** @type {File[]} */
 const _files = [];
@@ -86,8 +90,8 @@ async function ensurePdfBytes(file) {
 }
 
 async function runOcrPipeline(file, idx, total) {
-  // Render at 300 DPI for optimal OCR accuracy (PDF native unit = 72 dpi)
-  const OCR_SCALE = 300 / 72;
+  // Render DPI driven by user setting (default 300); PDF native unit = 72 dpi
+  const OCR_SCALE = getOcrDpi() / 72;
   const baseProgress = (idx / total) * 100;
   const pageSlot = 90 / total; // progress share for this file's pages
 
@@ -138,7 +142,7 @@ async function runOcrPipeline(file, idx, total) {
         `OCR стр. ${p}/${numPages} — Предобработка (наклон, шум)…`,
         baseProgress + (pageFrac + 0.3 / numPages) * pageSlot,
       );
-      const preprocessed = preprocessForOcr(canvas, { deskew: true, denoise: true, binarize: false, removeBorders: true });
+      const preprocessed = preprocessForOcr(canvas, getPreprocessOptions());
 
       // ── Stage 3: OCR ──────────────────────────────────────────────────────
       showProgress(
@@ -165,7 +169,7 @@ async function runOcrPipeline(file, idx, total) {
 
   // ── Stage 4: Build searchable PDF ─────────────────────────────────────────
   showProgress(`OCR: Создание текстового слоя…`, baseProgress + pageSlot);
-  const searchable = await createSearchablePdf(bytes, ocrResults, { minConfidence: 30 });
+  const searchable = await createSearchablePdf(bytes, ocrResults, { minConfidence: getOcrConfidence() });
 
   // Brief QA summary
   const qa = searchable.stats;
@@ -185,11 +189,11 @@ async function runConversion(file, format) {
       const getDoc = pdfjsMod.getDocument || pdfjsMod.default?.getDocument;
       const pdfDoc = await getDoc({ data: bytes }).promise;
       const { convertPdfToDocxCompat } = await import('./conversion-pipeline.js');
-      return convertPdfToDocxCompat(pdfDoc, file.name, pdfDoc.numPages, { mode: 'text' });
+      return convertPdfToDocxCompat(pdfDoc, file.name, pdfDoc.numPages, { mode: getDocxMode() });
     }
     case 'xlsx': {
       const { convertPdfToXlsx } = await import('./pdf-to-xlsx.js');
-      const result = await convertPdfToXlsx(bytes);
+      const result = await convertPdfToXlsx(bytes, getXlsxOptions());
       return result.blob;
     }
     case 'pptx': {
@@ -205,7 +209,7 @@ async function runConversion(file, format) {
     case 'djvu': {
       const { convertPdfToDjvu } = await import('./pdf-to-djvu.js');
       const result = await convertPdfToDjvu(bytes, {
-        quality: 'balanced',
+        quality: getDjvuQuality(),
         onProgress: (cur, tot, stage) => {
           showProgress(
             `DjVu ${stage}: стр. ${cur}/${tot}`,

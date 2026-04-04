@@ -845,6 +845,7 @@
           <button data-modal-tab="ocr" role="tab" aria-selected="false">OCR</button>
           <button data-modal-tab="hotkeys" role="tab" aria-selected="false" data-i18n="settings.hotkeysTab">Клавиши</button>
           <button data-modal-tab="advanced" role="tab" aria-selected="false" data-i18n="settings.advancedTab">Продвинутые</button>
+          <button data-modal-tab="conversion" role="tab" aria-selected="false">Конвертация</button>
         </nav>
 
         <div class="modal-body">
@@ -956,6 +957,134 @@
                 <label><span data-i18n="dim.annotCanvas">Аннот. холст (%)</span> <input id="cfgAnnotationCanvasScale" type="number" min="50" max="100" value="90" /></label>
               </div>
             </section>
+          </div>
+
+          <div class="modal-tab-panel" data-modal-panel="conversion" role="tabpanel" aria-label="Настройки конвертации">
+
+            <section>
+              <h4>Предобработка изображения</h4>
+              <label class="checkbox-row"><input id="cfgConvDeskew" type="checkbox" /> <span>Выравнивание (deskew)</span></label>
+              <label class="checkbox-row"><input id="cfgConvSharpen" type="checkbox" /> <span>Повышение резкости</span></label>
+              <div class="settings-grid">
+                <label><span>Шумоподавление</span>
+                  <select id="cfgConvDenoise">
+                    <option value="0">Нет</option>
+                    <option value="1">Слабое</option>
+                    <option value="2">Сильное</option>
+                  </select>
+                </label>
+                <label><span>DPI растеризации</span>
+                  <select id="cfgConvDpi">
+                    <option value="150">150 dpi (быстро)</option>
+                    <option value="300">300 dpi (стандарт)</option>
+                    <option value="400">400 dpi (точно)</option>
+                  </select>
+                </label>
+              </div>
+            </section>
+
+            <section>
+              <h4>Движок OCR</h4>
+              <div class="settings-grid">
+                <label><span>Режим (OEM)</span>
+                  <select id="cfgConvOem">
+                    <option value="0">0 — Legacy</option>
+                    <option value="1">1 — LSTM</option>
+                    <option value="3">3 — LSTM + Legacy</option>
+                  </select>
+                </label>
+                <label><span>Сегментация (PSM)</span>
+                  <select id="cfgConvPsm">
+                    <option value="3">3 — Авто (рекоменд.)</option>
+                    <option value="1">1 — Авто с ориент.</option>
+                    <option value="4">4 — Одна колонка</option>
+                    <option value="6">6 — Единый блок текста</option>
+                    <option value="11">11 — Разрозненный текст</option>
+                    <option value="12">12 — Разрозн. (OSD)</option>
+                  </select>
+                </label>
+                <label><span>Мин. уверенность (%)</span>
+                  <input id="cfgConvConfidence" type="number" min="0" max="100" value="60" />
+                </label>
+              </div>
+            </section>
+
+            <section>
+              <h4>Вывод Word (.docx)</h4>
+              <div class="settings-grid">
+                <label><span>Режим</span>
+                  <select id="cfgConvDocxMode">
+                    <option value="editable">Редактируемый текст</option>
+                    <option value="text-only">Только текст</option>
+                    <option value="layout">Точный макет</option>
+                  </select>
+                </label>
+              </div>
+              <label class="checkbox-row"><input id="cfgConvDocxImages" type="checkbox" /> <span>Включать изображения</span></label>
+              <label class="checkbox-row"><input id="cfgConvDocxColors" type="checkbox" /> <span>Сохранять цвета текста</span></label>
+              <label class="checkbox-row"><input id="cfgConvDocxHighlight" type="checkbox" /> <span>Выделять слова низкой уверенности (жёлтым)</span></label>
+            </section>
+
+            <section>
+              <h4>Вывод Excel (.xlsx)</h4>
+              <div class="settings-grid">
+                <label><span>Профиль извлечения</span>
+                  <select id="cfgConvXlsxProfile">
+                    <option value="auto">Авто</option>
+                    <option value="lines">По линиям</option>
+                    <option value="text">По тексту</option>
+                    <option value="spatial">Пространственный</option>
+                  </select>
+                </label>
+              </div>
+              <label class="checkbox-row"><input id="cfgConvXlsxFormulas" type="checkbox" /> <span>Добавлять формулы (SUM)</span></label>
+              <label class="checkbox-row"><input id="cfgConvXlsxAutoFilter" type="checkbox" /> <span>Авто-фильтр столбцов</span></label>
+              <label class="checkbox-row"><input id="cfgConvXlsxFreeze" type="checkbox" /> <span>Закрепить заголовок</span></label>
+            </section>
+
+            <section>
+              <h4>Вывод DjVu</h4>
+              <div class="settings-grid">
+                <label><span>Качество</span>
+                  <select id="cfgConvDjvuQuality">
+                    <option value="compact">Компактный</option>
+                    <option value="balanced">Баланс</option>
+                    <option value="quality">Качество</option>
+                    <option value="archive">Архивный</option>
+                  </select>
+                </label>
+              </div>
+              <label class="checkbox-row"><input id="cfgConvDjvuTextLayer" type="checkbox" /> <span>Встраивать текстовый слой (TXTa)</span></label>
+            </section>
+
+            <section>
+              <h4>Параметры вывода</h4>
+              <div class="settings-grid">
+                <label><span>Папка вывода</span>
+                  <select id="cfgConvOutputLocation">
+                    <option value="same">Рядом с файлом</option>
+                    <option value="desktop">Рабочий стол</option>
+                    <option value="downloads">Загрузки</option>
+                    <option value="custom">Своя папка…</option>
+                  </select>
+                </label>
+                <label><span>Если файл существует</span>
+                  <select id="cfgConvFileExists">
+                    <option value="ask">Спросить</option>
+                    <option value="overwrite">Перезаписать</option>
+                    <option value="rename">Переименовать</option>
+                  </select>
+                </label>
+              </div>
+              <div id="cfgConvCustomFolderRow" class="settings-grid">
+                <label style="grid-column:1/-1"><span>Путь к папке</span>
+                  <input id="cfgConvCustomFolder" type="text" placeholder="C:\Users\…\Documents" style="width:100%" />
+                </label>
+              </div>
+              <label class="checkbox-row"><input id="cfgConvOpenFolder" type="checkbox" /> <span>Показать в проводнике после конвертации</span></label>
+              <label class="checkbox-row"><input id="cfgConvPreserveMetadata" type="checkbox" /> <span>Сохранять метаданные документа</span></label>
+            </section>
+
           </div>
         </div>
 
