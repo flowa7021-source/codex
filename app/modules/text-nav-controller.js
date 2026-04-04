@@ -167,8 +167,8 @@ export async function exportCurrentDocToWord() {
   const hasPdfSource = (state.adapter?.type === 'pdf' && state.adapter.pdfDoc) || state.pdfBytes;
   if (hasPdfSource) {
     try {
-      _deps.setOcrStatus('Экспорт DOCX: извлечение структуры...');
       const pageCount = state.pageCount || 1;
+      _deps.setOcrStatus(`Экспорт DOCX: подготовка (${pageCount} стр.)...`);
 
       // Get PDF.js document proxy — from adapter for native PDF, or load from converted bytes for DjVu
       let pdfDoc = state.adapter?.pdfDoc;
@@ -179,20 +179,55 @@ export async function exportCurrentDocToWord() {
       }
       if (!pdfDoc) throw new Error('PDF source not available');
 
+      /** @type {any} */
+      let _qaResult = null;
+
+      const _stageLabels = {
+        extract:  'Извлечение',
+        layout:   'Анализ макета',
+        semantic: 'Структура',
+        build:    'Сборка DOCX',
+        qa:       'Проверка качества',
+      };
+
       const blob = await _deps.convertPdfToDocx(pdfDoc, title, pageCount, {
         // 'text' mode extracts structured text + inline images/figures from the PDF.
         // Do NOT use 'text+images' — it appends redundant full-page PNG screenshots.
         mode: 'text',
         capturePageImage: null,
         ocrWordCache: _deps._ocrWordCache,
+        ocrLanguage: state.settings?.ocrLang || 'auto',
         includeFooter: true,
+        runQA: true,
+        onProgress: (stage, pct, msg) => {
+          const label = _stageLabels[stage] || stage;
+          _deps.setOcrStatus(`Экспорт DOCX: ${label} — ${msg} (${Math.round(pct)}%)`);
+        },
+        qaCallback: (qa) => { _qaResult = qa; },
       });
 
       const { saveOrDownload } = await import('./platform.js');
       await saveOrDownload(blob, `${title}.docx`, [{ name: 'DOCX', extensions: ['docx'] }]);
       _deps.recordSuccessfulOperation();
-      _deps.setOcrStatus(`Экспорт DOCX: готово (${Math.round(blob.size / 1024)} КБ, ${pageCount} стр.)`);
-      _deps.pushDiagnosticEvent('export.docx', { pages: pageCount, sizeKb: Math.round(blob.size / 1024), engine: 'docx-lib' });
+
+      let statusMsg = `Экспорт DOCX: готово (${Math.round(blob.size / 1024)} КБ, ${pageCount} стр.)`;
+      if (_qaResult?.scannedPageCount > 0) {
+        statusMsg += ` — OCR: ${_qaResult.scannedPageCount} стр.`;
+      }
+      if (_qaResult?.textMetrics) {
+        const cer = _qaResult.textMetrics.cer ?? 0;
+        const accuracy = ((1 - cer) * 100).toFixed(1);
+        statusMsg += ` — точность: ${accuracy}%`;
+        if (cer > 0.15) statusMsg += ' ⚠ низкое качество, проверьте документ';
+      }
+      _deps.setOcrStatus(statusMsg);
+      _deps.pushDiagnosticEvent('export.docx', {
+        pages: pageCount,
+        sizeKb: Math.round(blob.size / 1024),
+        engine: 'v2-pipeline',
+        cer: _qaResult?.textMetrics?.cer,
+        scannedPages: _qaResult?.scannedPageCount ?? 0,
+      });
       return;
     } catch (err) {
       console.warn('New DOCX converter failed, falling back to legacy:', err);

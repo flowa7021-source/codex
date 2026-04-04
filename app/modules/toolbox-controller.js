@@ -129,8 +129,8 @@ async function runConversion(file, format) {
       const pdfjsMod = await import('pdfjs-dist');
       const getDoc = pdfjsMod.getDocument || pdfjsMod.default?.getDocument;
       const pdfDoc = await getDoc({ data: bytes }).promise;
-      const { convertPdfToDocx } = await import('./docx-converter.js');
-      return convertPdfToDocx(pdfDoc, file.name, pdfDoc.numPages, { mode: 'text' });
+      const { convertPdfToDocxCompat } = await import('./conversion-pipeline.js');
+      return convertPdfToDocxCompat(pdfDoc, file.name, pdfDoc.numPages, { mode: 'text' });
     }
     case 'xlsx': {
       const { convertPdfToXlsx } = await import('./pdf-to-xlsx.js');

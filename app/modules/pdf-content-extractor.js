@@ -568,14 +568,80 @@ async function extractAnnotations(pdfPage) {
 // ─── Main extraction function ────────────────────────────────────────────────
 
 /**
+ * Render a PDF page to a canvas at the requested scale.
+ * Returns null if rendering is impossible (0-dimension canvas, missing API).
+ * @param {Object} pdfPage
+ * @param {number} scale
+ * @returns {Promise<OffscreenCanvas|HTMLCanvasElement|null>}
+ */
+async function renderPageToCanvas(pdfPage, scale) {
+  const viewport = pdfPage.getViewport({ scale });
+  const w = Math.round(viewport.width);
+  const h = Math.round(viewport.height);
+  if (w <= 0 || h <= 0) return null;
+  /** @type {any} */
+  const canvas = typeof OffscreenCanvas !== 'undefined'
+    ? new OffscreenCanvas(w, h)
+    : document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  await pdfPage.render({ canvasContext: ctx, viewport }).promise;
+  return canvas;
+}
+
+/**
+ * Convert Tesseract word list to the internal textRun format used by
+ * layout-analyzer.  Coordinates are de-scaled from OCR pixel space to pt.
+ * @param {Array<{text:string,bbox:{x0:number,y0:number,x1:number,y1:number}}>} words
+ * @param {number} scale - OCR render scale (pixel/pt ratio)
+ * @returns {Array<Object>}
+ */
+function ocrWordsToTextRuns(words, scale) {
+  const runs = [];
+  for (const word of words) {
+    const t = String(word.text || '').trim();
+    if (!t || !word.bbox) continue;
+    const x = word.bbox.x0 / scale;
+    const y = word.bbox.y0 / scale;
+    const w = (word.bbox.x1 - word.bbox.x0) / scale;
+    const h = (word.bbox.y1 - word.bbox.y0) / scale;
+    if (w <= 0 || h <= 0) continue;
+    runs.push({
+      text: t,
+      x,
+      y,
+      width: w,
+      height: h,
+      fontSize: Math.max(6, Math.round(h * 0.72)),
+      fontName: 'Arial',
+      fontFamily: 'sans-serif',
+      bold: false,
+      italic: false,
+      color: '#000000',
+      fromOcr: true,
+    });
+  }
+  return runs;
+}
+
+/**
  * Extract all content from a PDF page using hybrid approach:
  * - Text via getTextContent() (reliable text extraction with font encoding)
  * - Vector paths and images via getOperatorList()
+ * - OCR fallback when the page has no extractable text (scanned document)
  *
  * @param {Object} pdfPage - pdf.js PDFPageProxy
+ * @param {Object} [options]
+ * @param {Function|null} [options.ocrPageFn] - async (canvas) => {text, words[]}
+ *   Called when the page has no native text.  Injected by conversion-pipeline.js
+ *   to avoid a direct dependency on tesseract-adapter here.
  * @returns {Promise<any>}
  */
-export async function extractPageContent(pdfPage) {
+export async function extractPageContent(pdfPage, options = {}) {
+  const { ocrPageFn = null } = options;
+
   const viewport = pdfPage.getViewport({ scale: 1.0 });
   const pageWidth = viewport.width;
   const pageHeight = viewport.height;
@@ -617,6 +683,28 @@ export async function extractPageContent(pdfPage) {
     }
   }
 
+  // ── OCR fallback for scanned pages ──────────────────────────────────────
+  // A page is considered "scanned" when it has fewer than 10 non-whitespace
+  // characters extracted natively.  In that case we render the page to a
+  // canvas at 2× scale (~144 DPI) and run Tesseract via the injected callback.
+  const textChars = textRuns.reduce((s, r) => s + r.text.replace(/\s/g, '').length, 0);
+  const isScanned = textChars < 10;
+
+  if (isScanned && ocrPageFn) {
+    const OCR_SCALE = 2;
+    try {
+      const canvas = await renderPageToCanvas(pdfPage, OCR_SCALE);
+      if (canvas) {
+        const ocrResult = await ocrPageFn(canvas);
+        if (ocrResult?.words?.length) {
+          textRuns.push(...ocrWordsToTextRuns(ocrResult.words, OCR_SCALE));
+        }
+      }
+    } catch (ocrErr) {
+      console.warn('[pdf-content-extractor] OCR fallback failed on page', pdfPage.pageNumber, ':', ocrErr?.message);
+    }
+  }
+
   // Deduplicate near-identical paths (PDF sometimes renders same line twice)
   const dedupedPaths = deduplicatePaths(paths);
 
@@ -630,6 +718,7 @@ export async function extractPageContent(pdfPage) {
     images,
     fonts,
     annotations,
+    isScanned,
   };
 }
 
