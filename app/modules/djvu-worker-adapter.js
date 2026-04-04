@@ -17,6 +17,7 @@
 
 import { DjVuPageCache } from './djvu-page-cache.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
+import { getAdaptiveDjvuCacheMb } from './perf-utils.js';
 
 // Fraction of full resolution used for the low-res preview pass.
 const LOW_RES_SCALE = 0.25;   // 1/4 linear → 1/16 pixels → 16× faster decode
@@ -44,7 +45,7 @@ export class DjVuWorkerAdapter {
       });
 
     this._pageCount   = 0;
-    this._cache       = new DjVuPageCache(200);
+    this._cache       = new DjVuPageCache(getAdaptiveDjvuCacheMb());
 
     /** @type {Map<number, {width:number, height:number}>} */
     this._sizeCache   = new Map();
