@@ -202,6 +202,19 @@ async function runConversion(file, format) {
       const result = await convertToPdfA(bytes, { title: file.name });
       return result.blob;
     }
+    case 'djvu': {
+      const { convertPdfToDjvu } = await import('./pdf-to-djvu.js');
+      const result = await convertPdfToDjvu(bytes, {
+        quality: 'balanced',
+        onProgress: (cur, tot, stage) => {
+          showProgress(
+            `DjVu ${stage}: стр. ${cur}/${tot}`,
+            ((cur - 1) / Math.max(1, tot)) * 90,
+          );
+        },
+      });
+      return result.blob;
+    }
     default:
       throw new Error(`Unknown format: ${format}`);
   }
@@ -242,7 +255,7 @@ async function run() {
 
   try {
     const { saveOrDownload } = await import('./platform.js');
-    const extMap = { docx: 'docx', xlsx: 'xlsx', pptx: 'pptx', pdfa: 'pdf' };
+    const extMap = { docx: 'docx', xlsx: 'xlsx', pptx: 'pptx', pdfa: 'pdf', djvu: 'djvu' };
 
     if (action === 'merge') {
       showProgress('Объединение...', 50);
