@@ -727,7 +727,10 @@
         <!-- Panel: Toolbox (PDF24-style batch processing) -->
         <div class="rp-panel" data-rp-panel="toolbox">
           <div class="rp-section">
-            <h3 class="rp-section-title">Toolbox</h3>
+            <h3 class="rp-section-title" style="display:flex;align-items:center;justify-content:space-between">
+              Toolbox
+              <button id="openToolboxOverlay" class="btn-ghost btn-xs" title="Открыть полный Toolbox">⊞ Полный</button>
+            </h3>
             <div id="toolboxDropZone" style="border:2px dashed var(--border);border-radius:8px;padding:24px;text-align:center;cursor:pointer;margin-bottom:8px;transition:border-color .2s">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               <p style="margin:8px 0 0;font-size:13px;opacity:0.7">Перетащите файлы или нажмите для выбора</p>
@@ -1287,5 +1290,146 @@
       navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
     </script>
+
+    <!-- ═══ Toolbox Overlay (PDF24-style full-screen toolbox) ═══ -->
+    <div id="toolboxOverlay" class="tbx-overlay" aria-hidden="true" role="dialog" aria-label="PDF Converter — Инструменты">
+      <div class="tbx-header">
+        <span class="tbx-title">PDF Converter — Инструменты</span>
+        <button id="tbxClose" class="tbx-close-btn" aria-label="Закрыть Toolbox">✕</button>
+      </div>
+
+      <div class="tbx-body">
+
+        <!-- ── Left: file list + output folder ───────────────── -->
+        <div class="tbx-files-col">
+          <div class="tbx-files-header">
+            <span class="tbx-files-label">ФАЙЛЫ</span>
+            <button id="tbxBtnAdd" class="tbx-file-btn" title="Добавить файлы">+</button>
+            <button id="tbxBtnRemove" class="tbx-file-btn" title="Удалить выбранные" disabled>−</button>
+            <input id="tbxFileInput" type="file" multiple accept=".pdf,.djvu,.epub,.png,.jpg,.jpeg,.tiff,.bmp,.webp" hidden />
+          </div>
+
+          <div id="tbxDropZone" class="tbx-dropzone" role="button" tabindex="0" aria-label="Перетащите PDF файлы сюда">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <p>Перетащите PDF<br>или нажмите для выбора</p>
+          </div>
+
+          <ul id="tbxFileList" class="tbx-file-list"></ul>
+
+          <div class="tbx-output-bar">
+            <label class="tbx-output-label">Папка:</label>
+            <select id="tbxOutputLocation" class="tbx-output-select">
+              <option value="same">Рядом с файлом</option>
+              <option value="desktop">Рабочий стол</option>
+              <option value="downloads">Загрузки</option>
+              <option value="custom">Своя папка…</option>
+            </select>
+            <input id="tbxCustomFolder" class="tbx-custom-folder" type="text" placeholder="Путь к папке…" hidden />
+          </div>
+        </div>
+
+        <!-- ── Right: tool grid ──────────────────────────────── -->
+        <div class="tbx-grid-col">
+          <p class="tbx-grid-hint">Выберите инструмент</p>
+          <div id="tbxToolGrid" class="tbx-grid">
+
+            <!-- Conversion group -->
+            <div class="tbx-tile" data-tool="docx" data-group="conversion" title="Конвертировать PDF в редактируемый документ Word (.docx)">
+              <div class="tbx-tile-icon">📄</div>
+              <div class="tbx-tile-label">→ Word</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <div class="tbx-tile" data-tool="xlsx" data-group="conversion" title="Конвертировать PDF в таблицы Excel (.xlsx)">
+              <div class="tbx-tile-icon">📊</div>
+              <div class="tbx-tile-label">→ Excel</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <div class="tbx-tile" data-tool="djvu" data-group="conversion" title="Конвертировать PDF в сжатый DjVu с текстовым слоем">
+              <div class="tbx-tile-icon">📚</div>
+              <div class="tbx-tile-label">→ DjVu</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <div class="tbx-tile" data-tool="pptx" data-group="conversion" title="Конвертировать PDF в презентацию PowerPoint (.pptx)">
+              <div class="tbx-tile-icon">🎞</div>
+              <div class="tbx-tile-label">→ PPTX</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <div class="tbx-tile" data-tool="images" data-group="conversion" title="Конвертировать страницы PDF в изображения PNG">
+              <div class="tbx-tile-icon">🖼</div>
+              <div class="tbx-tile-label">→ PNG</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <div class="tbx-tile" data-tool="pdfa" data-group="conversion" title="Конвертировать PDF в архивный формат PDF/A">
+              <div class="tbx-tile-icon">🗄</div>
+              <div class="tbx-tile-label">→ PDF/A</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <!-- OCR group -->
+            <div class="tbx-tile" data-tool="ocr" data-group="ocr" title="Распознать текст и встроить текстовый слой в PDF">
+              <div class="tbx-tile-icon">🔍</div>
+              <div class="tbx-tile-label">OCR PDF</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <!-- PDF ops group -->
+            <div class="tbx-tile" data-tool="split" data-group="pdfops" title="Разделить PDF на отдельные страницы или диапазоны">
+              <div class="tbx-tile-icon">✂</div>
+              <div class="tbx-tile-label">Разделить</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <div class="tbx-tile" data-tool="merge" data-group="pdfops" title="Объединить несколько PDF в один файл">
+              <div class="tbx-tile-icon">⊕</div>
+              <div class="tbx-tile-label">Объединить</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <div class="tbx-tile" data-tool="compress" data-group="pdfops" title="Уменьшить размер файла PDF">
+              <div class="tbx-tile-icon">🗜</div>
+              <div class="tbx-tile-label">Сжать</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <div class="tbx-tile" data-tool="protect" data-group="pdfops" title="Защитить PDF паролем">
+              <div class="tbx-tile-icon">🔒</div>
+              <div class="tbx-tile-label">Защитить</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+            <div class="tbx-tile" data-tool="rotate" data-group="pdfops" title="Повернуть страницы PDF на 90° или 180°">
+              <div class="tbx-tile-icon">🔄</div>
+              <div class="tbx-tile-label">Повернуть</div>
+              <div class="tbx-tile-progress-wrap"><div class="tbx-tile-bar"></div></div>
+              <div class="tbx-tile-status"></div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+      <div class="tbx-statusbar">
+        <span id="tbxStatusText">Готово</span>
+        <button id="tbxSettings" class="tbx-statusbar-btn">⚙ Настройки</button>
+      </div>
+    </div>
+
   </body>
 </html>

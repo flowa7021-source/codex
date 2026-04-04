@@ -255,6 +255,17 @@ async function handleCliAction(payload) {
     return;
   }
 
+  if (action === 'toolbox') {
+    // Open full toolbox overlay, pre-loading the file if one was provided.
+    const { openToolboxWithFiles, openToolboxOverlay } = await import('./toolbox-grid.js');
+    if (filePath) {
+      openToolboxWithFiles([filePath]);
+    } else {
+      openToolboxOverlay();
+    }
+    return;
+  }
+
   if (!filePath) {
     console.warn('[context-menu] No file path provided for action:', action);
     return;
