@@ -4,10 +4,10 @@
       "webviewInstallMode": {
         "type": "embedBootstrapper"
       },
-      "allowDowngrades": false
-    },
-    "nsis": {
-      "installerHooks": "nsis/installer-hooks.nsh"
+      "allowDowngrades": false,
+      "nsis": {
+        "installerHooks": "nsis/installer-hooks.nsh"
+      }
     }
   }
 }
