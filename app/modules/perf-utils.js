@@ -88,7 +88,7 @@ export class BatchedProgress {
   constructor(callback, intervalMs = BATCH_INTERVAL_MS) {
     this._cb = callback;
     this._interval = intervalMs;
-    this._lastEmit = 0;
+    this._lastEmit = -Infinity;
     this._timer = null;
     /** @type {any[]|null} */
     this._pending = null;
