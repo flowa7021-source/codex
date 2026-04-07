@@ -247,6 +247,7 @@
   "ocr.batchOcr": "Batch OCR",
   "ocr.ocrFullDoc": "OCR entire document",
   "ocr.cancel": "Cancel",
+  "ocr.saveWithTextLayer": "Save with text layer",
   "ocr.detectScan": "Detect scan",
   "ocr.storage": "OCR storage",
   "ocr.refresh": "Refresh",

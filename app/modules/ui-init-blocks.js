@@ -239,6 +239,34 @@ function initBatchOcrUI(deps) {
     });
   }
 
+  // Save searchable PDF to disk (text layer embedded, user picks save path)
+  const saveSearchablePdfBtn = document.getElementById('saveSearchablePdf');
+  if (saveSearchablePdfBtn) {
+    saveSearchablePdfBtn.addEventListener('click', async () => {
+      if (!state.file || state.adapter?.type !== 'pdf') {
+        setBatchStatus('Откройте PDF для сохранения с текстовым слоем');
+        return;
+      }
+      if (batchOcr.results.size === 0) {
+        setBatchStatus('Сначала запустите пакетное OCR всего документа');
+        return;
+      }
+      try {
+        setBatchStatus('Создание PDF с текстовым слоем...');
+        const arrayBuffer = await state.file.arrayBuffer();
+        const result = await createSearchablePdf(arrayBuffer, batchOcr.results);
+        const baseName = (state.file?.name || 'document').replace(/\.pdf$/i, '');
+        const fileName = `${baseName}_searchable.pdf`;
+        const { saveOrDownload } = await import('./platform.js');
+        await saveOrDownload(result.blob, fileName, [{ name: 'PDF', extensions: ['pdf'] }]);
+        setBatchStatus(`Сохранено: ${fileName} (${result.pagesProcessed} стр.)`);
+        pushDiagnosticEvent('searchable-pdf.saved', { pages: result.pagesProcessed });
+      } catch (err) {
+        setBatchStatus(`Ошибка сохранения: ${err?.message || 'неизвестная'}`);
+      }
+    });
+  }
+
   // Detect scanned document
   if (detectScannedBtn) {
     detectScannedBtn.addEventListener('click', async () => {

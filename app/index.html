@@ -577,6 +577,9 @@
             </div>
             <div class="rp-actions">
               <button id="createSearchablePdf" class="btn-xs">Searchable PDF</button>
+              <button id="saveSearchablePdf" class="btn-xs" data-i18n="ocr.saveWithTextLayer">Сохранить с текстом</button>
+            </div>
+            <div class="rp-actions">
               <button id="detectScanned" class="btn-xs" data-i18n="ocr.detectScan">Определить скан</button>
             </div>
             <progress id="batchOcrProgress" value="0" max="100" style="width:100%; height:6px; margin-top:4px; display:none;"></progress>
@@ -981,6 +984,7 @@
                     <option value="150">150 dpi (быстро)</option>
                     <option value="300">300 dpi (стандарт)</option>
                     <option value="400">400 dpi (точно)</option>
+                    <option value="600" selected>600 dpi (максимум)</option>
                   </select>
                 </label>
               </div>

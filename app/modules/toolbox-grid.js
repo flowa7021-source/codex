@@ -4,6 +4,7 @@
 // Opened via the "Полный Toolbox" sidebar button or the --toolbox CLI action.
 
 import { readFileAsBytes, writeFileBytes, isTauri, saveOrDownload } from './platform.js';
+import { yieldToMainThread } from './utils.js';
 import {
   getPreprocessOptions, getOcrDpi, getOcrConfidence,
   getDocxMode, getXlsxOptions, getDjvuQuality, getOutputDirectory,
@@ -227,6 +228,11 @@ async function _saveResult(blob, inputPath, newExt, suffix = '', mimeFilters = [
 
 async function _runTool(toolId, entry) {
   const bytes = await _getBytes(entry);
+  // Validate PDF signature (%PDF-) before attempting to parse
+  if (toolId !== 'merge' && bytes.length < 5) throw new Error('Файл пустой или повреждён');
+  if (toolId !== 'merge' && !(bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46)) {
+    throw new Error(`Файл не является PDF (заголовок не найден): ${entry.name}`);
+  }
   const reportPct = (/** @type {number} */ p) => _setTileState(toolId, 'running', `${p}%`, p);
 
   switch (toolId) {
@@ -351,6 +357,8 @@ async function _runOcr(bytes, entry, reportPct) {
 
   for (let p = 1; p <= numPages; p++) {
     reportPct(Math.round(((p - 1) / numPages) * 85));
+    // Yield to the UI thread between pages to prevent freezing
+    await yieldToMainThread(0);
     const page = await pdfDoc.getPage(p);
     const vp = page.getViewport({ scale: OCR_SCALE });
     const w = Math.round(vp.width);
@@ -363,6 +371,7 @@ async function _runOcr(bytes, entry, reportPct) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, w, h);
     await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    await yieldToMainThread(0);
     const preprocessed = preprocessForOcr(canvas, getPreprocessOptions());
     const result = await recognizeTesseract(preprocessed);
     ocrResults.set(p, { text: result.text, words: result.words,

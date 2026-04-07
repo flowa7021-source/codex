@@ -51,7 +51,7 @@ export function defaultSettings() {
     convDeskew:   true,    // run deskew in preprocessForOcr
     convDenoise:  1,       // 0=off 1=weak 2=strong (fastNlMeansDenoising)
     convSharpen:  false,   // unsharp mask before OCR
-    convDpi:      300,     // render DPI for OCR (150 / 300 / 400)
+    convDpi:      600,     // render DPI for OCR (150 / 300 / 400 / 600)
     // OCR engine
     convOem:      3,       // Tesseract --oem (0=legacy 1=lstm 3=combo)
     convPsm:      3,       // Tesseract --psm (3=auto 6=block 11=sparse)
