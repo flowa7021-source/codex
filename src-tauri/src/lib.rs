@@ -99,6 +99,56 @@ async fn find_free_output_path(path: String) -> String {
         .unwrap_or(0), ext)
 }
 
+// ── Python sidecar: inline PDF text editor engine ───────────────────────────
+
+/// Run the Python PDF text editor engine with a JSON command on stdin.
+/// Returns the JSON result from the engine's stdout.
+#[tauri::command]
+async fn run_pdf_edit_engine(app: tauri::AppHandle, json_input: String) -> Result<String, String> {
+    let resource_dir = app.path().resource_dir()
+        .map_err(|e| format!("Failed to resolve resource dir: {}", e))?;
+    let script_path = resource_dir.join("scripts").join("pdf_edit_engine.py");
+
+    // Fall back to project-relative path in development
+    let script = if script_path.exists() {
+        script_path
+    } else {
+        std::path::PathBuf::from("scripts/pdf_edit_engine.py")
+    };
+
+    let mut child = std::process::Command::new("python3")
+        .arg(&script)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn python3: {}", e))?;
+
+    // Write JSON command to stdin
+    if let Some(ref mut stdin) = child.stdin {
+        use std::io::Write;
+        stdin.write_all(json_input.as_bytes())
+            .map_err(|e| format!("Failed to write to stdin: {}", e))?;
+    }
+    // Close stdin by dropping
+    child.stdin.take();
+
+    let output = child.wait_with_output()
+        .map_err(|e| format!("Failed to read output: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Try to extract JSON error from stdout
+        if !stdout.is_empty() && stdout.starts_with('{') {
+            return Ok(stdout.to_string());
+        }
+        return Err(format!("Engine exited with {}: {}", output.status, stderr));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 // ── CLI-аргументы для запуска из контекстного меню ───────────────────────────
 
 #[derive(serde::Serialize, Clone)]
@@ -160,6 +210,7 @@ pub fn run() {
             get_app_data_dir,
             reveal_in_explorer,
             find_free_output_path,
+            run_pdf_edit_engine,
         ])
         .setup(move |app| {
             let window = app.get_webview_window("main").unwrap();

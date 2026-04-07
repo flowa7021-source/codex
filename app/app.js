@@ -61,6 +61,7 @@ import { CbzAdapter } from './modules/cbz-adapter.js';
 import { EraseUIController, EraseTool } from './modules/erase-tool.js';
 import { initAutosave, triggerAutosave, markCleanExit, checkForRecovery, clearRecoveryData, startAutosaveTimer, stopAutosaveTimer, applyRecoveredSnapshot } from './modules/autosave.js';
 import { initAutoScroll, startAutoScroll, stopAutoScroll, toggleAutoScroll, setAutoScrollSpeed, isAutoScrolling } from './modules/auto-scroll.js';
+import { initInlineEditorDeps, openInlineEditPanel } from './modules/pdf-inline-editor.js';
 
 // ─── Wave 8: Decomposition Facade Modules ────────────────────────────────
 import * as AppPersistence from './modules/app-persistence.js';
@@ -747,6 +748,17 @@ window._bootstrapAdvancedTools = () => {
 initTabs({
   state, els, safeOn, openFile, renderCurrentPage, clearPageRenderCache, TabManager,
 });
+
+// ─── Inline PDF Text Editor (Python sidecar) ───────────────────────────────
+initInlineEditorDeps({
+  reloadPdfFromBytes,
+  renderCurrentPage,
+  setOcrStatus,
+  toastSuccess,
+  toastError,
+  pushDiagnosticEvent,
+});
+document.getElementById('openInlineTextEdit')?.addEventListener('click', openInlineEditPanel);
 
 // ─── Bookmark & Notes Controllers ────────────────────────────────────────
 initBookmarkController();
