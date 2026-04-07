@@ -6,6 +6,9 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import { safeTimeout } from './safe-timers.js';
+import { indexOcrPage } from './search-controller.js';
+import { saveOcrTextData, loadOcrTextData } from './workspace-controller.js';
+import { preprocessForOcr } from './ocr-preprocess.js';
 
 /** @type {any} */
 const _win = window;
@@ -174,7 +177,13 @@ function initBatchOcrUI(deps) {
             return canvas;
           },
           recognizeFn: async (canvas, lang) => {
-            const result = await recognizeWithBoxes(canvas, lang);
+            // Apply deskew + denoise preprocessing before Tesseract recognition
+            // so that skewed/noisy scans produce significantly better results (#14).
+            const preprocessed = preprocessForOcr(canvas, {
+              deskew: true, denoise: true, denoiseStrength: 1,
+              sharpen: false, binarize: false, removeBorders: true,
+            });
+            const result = await recognizeWithBoxes(preprocessed, lang);
             return { text: result.text, words: result.words, confidence: result.confidence };
           },
           totalPages: state.pageCount,
@@ -193,6 +202,26 @@ function initBatchOcrUI(deps) {
           ? `OCR отменён: обработано ${result.processed} из ${result.total} страниц`
           : `OCR завершён: ${result.processed} страниц`);
         pushDiagnosticEvent('batch-ocr.done', { processed: result.processed, total: result.total });
+
+        // Index OCR results into the search engine so Ctrl+F can find them (#9).
+        if (!result.cancelled && batchOcr.results.size > 0) {
+          try {
+            const existing = loadOcrTextData();
+            const pagesText = Array.isArray(existing?.pagesText)
+              ? [...existing.pagesText]
+              : new Array(state.pageCount).fill('');
+            // Ensure array is large enough
+            while (pagesText.length < state.pageCount) pagesText.push('');
+            for (const [pageNum, data] of batchOcr.results) {
+              pagesText[pageNum - 1] = data.text || '';
+              indexOcrPage(pageNum, data.text || '');
+            }
+            saveOcrTextData({ pagesText, updatedAt: new Date().toISOString() });
+          } catch (idxErr) {
+            console.warn('[batch-ocr] indexing error:', idxErr?.message);
+          }
+        }
+
         // Refresh current page to show text layer with OCR results
         renderCurrentPage();
       } catch (err) {

@@ -1429,6 +1429,127 @@
 
       </div>
 
+      <!-- ── Toolbox settings panel (toggled by ⚙ button) ─── -->
+      <div id="tbxSettingsPanel" class="tbx-settings-panel" hidden>
+        <div class="tbx-sp-header">
+          <span>Настройки конвертации</span>
+          <button id="tbxSettingsPanelClose" class="tbx-sp-close" aria-label="Закрыть настройки">✕</button>
+        </div>
+        <div class="tbx-sp-body">
+
+          <!-- OCR -->
+          <details class="tbx-sp-section" open>
+            <summary>🔍 OCR</summary>
+            <div class="tbx-sp-grid">
+              <label>DPI рендера</label>
+              <select id="tbxCfgDpi" data-setting="convDpi">
+                <option value="150">150 dpi (быстро)</option>
+                <option value="300">300 dpi</option>
+                <option value="400">400 dpi</option>
+                <option value="600" selected>600 dpi (макс.)</option>
+              </select>
+              <label>Движок (OEM)</label>
+              <select id="tbxCfgOem" data-setting="convOem">
+                <option value="1" selected>LSTM (рекомендовано)</option>
+                <option value="0">Legacy</option>
+                <option value="3">LSTM + Legacy</option>
+              </select>
+              <label>Сегментация (PSM)</label>
+              <select id="tbxCfgPsm" data-setting="convPsm">
+                <option value="3" selected>3 — Авто</option>
+                <option value="6">6 — Блок текста</option>
+                <option value="11">11 — Разреженный текст</option>
+                <option value="1">1 — Авто + OSD</option>
+              </select>
+              <label>Мин. уверенность</label>
+              <input id="tbxCfgConfidence" type="range" min="0" max="100" value="60" data-setting="convConfidence" />
+              <label></label><span id="tbxCfgConfidenceVal" class="tbx-sp-val">60%</span>
+              <label>Деcкью (выравнивание)</label>
+              <input id="tbxCfgDeskew" type="checkbox" checked data-setting="convDeskew" />
+              <label>Шумоподавление</label>
+              <select id="tbxCfgDenoise" data-setting="convDenoise">
+                <option value="0">Выкл.</option>
+                <option value="1" selected>Умеренное</option>
+                <option value="2">Сильное</option>
+              </select>
+              <label>Резкость</label>
+              <input id="tbxCfgSharpen" type="checkbox" data-setting="convSharpen" />
+            </div>
+          </details>
+
+          <!-- DOCX -->
+          <details class="tbx-sp-section">
+            <summary>📄 Word (DOCX)</summary>
+            <div class="tbx-sp-grid">
+              <label>Режим</label>
+              <select id="tbxCfgDocxMode" data-setting="convDocxMode">
+                <option value="editable" selected>Редактируемый</option>
+                <option value="text-only">Только текст</option>
+                <option value="layout">С макетом</option>
+              </select>
+              <label>Включать изображения</label>
+              <input id="tbxCfgDocxImages" type="checkbox" checked data-setting="convDocxImages" />
+              <label>Сохранять цвета</label>
+              <input id="tbxCfgDocxColors" type="checkbox" checked data-setting="convDocxColors" />
+              <label>Подсвечивать неточные слова</label>
+              <input id="tbxCfgDocxHighlight" type="checkbox" data-setting="convDocxHighlight" />
+            </div>
+          </details>
+
+          <!-- XLSX -->
+          <details class="tbx-sp-section">
+            <summary>📊 Excel (XLSX)</summary>
+            <div class="tbx-sp-grid">
+              <label>Профиль</label>
+              <select id="tbxCfgXlsxProfile" data-setting="convXlsxProfile">
+                <option value="auto" selected>Авто</option>
+                <option value="lines">По линиям</option>
+                <option value="text">По тексту</option>
+                <option value="spatial">Пространственный</option>
+              </select>
+              <label>Добавить формулы</label>
+              <input id="tbxCfgXlsxFormulas" type="checkbox" checked data-setting="convXlsxFormulas" />
+              <label>Авто-фильтр</label>
+              <input id="tbxCfgXlsxAutoFilter" type="checkbox" checked data-setting="convXlsxAutoFilter" />
+              <label>Закрепить заголовок</label>
+              <input id="tbxCfgXlsxFreeze" type="checkbox" checked data-setting="convXlsxFreeze" />
+            </div>
+          </details>
+
+          <!-- DjVu -->
+          <details class="tbx-sp-section">
+            <summary>📚 DjVu</summary>
+            <div class="tbx-sp-grid">
+              <label>Качество</label>
+              <select id="tbxCfgDjvuQuality" data-setting="convDjvuQuality">
+                <option value="compact">Компакт</option>
+                <option value="balanced" selected>Сбалансированное</option>
+                <option value="quality">Высокое</option>
+                <option value="archive">Архивное</option>
+              </select>
+              <label>Текстовый слой</label>
+              <input id="tbxCfgDjvuTextLayer" type="checkbox" checked data-setting="convDjvuTextLayer" />
+            </div>
+          </details>
+
+          <!-- Output -->
+          <details class="tbx-sp-section">
+            <summary>💾 Вывод</summary>
+            <div class="tbx-sp-grid">
+              <label>Если файл существует</label>
+              <select id="tbxCfgFileExists" data-setting="convFileExists">
+                <option value="ask" selected>Спросить</option>
+                <option value="overwrite">Перезаписать</option>
+                <option value="rename">Переименовать</option>
+              </select>
+              <label>Открыть папку после</label>
+              <input id="tbxCfgOpenFolder" type="checkbox" checked data-setting="convOpenFolder" />
+            </div>
+          </details>
+
+        </div>
+      </div>
+
       <div class="tbx-statusbar">
         <span id="tbxStatusText">Готово</span>
         <button id="tbxSettings" class="tbx-statusbar-btn">⚙ Настройки</button>

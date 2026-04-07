@@ -11,6 +11,7 @@ import { state, els as _els } from './state.js';
 import { ToolMode, toolStateMachine } from './tool-modes.js';
 import { enableInlineTextEditing, disableInlineTextEditing } from './render-controller.js';
 import { saveOrDownload } from './platform.js';
+import { cacheRenderedPage, getCachedPage } from './perf.js';
 
 /** @type {any} - Cast to any to allow input/canvas element property access */
 const els = _els;
@@ -293,7 +294,26 @@ export function normalizePageInput() {
 
 export async function goToPage() {
   if (!state.adapter) return;
-  state.currentPage = normalizePageInput();
+  const newPage = normalizePageInput();
+  const jumpSize = Math.abs(newPage - state.currentPage);
+
+  // For large jumps (>3 pages), fire a background preload of the target so it
+  // may already be cached by the time renderCurrentPage() runs (#3).
+  if (jumpSize > 3) {
+    const alreadyCached = getCachedPage(newPage);
+    if (!alreadyCached) {
+      const zoom = state.zoom;
+      const rotation = state.rotation;
+      const offscreen = document.createElement('canvas');
+      state.adapter.renderPage(newPage, offscreen, { zoom, rotation })
+        .then(() => {
+          cacheRenderedPage(newPage, offscreen, zoom, rotation);
+        })
+        .catch(() => { offscreen.width = 0; offscreen.height = 0; });
+    }
+  }
+
+  state.currentPage = newPage;
   await _deps.renderCurrentPage();
 }
 

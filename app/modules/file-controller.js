@@ -245,6 +245,21 @@ const _openFileImpl = async function openFileImpl(file) {
   _deps.invalidateAnnotationCaches();
   _deps.clearOcrRuntimeCaches('file-open');
   resetTesseractAvailability(); // allow Tesseract retry on each new file
+  // Reset all per-document state that is NOT handled above — these can persist
+  // stale data when switching tabs (bug #20) or opening a new file.
+  state.drawEnabled = false;
+  state.isDrawing = false;
+  state.currentStroke = null;
+  state.ocrRegionMode = false;
+  state.ocrSelection = null;
+  state.isSelectingOcr = false;
+  state.textEditMode = false;
+  state.searchResultCounts = {};
+  state.lastSearchQuery = '';
+  state.pageSkewAngles = {};
+  state.pageSkewPromises = {};
+  state.backgroundOcrRunning = false;
+  state.backgroundOcrToken = (state.backgroundOcrToken || 0) + 1; // invalidate pending scans
 
   const lower = file.name.toLowerCase();
 

@@ -11,6 +11,7 @@ import {
 } from './conversion-settings.js';
 import { toastError, toastSuccess } from './toast.js';
 import { BatchedProgress, CancellationManager } from './perf-utils.js';
+import { state } from './state.js';
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 
@@ -27,6 +28,8 @@ const _els = {
   toolGrid:       /** @type {HTMLElement|null}        */ (document.getElementById('tbxToolGrid')),
   statusText:     /** @type {HTMLElement|null}        */ (document.getElementById('tbxStatusText')),
   settingsBtn:    /** @type {HTMLButtonElement|null}  */ (document.getElementById('tbxSettings')),
+  settingsPanel:  /** @type {HTMLElement|null}        */ (document.getElementById('tbxSettingsPanel')),
+  settingsPanelClose: /** @type {HTMLButtonElement|null} */ (document.getElementById('tbxSettingsPanelClose')),
   sidebarOpenBtn: /** @type {HTMLButtonElement|null}  */ (document.getElementById('openToolboxOverlay')),
 };
 
@@ -488,6 +491,67 @@ async function _onTileClick(toolId) {
   setTimeout(() => _setTileState(toolId, 'idle'), 2000);
 }
 
+// ── Settings panel helpers ─────────────────────────────────────────────────────
+
+/** Populate settings panel controls from current state.settings. */
+function _loadSettingsPanel() {
+  const s = state.settings || {};
+  const panel = _els.settingsPanel;
+  if (!panel) return;
+
+  /** @param {string} id @param {any} val */
+  function _set(id, val) {
+    const el = /** @type {any} */ (panel.querySelector(`#${id}`));
+    if (!el) return;
+    if (el.type === 'checkbox') el.checked = val !== false && val !== 0 && val !== '0';
+    else el.value = String(val ?? el.value);
+  }
+
+  _set('tbxCfgDpi',            s.convDpi         ?? 600);
+  _set('tbxCfgOem',            s.convOem         ?? 1);
+  _set('tbxCfgPsm',            s.convPsm         ?? 3);
+  _set('tbxCfgConfidence',     s.convConfidence  ?? 60);
+  _set('tbxCfgDeskew',         s.convDeskew      !== false);
+  _set('tbxCfgDenoise',        s.convDenoise     ?? 1);
+  _set('tbxCfgSharpen',        !!s.convSharpen);
+  _set('tbxCfgDocxMode',       s.convDocxMode    || 'editable');
+  _set('tbxCfgDocxImages',     s.convDocxImages  !== false);
+  _set('tbxCfgDocxColors',     s.convDocxColors  !== false);
+  _set('tbxCfgDocxHighlight',  !!s.convDocxHighlight);
+  _set('tbxCfgXlsxProfile',    s.convXlsxProfile || 'auto');
+  _set('tbxCfgXlsxFormulas',   s.convXlsxFormulas !== false);
+  _set('tbxCfgXlsxAutoFilter', s.convXlsxAutoFilter !== false);
+  _set('tbxCfgXlsxFreeze',     s.convXlsxFreeze !== false);
+  _set('tbxCfgDjvuQuality',    s.convDjvuQuality || 'balanced');
+  _set('tbxCfgDjvuTextLayer',  s.convDjvuTextLayer !== false);
+  _set('tbxCfgFileExists',     s.convFileExists  || 'ask');
+  _set('tbxCfgOpenFolder',     s.convOpenFolder  !== false);
+
+  // Update range display value
+  const confEl = /** @type {HTMLInputElement|null} */ (panel.querySelector('#tbxCfgConfidence'));
+  const confVal = panel.querySelector('#tbxCfgConfidenceVal');
+  if (confEl && confVal) confVal.textContent = `${confEl.value}%`;
+}
+
+/** Write a changed setting from the panel into state.settings. */
+function _onSettingChange(e) {
+  const el = /** @type {any} */ (e.target);
+  const key = el?.dataset?.setting;
+  if (!key) return;
+  if (!state.settings) state.settings = {};
+  const val = el.type === 'checkbox' ? el.checked
+    : (el.type === 'range' || el.tagName === 'SELECT' && /^\d+$/.test(el.value))
+      ? Number(el.value)
+      : el.value;
+  state.settings[key] = val;
+
+  // Update range label
+  if (el.id === 'tbxCfgConfidence') {
+    const label = _els.settingsPanel?.querySelector('#tbxCfgConfidenceVal');
+    if (label) label.textContent = `${el.value}%`;
+  }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 
 export function initToolboxOverlay() {
@@ -504,13 +568,18 @@ export function initToolboxOverlay() {
   // Sidebar "Полный" button
   _els.sidebarOpenBtn?.addEventListener('click', openToolboxOverlay);
 
-  // Settings link in status bar
+  // Settings button — toggle inline settings panel
   _els.settingsBtn?.addEventListener('click', () => {
-    closeToolboxOverlay();
-    // Open settings modal (may be unavailable in some contexts)
-    const btn = /** @type {HTMLButtonElement|null} */ (document.getElementById('openSettingsModal'));
-    btn?.click();
+    if (!_els.settingsPanel) return;
+    _loadSettingsPanel();
+    _els.settingsPanel.hidden = false;
   });
+  _els.settingsPanelClose?.addEventListener('click', () => {
+    if (_els.settingsPanel) _els.settingsPanel.hidden = true;
+  });
+  // Live-sync all settings panel inputs to state.settings
+  _els.settingsPanel?.addEventListener('change', _onSettingChange);
+  _els.settingsPanel?.addEventListener('input', _onSettingChange);
 
   // File add/remove buttons
   _els.btnAdd?.addEventListener('click', () => _els.fileInput?.click());
