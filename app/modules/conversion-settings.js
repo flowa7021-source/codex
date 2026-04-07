@@ -35,11 +35,11 @@ export function getPreprocessOptions() {
 
 /**
  * Render DPI for OCR page rasterization.
- * @returns {number}  one of 150 / 300 / 400
+ * @returns {number}  one of 150 / 300 / 400 / 600
  */
 export function getOcrDpi() {
-  const dpi = Number(s().convDpi ?? 300);
-  return [150, 300, 400].includes(dpi) ? dpi : 300;
+  const dpi = Number(s().convDpi ?? 600);
+  return [150, 300, 400, 600].includes(dpi) ? dpi : 600;
 }
 
 // ── Tesseract OCR engine ──────────────────────────────────────────────────────

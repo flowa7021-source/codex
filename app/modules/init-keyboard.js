@@ -26,6 +26,7 @@ export function initKeyboard(deps) {
     showShortcutsHelp,
     blockEditor,
     renderCurrentPage,
+    undoRedoManager,
   } = deps;
 
   document.addEventListener('keydown', async (e) => {
@@ -68,11 +69,11 @@ export function initKeyboard(deps) {
       e.preventDefault();
       els.searchInput?.focus();
     }
-    if ((e.ctrlKey || e.metaKey) && key === 'z') {
+    if ((e.ctrlKey || e.metaKey) && key === 'z' && !e.shiftKey) {
       if (state.drawEnabled) {
         e.preventDefault();
         undoStroke();
-      } else if (state.textEditMode && !e.shiftKey) {
+      } else if (state.textEditMode) {
         e.preventDefault();
         const action = undoPageEdit();
         if (action && els.pageText) {
@@ -84,9 +85,14 @@ export function initKeyboard(deps) {
         if (blockEditor.undo(state.currentPage)) {
           renderCurrentPage();
         }
+      } else if (undoRedoManager?.canUndo?.()) {
+        e.preventDefault();
+        undoRedoManager.undo();
+        renderCurrentPage();
       }
     }
-    if ((e.ctrlKey || e.metaKey) && key === 'y') {
+    if (((e.ctrlKey || e.metaKey) && key === 'y') ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && key === 'z')) {
       if (state.textEditMode) {
         e.preventDefault();
         const action = redoPageEdit();
@@ -99,6 +105,10 @@ export function initKeyboard(deps) {
         if (blockEditor.redo(state.currentPage)) {
           renderCurrentPage();
         }
+      } else if (undoRedoManager?.canRedo?.()) {
+        e.preventDefault();
+        undoRedoManager.redo();
+        renderCurrentPage();
       }
     }
     // Ctrl+S — save current document with modifications

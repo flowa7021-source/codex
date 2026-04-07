@@ -24,7 +24,7 @@ import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
 
 const DEFAULT_TEXT_SIZE     = 60;
 const DEFAULT_TEXT_COLOR    = { r: 0.7, g: 0.7, b: 0.7 };
-const DEFAULT_TEXT_OPACITY  = 0.25;
+const DEFAULT_TEXT_OPACITY  = 0.30;   // +20 % brighter than original 0.25
 const DEFAULT_TEXT_ROTATION = -45;    // degrees
 
 /**
@@ -280,7 +280,7 @@ export class WatermarkEditor {
     opacityInput.type  = 'range';
     opacityInput.min   = '0';
     opacityInput.max   = '100';
-    opacityInput.value = '25';
+    opacityInput.value = '30';
     opacityInput.style.cssText = 'width:140px;cursor:pointer';
     opacityRow.appendChild(opacityInput);
     textFields.appendChild(opacityRow);

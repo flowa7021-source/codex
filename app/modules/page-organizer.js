@@ -141,21 +141,25 @@ export async function insertBlankPage(pdfBytes, insertAt, width = 595.28, height
  * Duplicate specific pages.
  * @param {Uint8Array} pdfBytes
  * @param {number[]} pageIndices - 0-based indices to duplicate
- * @returns {Promise<Uint8Array>} - PDF with duplicated pages appended after originals
+ * @returns {Promise<Uint8Array>} - PDF with duplicated pages inserted after originals
  */
 export async function duplicatePages(pdfBytes, pageIndices) {
-  const doc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
-  const copiedPages = await doc.copyPages(doc, pageIndices);
+  // Load two independent instances — copying pages from the same document
+  // produces blank pages because pdf-lib can't embed resources into itself.
+  const srcDoc  = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const destDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+
+  const copiedPages = await destDoc.copyPages(srcDoc, pageIndices);
 
   // Insert each duplicate right after its original (offset by previous insertions)
   let offset = 0;
   for (let i = 0; i < pageIndices.length; i++) {
     const insertPos = pageIndices[i] + 1 + offset;
-    doc.insertPage(insertPos, copiedPages[i]);
+    destDoc.insertPage(insertPos, copiedPages[i]);
     offset++;
   }
 
-  return doc.save();
+  return destDoc.save();
 }
 
 /**

@@ -260,6 +260,9 @@ export async function renderCurrentPage() {
     _updateAnnotationCanvas();
     _updatePageUI(Math.round(performance.now() - renderStartedAt));
     _schedulePreRender(page, zoom, rotation);
+    // Always rebuild text layer on page change — without this the previous
+    // page's OCR/PDF text layer would persist on the new page.
+    renderTextLayer(page, zoom, rotation).catch((err) => { console.warn('[render-controller] error:', err?.message); });
     try {
       performance.mark('render-page-end');
       performance.measure('render-page', 'render-page-start', 'render-page-end');

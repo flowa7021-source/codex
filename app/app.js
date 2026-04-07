@@ -34,7 +34,7 @@ import { toast, toastSuccess, toastError, toastWarning, toastInfo, toastProgress
 import { initTooltips } from './modules/tooltip.js';
 import { initContextMenu } from './modules/context-menu.js';
 import { initA11y } from './modules/a11y.js';
-import { bindUndoRedoKeys } from './modules/undo-redo.js';
+import { bindUndoRedoKeys, undoRedoManager } from './modules/undo-redo.js';
 import { VIEW_MODES, initViewModes, setViewMode, getCurrentMode } from './modules/view-modes.js';
 import { convertToHtml, downloadHtml } from './modules/html-converter.js';
 import { applyTextEdits, addTextBlock, findAndReplace, spellCheck, getAvailableFonts } from './modules/pdf-text-edit.js';
@@ -428,7 +428,7 @@ initKeyboard({
   navigateHistoryBack, navigateHistoryForward, addBookmark,
   setDrawMode, setOcrRegionMode, setOcrStatus,
   undoStroke, undoPageEdit, redoPageEdit, showShortcutsHelp,
-  closeSettingsModal, blockEditor, renderCurrentPage,
+  closeSettingsModal, blockEditor, renderCurrentPage, undoRedoManager,
   saveCurrentFile: async () => {
     if (!state.pdfBytes) return;
     const { saveOrDownload } = await import('./modules/platform.js');

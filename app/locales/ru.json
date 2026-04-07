@@ -247,6 +247,7 @@
   "ocr.batchOcr": "Пакетное OCR",
   "ocr.ocrFullDoc": "OCR всего документа",
   "ocr.cancel": "Отмена",
+  "ocr.saveWithTextLayer": "Сохранить с текстом",
   "ocr.detectScan": "Определить скан",
   "ocr.storage": "OCR хранилище",
   "ocr.refresh": "Обновить",
