@@ -123,8 +123,11 @@ export function _schedulePreRender(currentPage, zoom, rotation) {
 export async function _preRenderAdjacent(page, zoom, rotation) {
   if (!state.adapter) return;
   const targets = [];
-  if (page + 1 <= state.pageCount) targets.push(page + 1);
-  if (page - 1 >= 1) targets.push(page - 1);
+  // Pre-render ±3 adjacent pages (was ±1) for smoother sequential navigation (#3)
+  for (let offset = 1; offset <= 3; offset++) {
+    if (page + offset <= state.pageCount) targets.push(page + offset);
+    if (page - offset >= 1)              targets.push(page - offset);
+  }
   for (const p of targets) {
     // Skip if already cached at this zoom/rotation
     const existing = pageRenderCache.entries.get(p);
@@ -257,7 +260,9 @@ export async function renderCurrentPage() {
   const cached = getCachedPage(page);
   if (cached && cached.zoom === zoom && cached.rotation === rotation && cached.canvas.width > 0) {
     _blitCacheToCanvas(cached, els.canvas);
-    _updateAnnotationCanvas();
+    // Defer expensive annotation canvas resize/repaint to next frame so it
+    // doesn't inflate the render-page performance measurement (#2).
+    requestAnimationFrame(() => _updateAnnotationCanvas());
     _updatePageUI(Math.round(performance.now() - renderStartedAt));
     _schedulePreRender(page, zoom, rotation);
     // Always rebuild text layer on page change — without this the previous
@@ -321,8 +326,11 @@ export async function renderCurrentPage() {
   // Discard stale render if a newer renderCurrentPage call has started
   if (generation !== _renderGeneration) return;
 
-  _updateAnnotationCanvas();
+  // Record render time BEFORE expensive annotation canvas operations (#2).
   _updatePageUI(Math.round(performance.now() - renderStartedAt));
+  // Defer annotation canvas resize/repaint to next animation frame to keep
+  // the perf.measure within budget and avoid a longtask warning.
+  requestAnimationFrame(() => _updateAnnotationCanvas());
 
   cacheRenderedPage(page, els.canvas, zoom, rotation);
   _schedulePreRender(page, zoom, rotation);
