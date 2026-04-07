@@ -9,8 +9,8 @@ const MIN_COLUMN_GAP = 15;       // minimum gap between columns (pt)
 const SUPERSCRIPT_Y_THRESHOLD = 0.6;
 const SUPERSCRIPT_SIZE_THRESHOLD = 0.8;
 const LINE_Y_TOLERANCE = 0.3;    // fraction of avgFontSize
-const PARAGRAPH_GAP_FACTOR = 1.5; // gap > lineHeight * this → new paragraph
-const INDENT_THRESHOLD = 10;     // pt — significant indent change
+const PARAGRAPH_GAP_FACTOR = 2.0; // gap > lineHeight * this → new paragraph (was 1.5, false-splits were too common)
+const INDENT_THRESHOLD = 14;     // pt — significant indent change (was 10, too sensitive)
 const INTERSECTION_TOLERANCE = 2; // pt — for table grid detection
 const MIN_TABLE_ROWS = 2;
 const MIN_TABLE_COLS = 2;
@@ -174,11 +174,16 @@ function detectColumns(textRuns, pageWidth, _pageHeight) {
     }
   }
 
-  // Validate gaps
+  // Validate gaps — require both sides to have content AND cover substantial vertical area
   const validGaps = gaps.filter(gap => {
-    const leftCount = textRuns.filter(r => r.x + (r.width || 0) < gap.center).length;
-    const rightCount = textRuns.filter(r => r.x > gap.center).length;
-    return leftCount > textRuns.length * 0.15 && rightCount > textRuns.length * 0.15;
+    const leftRuns  = textRuns.filter(r => r.x + (r.width || 0) < gap.center);
+    const rightRuns = textRuns.filter(r => r.x > gap.center);
+    if (leftRuns.length < textRuns.length * 0.15) return false;
+    if (rightRuns.length < textRuns.length * 0.15) return false;
+    // Both columns must span a significant portion of page height
+    const span = (runs) => runs.length < 2 ? 0
+      : Math.max(...runs.map(r => r.y + (r.height || 0))) - Math.min(...runs.map(r => r.y));
+    return span(leftRuns) > 150 && span(rightRuns) > 150;
   });
 
   if (!validGaps.length) {
@@ -224,9 +229,10 @@ function detectParagraphs(lines, columns, margins) {
       const vertGap = curr.top - prev.bottom;
       const expectedLineHeight = prev.fontSize * 1.3;
       const hasBullet = detectBulletOrNumber(curr);
-      const fontSizeChange = Math.abs(curr.fontSize - prev.fontSize) > 2;
+      const fontSizeChange = Math.abs(curr.fontSize - prev.fontSize) > 3.5; // was 2 — too sensitive
       const indentChange = Math.abs(curr.indent - prev.indent) > INDENT_THRESHOLD &&
-                           Math.abs(curr.indent - currentPara.lines[0].indent) > INDENT_THRESHOLD;
+                           Math.abs(curr.indent - currentPara.lines[0].indent) > INDENT_THRESHOLD &&
+                           vertGap > expectedLineHeight * 0.8; // also require a visible gap
 
       const isNewParagraph = vertGap > expectedLineHeight * PARAGRAPH_GAP_FACTOR ||
                              hasBullet || fontSizeChange || indentChange;

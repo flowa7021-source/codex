@@ -147,8 +147,9 @@ function processTextItems(items, styles, viewport) {
     if (!item.transform) continue;
 
     const tx = item.transform;
-    // Font size from transform matrix
-    const fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
+    // Font size from transform matrix — handle rotated text gracefully
+    let fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
+    if (fontSize < 0.5 && item.height) fontSize = Math.abs(item.height);
     if (fontSize < 0.5) continue;
 
     // Position in PDF coords (origin bottom-left)
@@ -158,10 +159,10 @@ function processTextItems(items, styles, viewport) {
     // Convert to top-left origin
     const topY = pageHeight / scale - y;
 
-    // Font info from styles
+    // Font info from styles — normalize immediately so downstream always gets clean names
     const styleName = item.fontName || '';
     const styleInfo = styles?.[styleName] || {};
-    const rawFontFamily = styleInfo.fontFamily || styleName;
+    const rawFontFamily = normalizeFontName(styleInfo.fontFamily || styleName);
 
     const run = {
       text: item.str,
