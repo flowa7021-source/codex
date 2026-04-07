@@ -8,6 +8,25 @@ import {
   insertBlankPage, createOrganizerState, togglePageSelection,
   selectPageRange, computeReorderFromDrag,
 } from './page-organizer.js';
+import { ensurePdfJs } from './loaders.js';
+
+// ── Thumbnail render queue (max 3 concurrent) ────────────────────────────────
+let _thumbQueue = [];
+let _thumbActive = 0;
+const _THUMB_CONCURRENCY = 3;
+
+function _enqueueThumbnail(fn) {
+  _thumbQueue.push(fn);
+  _drainThumbQueue();
+}
+
+function _drainThumbQueue() {
+  while (_thumbActive < _THUMB_CONCURRENCY && _thumbQueue.length > 0) {
+    const fn = _thumbQueue.shift();
+    _thumbActive++;
+    Promise.resolve().then(fn).finally(() => { _thumbActive--; _drainThumbQueue(); });
+  }
+}
 
 /**
  * Initialize the Page Organizer UI.
@@ -51,6 +70,7 @@ export function initPageOrganizerUI(deps) {
 
   async function renderOrgGrid() {
     if (!orgState || !orgGrid) return;
+    _thumbQueue = [];  // cancel pending thumbnails from previous render
     orgGrid.innerHTML = '';
 
     for (let i = 0; i < orgNewOrder.length; i++) {
@@ -127,14 +147,18 @@ export function initPageOrganizerUI(deps) {
 
       orgGrid.appendChild(thumb);
 
-      // Render page thumbnail asynchronously
-      renderThumbnailAsync(canvas, pageNum).catch((err) => { console.warn('[page-organizer-ui] error:', err?.message); });
+      // Render page thumbnail asynchronously (throttled to _THUMB_CONCURRENCY)
+      const capturedBytes = orgPdfBytes;
+      _enqueueThumbnail(() => renderThumbnailAsync(canvas, pageNum, capturedBytes).catch((err) => { console.warn('[page-organizer-ui] error:', err?.message); }));
     }
   }
 
-  async function renderThumbnailAsync(canvas, pageNum) {
+  async function renderThumbnailAsync(canvas, pageNum, pdfBytes) {
     try {
-      const page = await state.adapter.pdfDoc.getPage(pageNum);
+      // Always render from the current orgPdfBytes so rotations/edits are reflected.
+      const pdfJs = await ensurePdfJs();
+      const doc = await pdfJs.getDocument({ data: pdfBytes.slice() }).promise;
+      const page = await doc.getPage(pageNum);
       const viewport = page.getViewport({ scale: 0.25 });
       canvas.width = viewport.width;
       canvas.height = viewport.height;
@@ -191,6 +215,11 @@ export function initPageOrganizerUI(deps) {
     if (!orgPdfBytes || !orgState?.selected.size) return;
     const indices = [...orgState.selected].map(i => orgNewOrder[i]);
     orgPdfBytes = await rotatePages(orgPdfBytes, indices, 90);
+    // Refresh page metadata — rotation is stored in the PDF, not in the UI state.
+    // Without this the thumbnail renders stale (unrotated) viewport dimensions.
+    const pages = await getPageInfoList(orgPdfBytes);
+    orgState = createOrganizerState(pages);
+    orgNewOrder = pages.map((_, i) => i);
     await renderOrgGrid();
   });
 

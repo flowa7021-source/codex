@@ -27,6 +27,7 @@ export class TabManager {
     this.onActivate = options.onActivate;
     this.onClose = options.onClose || (() => true);
     this.onDeactivate = options.onDeactivate || null;
+    this.onNoTabs = options.onNoTabs || null;
     this.maxTabs = options.maxTabs ?? 10;
 
     /** @type {Map<string, DocumentTab>} */
@@ -131,13 +132,17 @@ export class TabManager {
     tab.state = null;
     this.tabs.delete(id);
 
-    // If closing active tab, switch to adjacent
+    // If closing active tab, switch to adjacent or signal "no tabs"
     if (this.activeTabId === id) {
       const remaining = [...this.tabs.keys()];
       if (remaining.length > 0) {
         this.activate(remaining[remaining.length - 1]);
       } else {
         this.activeTabId = null;
+        // Notify the app that no documents are open so it can reset the UI
+        if (this.onNoTabs) {
+          Promise.resolve().then(() => this.onNoTabs()).catch(err => console.warn('[tab-manager] onNoTabs error:', err?.message));
+        }
       }
     }
 

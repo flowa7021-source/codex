@@ -251,7 +251,7 @@ export class SignaturePad {
     const insertBtn = document.createElement('button');
     insertBtn.textContent = 'Insert';
     insertBtn.style.cssText = 'padding:6px 14px;border:none;border-radius:4px;background:#0078d4;color:#fff;cursor:pointer;font-weight:600';
-    insertBtn.addEventListener('click', () => this._handleInsert());
+    insertBtn.addEventListener('click', () => this._handleInsert().catch(err => console.error('[signature] insert failed:', err)));
 
     btnRow.append(clearBtn, cancelBtn, insertBtn);
     panel.appendChild(btnRow);
@@ -423,7 +423,7 @@ export class SignaturePad {
     const position = this._deps.defaultPosition ?? { x: 72, y: 72 };
     const width    = this._deps.defaultWidth    ?? 150;
 
-    this._deps.onInsert?.({ pngBytes, position, width });
+    await this._deps.onInsert?.({ pngBytes, position, width });
     this.close();
   }
 }

@@ -23,6 +23,27 @@ export function initTabs(deps) {
   const tabBarEl = document.getElementById('tabBarTabs');
   const tabManager = new TabManager({
     tabBar: tabBarEl,
+    onNoTabs: async () => {
+      // All tabs closed — reset document state and show empty UI
+      state.file = null;
+      state.adapter = null;
+      state.docName = null;
+      state.pdfBytes = null;
+      state.currentPage = 1;
+      state.pageCount = 0;
+      state.searchResults = [];
+      state.searchCursor = -1;
+      state.outline = [];
+      state.visitTrail = [];
+      state.drawEnabled = false;
+      state.textEditMode = false;
+      if (els.pageInput) els.pageInput.value = '1';
+      if (els.searchStatus) els.searchStatus.textContent = '';
+      // Hide canvas, show welcome/drop zone
+      if (els.canvas) els.canvas.style.display = 'none';
+      const emptyState = document.getElementById('emptyState') || document.getElementById('dropZone');
+      if (emptyState) emptyState.style.display = '';
+    },
     onActivate: async (tab) => {
       if (!tab.bytes) return;
       // Clear the render cache — it contains pages from the previous tab's document.
