@@ -11,7 +11,7 @@
 // Communication: JS ↔ Tauri invoke("run_pdf_edit_engine") ↔ Python stdin/stdout
 // ═══════════════════════════════════════════════════════════════════════════════
 
-import { state, els } from './state.js';
+import { state } from './state.js';
 import { isTauri } from './platform.js';
 
 // ─── Late-bound dependencies ────────────────────────────────────────────────
