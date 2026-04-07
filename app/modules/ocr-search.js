@@ -1,6 +1,10 @@
 // @ts-check
 // ─── OCR Search Index ───────────────────────────────────────────────────────
 // Full-text search over OCR results with coordinate mapping.
+// Uses MiniSearch (BM25 + fuzzy) for efficient ranked page discovery,
+// then falls back to exact indexOf for precise context extraction.
+
+import MiniSearch from 'minisearch';
 
 /**
  * @typedef {object} SearchEntry
@@ -17,6 +21,12 @@ export class OcrSearchIndex {
     /** @type {string[]} */
     this.history = [];
     this.maxHistory = 100;
+    /** @type {MiniSearch} */
+    this._ms = new MiniSearch({
+      fields: ['text'],
+      storeFields: ['pageNum'],
+      searchOptions: { fuzzy: 0.2, prefix: true },
+    });
   }
 
   /**
@@ -40,6 +50,10 @@ export class OcrSearchIndex {
       fullText: text,
       words: wordEntries,
     });
+
+    // Keep MiniSearch in sync
+    try { this._ms.remove({ id: pageNum }); } catch (_e) { /* not yet indexed */ }
+    try { this._ms.add({ id: pageNum, pageNum, text }); } catch (_e) { /* ignore */ }
   }
 
   /**
@@ -48,6 +62,7 @@ export class OcrSearchIndex {
    */
   removePage(pageNum) {
     this.pages.delete(pageNum);
+    try { this._ms.remove({ id: pageNum }); } catch (_e) { /* ignore */ }
   }
 
   /**
@@ -69,7 +84,20 @@ export class OcrSearchIndex {
     // Add to history
     this._addToHistory(query);
 
-    for (const [pageNum, entry] of this.pages) {
+    // Use MiniSearch to get BM25-ranked candidate pages (fuzzy + prefix)
+    let rankedPageNums;
+    try {
+      const msResults = this._ms.search(searchQuery, { fuzzy: 0.2, prefix: true });
+      rankedPageNums = msResults.length > 0
+        ? msResults.map(r => r.pageNum)
+        : [...this.pages.keys()];
+    } catch (_e) {
+      rankedPageNums = [...this.pages.keys()];
+    }
+
+    for (const pageNum of rankedPageNums) {
+      const entry = this.pages.get(pageNum);
+      if (!entry) continue;
       const text = caseSensitive ? entry.fullText : entry.text;
       let startPos = 0;
 
@@ -164,6 +192,11 @@ export class OcrSearchIndex {
    */
   clear() {
     this.pages.clear();
+    this._ms = new MiniSearch({
+      fields: ['text'],
+      storeFields: ['pageNum'],
+      searchOptions: { fuzzy: 0.2, prefix: true },
+    });
   }
 
   /**

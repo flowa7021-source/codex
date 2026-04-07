@@ -12,6 +12,7 @@ import { yieldToMainThread } from './utils.js';
 import { recordPerfMetric } from './perf.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
 import { loadOcrTextData } from './workspace-controller.js';
+import MiniSearch from 'minisearch';
 
 // ─── Dependencies injected from app.js ─────────────────────────────────────
 // Some functions live in app.js and are not yet modularised. We accept them
@@ -39,6 +40,30 @@ export const ocrSearchIndex = {
   pages: new Map(),
   version: 0,
 };
+
+// ─── MiniSearch BM25 index ───────────────────────────────────────────────────
+// Provides fuzzy matching and BM25-ranked page relevance on top of the
+// coordinate-based ocrSearchIndex. Each page is a separate document.
+
+/** @type {MiniSearch} */
+let _miniSearch = _createMiniSearch();
+
+function _createMiniSearch() {
+  return new MiniSearch({
+    fields: ['text'],
+    storeFields: ['pageNum'],
+    searchOptions: {
+      boost: { text: 1 },
+      fuzzy: 0.2,        // up to 20% edit distance
+      prefix: true,      // prefix matching for partial words
+    },
+  });
+}
+
+/** Reset the MiniSearch index (call when a new document is opened). */
+export function resetMiniSearchIndex() {
+  _miniSearch = _createMiniSearch();
+}
 
 /** @param {any} pageNum @param {any} text @returns {any} */
 export function buildOcrSearchEntry(pageNum, text) {
@@ -70,6 +95,9 @@ export function indexOcrPage(pageNum, text) {
   if (entry) {
     ocrSearchIndex.pages.set(pageNum, entry);
     ocrSearchIndex.version++;
+    // Keep MiniSearch in sync — remove old entry first to allow re-indexing
+    try { _miniSearch.remove({ id: pageNum }); } catch (_e) { /* not yet indexed */ }
+    try { _miniSearch.add({ id: pageNum, pageNum, text }); } catch (_e) { /* ignore */ }
   }
 }
 
@@ -77,19 +105,42 @@ export function indexOcrPage(pageNum, text) {
 export function searchOcrIndex(query) {
   const norm = (query || '').trim().toLowerCase();
   if (!norm) return [];
+
+  // Use MiniSearch for BM25 ranking + fuzzy matching across all indexed pages
+  let miniResults;
+  try {
+    miniResults = _miniSearch.search(norm);
+  } catch (_e) {
+    miniResults = [];
+  }
+
+  // Build a relevance score map from MiniSearch (page → score)
+  /** @type {Map<number, number>} */
+  const scoreMap = new Map(miniResults.map(r => [r.pageNum, r.score]));
+
+  // Collect per-page word matches from the coordinate index
   const results = [];
-  for (const [pageNum, entry] of ocrSearchIndex.pages) {
+  const pagesToSearch = miniResults.length > 0
+    ? miniResults.map(r => r.pageNum)
+    : [...ocrSearchIndex.pages.keys()];
+
+  for (const pageNum of pagesToSearch) {
+    const entry = ocrSearchIndex.pages.get(pageNum);
+    if (!entry) continue;
     const matches = [];
     for (const w of entry.words) {
-      if (w.word.includes(norm)) {
+      if (w.word.includes(norm) || w.word.startsWith(norm)) {
         matches.push({ word: w.original, line: w.line, offset: w.offset });
       }
     }
     if (matches.length > 0) {
-      results.push({ page: pageNum, matchCount: matches.length, matches });
+      results.push({ page: pageNum, matchCount: matches.length, matches, score: scoreMap.get(pageNum) || 0 });
     }
   }
-  return results.sort((a, b) => a.page - b.page);
+
+  // Sort by BM25 score descending (pages with more/better matches first),
+  // with page number as tiebreaker for stable output.
+  return results.sort((a, b) => (b.score - a.score) || (a.page - b.page));
 }
 
 /** @returns {any} */

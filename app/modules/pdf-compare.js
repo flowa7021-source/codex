@@ -4,111 +4,51 @@
 // Text-based and visual comparison of two PDF documents
 // ═══════════════════════════════════════════════════════════════════════
 
+// Uses Myers' diff algorithm via the `diff` npm package (O(n·D) vs O(mn) LCS).
+// Handles documents of any size without a hard line limit.
+import { diffArrays, diffWords } from 'diff';
+
 /**
- * Compute a diff between two text arrays using a simple LCS-based approach.
- * Returns an array of {type: 'equal'|'add'|'remove', text: string, line: number}
+ * Compute a line-level diff between two text arrays using Myers' algorithm.
+ * Returns an array of {type: 'equal'|'add'|'remove', text: string}.
+ * @param {string[]} linesA
+ * @param {string[]} linesB
+ * @returns {Array<{type: string, text: string, lineA?: number, lineB?: number}>}
  */
 function computeLineDiff(linesA, linesB) {
-  const _result = [];
-  const m = linesA.length;
-  const n = linesB.length;
+  const changes = diffArrays(linesA, linesB);
+  /** @type {Array<{type: string, text: string, lineA?: number, lineB?: number}>} */
+  const result = [];
+  let lineA = 1;
+  let lineB = 1;
 
-  // Build LCS table (O(mn) — acceptable for documents up to ~5000 lines)
-  const maxSize = 5000;
-  if (m > maxSize || n > maxSize) {
-    // Fallback: simple sequential comparison for very large docs
-    return simpleDiff(linesA, linesB);
-  }
-
-  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
-
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (linesA[i - 1] === linesB[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1] + 1;
+  for (const change of changes) {
+    for (const text of change.value) {
+      if (change.added) {
+        result.push({ type: 'add', text, lineB: lineB++ });
+      } else if (change.removed) {
+        result.push({ type: 'remove', text, lineA: lineA++ });
       } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+        result.push({ type: 'equal', text, lineA: lineA++, lineB: lineB++ });
       }
     }
   }
 
-  // Backtrack to produce diff
-  let i = m, j = n;
-  const backtrack = [];
-
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && linesA[i - 1] === linesB[j - 1]) {
-      backtrack.push({ type: 'equal', text: linesA[i - 1], lineA: i, lineB: j });
-      i--; j--;
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      backtrack.push({ type: 'add', text: linesB[j - 1], lineB: j });
-      j--;
-    } else {
-      backtrack.push({ type: 'remove', text: linesA[i - 1], lineA: i });
-      i--;
-    }
-  }
-
-  return backtrack.reverse();
-}
-
-function simpleDiff(linesA, linesB) {
-  const result = [];
-  const maxLen = Math.max(linesA.length, linesB.length);
-
-  for (let i = 0; i < maxLen; i++) {
-    const a = linesA[i];
-    const b = linesB[i];
-
-    if (a === b) {
-      result.push({ type: 'equal', text: a, lineA: i + 1, lineB: i + 1 });
-    } else {
-      if (a !== undefined) result.push({ type: 'remove', text: a, lineA: i + 1 });
-      if (b !== undefined) result.push({ type: 'add', text: b, lineB: i + 1 });
-    }
-  }
   return result;
 }
 
 /**
- * Compute word-level diff for changed lines
+ * Compute word-level diff using Myers' algorithm.
+ * @param {string} textA
+ * @param {string} textB
+ * @returns {Array<{type: string, text: string}>}
  */
 function computeWordDiff(textA, textB) {
-  const wordsA = textA.split(/\s+/);
-  const wordsB = textB.split(/\s+/);
-
-  const _result = [];
-  const m = wordsA.length;
-  const n = wordsB.length;
-
-  if (m > 500 || n > 500) {
-    return [{ type: 'remove', text: textA }, { type: 'add', text: textB }];
-  }
-
-  const dp = Array.from({ length: m + 1 }, () => new Uint16Array(n + 1));
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (wordsA[i - 1] === wordsB[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
-      else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-    }
-  }
-
-  let i = m, j = n;
-  const backtrack = [];
-  while (i > 0 || j > 0) {
-    if (i > 0 && j > 0 && wordsA[i - 1] === wordsB[j - 1]) {
-      backtrack.push({ type: 'equal', text: wordsA[i - 1] });
-      i--; j--;
-    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
-      backtrack.push({ type: 'add', text: wordsB[j - 1] });
-      j--;
-    } else {
-      backtrack.push({ type: 'remove', text: wordsA[i - 1] });
-      i--;
-    }
-  }
-
-  return backtrack.reverse();
+  const changes = diffWords(textA, textB);
+  return changes.map(change => ({
+    type: change.added ? 'add' : change.removed ? 'remove' : 'equal',
+    text: change.value,
+  }));
 }
 
 export class PdfCompare {

@@ -28,20 +28,28 @@ import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 // Rendering backends
 // ---------------------------------------------------------------------------
 
+/** @type {any} */
+let _katexInstance = null;
+
 /**
- * Attempt to load KaTeX (bundled with the page or from CDN).
- * Returns null if unavailable.
+ * Load KaTeX from the bundled npm package.
+ * Also injects the KaTeX CSS into the page once (for correct rendering).
+ * Returns null in non-browser environments (Node.js/tests) where Image.onload
+ * never fires and the HTML→PNG pipeline would hang.
  */
 async function _tryKatex() {
-  // Already loaded globally?
-  if (typeof globalThis.katex !== 'undefined') return globalThis.katex;
-
-  // Try dynamic import (works if bundled)
+  // KaTeX rendering requires a real browser event loop (Image.onload, canvas)
+  if (typeof window === 'undefined') return null;
+  if (_katexInstance) return _katexInstance;
   try {
-    const mod = await import(/** @type {any} */ ('katex'));
-    return mod.default ?? mod;
-  } catch (_e) { /* not bundled */ }
-
+    // Load katex JS and CSS in parallel; CSS import is a no-op in non-Vite envs
+    const [mod] = await Promise.all([
+      import('katex'),
+      import('katex/dist/katex.min.css').catch(() => {}),
+    ]);
+    _katexInstance = mod.default ?? mod;
+    return _katexInstance;
+  } catch (_e) { /* not available in this environment */ }
   return null;
 }
 
@@ -116,13 +124,16 @@ async function _renderWithKatex(katex, latex, opts) {
   }
 
   // Wrap in a full HTML document for off-screen rendering via iframe or blob URL
+  // KaTeX CSS is bundled via `import 'katex/dist/katex.min.css'` at the top of this module.
+  // For the off-screen SVG foreignObject approach we inline the minimal display rules;
+  // full KaTeX styling is injected by Vite into the page's <head> automatically.
   const fullHtml = `<!DOCTYPE html>
 <html><head>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <style>
   body { margin:0; padding:${padding}px; background:${bg === 'transparent' ? 'transparent' : bg};
          font-size:${fontSize}px; color:${color}; display:inline-block; }
   .katex-display { margin:0; }
+  .katex { font-size:1em; }
 </style>
 </head><body>${html}</body></html>`;
 
