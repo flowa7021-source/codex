@@ -58,6 +58,7 @@ const _deps = {
   renderEtaStatus: () => {},
   startReadingTimer: () => {},
   recordCrashEvent: () => {},
+  onAfterOpen: (_adapter, _pageCount, _docName) => {},
   PDFAdapter: null,
   DjVuAdapter: null,
   DjVuNativeAdapter: null,
@@ -169,6 +170,7 @@ export async function reloadPdfFromBytes(bytes) {
     state.pdfLibDoc = null;
   }
   state.pageCount = state.adapter.getPageCount();
+  _deps.onAfterOpen(state.adapter, state.pageCount, state.docName || 'document');
 
   // Clamp current page
   if (state.currentPage > state.pageCount) {
@@ -366,6 +368,7 @@ const _openFileImpl = async function openFileImpl(file) {
   } catch (_e) { /* Performance API unavailable */ }
 
   state.pageCount = state.adapter.getPageCount();
+  _deps.onAfterOpen(state.adapter, state.pageCount, state.docName || 'document');
 
   // Auto-load PDF forms if adapter is PDF
   if (state.adapter?.type === 'pdf') {
