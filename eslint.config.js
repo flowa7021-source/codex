@@ -61,6 +61,8 @@ export default [
         BroadcastChannel: 'readonly',
         WebAssembly: 'readonly',
         cancelAnimationFrame: 'readonly',
+        cancelIdleCallback: 'readonly',
+        createImageBitmap: 'readonly',
         // Node.js globals (for build scripts/tests)
         process: 'readonly',
         __dirname: 'readonly',

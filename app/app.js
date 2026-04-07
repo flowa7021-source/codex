@@ -62,6 +62,7 @@ import { EraseUIController, EraseTool } from './modules/erase-tool.js';
 import { initAutosave, triggerAutosave, markCleanExit, checkForRecovery, clearRecoveryData, startAutosaveTimer, stopAutosaveTimer, applyRecoveredSnapshot } from './modules/autosave.js';
 import { initAutoScroll, startAutoScroll, stopAutoScroll, toggleAutoScroll, setAutoScrollSpeed, isAutoScrolling } from './modules/auto-scroll.js';
 import { initInlineEditorDeps, openInlineEditPanel } from './modules/pdf-inline-editor.js';
+import { thumbnailStore } from './modules/thumbnail-store.js';
 
 // ─── Wave 8: Decomposition Facade Modules ────────────────────────────────
 import * as AppPersistence from './modules/app-persistence.js';
@@ -586,7 +587,23 @@ initFileControllerDeps({
   loadPersistedEdits, renderCommentList, updateReadingTimeStatus, renderEtaStatus,
   startReadingTimer,
   PDFAdapter, DjVuAdapter, DjVuNativeAdapter, ImageAdapter, UnsupportedAdapter,
+  onAfterOpen: (adapter, pageCount, docName) => {
+    thumbnailStore.init(adapter, pageCount, docName);
+    // Urgently generate thumbnail for the first page, then background the rest
+    thumbnailStore.generateUrgent([1, 2, 3]).catch(() => {});
+    // After urgent pages, schedule background generation for all pages
+    setTimeout(() => thumbnailStore.scheduleBackground(state.currentPage || 1), 500);
+  },
 });
+// When a thumbnail becomes ready, re-render the current page if it has no
+// full-res cache yet — the thumbnail will appear immediately as a fallback.
+thumbnailStore.onThumbnailReady = (pageNum) => {
+  if (state.currentPage !== pageNum) return;
+  try {
+    const cached = getCachedPage(pageNum);
+    if (!cached) renderCurrentPage().catch(() => {});
+  } catch (_e) { /* non-critical */ }
+};
 initPdfOpsDeps({
   setOcrStatus, safeCreateObjectURL, pushDiagnosticEvent,
   mergePdfDocuments, splitPdfDocument, parsePageRangeLib,

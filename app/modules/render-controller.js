@@ -66,6 +66,9 @@ export {
   addStampToPage, openSignaturePad,
 };
 
+import { thumbnailStore } from './thumbnail-store.js';
+import { scrollVelocity } from './scroll-velocity.js';
+
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // Injected from app.js to avoid circular imports.
 const _deps = {
@@ -122,34 +125,54 @@ export function _schedulePreRender(currentPage, zoom, rotation) {
 
 export async function _preRenderAdjacent(page, zoom, rotation) {
   if (!state.adapter) return;
+
+  // Compute adaptive prefetch window based on scroll velocity
+  const speed = scrollVelocity.getSpeed();   // pages/sec
+  const dir   = scrollVelocity.getDirection(); // +1 or -1
+  const forwardBase = speed > 10 ? 12 : speed > 5 ? 7 : speed > 2 ? 5 : 3;
+  const fwdWindow  = dir >= 0 ? forwardBase      : Math.max(2, Math.floor(forwardBase / 2));
+  const bwdWindow  = dir <  0 ? forwardBase      : Math.max(2, Math.floor(forwardBase / 3));
+
   const targets = [];
-  // Pre-render ±3 adjacent pages (was ±1) for smoother sequential navigation (#3)
-  for (let offset = 1; offset <= 3; offset++) {
-    if (page + offset <= state.pageCount) targets.push(page + offset);
-    if (page - offset >= 1)              targets.push(page - offset);
+  for (let offset = 1; offset <= Math.max(fwdWindow, bwdWindow); offset++) {
+    if (offset <= fwdWindow && page + offset <= state.pageCount) targets.push(page + offset);
+    if (offset <= bwdWindow && page - offset >= 1)               targets.push(page - offset);
   }
+
   for (const p of targets) {
-    // Skip if already cached at this zoom/rotation
     const existing = pageRenderCache.entries.get(p);
     if (existing && existing.zoom === zoom && existing.rotation === rotation) continue;
-    // Don't pre-render if user has already navigated away
     if (state.currentPage !== page) return;
     try {
       const offscreen = document.createElement('canvas');
       await state.adapter.renderPage(p, offscreen, { zoom, rotation });
-      // Verify user didn't navigate away during async render
       if (state.currentPage !== page) { offscreen.width = 0; offscreen.height = 0; return; }
       cacheRenderedPage(p, offscreen, zoom, rotation);
       offscreen.width = 0;
       offscreen.height = 0;
     } catch (err) {
       console.warn('[render-controller] error:', err?.message);
-      // Pre-render failures are non-critical; silently ignore
     }
   }
 }
 
 // ─── Helper: blit a cached entry onto the main canvas ───────────────────────
+
+/**
+ * Blit an ImageBitmap (thumbnail) onto the main canvas.
+ * Resizes canvas to match the thumbnail aspect ratio at a reasonable display size.
+ * @param {ImageBitmap} bmp
+ * @param {HTMLCanvasElement} canvas
+ */
+export function _blitThumbToCanvas(bmp, canvas) {
+  // Use the thumbnail as a blurry placeholder — keep existing canvas size if set,
+  // otherwise size the canvas to thumbnail dimensions
+  const displayW = canvas.width  > 0 ? canvas.width  : bmp.width;
+  const displayH = canvas.height > 0 ? canvas.height : bmp.height;
+  const ctx = canvas.getContext('2d', { alpha: false });
+  if (!ctx) return;
+  ctx.drawImage(bmp, 0, 0, displayW, displayH);
+}
 
 export function _blitCacheToCanvas(entry, canvas) {
   canvas.width = entry.canvas.width;
@@ -234,6 +257,7 @@ export async function renderCurrentPage() {
   const generation = ++_renderGeneration;
   const renderStartedAt = performance.now();
   const page = state.currentPage;
+  scrollVelocity.record(page);
   const zoom = state.zoom;
   const rotation = state.rotation;
 
@@ -281,6 +305,16 @@ export async function renderCurrentPage() {
   if (cached && cached.canvas.width > 0 && generation === _renderGeneration
       && cached.zoom === zoom && cached.rotation === rotation) {
     _blitCacheToCanvas(cached, els.canvas);
+  }
+
+  // ── Thumbnail fallback: show low-res thumbnail immediately while rendering ──
+  // This ensures the user sees SOMETHING (<16 ms) instead of a blank canvas,
+  // even for cold GoToPage jumps where no full-res cache exists.
+  if (!cached) {
+    const thumb = thumbnailStore.get(page);
+    if (thumb && els.canvas.width > 0) {
+      _blitThumbToCanvas(thumb, els.canvas);
+    }
   }
 
   // ── Show skeleton loading placeholder while rendering ──
