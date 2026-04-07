@@ -602,7 +602,7 @@ thumbnailStore.onThumbnailReady = (pageNum) => {
   try {
     const cached = getCachedPage(pageNum);
     if (!cached) renderCurrentPage().catch(() => {});
-  } catch (_) {}
+  } catch (_e) { /* non-critical */ }
 };
 initPdfOpsDeps({
   setOcrStatus, safeCreateObjectURL, pushDiagnosticEvent,

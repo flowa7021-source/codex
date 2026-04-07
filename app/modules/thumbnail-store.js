@@ -88,7 +88,7 @@ export class ThumbnailStore {
         this._memory.set(pageNum, bmp);
         return bmp;
       }
-    } catch (_) {}
+    } catch (_e) { /* disk cache miss is non-critical */ }
     return this._generate(pageNum);
   }
 
@@ -149,7 +149,7 @@ export class ThumbnailStore {
             this.onThumbnailReady?.(pageNum);
             loaded = true;
           }
-        } catch (_) {}
+        } catch (_e) { /* disk cache miss is non-critical */ }
         if (!loaded) {
           await this._generate(pageNum);
         }
@@ -189,12 +189,12 @@ export class ThumbnailStore {
         // Save to disk cache asynchronously (best-effort)
         offscreen.toBlob(async (blob) => {
           if (!blob) return;
-          try { await cachePageRender(this._docKey, pageNum, blob, { zoom: scale }); } catch (_) {}
+          try { await cachePageRender(this._docKey, pageNum, blob, { zoom: scale }); } catch (_e) { /* non-critical */ }
         }, 'image/jpeg', THUMB_QUALITY);
         // Release the offscreen canvas
         offscreen.width = 0; offscreen.height = 0;
       }
-    } catch (_) {
+    } catch (_e) {
       // Thumbnail generation failure is non-critical
     } finally {
       this._generating.delete(pageNum);
