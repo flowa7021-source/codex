@@ -54,9 +54,12 @@ async function callEngine(cmd) {
 
 async function writeTempPdf(suffix = '') {
   const { invoke } = await import('@tauri-apps/api/core');
+  /** @type {string} */
   const dir = await invoke('get_app_data_dir');
   const name = `_nova_edit_${Date.now()}${suffix}.pdf`;
-  const path = `${dir}/${name}`;
+  // Use the same separator as the returned dir to avoid mixed-separator paths on Windows
+  const sep = dir.includes('\\') ? '\\' : '/';
+  const path = `${dir}${sep}${name}`;
   const bytes = state.pdfBytes;
   if (!bytes) throw new Error('No PDF loaded');
   await invoke('write_file_bytes', { path, data: Array.from(bytes) });
@@ -72,10 +75,10 @@ async function readTempPdf(path) {
 
 async function deleteTempFile(path) {
   try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    // Best-effort cleanup — no error if it fails
-    await invoke('write_file_bytes', { path, data: [] });
-  } catch (_e) { /* non-critical */ }
+    // Use Tauri fs plugin to actually remove the temp file
+    const { remove } = await import('@tauri-apps/plugin-fs');
+    await remove(path);
+  } catch (_e) { /* non-critical — best-effort cleanup */ }
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────

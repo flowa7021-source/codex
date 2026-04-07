@@ -101,6 +101,31 @@ async fn find_free_output_path(path: String) -> String {
 
 // ── Python sidecar: inline PDF text editor engine ───────────────────────────
 
+/// Find the Python interpreter command for the current platform.
+/// Windows ships without `python3`; tries "python" then "py" launcher.
+fn find_python_command() -> String {
+    #[cfg(target_os = "windows")]
+    {
+        // Try "python" first (most common in PATH on Windows)
+        if std::process::Command::new("python")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+        {
+            return "python".to_string();
+        }
+        // Fall back to the Python Launcher ("py")
+        "py".to_string()
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        "python3".to_string()
+    }
+}
+
 /// Run the Python PDF text editor engine with a JSON command on stdin.
 /// Returns the JSON result from the engine's stdout.
 #[tauri::command]
@@ -109,20 +134,29 @@ async fn run_pdf_edit_engine(app: tauri::AppHandle, json_input: String) -> Resul
         .map_err(|e| format!("Failed to resolve resource dir: {}", e))?;
     let script_path = resource_dir.join("scripts").join("pdf_edit_engine.py");
 
-    // Fall back to project-relative path in development
+    // Fall back to compile-time project root in development
     let script = if script_path.exists() {
         script_path
     } else {
-        std::path::PathBuf::from("scripts/pdf_edit_engine.py")
+        // CARGO_MANIFEST_DIR points to src-tauri/, so go one level up
+        let dev_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("scripts")
+            .join("pdf_edit_engine.py");
+        dev_path
     };
 
-    let mut child = std::process::Command::new("python3")
+    // On Windows: try "python", then "py"; on Unix: use "python3"
+    let python_cmd = find_python_command();
+
+    let mut child = std::process::Command::new(&python_cmd)
         .arg(&script)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Failed to spawn python3: {}", e))?;
+        .map_err(|e| format!("Failed to spawn '{}': {}", python_cmd, e))?;
 
     // Write JSON command to stdin
     if let Some(ref mut stdin) = child.stdin {
