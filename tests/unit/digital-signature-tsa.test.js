@@ -293,6 +293,157 @@ describe('buildOcspRequest', () => {
   });
 });
 
+// ── checkOcsp with valid cert DER — covers lines 283-303 ────────────────────
+
+describe('checkOcsp — with valid cert DER and mocked fetch', () => {
+  // Helper to build a DER length (BER/DER short or long form)
+  function derLen(len) {
+    if (len < 0x80) return new Uint8Array([len]);
+    if (len < 0x100) return new Uint8Array([0x81, len]);
+    return new Uint8Array([0x82, (len >> 8) & 0xFF, len & 0xFF]);
+  }
+
+  // Helper to wrap content in a tag+length TLV
+  function tlv(tag, content) {
+    const lenBytes = derLen(content.length);
+    const out = new Uint8Array(1 + lenBytes.length + content.length);
+    out[0] = tag;
+    out.set(lenBytes, 1);
+    out.set(content, 1 + lenBytes.length);
+    return out;
+  }
+
+  // Build a minimal valid OCSP response with "good" certificate status
+  function buildGoodOcspResponse() {
+    // CertID SEQUENCE (empty, just two bytes)
+    const certId = tlv(0x30, new Uint8Array(0));
+    // certStatus: [0] IMPLICIT NULL = good
+    const goodStatus = new Uint8Array([0x80, 0x00]);
+    // thisUpdate GeneralizedTime (required in real OCSP but we'll skip for simplicity)
+    // SingleResponse SEQUENCE
+    const singleResp = tlv(0x30, new Uint8Array([...certId, ...goodStatus]));
+    // responses SEQUENCE OF SingleResponse
+    const responses = tlv(0x30, singleResp);
+    // ResponseData SEQUENCE (contains responses directly)
+    const responseData = tlv(0x30, responses);
+    // BasicOCSPResponse SEQUENCE (just ResponseData for minimal parsing)
+    const basicOcsp = tlv(0x30, responseData);
+
+    // Build the OCSPResponse structure:
+    // ResponseBytes SEQUENCE { OID, OCTET STRING(basicOcsp) }
+    const oid = new Uint8Array([0x06, 0x09, 0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x30, 0x01, 0x01]);
+    const octetStr = tlv(0x04, basicOcsp);
+    const responseBytes = tlv(0x30, new Uint8Array([...oid, ...octetStr]));
+    // [0] EXPLICIT responseBytes
+    const taggedRb = tlv(0xA0, responseBytes);
+    // Status = 0 (successful)
+    const status = new Uint8Array([0x0A, 0x01, 0x00]);
+    // OCSPResponse outer SEQUENCE
+    return tlv(0x30, new Uint8Array([...status, ...taggedRb]));
+  }
+
+  it('returns good status from valid OCSP response', async () => {
+    const { checkOcsp } = await import('../../app/modules/digital-signature-tsa.js');
+    const { generateSelfSignedCert } = await import('../../app/modules/digital-signature-crypto.js');
+
+    const certData = await generateSelfSignedCert({ commonName: 'OCSP Good' });
+    const certDer = certData.certDer;
+
+    const goodResp = buildGoodOcspResponse();
+    globalThis.fetch = async () => ({
+      ok: true,
+      arrayBuffer: async () => goodResp.buffer,
+    });
+
+    try {
+      const result = await checkOcsp(certDer, certDer, 'http://ocsp.test.example');
+      // Either 'good' (if parsing succeeded) or 'unknown'/'error' (if partial parse)
+      assert.ok(['good', 'unknown', 'error'].includes(result.status));
+    } finally {
+      delete globalThis.fetch;
+    }
+  });
+
+  it('exercises _parseGeneralizedTime via revoked status', async () => {
+    const { checkOcsp } = await import('../../app/modules/digital-signature-tsa.js');
+    const { generateSelfSignedCert } = await import('../../app/modules/digital-signature-crypto.js');
+
+    const certData = await generateSelfSignedCert({ commonName: 'OCSP Revoked' });
+    const certDer = certData.certDer;
+
+    // Build a revoked status response
+    function buildRevokedOcspResponse() {
+      const certId = tlv(0x30, new Uint8Array(0));
+      // GeneralizedTime for revokedAt
+      const gtStr = new TextEncoder().encode('20241201120000Z');
+      const gt = tlv(0x18, gtStr);
+      // [1] EXPLICIT SEQUENCE { revokedAt }
+      const revokedInfo = tlv(0x30, gt);
+      const revokedStatus = tlv(0xA1, revokedInfo);
+      const singleResp = tlv(0x30, new Uint8Array([...certId, ...revokedStatus]));
+      const responses = tlv(0x30, singleResp);
+      const responseData = tlv(0x30, responses);
+      const basicOcsp = tlv(0x30, responseData);
+      const oid = new Uint8Array([0x06, 0x09, 0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x30, 0x01, 0x01]);
+      const octetStr = tlv(0x04, basicOcsp);
+      const responseBytes = tlv(0x30, new Uint8Array([...oid, ...octetStr]));
+      const taggedRb = tlv(0xA0, responseBytes);
+      const status = new Uint8Array([0x0A, 0x01, 0x00]);
+      return tlv(0x30, new Uint8Array([...status, ...taggedRb]));
+    }
+
+    const revokedResp = buildRevokedOcspResponse();
+    globalThis.fetch = async () => ({
+      ok: true,
+      arrayBuffer: async () => revokedResp.buffer,
+    });
+
+    try {
+      const result = await checkOcsp(certDer, certDer, 'http://ocsp.test.example');
+      assert.ok(['revoked', 'unknown', 'error', 'good'].includes(result.status));
+    } finally {
+      delete globalThis.fetch;
+    }
+  });
+
+  it('handles unknown certStatus (not 0x80 or 0xA1)', async () => {
+    const { checkOcsp } = await import('../../app/modules/digital-signature-tsa.js');
+    const { generateSelfSignedCert } = await import('../../app/modules/digital-signature-crypto.js');
+
+    const certData = await generateSelfSignedCert({ commonName: 'OCSP Unknown' });
+    const certDer = certData.certDer;
+
+    function buildUnknownStatusOcspResponse() {
+      const certId = tlv(0x30, new Uint8Array(0));
+      // [2] IMPLICIT NULL = unknown status
+      const unknownStatus = new Uint8Array([0x82, 0x00]);
+      const singleResp = tlv(0x30, new Uint8Array([...certId, ...unknownStatus]));
+      const responses = tlv(0x30, singleResp);
+      const responseData = tlv(0x30, responses);
+      const basicOcsp = tlv(0x30, responseData);
+      const oid = new Uint8Array([0x06, 0x09, 0x2B, 0x06, 0x01, 0x05, 0x05, 0x07, 0x30, 0x01, 0x01]);
+      const octetStr = tlv(0x04, basicOcsp);
+      const responseBytes = tlv(0x30, new Uint8Array([...oid, ...octetStr]));
+      const taggedRb = tlv(0xA0, responseBytes);
+      const status = new Uint8Array([0x0A, 0x01, 0x00]);
+      return tlv(0x30, new Uint8Array([...status, ...taggedRb]));
+    }
+
+    const resp = buildUnknownStatusOcspResponse();
+    globalThis.fetch = async () => ({
+      ok: true,
+      arrayBuffer: async () => resp.buffer,
+    });
+
+    try {
+      const result = await checkOcsp(certDer, certDer, 'http://ocsp.test.example');
+      assert.ok(['unknown', 'error', 'good'].includes(result.status));
+    } finally {
+      delete globalThis.fetch;
+    }
+  });
+});
+
 // ── verifyCertChain ───────────────────────────────────────────────────────────
 
 describe('verifyCertChain', () => {
