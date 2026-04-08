@@ -11,6 +11,7 @@ const {
   getRecentErrors,
   initCrashTelemetry,
   crashTelemetry,
+  collectErrorCauseChain,
 } = await import('../../app/modules/crash-telemetry.js');
 
 describe('crash-telemetry', () => {
@@ -117,5 +118,63 @@ describe('crash-telemetry', () => {
 
   it('initCrashTelemetry does not throw', () => {
     assert.doesNotThrow(() => initCrashTelemetry());
+  });
+});
+
+describe('collectErrorCauseChain', () => {
+  it('returns single-entry chain for simple Error', () => {
+    const chain = collectErrorCauseChain(new Error('top'));
+    assert.deepStrictEqual(chain, ['top']);
+  });
+
+  it('follows nested cause chain', () => {
+    const root = new Error('root');
+    const mid = new Error('mid', { cause: root });
+    const top = new Error('top', { cause: mid });
+    const chain = collectErrorCauseChain(top);
+    assert.deepStrictEqual(chain, ['top', 'mid', 'root']);
+  });
+
+  it('limits depth to 5 levels', () => {
+    let err = new Error('e0');
+    for (let i = 1; i <= 10; i++) err = new Error(`e${i}`, { cause: err });
+    const chain = collectErrorCauseChain(err);
+    assert.equal(chain.length, 5);
+  });
+
+  it('handles non-Error cause (string)', () => {
+    const err = new Error('top', { cause: 'string-cause' });
+    const chain = collectErrorCauseChain(err);
+    assert.deepStrictEqual(chain, ['top', 'string-cause']);
+  });
+
+  it('handles null input', () => {
+    const chain = collectErrorCauseChain(null);
+    assert.deepStrictEqual(chain, []);
+  });
+
+  it('handles non-Error input', () => {
+    const chain = collectErrorCauseChain('just a string');
+    assert.deepStrictEqual(chain, ['just a string']);
+  });
+});
+
+describe('recordCrashEvent with cause', () => {
+  beforeEach(() => {
+    crashTelemetry.errors.length = 0;
+    crashTelemetry.crashes.length = 0;
+    crashTelemetry.totalErrors = 0;
+  });
+
+  it('records causeChain when cause is provided', () => {
+    const root = new Error('root cause');
+    const wrapper = new Error('wrapper', { cause: root });
+    recordCrashEvent('error', 'wrapped error', 'test', { cause: wrapper });
+    assert.deepStrictEqual(crashTelemetry.errors[0].causeChain, ['wrapper', 'root cause']);
+  });
+
+  it('records empty causeChain when no cause provided', () => {
+    recordCrashEvent('error', 'plain error', 'test');
+    assert.deepStrictEqual(crashTelemetry.errors[0].causeChain, []);
   });
 });

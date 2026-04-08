@@ -19,18 +19,42 @@ const telemetry = {
 };
 
 /**
+ * Collect the Error.cause chain into an array of messages (max 5 deep).
+ * @param {unknown} err
+ * @returns {string[]}
+ */
+export function collectErrorCauseChain(err) {
+  const chain = [];
+  let current = err;
+  let depth = 0;
+  while (current && depth < 5) {
+    if (current instanceof Error) {
+      chain.push(current.message);
+      current = current.cause;
+    } else {
+      chain.push(String(current));
+      break;
+    }
+    depth++;
+  }
+  return chain;
+}
+
+/**
  * Record a crash or error event.
  * @param {string} type - 'crash' | 'fatal' | 'error' | 'uncaught' | etc.
  * @param {string} message
  * @param {string} [context]
- * @param {{ page?: number, docName?: string }} [extra]
+ * @param {{ page?: number, docName?: string, cause?: unknown }} [extra]
  */
 export function recordCrashEvent(type, message, context, extra = {}) {
+  const causeChain = extra.cause ? collectErrorCauseChain(extra.cause) : [];
   const event = {
     ts: new Date().toISOString(),
     type,
     message: String(message || '').slice(0, 500),
     context: String(context || ''),
+    causeChain,
     uptimeMs: Math.round(performance.now()),
     page: extra.page,
     docName: extra.docName,

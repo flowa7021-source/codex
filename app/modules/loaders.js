@@ -54,7 +54,7 @@ export async function ensurePdfJs() {
     } catch (err) {
       console.warn('[loaders] error:', err?.message);
       pdfLoadPromise = null;
-      throw new Error('PDF.js недоступен в локальном runtime пакете');
+      throw new Error('PDF.js недоступен в локальном runtime пакете', { cause: err });
     }
   })();
 

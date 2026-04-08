@@ -188,11 +188,24 @@ describe('CbzAdapter', () => {
     const buf = makeZip({ 'img1.png': new Uint8Array([1]) });
     const adapter = new CbzAdapter();
     await adapter.load(buf);
-    // Default Image mock fires onerror → should reject
-    await assert.rejects(
-      () => adapter._getImage(1),
-      /Failed to load image/,
-    );
+    // Override Image mock to fire onerror for this test
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class MockImage {
+      constructor() { this._src = ''; this.onload = null; this.onerror = null; }
+      set src(v) {
+        this._src = v;
+        queueMicrotask(() => { if (this.onerror) this.onerror(new Error('load failed')); });
+      }
+      get src() { return this._src; }
+    };
+    try {
+      await assert.rejects(
+        () => adapter._getImage(1),
+        /Failed to load image/,
+      );
+    } finally {
+      globalThis.Image = OrigImage;
+    }
   });
 
   it('destroy revokes blob URLs for cached images', async () => {

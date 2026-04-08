@@ -114,6 +114,11 @@ export class WorkerPool {
     this.activeTasks.clear();
   }
 
+  /** Symbol.dispose support — allows `using pool = new WorkerPool(...)`. */
+  [Symbol.dispose]() {
+    this.destroy();
+  }
+
   /** @private */
   _dispatch() {
     if (this.queue.length === 0) return;
