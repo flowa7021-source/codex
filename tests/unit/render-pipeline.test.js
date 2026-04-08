@@ -338,6 +338,131 @@ describe('renderPageProgressive', () => {
     assert.ok(result);
     assert.equal(completeCalled, true);
   });
+
+  it('takes DjVu worker path and registers onPageReady callback', async () => {
+    const ctx = makeCtx();
+    const adapter = {
+      mode: 'native-worker',
+      type: 'djvu',
+      onPageReady: null,
+      renderPage: async (_page, canvas) => {
+        canvas.width = 200;
+        canvas.height = 300;
+      },
+    };
+
+    const result = await renderPageProgressive(
+      { page: 1, zoom: 1, rotation: 0, adapter },
+      ctx,
+    );
+    assert.ok(result.width >= 0);
+    assert.ok(result.height >= 0);
+    // adapter.onPageReady should be set by the progressive path
+    assert.equal(typeof adapter.onPageReady, 'function');
+  });
+
+  it('DjVu worker onPageReady callback triggers high-res render', async () => {
+    const ctx = makeCtx();
+    let highResRendered = false;
+
+    let resolveHighRes;
+    const highResPromise = new Promise(r => { resolveHighRes = r; });
+
+    const adapter = {
+      mode: 'native-worker',
+      type: 'djvu',
+      onPageReady: null,
+      renderPage: async (_page, canvas) => {
+        canvas.width = 200;
+        canvas.height = 300;
+        highResRendered = true;
+      },
+    };
+
+    await renderPageProgressive(
+      { page: 1, zoom: 1, rotation: 0, adapter },
+      ctx,
+      { onHighRes: () => resolveHighRes() },
+    );
+
+    assert.equal(typeof adapter.onPageReady, 'function');
+    adapter.onPageReady(1); // trigger high-res render
+    await highResPromise;
+    assert.equal(highResRendered, true);
+  });
+
+  it('DjVu worker onPageReady skips render for wrong page', async () => {
+    const ctx = makeCtx();
+    let renderCalled = 0;
+    const adapter = {
+      mode: 'native-worker',
+      type: 'djvu',
+      onPageReady: null,
+      renderPage: async (_page, canvas) => {
+        canvas.width = 200;
+        canvas.height = 300;
+        renderCalled++;
+      },
+    };
+
+    await renderPageProgressive(
+      { page: 1, zoom: 1, rotation: 0, adapter },
+      ctx,
+    );
+    const countAfterPhase1 = renderCalled;
+    const callback = adapter.onPageReady;
+    callback(99); // wrong page → should NOT trigger additional render
+    // Give microtasks a chance to run
+    await new Promise(r => queueMicrotask(r));
+    assert.equal(renderCalled, countAfterPhase1); // no extra renders
+  });
+
+  it('invokes onFirstPaint callback on DjVu worker path', async () => {
+    const ctx = makeCtx();
+    let firstPaintCalled = false;
+    const adapter = {
+      mode: 'native-worker',
+      type: 'djvu',
+      onPageReady: null,
+      renderPage: async (_page, canvas) => {
+        canvas.width = 200;
+        canvas.height = 300;
+      },
+    };
+
+    await renderPageProgressive(
+      { page: 1, zoom: 1, rotation: 0, adapter },
+      ctx,
+      { onFirstPaint: () => { firstPaintCalled = true; } },
+    );
+    assert.equal(firstPaintCalled, true);
+  });
+
+  it('invokes onTextLayer and onAnnotations callbacks on DjVu path', async () => {
+    let textLayerCalled = false;
+    let annotCalled = false;
+    const ctx = makeCtx();
+    const adapter = {
+      mode: 'native-worker',
+      type: 'djvu',
+      onPageReady: null,
+      renderPage: async (_page, canvas) => {
+        canvas.width = 200;
+        canvas.height = 300;
+      },
+    };
+
+    await renderPageProgressive(
+      { page: 1, zoom: 1, rotation: 0, adapter },
+      ctx,
+      {
+        onTextLayer: () => { textLayerCalled = true; },
+        onAnnotations: () => { annotCalled = true; },
+      },
+    );
+    assert.equal(textLayerCalled, true);
+    assert.equal(annotCalled, true);
+  });
 });
 
 // ── Cache eviction ──────────────────────────────────────────────────────────

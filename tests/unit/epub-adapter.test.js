@@ -169,6 +169,46 @@ describe('stripHtmlTags', () => {
     assert.ok(result.includes('Some & text'));
     assert.ok(result.includes('More <stuff>'));
   });
+
+  it('uses DOMParser path when DOMParser is available', () => {
+    const origDOMParser = globalThis.DOMParser;
+    try {
+      // Set up a minimal DOMParser mock
+      globalThis.DOMParser = class MockDOMParser {
+        parseFromString(html) {
+          return {
+            body: { textContent: 'parsed content' },
+          };
+        }
+      };
+      const result = stripHtmlTags('<p>anything</p>');
+      assert.equal(result, 'parsed content');
+    } finally {
+      if (origDOMParser === undefined) {
+        delete globalThis.DOMParser;
+      } else {
+        globalThis.DOMParser = origDOMParser;
+      }
+    }
+  });
+
+  it('falls through to regex when DOMParser throws', () => {
+    const origDOMParser = globalThis.DOMParser;
+    try {
+      globalThis.DOMParser = class BrokenParser {
+        parseFromString() { throw new Error('parse error'); }
+      };
+      // Should fall through to regex path and still return stripped text
+      const result = stripHtmlTags('<p>fallback</p>');
+      assert.equal(result, 'fallback');
+    } finally {
+      if (origDOMParser === undefined) {
+        delete globalThis.DOMParser;
+      } else {
+        globalThis.DOMParser = origDOMParser;
+      }
+    }
+  });
 });
 
 // ─── extractChapterTitle ─────────────────────────────────────────────────────
@@ -645,6 +685,83 @@ describe('EpubAdapter – renderPage', () => {
       chapters: [{ title: null, text: 'some content', html: '', href: '' }],
       toc: [], bytes: new Uint8Array(), css: [], fonts: [],
     }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders chapter.blocks with blockquote type', async () => {
+    const chapter = {
+      title: 'Ch',
+      text: '',
+      blocks: [{ type: 'blockquote', text: 'A famous quote from a famous person.' }],
+    };
+    const adapter = new EpubAdapter({ chapters: [chapter], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders chapter.blocks with li type', async () => {
+    const chapter = {
+      title: 'Ch',
+      text: '',
+      blocks: [
+        { type: 'li', text: 'First list item' },
+        { type: 'li', text: 'Second list item' },
+      ],
+    };
+    const adapter = new EpubAdapter({ chapters: [chapter], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders chapter.blocks with code type', async () => {
+    const chapter = {
+      title: 'Ch',
+      text: '',
+      blocks: [{ type: 'code', text: 'const x = 42;' }],
+    };
+    const adapter = new EpubAdapter({ chapters: [chapter], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders chapter.blocks with hr type', async () => {
+    const chapter = {
+      title: 'Ch',
+      text: '',
+      blocks: [
+        { type: 'p', text: 'Above rule' },
+        { type: 'hr', text: '' },
+        { type: 'p', text: 'Below rule' },
+      ],
+    };
+    const adapter = new EpubAdapter({ chapters: [chapter], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
+    const canvas = makeCanvas();
+    await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
+    assert.ok(canvas.width > 0);
+  });
+
+  it('renders chapter.blocks with all types mixed (h1, h2, h3, blockquote, li, code, hr, p)', async () => {
+    const chapter = {
+      title: 'Full',
+      text: '',
+      blocks: [
+        { type: 'h1', text: 'Main Heading' },
+        { type: 'h2', text: 'Sub Heading' },
+        { type: 'h3', text: 'Minor Heading' },
+        { type: 'p', text: 'A paragraph of text.' },
+        { type: 'blockquote', text: 'A quotation.' },
+        { type: 'li', text: 'A list item.' },
+        { type: 'code', text: 'code here' },
+        { type: 'hr', text: '' },
+        { type: 'p', text: 'More text after.' },
+      ],
+    };
+    const adapter = new EpubAdapter({ chapters: [chapter], toc: [], bytes: new Uint8Array(), css: [], fonts: [] }, 'x.epub');
     const canvas = makeCanvas();
     await adapter.renderPage(1, canvas, { zoom: 1, rotation: 0 });
     assert.ok(canvas.width > 0);

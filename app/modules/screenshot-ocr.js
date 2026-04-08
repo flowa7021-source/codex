@@ -60,7 +60,7 @@ export class ScreenshotOcr {
         })),
       };
     } catch (e) {
-      throw new Error(`OCR failed: ${e.message}`);
+      throw new Error(`OCR failed: ${e.message}`, { cause: e });
     }
   }
 
@@ -133,7 +133,7 @@ export class ScreenshotOcr {
       const data = new Uint8ClampedArray(rgbaBytes);
       return new ImageData(data, 1920, 1080);
     } catch (e) {
-      throw new Error(`Tauri capture failed: ${e.message}`);
+      throw new Error(`Tauri capture failed: ${e.message}`, { cause: e });
     }
   }
 }

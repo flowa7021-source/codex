@@ -63,6 +63,12 @@ export default [
         cancelAnimationFrame: 'readonly',
         cancelIdleCallback: 'readonly',
         createImageBitmap: 'readonly',
+        ImageDecoder: 'readonly',
+        ReadableStream: 'readonly',
+        WritableStream: 'readonly',
+        TransformStream: 'readonly',
+        CompressionStream: 'readonly',
+        DecompressionStream: 'readonly',
         // Node.js globals (for build scripts/tests)
         process: 'readonly',
         __dirname: 'readonly',

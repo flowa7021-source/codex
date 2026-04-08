@@ -24,6 +24,7 @@ import { mergePdfDocuments } from './pdf-operations.js';
 import { clearPageRenderCache, revokeAllTrackedUrls } from './perf.js';
 import { _updatePageUI } from './render-controller.js';
 import { on } from './event-bus.js';
+import { initModernApis } from './init-modern-apis.js';
 
 export function initPhase2Modules(deps) {
   const { renderCurrentPage, goToPage: _goToPage } = deps;
@@ -394,6 +395,9 @@ export function initPhase2Modules(deps) {
       });
     }
   }
+
+  // ─── Initialize Modern Web APIs ───────────────────────────────────────────
+  initModernApis().catch(() => { /* non-critical */ });
 
   // ─── Initialize Memory Manager ────────────────────────────────────────────
   initMemoryManager();

@@ -1,6 +1,7 @@
 import './setup-dom.js';
 import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 // ---------------------------------------------------------------------------
 // Mock pdfjs-dist before importing the module under test.
@@ -374,5 +375,164 @@ describe('pdf-to-xlsx', () => {
       assert.equal(bytes[0], 0x50, 'first byte is P');
       assert.equal(bytes[1], 0x4B, 'second byte is K');
     });
+  });
+});
+
+// ── Helper: create a simple 1-page PDF with text ──────────────────────────────
+async function makePdfBytes(textLines = ['Hello world']) {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const page = pdf.addPage([612, 792]);
+  textLines.forEach((line, i) => {
+    page.drawText(line, { x: 72, y: 700 - i * 16, size: 12, font, color: rgb(0, 0, 0) });
+  });
+  return new Uint8Array(await pdf.save());
+}
+
+async function makeMultiPagePdfBytes() {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  for (let p = 0; p < 3; p++) {
+    const page = pdf.addPage([612, 792]);
+    page.drawText(`Page ${p + 1} content here`, { x: 72, y: 700, size: 12, font, color: rgb(0, 0, 0) });
+  }
+  return new Uint8Array(await pdf.save());
+}
+
+/** Blank PDF — no text at all, triggers the "no tables" empty-sheet fallback. */
+async function makeBlankPdfBytes() {
+  const pdf = await PDFDocument.create();
+  pdf.addPage([612, 792]);
+  return new Uint8Array(await pdf.save());
+}
+
+/**
+ * 4-page PDF where each page has a distinct 3-column table.
+ * Produces allTableInfos.length === 4, triggering the index sheet (> 3 tables).
+ */
+async function makeFourTablePdfBytes() {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const tableLabels = ['Alpha', 'Beta', 'Gamma', 'Delta'];
+  for (let t = 0; t < 4; t++) {
+    const page = pdf.addPage([612, 792]);
+    // Header row
+    page.drawText(`${tableLabels[t]}Col1`, { x: 50,  y: 730, size: 11, font, color: rgb(0, 0, 0) });
+    page.drawText(`${tableLabels[t]}Col2`, { x: 220, y: 730, size: 11, font, color: rgb(0, 0, 0) });
+    page.drawText(`${tableLabels[t]}Col3`, { x: 390, y: 730, size: 11, font, color: rgb(0, 0, 0) });
+    // Data rows
+    for (let r = 0; r < 4; r++) {
+      const y = 710 - r * 18;
+      page.drawText(`A${r + 1}`, { x: 50,  y, size: 10, font, color: rgb(0, 0, 0) });
+      page.drawText(`B${r + 1}`, { x: 220, y, size: 10, font, color: rgb(0, 0, 0) });
+      page.drawText(`C${r + 1}`, { x: 390, y, size: 10, font, color: rgb(0, 0, 0) });
+    }
+  }
+  return new Uint8Array(await pdf.save());
+}
+
+// ── Integration tests: convertPdfToXlsx with real PDF bytes ──────────────────
+
+describe('convertPdfToXlsx — real PDF integration', { skip: !moduleAvailable && 'module not loadable' }, () => {
+  it('converts a single-page PDF to XLSX blob', async () => {
+    const bytes = await makePdfBytes(['Name Score', 'Alice 95', 'Bob 87']);
+    const result = await convertPdfToXlsx(bytes);
+    assert.ok(result.blob instanceof Blob, 'should return a Blob');
+    assert.ok(result.sheetCount >= 1, 'should have at least 1 sheet');
+  });
+
+  it('calls onProgress callback for each page', async () => {
+    const bytes = await makeMultiPagePdfBytes();
+    const progressCalls = [];
+    const result = await convertPdfToXlsx(bytes, {
+      onProgress: (cur, total) => progressCalls.push({ cur, total }),
+    });
+    assert.ok(result.blob instanceof Blob);
+    assert.ok(progressCalls.length >= 1, 'onProgress called at least once');
+    assert.equal(progressCalls[0].total, 3, 'total should be 3');
+  });
+
+  it('respects pageRange single page', async () => {
+    const bytes = await makeMultiPagePdfBytes();
+    const result = await convertPdfToXlsx(bytes, { pageRange: '1' });
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('respects pageRange range 1-3', async () => {
+    const bytes = await makeMultiPagePdfBytes();
+    const result = await convertPdfToXlsx(bytes, { pageRange: '1-3' });
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('works with numberDetection=false', async () => {
+    const bytes = await makePdfBytes(['Item Price', 'Widget 42.50', 'Gadget 100']);
+    const result = await convertPdfToXlsx(bytes, { numberDetection: false });
+    assert.ok(result.blob instanceof Blob);
+    assert.ok(result.sheetCount >= 1);
+  });
+
+  it('works with sheetsPerPage=true', async () => {
+    const bytes = await makeMultiPagePdfBytes();
+    const result = await convertPdfToXlsx(bytes, { sheetsPerPage: true });
+    assert.ok(result.blob instanceof Blob);
+    assert.ok(result.sheetCount >= 1);
+  });
+
+  it('works with manual mode and selectedArea', async () => {
+    const bytes = await makePdfBytes(['Product', 'Widget', 'Gadget']);
+    const result = await convertPdfToXlsx(bytes, {
+      mode: 'manual',
+      selectedArea: { x: 60, y: 600, width: 300, height: 120 },
+    });
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('handles PDF with numeric values (exercises type detection)', async () => {
+    const bytes = await makePdfBytes([
+      'Qty Price',
+      '10 123.45',
+      '5 $99.99',
+      '3 25.03.2024',
+      '20 75%',
+    ]);
+    const result = await convertPdfToXlsx(bytes, { numberDetection: true });
+    assert.ok(result.blob instanceof Blob);
+    assert.ok(result.sheetCount >= 1);
+  });
+
+  it('handles multi-page PDF with pageRange containing comma-separated pages', async () => {
+    const bytes = await makeMultiPagePdfBytes();
+    const result = await convertPdfToXlsx(bytes, { pageRange: '1,3' });
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('produces valid ZIP-format output (PK header)', async () => {
+    const bytes = await makePdfBytes(['Data']);
+    const result = await convertPdfToXlsx(bytes);
+    const resultBytes = new Uint8Array(await result.blob.arrayBuffer());
+    assert.equal(resultBytes[0], 0x50, 'P');
+    assert.equal(resultBytes[1], 0x4B, 'K');
+  });
+
+  it('handles parenthesised negatives in data (exercises parseNumeric)', async () => {
+    const bytes = await makePdfBytes(['Value', '(1,234.56)', '-42.5']);
+    const result = await convertPdfToXlsx(bytes, { numberDetection: true });
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('blank PDF (no text) produces one empty sheet (empty fallback path)', async () => {
+    const bytes = await makeBlankPdfBytes();
+    const result = await convertPdfToXlsx(bytes);
+    assert.ok(result.blob instanceof Blob, 'should return a Blob');
+    // sheetCount should be 1 from the empty-sheet fallback
+    assert.ok(result.sheetCount >= 1, 'should have at least 1 sheet via fallback');
+  });
+
+  it('PDF with 4+ tables prepends an index sheet', async () => {
+    const bytes = await makeFourTablePdfBytes();
+    const result = await convertPdfToXlsx(bytes);
+    assert.ok(result.blob instanceof Blob, 'should return a Blob');
+    // 4 data sheets + 1 index sheet = 5 total
+    assert.ok(result.sheetCount >= 4, `expected >= 4 sheets, got ${result.sheetCount}`);
   });
 });

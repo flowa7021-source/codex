@@ -167,24 +167,7 @@ if (typeof globalThis.document === 'undefined') {
       const frag = { children: [], appendChild(child) { frag.children.push(child); return child; }, append(...nodes) { for (const n of nodes) if (n != null) frag.appendChild(n); } };
       return frag;
     },
-    body: (() => {
-      const _cls = new Set();
-      return {
-        appendChild() {},
-        style: {},
-        className: '',
-        classList: {
-          add(...c) { c.forEach(x => _cls.add(x)); },
-          remove(...c) { c.forEach(x => _cls.delete(x)); },
-          toggle(c, force) {
-            if (force !== undefined) { force ? _cls.add(c) : _cls.delete(c); }
-            else if (_cls.has(c)) { _cls.delete(c); }
-            else { _cls.add(c); }
-          },
-          contains(c) { return _cls.has(c); },
-        },
-      };
-    })(),
+    body: _createElement('body'),
     head: { appendChild() {} },
     documentElement: { style: {} },
     addEventListener() {},
@@ -308,11 +291,23 @@ if (typeof globalThis.FileReader === 'undefined') {
         if (this.onerror) this.onerror(err);
       });
     }
+    readAsDataURL(_blob) {
+      this.result = 'data:image/png;base64,iVBORw0KGgo=';
+      queueMicrotask(() => { if (this.onload) this.onload({ target: this }); });
+    }
   };
 }
 
 if (typeof globalThis.Image === 'undefined') {
-  globalThis.Image = class Image { constructor() { this.src = ''; } };
+  globalThis.Image = class Image {
+    constructor() { this._src = ''; this.width = 0; this.height = 0; this.onload = null; this.onerror = null; }
+    set src(v) {
+      this._src = v;
+      // Fire onload so img.onload callbacks can execute.
+      queueMicrotask(() => { if (this.onload) this.onload(); else if (this.onerror) this.onerror(new Error('mock Image')); });
+    }
+    get src() { return this._src; }
+  };
 }
 
 if (typeof globalThis.FontFace === 'undefined') {
@@ -329,7 +324,12 @@ if (typeof globalThis.HTMLCanvasElement === 'undefined') {
 if (typeof globalThis.OffscreenCanvas === 'undefined') {
   globalThis.OffscreenCanvas = class OffscreenCanvas {
     constructor(w, h) { this.width = w; this.height = h; }
-    getContext() { return { drawImage() {}, getImageData: () => ({ data: new Uint8Array(0) }), fillRect() {}, clearRect() {} }; }
+    getContext() {
+      return {
+        drawImage() {}, fillRect() {}, clearRect() {}, putImageData() {},
+        getImageData: () => ({ data: new Uint8Array(0), width: 0, height: 0 }),
+      };
+    }
   };
 }
 

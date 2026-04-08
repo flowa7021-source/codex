@@ -11,6 +11,8 @@ import {
   startAutosaveTimer,
   stopAutosaveTimer,
   applyRecoveredSnapshot,
+  checkForRecovery,
+  clearRecoveryData,
 } from '../../app/modules/autosave.js';
 
 const LS_FALLBACK_KEY = 'novareader-autosave-fallback';
@@ -160,6 +162,86 @@ describe('applyRecoveredSnapshot', () => {
     });
 
     assert.equal(deps.state.rotation, 0);
+  });
+});
+
+describe('checkForRecovery — old snapshot rejection (>24h)', () => {
+  beforeEach(async () => {
+    initAutosave(makeDeps());
+    // Clear ALL recovery data (IDB store + localStorage) so IDB returns empty
+    await clearRecoveryData();
+  });
+
+  it('returns null and marks clean for snapshots older than 24h', async () => {
+    // Put an old unclean snapshot in localStorage AFTER clearRecoveryData
+    // (IDB is empty, so the LS fallback is used)
+    const oldSnapshot = {
+      sessionId: 'old-session-test',
+      fileName: 'old.pdf',
+      timestamp: Date.now() - (25 * 60 * 60 * 1000), // 25 hours ago
+      wasCleanExit: false,
+      currentPage: 1,
+      zoom: 1,
+      rotation: 0,
+    };
+    localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify([oldSnapshot]));
+
+    // checkForRecovery should find the old snapshot, reject it (>24h), and return null
+    const result = await checkForRecovery();
+    assert.equal(result, null);
+  });
+
+  it('returns null when no unclean snapshots exist', async () => {
+    // IDB is empty and localStorage was cleared by clearRecoveryData
+    const result = await checkForRecovery();
+    assert.equal(result, null);
+  });
+});
+
+describe('clearRecoveryData', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    initAutosave(makeDeps());
+  });
+
+  it('clears localStorage fallback data', async () => {
+    const snapshot = {
+      sessionId: 'to-clear',
+      fileName: 'test.pdf',
+      timestamp: Date.now(),
+      wasCleanExit: false,
+    };
+    localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify([snapshot]));
+
+    await clearRecoveryData();
+
+    const remaining = localStorage.getItem(LS_FALLBACK_KEY);
+    const parsed = remaining ? JSON.parse(remaining) : [];
+    assert.equal(parsed.length, 0);
+  });
+});
+
+describe('startAutosaveTimer — initial save error handling', () => {
+  it('does not throw when _performSave fails (initial save error path)', () => {
+    // Use a deps that will cause _performSave to fail (no valid state)
+    const deps = makeDeps({
+      state: {
+        adapter: null, // no adapter — _performSave returns early
+        docName: null,
+        currentPage: 1,
+        zoom: 1,
+        rotation: 0,
+        pageCount: 0,
+        file: null,
+      },
+    });
+    initAutosave(deps);
+
+    // Should not throw even with null adapter
+    assert.doesNotThrow(() => {
+      startAutosaveTimer();
+      stopAutosaveTimer();
+    });
   });
 });
 

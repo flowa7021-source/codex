@@ -147,3 +147,183 @@ describe('FormDesigner – getFields', () => {
     assert.equal(list[2].type, 'radio');
   });
 });
+
+describe('FormDesigner – distributeFields horizontal', () => {
+  it('evenly distributes 3 fields along x axis', () => {
+    const designer = new FormDesigner(new Uint8Array());
+    // Fields at x=0, x=200, x=100 (out of order)
+    designer
+      .addTextField(1, [0, 700, 50, 720], { name: 'f1' })
+      .addTextField(1, [100, 700, 150, 720], { name: 'f2' })
+      .addTextField(1, [200, 700, 250, 720], { name: 'f3' });
+
+    designer.distributeFields(['f1', 'f2', 'f3'], 'horizontal');
+
+    const rects = designer._fields.map(f => f.rect);
+    // After distribution, f2 (middle) should be at x=100 (equidistant from 0 and 200)
+    const xValues = rects.map(r => r[0]).sort((a, b) => a - b);
+    assert.equal(xValues[0], 0);
+    assert.equal(xValues[1], 100);
+    assert.equal(xValues[2], 200);
+  });
+
+  it('returns this when fewer than 3 matching fields', () => {
+    const designer = new FormDesigner(new Uint8Array());
+    designer.addTextField(1, [0, 700, 50, 720], { name: 'only' });
+    const result = designer.distributeFields(['only'], 'horizontal');
+    assert.equal(result, designer);
+  });
+});
+
+describe('FormDesigner – distributeFields vertical', () => {
+  it('evenly distributes 3 fields along y axis', () => {
+    const designer = new FormDesigner(new Uint8Array());
+    designer
+      .addTextField(1, [50, 0, 100, 20], { name: 'a' })
+      .addTextField(1, [50, 100, 100, 120], { name: 'b' })
+      .addTextField(1, [50, 200, 100, 220], { name: 'c' });
+
+    designer.distributeFields(['a', 'b', 'c'], 'vertical');
+
+    const yValues = designer._fields.map(f => f.rect[1]).sort((a, b) => a - b);
+    assert.equal(yValues[0], 0);
+    assert.equal(yValues[1], 100);
+    assert.equal(yValues[2], 200);
+  });
+});
+
+describe('FormDesigner – validation rules applied in build()', () => {
+  it('applies range validation rule to a text field', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer
+      .addTextField(1, [50, 700, 250, 720], { name: 'age' })
+      .setValidation('age', { type: 'range', min: 0, max: 120 });
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+    assert.ok(result.length > 0);
+  });
+
+  it('applies email validation rule to a text field', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer
+      .addTextField(1, [50, 700, 250, 720], { name: 'email' })
+      .setValidation('email', { type: 'email' });
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+  });
+
+  it('applies required validation rule to a text field', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer
+      .addTextField(1, [50, 700, 250, 720], { name: 'required_field' })
+      .setValidation('required_field', { type: 'required' });
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+  });
+
+  it('silently skips validation for non-existent field', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    // setValidation on a field not added — should not throw
+    designer.setValidation('ghost', { type: 'email' });
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+  });
+});
+
+describe('FormDesigner – calculation expressions', () => {
+  it('applies calculation expression to a text field', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer
+      .addTextField(1, [50, 700, 250, 720], { name: 'total' })
+      .setCalculation('total', 'field1 + field2');
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+  });
+
+  it('silently skips calculation for non-existent field', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer.setCalculation('nonexistent', '1 + 1');
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+  });
+
+  it('appends calculation when field already has AA dictionary', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer
+      .addTextField(1, [50, 700, 250, 720], { name: 'val' })
+      .setValidation('val', { type: 'email' })    // sets AA dict
+      .setCalculation('val', 'otherField * 2');    // should append C to existing AA
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+  });
+});
+
+describe('FormDesigner – text field optional properties', () => {
+  it('applies maxLen, multiLine, readOnly, required, and fontSize on text field', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer.addTextField(1, [50, 700, 250, 720], {
+      name: 'bio',
+      defaultValue: 'Default text',
+      maxLen: 100,
+      multiLine: true,
+      readOnly: true,
+      required: true,
+      fontSize: 14,
+    });
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+    const doc = await PDFDocument.load(result);
+    const fields = doc.getForm().getFields();
+    assert.equal(fields.length, 1);
+    assert.equal(fields[0].getName(), 'bio');
+  });
+});
+
+describe('FormDesigner – radio group built via build()', () => {
+  it('builds a PDF with radio group fields', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer.addRadioGroup('choice', [
+      { pageNum: 1, rect: [50, 700, 70, 720], value: 'yes' },
+      { pageNum: 1, rect: [80, 700, 100, 720], value: 'no' },
+    ]);
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+    const doc = await PDFDocument.load(result);
+    const fields = doc.getForm().getFields();
+    assert.ok(fields.length >= 1);
+  });
+});
+
+describe('FormDesigner – listbox and button and signature field types', () => {
+  it('adds listbox, button, and signature fields', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer
+      .addListBox(1, [50, 600, 250, 680], { name: 'items', options: ['A', 'B', 'C'] })
+      .addPushButton(1, [50, 550, 150, 580], { name: 'submit', label: 'Submit' })
+      .addSignatureField(1, [50, 480, 250, 530], { name: 'sig1' });
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+    const doc = await PDFDocument.load(result);
+    const fields = doc.getForm().getFields();
+    // listbox + button + signature (sig is a text field with FT=Sig)
+    assert.ok(fields.length >= 3);
+  });
+});

@@ -1,13 +1,26 @@
 import './setup-dom.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import {
   buildChapters,
   escapeXml,
   buildContentOpf,
   buildTocNcx,
   generateUuid,
+  convertPdfToEpub,
 } from '../../app/modules/pdf-to-epub.js';
+
+// ── PDF helpers ────────────────────────────────────────────────────────────
+async function makePdfBytes(lines = ['Hello world']) {
+  const doc = await PDFDocument.create();
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const page = doc.addPage([612, 792]);
+  lines.forEach((line, i) => {
+    page.drawText(line, { x: 72, y: 700 - i * 16, size: 12, font, color: rgb(0, 0, 0) });
+  });
+  return new Uint8Array(await doc.save());
+}
 
 // ---------------------------------------------------------------------------
 // escapeXml
@@ -136,5 +149,95 @@ describe('buildTocNcx', () => {
   it('includes document title', () => {
     const ncx = buildTocNcx('uid', 'Test Title', []);
     assert.ok(ncx.includes('Test Title'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildChapters — edge case: consecutive headings (lines 218-219)
+// ---------------------------------------------------------------------------
+
+describe('buildChapters — consecutive headings edge case', () => {
+  it('handles consecutive headings: second heading updates empty chapter title (line 218-219)', () => {
+    // To reach line 218: need currentChapter.paragraphs.length===0 AND chapters.length>0.
+    // This happens when:
+    //   Page 1 ends with body text → pushed to paragraphs.
+    //   Page 2 has Heading Two → pushes chapter 1, starts chapter 2 (empty).
+    //   Page 2 then has Heading Three immediately → paragraphs===0 AND chapters.length>0 → line 218.
+    //
+    // Use small body fontSize (6) and large heading fontSize (30) to ensure headings are detected.
+    const pages = [
+      {
+        items: [
+          { str: 'Heading One', fontSize: 30 },
+          { str: 'body text a', fontSize: 6 },
+          { str: 'body text b', fontSize: 6 },
+          { str: 'body text c', fontSize: 6 },
+        ],
+      },
+      {
+        items: [
+          { str: 'Heading Two', fontSize: 30 },
+          { str: 'Heading Three', fontSize: 30 },
+        ],
+      },
+    ];
+    const chapters = buildChapters(pages, true);
+    assert.ok(Array.isArray(chapters));
+    assert.ok(chapters.length >= 1);
+    // Chapter 1 ("Heading One") should have been pushed with content
+    const titles = chapters.map(c => c.title);
+    assert.ok(titles.includes('Heading One'), `Expected "Heading One" in ${JSON.stringify(titles)}`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// convertPdfToEpub — integration tests
+// ---------------------------------------------------------------------------
+
+describe('convertPdfToEpub — integration', () => {
+  it('returns a Blob with epub+zip type', async () => {
+    const bytes = await makePdfBytes(['Hello world from PDF']);
+    const result = await convertPdfToEpub(bytes);
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.blob.type, 'application/epub+zip');
+  });
+
+  it('returns chapterCount >= 1', async () => {
+    const bytes = await makePdfBytes(['Document text here']);
+    const result = await convertPdfToEpub(bytes);
+    assert.ok(typeof result.chapterCount === 'number');
+    assert.ok(result.chapterCount >= 1);
+  });
+
+  it('output blob is valid ZIP (PK header)', async () => {
+    const bytes = await makePdfBytes(['Test content']);
+    const result = await convertPdfToEpub(bytes);
+    const buf = await result.blob.arrayBuffer();
+    const arr = new Uint8Array(buf);
+    assert.equal(arr[0], 0x50, 'first byte P');
+    assert.equal(arr[1], 0x4B, 'second byte K');
+  });
+
+  it('respects title and author options', async () => {
+    const bytes = await makePdfBytes(['Content']);
+    const result = await convertPdfToEpub(bytes, { title: 'My ePub', author: 'Bob' });
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('works with splitByHeadings=false', async () => {
+    const bytes = await makePdfBytes(['Chapter 1 text', 'More content']);
+    const result = await convertPdfToEpub(bytes, { splitByHeadings: false });
+    assert.ok(result.blob instanceof Blob);
+    assert.ok(result.chapterCount >= 1);
+  });
+
+  it('handles blank PDF gracefully (empty chapter fallback)', async () => {
+    // A PDF with no text → buildChapters returns [] → one default chapter is pushed
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const bytes = new Uint8Array(await doc.save());
+    const result = await convertPdfToEpub(bytes);
+    assert.ok(result.blob instanceof Blob);
+    assert.ok(result.chapterCount >= 1);
   });
 });

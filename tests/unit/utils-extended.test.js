@@ -14,7 +14,11 @@ describe('downloadBlob', () => {
 });
 
 describe('loadImage', () => {
-  it('returns a promise', () => { assert.ok(loadImage('data:image/png;base64,') instanceof Promise); });
+  it('returns a promise', async () => {
+    const p = loadImage('data:image/png;base64,');
+    assert.ok(p instanceof Promise);
+    await p.catch(() => {}); // consume rejection from mock Image onerror
+  });
 });
 
 describe('yieldToMainThread extended', () => {

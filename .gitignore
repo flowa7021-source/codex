@@ -3,5 +3,6 @@ dist/
 dist-vite/
 src-tauri/target/
 coverage/
+*.lcov
 test-results/
 playwright-report/

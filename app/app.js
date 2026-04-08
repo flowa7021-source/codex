@@ -75,7 +75,7 @@ import { getPageInfoList, reorderPages, deletePages, rotatePages, extractPages, 
 import { initFloatingSearch } from './modules/floating-search.js';
 import { XpsAdapter } from './modules/xps-adapter.js';
 import { registerProvider, getProviders, authenticate, listFiles, openFile as cloudOpenFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider } from './modules/cloud-integration.js';
-import { summarizeText, extractTags, semanticSearch, generateToc } from './modules/ai-features.js';
+import { summarizeText, extractTags, semanticSearch, generateToc, askQuestion } from './modules/ai-features.js';
 import { loadAiBackendConfig, saveAiBackendConfig, getAiBackendConfig, isAiBackendActive } from './modules/ai-backend.js';
 import { nrPrompt, nrConfirm } from './modules/modal-prompt.js';
 import * as SettingsController from './modules/settings-controller.js';
@@ -955,7 +955,7 @@ window._floatingSearch = initFloatingSearch(
 window._xpsAdapter = XpsAdapter;
 window._cloud = { registerProvider, getProviders, authenticate, listFiles, openFile: cloudOpenFile, saveFile, getShareLink, signOut, getConnectionStatus, onStatusChange, createGoogleDriveProvider, createOneDriveProvider, createDropboxProvider };
 window._ai = {
-  summarizeText, extractTags, semanticSearch, generateToc,
+  summarizeText, extractTags, semanticSearch, generateToc, askQuestion,
   // AI backend configuration (Claude / OpenAI / heuristic)
   configureBackend: saveAiBackendConfig,
   getBackendConfig: getAiBackendConfig,

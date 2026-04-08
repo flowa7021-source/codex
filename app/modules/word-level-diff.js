@@ -22,6 +22,7 @@
  */
 
 import { getDocument } from 'pdfjs-dist/build/pdf.mjs';
+import { extractPageText as pdfOxideExtractPageText, isAvailable as isPdfOxideAvailable } from './pdf-oxide-extractor.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -530,6 +531,14 @@ function _renderSideBySide(result) {
 
 async function _extractPageText(pdfBytes, pageNum) {
   const data = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+
+  // Fast path: use pdf-oxide WASM when available (avoids full pdfjs load)
+  if (isPdfOxideAvailable()) {
+    const text = await pdfOxideExtractPageText(data, pageNum);
+    if (text !== null) return text;
+  }
+
+  // Fallback: pdfjs-dist full extraction
   const doc  = await getDocument({ data: data.slice() }).promise;
   const text = await _extractPageTextFromDoc(doc, pageNum);
   doc.destroy();

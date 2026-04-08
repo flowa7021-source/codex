@@ -1,8 +1,8 @@
 import './setup-dom.js';
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
-import { PDFDocument, PDFName } from 'pdf-lib';
-import { PdfOptimizer, pdfOptimizer } from '../../app/modules/pdf-optimize.js';
+import { PDFDocument, PDFName, StandardFonts, rgb } from 'pdf-lib';
+import { PdfOptimizer, pdfOptimizer, COMPRESSION_PROFILES } from '../../app/modules/pdf-optimize.js';
 
 async function createTestPdf(opts = {}) {
   const doc = await PDFDocument.create();
@@ -121,5 +121,66 @@ describe('PdfOptimizer._formatSize', () => {
 describe('pdfOptimizer singleton', () => {
   it('is an instance of PdfOptimizer', () => {
     assert.ok(pdfOptimizer instanceof PdfOptimizer);
+  });
+});
+
+describe('PdfOptimizer.optimizeWithProfile', () => {
+  it('optimizes with screen profile', async () => {
+    const bytes = await createTestPdf({ pages: 1 });
+    const result = await pdfOptimizer.optimizeWithProfile(bytes, 'screen');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('optimizes with ebook profile', async () => {
+    const bytes = await createTestPdf({ pages: 1 });
+    const result = await pdfOptimizer.optimizeWithProfile(bytes, 'ebook');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('optimizes with print profile', async () => {
+    const bytes = await createTestPdf({ pages: 1 });
+    const result = await pdfOptimizer.optimizeWithProfile(bytes, 'print');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('optimizes with prepress profile', async () => {
+    const bytes = await createTestPdf({ pages: 1 });
+    const result = await pdfOptimizer.optimizeWithProfile(bytes, 'prepress');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('throws for unknown profile name', async () => {
+    const bytes = await createTestPdf();
+    await assert.rejects(
+      () => pdfOptimizer.optimizeWithProfile(bytes, 'unknown'),
+      /Unknown profile/,
+    );
+  });
+
+  it('COMPRESSION_PROFILES exports all 4 profiles', () => {
+    assert.ok(COMPRESSION_PROFILES.screen);
+    assert.ok(COMPRESSION_PROFILES.ebook);
+    assert.ok(COMPRESSION_PROFILES.print);
+    assert.ok(COMPRESSION_PROFILES.prepress);
+  });
+});
+
+describe('PdfOptimizer.subsetFonts', () => {
+  it('returns fontsProcessed=0 for PDF with no embedded fonts', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const result = await pdfOptimizer.subsetFonts(doc);
+    assert.equal(typeof result.fontsProcessed, 'number');
+    assert.equal(result.fontsProcessed, 0);
+    assert.equal(result.bytesSaved, 0);
+  });
+
+  it('returns fontsProcessed >= 1 for PDF with text using embedded font', async () => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([612, 792]);
+    page.drawText('Hello', { x: 50, y: 700, size: 12, font, color: rgb(0, 0, 0) });
+    const result = await pdfOptimizer.subsetFonts(doc);
+    assert.ok(result.fontsProcessed >= 1);
   });
 });

@@ -118,4 +118,114 @@ describe('CbzAdapter', () => {
     assert.equal(adapter.getPageCount(), 0);
     assert.equal(adapter._imageCache.size, 0);
   });
+
+  it('_getImage loads and caches image on load success', async () => {
+    const buf = makeZip({ 'img1.png': new Uint8Array([1]) });
+    const adapter = new CbzAdapter();
+    await adapter.load(buf);
+
+    // Override Image to fire onload with dimensions
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class MockImg {
+      constructor() { this.naturalWidth = 100; this.naturalHeight = 200; this.onload = null; this.onerror = null; }
+      set src(_v) { queueMicrotask(() => { if (this.onload) this.onload(); }); }
+    };
+
+    try {
+      const img = await adapter._getImage(1);
+      assert.equal(img.naturalWidth, 100);
+      assert.equal(img.naturalHeight, 200);
+      // Calling again should return cached
+      const img2 = await adapter._getImage(1);
+      assert.equal(img2, img);
+    } finally {
+      globalThis.Image = OrigImage;
+    }
+  });
+
+  it('getPageSize returns image dimensions', async () => {
+    const buf = makeZip({ 'img1.png': new Uint8Array([1]) });
+    const adapter = new CbzAdapter();
+    await adapter.load(buf);
+
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class MockImg {
+      constructor() { this.naturalWidth = 300; this.naturalHeight = 400; this.onload = null; this.onerror = null; }
+      set src(_v) { queueMicrotask(() => { if (this.onload) this.onload(); }); }
+    };
+
+    try {
+      const size = await adapter.getPageSize(1);
+      assert.equal(size.width, 300);
+      assert.equal(size.height, 400);
+    } finally {
+      globalThis.Image = OrigImage;
+    }
+  });
+
+  it('renderPage draws image to canvas', async () => {
+    const buf = makeZip({ 'img1.png': new Uint8Array([1]) });
+    const adapter = new CbzAdapter();
+    await adapter.load(buf);
+
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class MockImg {
+      constructor() { this.naturalWidth = 50; this.naturalHeight = 80; this.onload = null; this.onerror = null; }
+      set src(_v) { queueMicrotask(() => { if (this.onload) this.onload(); }); }
+    };
+
+    try {
+      const canvas = document.createElement('canvas');
+      const result = await adapter.renderPage(1, canvas, 2);
+      assert.equal(result.width, 100);
+      assert.equal(result.height, 160);
+    } finally {
+      globalThis.Image = OrigImage;
+    }
+  });
+
+  it('_getImage rejects when image fails to load', async () => {
+    const buf = makeZip({ 'img1.png': new Uint8Array([1]) });
+    const adapter = new CbzAdapter();
+    await adapter.load(buf);
+    // Override Image mock to fire onerror for this test
+    const OrigImage = globalThis.Image;
+    globalThis.Image = class MockImage {
+      constructor() { this._src = ''; this.onload = null; this.onerror = null; }
+      set src(v) {
+        this._src = v;
+        queueMicrotask(() => { if (this.onerror) this.onerror(new Error('load failed')); });
+      }
+      get src() { return this._src; }
+    };
+    try {
+      await assert.rejects(
+        () => adapter._getImage(1),
+        /Failed to load image/,
+      );
+    } finally {
+      globalThis.Image = OrigImage;
+    }
+  });
+
+  it('destroy revokes blob URLs for cached images', async () => {
+    const buf = makeZip({ 'img1.png': new Uint8Array([1]) });
+    const adapter = new CbzAdapter();
+    await adapter.load(buf);
+
+    // Manually inject a cached "image" with a _blobUrl to test the revoke branch
+    const fakeImg = { _blobUrl: 'blob:fake' };
+    adapter._imageCache.set(1, fakeImg);
+
+    let revokedUrl = null;
+    const origRevoke = URL.revokeObjectURL.bind(URL);
+    URL.revokeObjectURL = (url) => { revokedUrl = url; };
+
+    try {
+      adapter.destroy();
+      assert.equal(revokedUrl, 'blob:fake');
+    } finally {
+      URL.revokeObjectURL = origRevoke;
+    }
+  });
 });

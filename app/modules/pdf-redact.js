@@ -75,7 +75,7 @@ export class PdfRedactor {
       regex = new RegExp(regexStr, flags || 'g');
     } catch (err) {
       console.warn('[pdf-ops] error:', err?.message);
-      throw new Error(`Invalid regex: ${regexStr}`);
+      throw new Error(`Invalid regex: ${regexStr}`, { cause: err });
     }
 
     let totalFound = 0;

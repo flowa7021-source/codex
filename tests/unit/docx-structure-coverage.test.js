@@ -325,3 +325,133 @@ describe('mapPdfFont additional', () => {
     assert.equal(mapPdfFont('Trebuchet'), 'Trebuchet MS');
   });
 });
+
+// ── Table validation failure path ────────────────────────────────────────────
+
+describe('table candidate with validation failure', () => {
+  it('converts single-row table candidate to paragraph (validation fails)', async () => {
+    // One "table-like" row (wide x-span + large gap) followed by a regular text line.
+    // tableCandidate gets 1 entry → _validateTableCandidate returns false (length < 2)
+    // → lines are emitted as paragraphs (lines 764-767 path)
+    const items = [
+      // Line 1: column-like items far apart → looks like table row
+      { str: 'Col A', transform: [12, 0, 0, 12, 50, 742], width: 35, height: 12, fontName: 'Arial' },
+      { str: 'Col B', transform: [12, 0, 0, 12, 350, 742], width: 35, height: 12, fontName: 'Arial' },
+      // Line 2: regular text (large gap below — different y → different line)
+      { str: 'Regular paragraph text here follows.', transform: [12, 0, 0, 12, 50, 642], width: 200, height: 12, fontName: 'Arial' },
+    ];
+    const doc = makePdfDoc([makePdfPage(items)]);
+    const result = await extractStructuredContent(doc, 1);
+    // Should have produced some blocks (paragraph from failed table + regular paragraph)
+    assert.ok(result.blocks.length >= 1);
+  });
+});
+
+// ── clusterByXGap same-cluster path ──────────────────────────────────────────
+
+describe('clusterByXGap overlapping items in same cluster', () => {
+  it('groups overlapping x-items into same cluster', async () => {
+    // Items at x=50 (w=40, ends at 90) and x=65 (gap=65-90=-25, negative → same cluster)
+    // plus item at x=350 (large gap → new cluster). Line has 2 distinct columns.
+    const items = [
+      // Line 1: two close items + one far item → 2 clusters
+      { str: 'Part', transform: [12, 0, 0, 12, 50, 742], width: 40, height: 12, fontName: 'Arial' },
+      { str: 'Two', transform: [12, 0, 0, 12, 65, 742], width: 30, height: 12, fontName: 'Arial' },
+      { str: 'Remote', transform: [12, 0, 0, 12, 350, 742], width: 40, height: 12, fontName: 'Arial' },
+      // Line 2 (same pattern to make 2-row table candidate pass validation)
+      { str: 'Alpha', transform: [12, 0, 0, 12, 50, 726], width: 40, height: 12, fontName: 'Arial' },
+      { str: 'Beta', transform: [12, 0, 0, 12, 65, 726], width: 30, height: 12, fontName: 'Arial' },
+      { str: 'Gamma', transform: [12, 0, 0, 12, 350, 726], width: 40, height: 12, fontName: 'Arial' },
+    ];
+    const doc = makePdfDoc([makePdfPage(items)]);
+    const result = await extractStructuredContent(doc, 1);
+    // Should produce a table block (2 rows, 2 columns each after merging close items)
+    assert.ok(result.blocks.length >= 1);
+  });
+});
+
+// ── Gap-flush with valid 2-row table (line 716) ───────────────────────────────
+
+describe('gap-flush with valid 2-row table', () => {
+  it('flushes a valid 2-row table when large gap occurs after table rows', async () => {
+    // Row 1 (y=100): 2 columns, Row 2 (y=116): 2 columns (small gap 4 < 18 → no early flush)
+    // Row 3 (y=250): large gap 122 > 18 → gap-flush fires → _validateTableCandidate([r1,r2])=true
+    // → flushTable called (line 716 path)
+    const items = [
+      { str: 'Header A', transform: [12, 0, 0, 12, 50, 742], width: 50, height: 12, fontName: 'Arial' },
+      { str: 'Header B', transform: [12, 0, 0, 12, 400, 742], width: 50, height: 12, fontName: 'Arial' },
+      { str: 'Value A', transform: [12, 0, 0, 12, 50, 726], width: 50, height: 12, fontName: 'Arial' },
+      { str: 'Value B', transform: [12, 0, 0, 12, 400, 726], width: 50, height: 12, fontName: 'Arial' },
+      // Large gap: y = 842 - 592 = 250, prevBottom = 128, gap = 122 > 18
+      { str: 'Next section after gap', transform: [12, 0, 0, 12, 50, 592], width: 100, height: 12, fontName: 'Arial' },
+    ];
+    const doc = makePdfDoc([makePdfPage(items)]);
+    const result = await extractStructuredContent(doc, 1);
+    // Should produce a table block from rows 1+2, plus a paragraph from row 3
+    const tableBlock = result.blocks.find(b => b.type === 'table');
+    assert.ok(tableBlock, 'should produce a table block');
+    assert.equal(tableBlock.rows.length, 2);
+  });
+});
+
+// ── Non-gap flush with valid 2-row table (lines 760-768) ──────────────────────
+
+describe('non-gap flush with valid 2-row table', () => {
+  it('flushes a valid 2-row table when followed by a non-table-row line', async () => {
+    // Row 1 and Row 2: two proper table-like rows (small gap between them)
+    // Row 3: single-column regular text with small gap → triggers "flush pending table" block
+    const items = [
+      { str: 'Data A', transform: [12, 0, 0, 12, 50, 742], width: 50, height: 12, fontName: 'Arial' },
+      { str: 'Data B', transform: [12, 0, 0, 12, 400, 742], width: 50, height: 12, fontName: 'Arial' },
+      { str: 'Item A', transform: [12, 0, 0, 12, 50, 726], width: 50, height: 12, fontName: 'Arial' },
+      { str: 'Item B', transform: [12, 0, 0, 12, 400, 726], width: 50, height: 12, fontName: 'Arial' },
+      // y = 842 - 712 = 130, prevBottom = 128, gap = 2 (tiny, no gap-flush)
+      // Single column → not detected as table row → flushes pending table (lines 760-768)
+      { str: 'Regular paragraph that follows the table block.', transform: [12, 0, 0, 12, 50, 712], width: 220, height: 12, fontName: 'Arial' },
+    ];
+    const doc = makePdfDoc([makePdfPage(items)]);
+    const result = await extractStructuredContent(doc, 1);
+    const tableBlock = result.blocks.find(b => b.type === 'table');
+    assert.ok(tableBlock, 'should produce a table block from 2 rows');
+    assert.equal(tableBlock.rows.length, 2);
+  });
+});
+
+// ── Footnote detection (lines 773-783) ───────────────────────────────────────
+
+describe('footnote detection', () => {
+  it('detects footnote with numeric marker in bottom 25% of page with small font', async () => {
+    // Body: 12pt. Footnote: 9pt (< 12 * 0.85 = 10.2). Y > 842*0.75 = 631.5
+    const items = [
+      // Body content (y=100, font 12)
+      { str: 'Main body text paragraph content here', transform: [12, 0, 0, 12, 50, 742], width: 200, height: 12, fontName: 'Arial' },
+      { str: 'Second line of body text content here', transform: [12, 0, 0, 12, 50, 726], width: 200, height: 12, fontName: 'Arial' },
+      // Footnote at bottom (y > 631.5), small font (9 < 10.2), starts with "1. "
+      { str: '1. This is the footnote text here', transform: [9, 0, 0, 9, 50, 130], width: 150, height: 9, fontName: 'Arial' },
+    ];
+    const doc = makePdfDoc([makePdfPage(items)]);
+    const result = await extractStructuredContent(doc, 1);
+    const footnote = result.blocks.find(b => b.type === 'footnote');
+    assert.ok(footnote, 'should detect footnote block');
+    assert.ok(footnote.text.startsWith('1.'));
+  });
+});
+
+// ── End-of-page single table row validation failure (lines 891-892) ───────────
+
+describe('end-of-page single table row falls back to paragraph', () => {
+  it('emits single table-row candidate as paragraph at end of content', async () => {
+    // Only one table-like row and nothing after it.
+    // End-of-loop flush: _validateTableCandidate([row1]) = false → lines 891-892 path
+    const items = [
+      { str: 'Only A', transform: [12, 0, 0, 12, 50, 742], width: 50, height: 12, fontName: 'Arial' },
+      { str: 'Only B', transform: [12, 0, 0, 12, 400, 742], width: 50, height: 12, fontName: 'Arial' },
+    ];
+    const doc = makePdfDoc([makePdfPage(items)]);
+    const result = await extractStructuredContent(doc, 1);
+    // No table (only 1 row, validation fails) — emitted as paragraph(s)
+    const tableBlock = result.blocks.find(b => b.type === 'table');
+    assert.ok(!tableBlock, 'should NOT produce a table block with only 1 row');
+    assert.ok(result.blocks.length >= 1, 'should produce at least one block');
+  });
+});

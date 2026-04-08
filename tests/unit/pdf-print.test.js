@@ -1,7 +1,8 @@
 // ─── Unit Tests: PDF Print ──────────────────────────────────────────────────
+import './setup-dom.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parsePageRange, getPagesToPrint, arrangeBooklet, arrangeNup } from '../../app/modules/pdf-print.js';
+import { parsePageRange, getPagesToPrint, arrangeBooklet, arrangeNup, renderNupSheet, triggerPrint } from '../../app/modules/pdf-print.js';
 
 describe('parsePageRange', () => {
   it('parses single pages', () => {
@@ -94,5 +95,81 @@ describe('arrangeNup', () => {
   it('handles single page per sheet', () => {
     const sheets = arrangeNup([1, 2, 3], 1);
     assert.deepEqual(sheets, [[1], [2], [3]]);
+  });
+});
+
+function makeCanvas(w = 200, h = 300) {
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = h;
+  return c;
+}
+
+describe('renderNupSheet', () => {
+  it('returns a canvas with A4 dimensions for 2-up layout', () => {
+    const canvases = [makeCanvas(), makeCanvas()];
+    const result = renderNupSheet(canvases, 2);
+    assert.ok(result instanceof Object);
+    assert.equal(result.width, 794);
+    assert.equal(result.height, 1123);
+  });
+
+  it('returns a canvas for 1-up layout', () => {
+    const result = renderNupSheet([makeCanvas()], 1);
+    assert.ok(result);
+    assert.equal(result.width, 794);
+  });
+
+  it('returns a canvas for 4-up layout', () => {
+    const canvases = [makeCanvas(), makeCanvas(), makeCanvas(), makeCanvas()];
+    const result = renderNupSheet(canvases, 4);
+    assert.ok(result);
+    assert.equal(result.width, 794);
+  });
+
+  it('draws borders when borders=true', () => {
+    const canvases = [makeCanvas(), makeCanvas()];
+    const result = renderNupSheet(canvases, 2, true);
+    assert.ok(result);
+    assert.equal(result.width, 794);
+  });
+
+  it('handles null canvas slot gracefully', () => {
+    const result = renderNupSheet([makeCanvas(), null], 2);
+    assert.ok(result);
+  });
+});
+
+function withIframeMock(fn) {
+  const origCreate = document.createElement.bind(document);
+  // Ensure document.body.removeChild is a no-op so the cleanup timer doesn't throw
+  if (!document.body.removeChild) document.body.removeChild = () => {};
+
+  document.createElement = (tag) => {
+    const el = origCreate(tag);
+    if (tag.toLowerCase() === 'iframe') {
+      const mockDoc = { open: () => {}, write: () => {}, close: () => {} };
+      Object.defineProperty(el, 'contentDocument', { get: () => mockDoc });
+      Object.defineProperty(el, 'contentWindow', {
+        get: () => ({ focus: () => {}, print: () => {} }),
+      });
+    }
+    return el;
+  };
+  try { fn(); } finally { document.createElement = origCreate; }
+}
+
+describe('triggerPrint', () => {
+  it('creates an iframe and writes canvas data URLs without throwing', () => {
+    withIframeMock(() => {
+      const canvases = [makeCanvas(), makeCanvas()];
+      assert.doesNotThrow(() => triggerPrint(canvases));
+    });
+  });
+
+  it('does not throw for empty canvas array', () => {
+    withIframeMock(() => {
+      assert.doesNotThrow(() => triggerPrint([]));
+    });
   });
 });

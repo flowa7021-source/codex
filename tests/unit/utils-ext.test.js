@@ -67,8 +67,10 @@ describe('yieldToMainThread', () => {
 });
 
 describe('loadImage', () => {
-  it('returns a promise', () => {
+  it('returns a promise', async () => {
     const result = loadImage('data:image/png;base64,');
     assert.ok(result instanceof Promise);
+    // Consume the rejection so the mock Image onerror doesn't leak after test end
+    await result.catch(() => {});
   });
 });

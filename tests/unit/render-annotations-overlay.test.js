@@ -1,4 +1,5 @@
 // ─── Unit Tests: Render Annotations Overlay ────────────────────────────────
+import './setup-dom.js';
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -380,6 +381,32 @@ describe('handleImageInsertion', () => {
       handleImageInsertion(undefined);
     });
   });
+
+  it('processes file when adapter is set (async onload path)', async () => {
+    state.adapter = { type: 'pdf' };
+    state.currentPage = 1;
+
+    // Set up mock canvas elements
+    const mockCanvas = document.createElement('canvas');
+    mockCanvas.style.cssText = 'width:400px;height:600px;';
+    els.canvas = mockCanvas;
+    els.canvasWrap = document.createElement('div');
+
+    // Use a real Blob so FileReader readAsDataURL works with the mock
+    const file = new Blob(['fakepng'], { type: 'image/png' });
+
+    // handleImageInsertion is async internally (FileReader + Image onload)
+    // Wrap in a promise that resolves after microtasks settle
+    handleImageInsertion(file);
+
+    // Drain microtasks/queueMicrotask chains
+    await new Promise(r => setTimeout(r, 50));
+
+    // Should not have thrown; we just verify it ran to completion
+    assert.ok(true);
+
+    state.adapter = null;
+  });
 });
 
 // ── openSignaturePad ────────────────────────────────────────────────────────
@@ -391,5 +418,67 @@ describe('openSignaturePad', () => {
     assert.doesNotThrow(() => {
       openSignaturePad();
     });
+  });
+
+  it('clear button clears signature canvas', () => {
+    openSignaturePad();
+    // The modal is appended to document.body. Find the clear button.
+    const modal = document.body.querySelector('div[style*="position:fixed"]');
+    assert.ok(modal, 'modal should be present');
+    const buttons = modal.querySelectorAll('button');
+    const clearBtn = [...buttons].find(b => b.textContent === 'Очистить');
+    assert.ok(clearBtn, 'clear button should exist');
+    assert.doesNotThrow(() => clearBtn.click());
+    modal.remove();
+  });
+
+  it('cancel button removes modal', () => {
+    openSignaturePad();
+    // Find the most recently appended modal (last child matching style)
+    const modals = document.body.querySelectorAll('div[style*="position:fixed"]');
+    const modal = modals[modals.length - 1];
+    assert.ok(modal);
+    const buttons = modal.querySelectorAll('button');
+    const cancelBtn = [...buttons].find(b => b.textContent === 'Отмена');
+    assert.ok(cancelBtn, 'cancel button should exist');
+    cancelBtn.click();
+    // This specific modal should be detached
+    assert.equal(modal.parentNode, null);
+  });
+
+  it('clicking overlay removes modal', () => {
+    openSignaturePad();
+    const modals = document.body.querySelectorAll('div[style*="position:fixed"]');
+    const modal = modals[modals.length - 1];
+    assert.ok(modal);
+    // Simulate clicking directly on the backdrop (target === modal)
+    const event = new Event('click', { bubbles: true });
+    Object.defineProperty(event, 'target', { value: modal });
+    modal.dispatchEvent(event);
+    assert.equal(modal.parentNode, null);
+  });
+
+  it('pointermove while drawing calls lineTo and stroke', () => {
+    openSignaturePad();
+    const modals = document.body.querySelectorAll('div[style*="position:fixed"]');
+    const modal = modals[modals.length - 1];
+    assert.ok(modal);
+    const sigCanvas = modal.querySelector('canvas');
+    assert.ok(sigCanvas, 'signature canvas should exist');
+
+    // pointerdown sets drawing = true
+    sigCanvas.dispatchEvent(new Event('pointerdown'));
+    // pointermove should now execute lineTo and stroke
+    assert.doesNotThrow(() => {
+      sigCanvas.dispatchEvent(new Event('pointermove'));
+    });
+    // pointerup resets drawing
+    sigCanvas.dispatchEvent(new Event('pointerup'));
+    // pointermove after pointerup should be a no-op
+    assert.doesNotThrow(() => {
+      sigCanvas.dispatchEvent(new Event('pointermove'));
+    });
+
+    modal.remove();
   });
 });

@@ -1,6 +1,8 @@
 // ─── Unit Tests: PDF Advanced Edit ────────────────────────────────────────────
+import './setup-dom.js';
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { PDFDocument } from 'pdf-lib';
 import { PdfBlockEditor, blockEditor } from '../../app/modules/pdf-advanced-edit.js';
 
 // ─── PdfBlockEditor constructor ──────────────────────────────────────────────
@@ -591,6 +593,119 @@ describe('enable and disable', () => {
     editor.disable();
     assert.equal(removed, true);
     assert.equal(editor._overlay, null);
+  });
+});
+
+// ─── exportBlocksToPdf ───────────────────────────────────────────────────────
+
+describe('exportBlocksToPdf', () => {
+  async function makeOnePage() {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const bytes = await doc.save();
+    // Return as ArrayBuffer which exportBlocksToPdf expects
+    return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  }
+
+  const CANVAS_SIZE = { width: 612, height: 792 };
+
+  it('returns Blob with PDF type for empty blocks', async () => {
+    const editor = new PdfBlockEditor();
+    const ab = await makeOnePage();
+    const blob = await editor.exportBlocksToPdf(ab);
+    assert.ok(blob instanceof Blob);
+    assert.equal(blob.type, 'application/pdf');
+  });
+
+  it('embeds a text block into a PDF page', async () => {
+    const editor = new PdfBlockEditor();
+    editor.addTextBlock(1, 50, 100, 'Hello PDF', { width: 200, height: 50 });
+    const ab = await makeOnePage();
+    const blob = await editor.exportBlocksToPdf(ab, CANVAS_SIZE);
+    assert.ok(blob instanceof Blob);
+    assert.equal(blob.type, 'application/pdf');
+  });
+
+  it('embeds bold italic text block', async () => {
+    const editor = new PdfBlockEditor();
+    editor.addTextBlock(1, 50, 200, 'Bold italic', { width: 200, height: 40 });
+    const blocks = editor.getPageBlocks(1);
+    editor.updateBlockStyle(blocks[0].id, { bold: true, italic: true, fontSize: 16 });
+    const ab = await makeOnePage();
+    const blob = await editor.exportBlocksToPdf(ab, CANVAS_SIZE);
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('embeds text block with background color', async () => {
+    const editor = new PdfBlockEditor();
+    editor.addTextBlock(1, 50, 300, 'Bg', { width: 150, height: 30 });
+    const blocks = editor.getPageBlocks(1);
+    editor.updateBlockStyle(blocks[0].id, { backgroundColor: '#ffff00', color: '#000000' });
+    const ab = await makeOnePage();
+    const blob = await editor.exportBlocksToPdf(ab, CANVAS_SIZE);
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('embeds multiline text block', async () => {
+    const editor = new PdfBlockEditor();
+    editor.addTextBlock(1, 50, 400, 'Line 1\nLine 2\nLine 3', { width: 200, height: 80 });
+    const ab = await makeOnePage();
+    const blob = await editor.exportBlocksToPdf(ab, CANVAS_SIZE);
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('skips image block with invalid data gracefully', async () => {
+    const editor = new PdfBlockEditor();
+    editor.addImageBlock(1, 50, 500, 'data:image/png;base64,NOT_VALID', 100, 100);
+    const ab = await makeOnePage();
+    const blob = await editor.exportBlocksToPdf(ab);
+    assert.ok(blob instanceof Blob);
+  });
+});
+
+// ─── refreshOverlay ──────────────────────────────────────────────────────────
+
+describe('refreshOverlay', () => {
+  it('does nothing when not active', () => {
+    const editor = new PdfBlockEditor();
+    const container = document.createElement('div');
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = 800;
+    sourceCanvas.height = 600;
+    // Should not throw and should not create overlay
+    editor.refreshOverlay(container, sourceCanvas);
+    assert.ok(!editor._overlay); // still falsy (undefined or null)
+    assert.equal(container.children.length, 0);
+  });
+
+  it('creates overlay canvas when active and appends to container', () => {
+    const editor = new PdfBlockEditor();
+    const container = document.createElement('div');
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = 400;
+    sourceCanvas.height = 300;
+    editor.active = true;
+    editor.refreshOverlay(container, sourceCanvas);
+    // Overlay should be created and appended
+    assert.ok(editor._overlay !== null);
+    assert.equal(editor._overlay.width, 400);
+    assert.equal(editor._overlay.height, 300);
+  });
+
+  it('updates existing overlay dimensions on second call', () => {
+    const editor = new PdfBlockEditor();
+    const container = document.createElement('div');
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = 400;
+    sourceCanvas.height = 300;
+    editor.active = true;
+    editor.refreshOverlay(container, sourceCanvas);
+    // Update dimensions and call again
+    sourceCanvas.width = 800;
+    sourceCanvas.height = 600;
+    editor.refreshOverlay(container, sourceCanvas);
+    assert.equal(editor._overlay.width, 800);
+    assert.equal(editor._overlay.height, 600);
   });
 });
 

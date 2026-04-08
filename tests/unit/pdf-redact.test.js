@@ -1,6 +1,7 @@
 import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
 import { PdfRedactor, REDACTION_PATTERNS, redactor } from '../../app/modules/pdf-redact.js';
 
 describe('REDACTION_PATTERNS', () => {
@@ -662,5 +663,209 @@ describe('PdfRedactor — constructor', () => {
     const r = new PdfRedactor();
     assert.ok(r.redactions instanceof Map);
     assert.equal(r.redactions.size, 0);
+  });
+});
+
+// ── PdfRedactor — sanitizeDocument ──────────────────────────────────────────
+
+describe('PdfRedactor — sanitizeDocument', () => {
+  let r;
+
+  beforeEach(() => { r = new PdfRedactor(); });
+
+  it('returns blob and removedItems for a plain PDF', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    doc.setAuthor('Test Author');
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.blob.type, 'application/pdf');
+    assert.ok(typeof result.removedItems === 'object');
+    assert.ok(result.removedItems.metadata === true);
+  });
+
+  it('removes annotations from a page', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([612, 792]);
+
+    // Add a minimal annotation dict directly
+    const annotDict = doc.context.obj({
+      Type: PDFName.of('Annot'),
+      Subtype: PDFName.of('Text'),
+      Rect: doc.context.obj([50, 700, 200, 720]),
+      Contents: PDFString.of('Test note'),
+    });
+    const annotRef = doc.context.register(annotDict);
+    page.node.set(PDFName.of('Annots'), doc.context.obj([annotRef]));
+
+    const bytes = new Uint8Array(await doc.save());
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.annotations >= 1, 'should count at least one annotation');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('removes bookmarks (Outlines) when present', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+
+    // Add a minimal Outlines dict to the catalog
+    const outlinesRef = doc.context.register(
+      doc.context.obj({ Type: PDFName.of('Outlines'), Count: 0 }),
+    );
+    doc.catalog.set(PDFName.of('Outlines'), outlinesRef);
+
+    const bytes = new Uint8Array(await doc.save());
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.bookmarks === true, 'bookmarks should be flagged as removed');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('sets metadata fields to sanitized values', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    doc.setAuthor('Sensitive Author');
+    doc.setSubject('Confidential Subject');
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.equal(result.removedItems.metadata, true);
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('removes AA (additional actions) from catalog', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    doc.catalog.set(PDFName.of('AA'), doc.context.obj({ JS: PDFName.of('SomeJS') }));
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.scripts >= 1, 'should count removed AA scripts');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('removes EmbeddedFiles from Names catalog entry', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const namesDict = doc.context.obj({ EmbeddedFiles: doc.context.obj({}) });
+    doc.catalog.set(PDFName.of('Names'), namesDict);
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.attachments >= 1, 'should count removed EmbeddedFiles');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('removes OCProperties (hidden layers) from catalog', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    doc.catalog.set(PDFName.of('OCProperties'), doc.context.obj({}));
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.hiddenLayers >= 1, 'should count removed hidden layers');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('removes Thumb thumbnails from pages', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([612, 792]);
+    page.node.set(PDFName.of('Thumb'), doc.context.obj({}));
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.thumbnails >= 1, 'should count removed thumbnails');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('removes JavaScript OpenAction from catalog', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const openActionDict = doc.context.obj({
+      S: PDFName.of('JavaScript'),
+      JS: PDFString.of('this.print();'),
+    });
+    doc.catalog.set(PDFName.of('OpenAction'), openActionDict);
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.js >= 1, 'should count removed JS OpenAction');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('removes JavaScript from Names catalog entry', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const namesDict = doc.context.obj({ JavaScript: doc.context.obj({}) });
+    doc.catalog.set(PDFName.of('Names'), namesDict);
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.js >= 1, 'should count removed Names/JavaScript');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('removes XMP Metadata stream from catalog', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    doc.catalog.set(PDFName.of('Metadata'), doc.context.obj({}));
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.xmp === true, 'should flag XMP as removed');
+    assert.ok(result.blob instanceof Blob);
+  });
+});
+
+// ── PdfRedactor — applyRedactions ───────────────────────────────────────────
+
+describe('PdfRedactor — applyRedactions', () => {
+  it('applies area redactions and returns blob', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const pdfBytes = new Uint8Array(await doc.save());
+
+    const r = new PdfRedactor();
+    r.markArea(1, { x: 50, y: 50, w: 200, h: 30 });
+    const result = await r.applyRedactions(pdfBytes);
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.blob.type, 'application/pdf');
+    assert.equal(result.redactedCount, 1);
+    assert.equal(result.metadataCleaned, true);
+  });
+
+  it('applies redactions with overlayText', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const pdfBytes = new Uint8Array(await doc.save());
+
+    const r = new PdfRedactor();
+    r.markArea(1, { x: 50, y: 100, w: 300, h: 20 });
+    const result = await r.applyRedactions(pdfBytes, { overlayText: 'REDACTED' });
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.redactedCount, 1);
+  });
+
+  it('returns 0 redactedCount when no areas marked', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const pdfBytes = new Uint8Array(await doc.save());
+
+    const r = new PdfRedactor();
+    const result = await r.applyRedactions(pdfBytes);
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.redactedCount, 0);
+  });
+
+  it('skips cleanMetadata when cleanMetadata=false', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const pdfBytes = new Uint8Array(await doc.save());
+
+    const r = new PdfRedactor();
+    const result = await r.applyRedactions(pdfBytes, { cleanMetadata: false });
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.metadataCleaned, false);
   });
 });
