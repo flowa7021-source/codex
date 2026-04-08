@@ -1560,3 +1560,94 @@ describe('_syncTextLayerToStorage — additional', () => {
     assert.doesNotThrow(() => _syncTextLayerToStorage());
   });
 });
+
+// ── _handleTextLayerClick — empty area ─────────────────────────────────────
+
+describe('_handleTextLayerClick — empty area (no span)', () => {
+  let origTextLayerDiv;
+  beforeEach(() => { origTextLayerDiv = els.textLayerDiv; });
+  afterEach(() => { els.textLayerDiv = origTextLayerDiv; setActiveInlineEditor(null); });
+
+  it('creates inline editor when clicking on empty area', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ top: 10, left: 20, width: 800, height: 600 });
+    els.textLayerDiv = container;
+
+    const e = {
+      target: {
+        closest(sel) {
+          // No inline-editor, no span
+          return null;
+        },
+      },
+      clientX: 150,
+      clientY: 200,
+    };
+
+    _handleTextLayerClick(e);
+    assert.ok(getActiveInlineEditor());
+  });
+});
+
+// ── _handleTextLayerDblClick — span click ──────────────────────────────────
+
+describe('_handleTextLayerDblClick — span click (single span)', () => {
+  let origTextLayerDiv;
+  beforeEach(() => { origTextLayerDiv = els.textLayerDiv; });
+  afterEach(() => { els.textLayerDiv = origTextLayerDiv; setActiveInlineEditor(null); });
+
+  it('creates inline editor for single span double-click', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 });
+
+    const span = makeSpan('word text here', { _top: 100, _left: 50 });
+    container.appendChild(span);
+    // override querySelectorAll to return just this span
+    container.querySelectorAll = (sel) => {
+      if (sel === 'span:not(.inline-editor)') return [span];
+      return [];
+    };
+    els.textLayerDiv = container;
+
+    const e = {
+      target: {
+        closest(sel) {
+          if (sel === 'span') return span;
+          return null;
+        },
+      },
+    };
+
+    _handleTextLayerDblClick(e);
+    assert.ok(getActiveInlineEditor());
+  });
+});
+
+// ── _findParagraphSpans — multi-span paragraph ─────────────────────────────
+
+describe('_findParagraphSpans — multi-span adjacent lines', () => {
+  let origTextLayerDiv;
+  beforeEach(() => { origTextLayerDiv = els.textLayerDiv; });
+  afterEach(() => { els.textLayerDiv = origTextLayerDiv; });
+
+  it('groups spans on adjacent lines into a paragraph', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ top: 0, left: 0, width: 600, height: 800 });
+
+    // Create spans on 3 adjacent lines (same paragraph, small gap)
+    const spans = [
+      makeSpan('Line one text', { _top: 100, _left: 50, _height: 14 }),
+      makeSpan('Line two text', { _top: 116, _left: 50, _height: 14 }),
+      makeSpan('Line three text', { _top: 132, _left: 50, _height: 14 }),
+    ];
+    for (const s of spans) container.appendChild(s);
+    container.querySelectorAll = (sel) => {
+      if (sel === 'span:not(.inline-editor)') return spans;
+      return [];
+    };
+    els.textLayerDiv = container;
+
+    const result = _findParagraphSpans(spans[1]); // Middle span
+    assert.ok(result.length >= 2, `Expected >= 2 spans, got ${result.length}`);
+  });
+});
