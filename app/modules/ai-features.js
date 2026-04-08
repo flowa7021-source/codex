@@ -1,12 +1,17 @@
 // @ts-check
 // ─── AI-Powered Features ────────────────────────────────────────────────────
 // Smart summary, auto-tagging, semantic search, auto-TOC generation.
-// Uses pluggable AI backend (local heuristics + optional API).
+// Uses pluggable AI backend (local heuristics + optional LLM API).
+//
+// Priority: LLM backend (Claude / OpenAI) → local heuristic fallback.
+// Configure the backend via ai-backend.js saveAiBackendConfig().
 
-/** @type {'stub'|'partial'|'ready'} Module readiness — 'partial' = heuristic-only, no AI API */
-export const MODULE_STATUS = 'partial';
-/** What's needed for full functionality */
-export const MODULE_REQUIRES = ['AI/LLM backend integration'];
+import { isAiBackendActive, aiSummarize, aiExtractTags, aiGenerateToc } from './ai-backend.js';
+
+/** @type {'stub'|'partial'|'ready'} Module readiness — 'ready' = LLM backend may be active */
+export const MODULE_STATUS = 'ready';
+/** What's needed for full LLM functionality (heuristic always works) */
+export const MODULE_REQUIRES = [];
 
 /**
  * @typedef {object} AiBackend
@@ -20,8 +25,7 @@ export const MODULE_REQUIRES = ['AI/LLM backend integration'];
 // ─── Local Heuristic Backend (no API needed) ────────────────────────────────
 
 /**
- * Generate a summary using extractive heuristics (no AI API).
- * Picks the most important sentences based on word frequency.
+ * Generate a summary — uses LLM backend when configured, else local extractive heuristic.
  * @param {string} text
  * @param {object} [options]
  * @param {number} [options.maxSentences=5]
@@ -30,6 +34,13 @@ export const MODULE_REQUIRES = ['AI/LLM backend integration'];
 export async function summarizeText(text, options = {}) {
   const { maxSentences = 5 } = options;
   if (!text || text.length < 50) return text;
+
+  // Try LLM backend first
+  if (isAiBackendActive()) {
+    try {
+      return await aiSummarize(text, maxSentences);
+    } catch (_e) { /* fall through to heuristic */ }
+  }
 
   const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
   if (sentences.length <= maxSentences) return text;
@@ -55,7 +66,7 @@ export async function summarizeText(text, options = {}) {
 }
 
 /**
- * Extract topic tags using TF-IDF-like scoring.
+ * Extract topic tags — uses LLM backend when configured, else local TF-IDF heuristic.
  * @param {string} text
  * @param {object} [options]
  * @param {number} [options.maxTags=10]
@@ -65,6 +76,13 @@ export async function summarizeText(text, options = {}) {
 export async function extractTags(text, options = {}) {
   const { maxTags = 10, minWordLength = 4 } = options;
   if (!text) return [];
+
+  // Try LLM backend first
+  if (isAiBackendActive()) {
+    try {
+      return await aiExtractTags(text, maxTags);
+    } catch (_e) { /* fall through to heuristic */ }
+  }
 
   const wordFreq = buildWordFrequency(text, minWordLength);
 
@@ -139,12 +157,22 @@ export async function semanticSearch(query, pageTexts, options = {}) {
 }
 
 /**
- * Auto-generate a table of contents from page texts.
- * Detects headings by font-size-like heuristics (short lines, title case, etc.).
+ * Auto-generate a table of contents — uses LLM when configured, else heading heuristics.
  * @param {Array<{text: string, pageNum: number}>} pages
  * @returns {Promise<Array<{title: string, page: number, level: number}>>}
  */
 export async function generateToc(pages) {
+  // Try LLM backend first
+  if (isAiBackendActive()) {
+    try {
+      const combined = pages
+        .map(({ pageNum, text }) => `[Page ${pageNum}]\n${text}`)
+        .join('\n\n');
+      const llmToc = await aiGenerateToc(combined);
+      if (llmToc.length > 0) return llmToc;
+    } catch (_e) { /* fall through to heuristic */ }
+  }
+
   const toc = [];
 
   for (const { text, pageNum } of pages) {
