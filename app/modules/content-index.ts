@@ -16,12 +16,14 @@ export interface ContentEntry {
 
 /**
  * Whether the Content Index API is available in this environment.
- * Requires Service Worker support in navigator. The presence of the `index`
- * property on the registration is verified asynchronously in each helper.
+ * Requires Service Worker support in navigator and the `index` property on
+ * the SW registration (checked via ServiceWorkerRegistration.prototype).
  */
 export function isContentIndexSupported(): boolean {
   try {
-    return 'serviceWorker' in navigator;
+    if (!('serviceWorker' in navigator)) return false;
+    const swReg = (navigator as any).serviceWorker?._reg;
+    return !!(swReg && (swReg as any).index);
   } catch {
     return false;
   }
@@ -34,7 +36,7 @@ export function isContentIndexSupported(): boolean {
  * @param entry - The content entry to register
  */
 export async function addToContentIndex(entry: ContentEntry): Promise<boolean> {
-  if (!isContentIndexSupported()) return false;
+  if (!('serviceWorker' in navigator)) return false;
 
   try {
     const swReg = await (navigator as any).serviceWorker.ready;
@@ -53,7 +55,7 @@ export async function addToContentIndex(entry: ContentEntry): Promise<boolean> {
  * @param id - The entry ID to remove
  */
 export async function removeFromContentIndex(id: string): Promise<boolean> {
-  if (!isContentIndexSupported()) return false;
+  if (!('serviceWorker' in navigator)) return false;
 
   try {
     const swReg = await (navigator as any).serviceWorker.ready;
@@ -70,7 +72,7 @@ export async function removeFromContentIndex(id: string): Promise<boolean> {
  * Returns an empty array when the API is unsupported or an error occurs.
  */
 export async function getContentIndexEntries(): Promise<ContentEntry[]> {
-  if (!isContentIndexSupported()) return [];
+  if (!('serviceWorker' in navigator)) return [];
 
   try {
     const swReg = await (navigator as any).serviceWorker.ready;
