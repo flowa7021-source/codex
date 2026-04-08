@@ -1,10 +1,12 @@
 // @ts-check
 // ─── Markdown → PDF Converter ────────────────────────────────────────────────
-// Parses a subset of Markdown and renders it to a PDF using pdf-lib.
-// Supports: headings, bold, italic, bullet/numbered lists, blockquotes,
-// code blocks, horizontal rules, links (rendered as text), and paragraphs.
+// Parses Markdown using the `marked` library (v12) and renders it to PDF
+// using pdf-lib. Supports headings (h1-h6), bold, italic, code spans,
+// code blocks, bullet/numbered lists, blockquotes, horizontal rules,
+// tables (rendered as plain text rows), and links (text only, not clickable).
 
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { marked } from 'marked';
 
 /**
  * @typedef {Object} MdPdfOptions
@@ -41,131 +43,138 @@ const PAGE_SIZES = {
 };
 
 /**
- * Parse inline markdown formatting into text runs.
- * Handles **bold**, *italic*, `code`, and [text](url).
- * @param {string} text
+ * Convert a marked inline token tree into TextRun[].
+ * @param {any[]} tokens
+ * @param {{bold?: boolean, italic?: boolean}} [ctx]
  * @returns {TextRun[]}
  */
-function parseInline(text) {
+function _inlineTokensToRuns(tokens, ctx = {}) {
   /** @type {TextRun[]} */
   const runs = [];
+  const bold = ctx.bold || false;
+  const italic = ctx.italic || false;
 
-  // Process inline patterns
-  const regex = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[(.+?)\]\((.+?)\))/g;
-  let lastIndex = 0;
-  let match;
-
-  while ((match = regex.exec(text)) !== null) {
-    // Text before the match
-    if (match.index > lastIndex) {
-      runs.push({ text: text.slice(lastIndex, match.index), bold: false, italic: false, mono: false });
+  for (const t of (tokens || [])) {
+    switch (t.type) {
+      case 'text':
+      case 'escape':
+        runs.push({ text: t.text || t.raw || '', bold, italic, mono: false });
+        break;
+      case 'strong':
+        runs.push(..._inlineTokensToRuns(t.tokens || [], { bold: true, italic }));
+        break;
+      case 'em':
+        runs.push(..._inlineTokensToRuns(t.tokens || [], { bold, italic: true }));
+        break;
+      case 'codespan':
+        runs.push({ text: t.text || '', bold: false, italic: false, mono: true });
+        break;
+      case 'link':
+        // Links rendered as plain text only (no hyperlinks in PDF)
+        runs.push(..._inlineTokensToRuns(t.tokens || [], { bold, italic }));
+        break;
+      case 'br':
+        runs.push({ text: ' ', bold: false, italic: false, mono: false });
+        break;
+      default:
+        if (t.raw) runs.push({ text: t.raw, bold, italic, mono: false });
     }
-
-    if (match[2]) {
-      // ***bold italic***
-      runs.push({ text: match[2], bold: true, italic: true, mono: false });
-    } else if (match[3]) {
-      // **bold**
-      runs.push({ text: match[3], bold: true, italic: false, mono: false });
-    } else if (match[4]) {
-      // *italic*
-      runs.push({ text: match[4], bold: false, italic: true, mono: false });
-    } else if (match[5]) {
-      // `code`
-      runs.push({ text: match[5], bold: false, italic: false, mono: true });
-    } else if (match[6]) {
-      // [text](url) — render text only (links not clickable in PDF)
-      runs.push({ text: match[6], bold: false, italic: false, mono: false });
-    }
-
-    lastIndex = match.index + match[0].length;
   }
-
-  // Remaining text
-  if (lastIndex < text.length) {
-    runs.push({ text: text.slice(lastIndex), bold: false, italic: false, mono: false });
-  }
-
-  if (runs.length === 0) {
-    runs.push({ text, bold: false, italic: false, mono: false });
-  }
-
-  return runs;
+  return runs.length > 0 ? runs : [];
 }
 
 /**
- * Parse markdown text into structured lines.
+ * Convert a marked block token list into ParsedLine[].
+ * Handles tables, blockquotes, and all standard block elements.
+ * @param {any[]} tokens
+ * @returns {ParsedLine[]}
+ */
+function _blockTokensToParsedLines(tokens) {
+  /** @type {ParsedLine[]} */
+  const parsed = [];
+
+  for (const token of tokens) {
+    switch (token.type) {
+      case 'heading': {
+        const level = Math.min(3, token.depth);
+        const type = /** @type {'h1'|'h2'|'h3'} */ (`h${level}`);
+        parsed.push({ type, runs: _inlineTokensToRuns(token.tokens || []) });
+        break;
+      }
+      case 'paragraph':
+        parsed.push({ type: 'paragraph', runs: _inlineTokensToRuns(token.tokens || []) });
+        break;
+      case 'code':
+        for (const codeLine of (token.text || '').split('\n')) {
+          parsed.push({ type: 'code', runs: [{ text: codeLine, bold: false, italic: false, mono: true }], raw: codeLine });
+        }
+        break;
+      case 'blockquote':
+        for (const inner of _blockTokensToParsedLines(token.tokens || [])) {
+          parsed.push({ ...inner, type: 'quote' });
+        }
+        break;
+      case 'list': {
+        let orderedIdx = 1;
+        for (const item of (token.items || [])) {
+          const itemRuns = [];
+          for (const child of (item.tokens || [])) {
+            if (child.type === 'text') {
+              const childRuns = _inlineTokensToRuns(child.tokens || [{ type: 'text', text: child.text }]);
+              itemRuns.push(...childRuns);
+            } else if (child.type === 'paragraph') {
+              itemRuns.push(..._inlineTokensToRuns(child.tokens || []));
+            }
+          }
+          if (token.ordered) {
+            parsed.push({ type: 'numbered', runs: itemRuns, listNumber: orderedIdx++ });
+          } else {
+            parsed.push({ type: 'bullet', runs: itemRuns });
+          }
+        }
+        break;
+      }
+      case 'table': {
+        // Render table as plain text rows separated by pipes
+        const header = (token.header || []).map((/** @type {any} */ h) =>
+          _inlineTokensToRuns(h.tokens || []).map((/** @type {TextRun} */ r) => r.text).join('')
+        ).join(' | ');
+        if (header) {
+          parsed.push({ type: 'paragraph', runs: [{ text: header, bold: true, italic: false, mono: false }] });
+          parsed.push({ type: 'hr', runs: [] });
+        }
+        for (const row of (token.rows || [])) {
+          const cells = row.map((/** @type {any} */ cell) =>
+            _inlineTokensToRuns(cell.tokens || []).map((/** @type {TextRun} */ r) => r.text).join('')
+          ).join(' | ');
+          parsed.push({ type: 'paragraph', runs: [{ text: cells, bold: false, italic: false, mono: false }] });
+        }
+        parsed.push({ type: 'blank', runs: [] });
+        break;
+      }
+      case 'hr':
+        parsed.push({ type: 'hr', runs: [] });
+        break;
+      case 'space':
+        parsed.push({ type: 'blank', runs: [] });
+        break;
+      default:
+        if (token.text) {
+          parsed.push({ type: 'paragraph', runs: [{ text: token.text, bold: false, italic: false, mono: false }] });
+        }
+    }
+  }
+  return parsed;
+}
+
+/**
+ * Parse markdown text into structured lines using the `marked` lexer.
  * @param {string} md
  * @returns {ParsedLine[]}
  */
 function parseMarkdown(md) {
-  const rawLines = md.split('\n');
-  /** @type {ParsedLine[]} */
-  const parsed = [];
-  let inCodeBlock = false;
-
-  for (let i = 0; i < rawLines.length; i++) {
-    const line = rawLines[i];
-
-    // Code block toggle
-    if (line.trimStart().startsWith('```')) {
-      inCodeBlock = !inCodeBlock;
-      if (!inCodeBlock) continue; // closing fence
-      continue; // opening fence
-    }
-
-    if (inCodeBlock) {
-      parsed.push({ type: 'code', runs: [{ text: line, bold: false, italic: false, mono: true }], raw: line });
-      continue;
-    }
-
-    // Blank line
-    if (line.trim() === '') {
-      parsed.push({ type: 'blank', runs: [] });
-      continue;
-    }
-
-    // Horizontal rule
-    if (/^(-{3,}|_{3,}|\*{3,})\s*$/.test(line.trim())) {
-      parsed.push({ type: 'hr', runs: [] });
-      continue;
-    }
-
-    // Headings
-    const headingMatch = line.match(/^(#{1,3})\s+(.+)$/);
-    if (headingMatch) {
-      const level = headingMatch[1].length;
-      const type = /** @type {'h1'|'h2'|'h3'} */ (`h${level}`);
-      parsed.push({ type, runs: parseInline(headingMatch[2]) });
-      continue;
-    }
-
-    // Bullet list
-    const bulletMatch = line.match(/^(\s*[-*+])\s+(.+)$/);
-    if (bulletMatch) {
-      parsed.push({ type: 'bullet', runs: parseInline(bulletMatch[2]) });
-      continue;
-    }
-
-    // Numbered list
-    const numMatch = line.match(/^(\s*)(\d+)\.\s+(.+)$/);
-    if (numMatch) {
-      parsed.push({ type: 'numbered', runs: parseInline(numMatch[3]), listNumber: parseInt(numMatch[2], 10) });
-      continue;
-    }
-
-    // Blockquote
-    const quoteMatch = line.match(/^>\s?(.*)$/);
-    if (quoteMatch) {
-      parsed.push({ type: 'quote', runs: parseInline(quoteMatch[1]) });
-      continue;
-    }
-
-    // Regular paragraph
-    parsed.push({ type: 'paragraph', runs: parseInline(line) });
-  }
-
-  return parsed;
+  const tokens = marked.lexer(md);
+  return _blockTokensToParsedLines(tokens);
 }
 
 /**
@@ -209,7 +218,7 @@ export async function convertMarkdownToPdf(mdString, options = {}) {
     return fontRegular;
   }
 
-  // Parse markdown
+  // Parse markdown via marked lexer → structured lines
   const lines = parseMarkdown(mdString);
 
   // Rendering state
@@ -240,7 +249,9 @@ export async function convertMarkdownToPdf(mdString, options = {}) {
 
     for (const run of runs) {
       const font = getFont(run);
-      const words = run.text.split(/( +)/);
+      // Replace control chars (newlines, tabs) that pdf-lib WinAnsi can't encode
+      const safeText = run.text.replace(/[\x00-\x09\x0B-\x1F\x7F]/g, ' ').replace(/\n/g, ' ');
+      const words = safeText.split(/( +)/);
 
       for (const word of words) {
         if (!word) continue;

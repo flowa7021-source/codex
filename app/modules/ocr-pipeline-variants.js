@@ -16,6 +16,7 @@ import {
   preprocessOcrCanvas, pickVariantsByBudget,
 } from './ocr-image-processing.js';
 import { ocrWithCharBoxes } from './ocr-char-layer.js';
+import { photonEnhanceCanvas, looksLikeScannedPage } from './ocr-photon-proc.js';
 // ─── Late-bound dependencies ────────────────────────────────────────────────
 // normalizeOcrTextByLang, scoreOcrTextByLang, postCorrectOcrText, setOcrStatus
 // are injected from app.js via initOcrPipelineVariantsDeps to avoid circular
@@ -71,6 +72,19 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
     return '';
   }
 
+  // ── Photon WASM pre-enhancement (scanned documents only) ─────────────────
+  // For pages that look like scans (high variance / noisy), apply a fast
+  // WASM-accelerated sharpen pass before the existing variant pipeline.
+  // Digital/vector PDFs are skipped — Photon adds no value for clean pages.
+  let pipelineCanvas = canvas;
+  if (looksLikeScannedPage(canvas)) {
+    try {
+      pipelineCanvas = await photonEnhanceCanvas(canvas);
+    } catch (_e) {
+      pipelineCanvas = canvas; // non-critical: fall back to original
+    }
+  }
+
   const preprocessStart = performance.now();
   const isAccurate = pipelineQualityMode === 'accurate';
   // Multi-language OCR (e.g. eng+rus for "auto") is inherently slow because
@@ -123,7 +137,7 @@ export async function runOcrOnPreparedCanvas(canvas, options = {}) {
   for (let i = 0; i < recipeList.length; i += 1) {
     if (taskId && taskId !== state.ocrTaskId) return '';
     const [contrast, thresholdMode, invert, sharpen] = recipeList[i];
-    baseVariants.push(preprocessOcrCanvas(canvas, contrast, thresholdMode, invert, sharpen));
+    baseVariants.push(preprocessOcrCanvas(pipelineCanvas, contrast, thresholdMode, invert, sharpen));
     preprocessDone += 1;
     reportPreprocess(recipeList.length);
     if (i % 2 === 1) {

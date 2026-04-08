@@ -12,6 +12,8 @@ import { yieldToMainThread } from './utils.js';
 import { recordPerfMetric } from './perf.js';
 import { pushDiagnosticEvent } from './diagnostics.js';
 import { loadOcrTextData } from './workspace-controller.js';
+import MiniSearch from 'minisearch';
+import FlexSearch from 'flexsearch';
 
 // ─── Dependencies injected from app.js ─────────────────────────────────────
 // Some functions live in app.js and are not yet modularised. We accept them
@@ -39,6 +41,133 @@ export const ocrSearchIndex = {
   pages: new Map(),
   version: 0,
 };
+
+// ─── MiniSearch BM25 index ───────────────────────────────────────────────────
+// Provides fuzzy matching and BM25-ranked page relevance on top of the
+// coordinate-based ocrSearchIndex. Each page is a separate document.
+
+/** @type {MiniSearch} */
+let _miniSearch = _createMiniSearch();
+
+function _createMiniSearch() {
+  return new MiniSearch({
+    fields: ['text'],
+    storeFields: ['pageNum'],
+    searchOptions: {
+      boost: { text: 1 },
+      fuzzy: 0.2,        // up to 20% edit distance
+      prefix: true,      // prefix matching for partial words
+    },
+  });
+}
+
+/** Reset the MiniSearch index (call when a new document is opened). */
+export function resetMiniSearchIndex() {
+  _miniSearch = _createMiniSearch();
+  _resetFlexIndex();
+}
+
+// ─── FlexSearch native-text index ────────────────────────────────────────────
+// Indexes extracted PDF/DjVu text per page for sub-millisecond keyword lookup.
+// Complements the OCR MiniSearch index: FlexSearch is faster on large corpora
+// and uses tokenised inverted index, while MiniSearch provides fuzzy/BM25.
+
+/** @type {any} */
+let _flexIndex = _makeFlexIndex();
+/** @type {Map<number, boolean>} Pages already indexed in FlexSearch */
+const _flexIndexed = new Map();
+
+function _makeFlexIndex() {
+  return new FlexSearch.Index({
+    tokenize: 'forward',   // prefix matching (finds 'foo' when searching 'fo')
+    resolution: 9,          // max scoring resolution
+    cache: true,            // keep recently searched terms in memory
+  });
+}
+
+function _resetFlexIndex() {
+  _flexIndex = _makeFlexIndex();
+  _flexIndexed.clear();
+}
+
+/**
+ * Index a page's native text in FlexSearch.
+ * Call this whenever a page's text has been extracted (after getText()).
+ * @param {number} pageNum
+ * @param {string} text
+ */
+export function flexIndexPage(pageNum, text) {
+  if (!text || _flexIndexed.get(pageNum)) return;
+  try {
+    _flexIndex.add(pageNum, text);
+    _flexIndexed.set(pageNum, true);
+  } catch (_e) { /* non-critical */ }
+}
+
+/**
+ * Search the FlexSearch native-text index.
+ * Returns page numbers that contain the query, ordered by relevance.
+ * @param {string} query
+ * @returns {number[]}
+ */
+export function flexSearch(query) {
+  if (!query) return [];
+  try {
+    return /** @type {number[]} */ (_flexIndex.search(query, { limit: 500 }));
+  } catch (_e) {
+    return [];
+  }
+}
+
+/** Number of pages currently indexed in FlexSearch. */
+export function flexIndexSize() {
+  return _flexIndexed.size;
+}
+
+/** @type {number|null} Handle for the active background indexing loop */
+let _bgIndexHandle = null;
+
+/**
+ * Schedule background FlexSearch indexing of all pages using requestIdleCallback.
+ * Indexes ~5 pages per idle slot so the UI is never blocked.
+ * Automatically stops when all pages are indexed or a new document is opened.
+ *
+ * @param {any} adapter   - Document adapter with getText(pageNum) → Promise<string>
+ * @param {number} pageCount
+ */
+export function scheduleBackgroundFlexIndex(adapter, pageCount) {
+  if (_bgIndexHandle !== null) cancelIdleCallback(_bgIndexHandle);
+  _bgIndexHandle = null;
+
+  let nextPage = 1;
+
+  const tick = (deadline) => {
+    // Stop if a new document reset the index
+    if (_flexIndexed.size === 0 && nextPage > 1) return;
+
+    const PAGES_PER_SLOT = 5;
+    let pagesThisTick = 0;
+
+    while (nextPage <= pageCount && pagesThisTick < PAGES_PER_SLOT && deadline.timeRemaining() > 2) {
+      const p = nextPage++;
+      if (_flexIndexed.get(p)) continue;
+      // Fire-and-forget: index the page text without blocking
+      adapter.getText(p).then((text) => {
+        if (text) flexIndexPage(p, text);
+      }).catch(() => {});
+      pagesThisTick++;
+    }
+
+    if (nextPage <= pageCount) {
+      _bgIndexHandle = requestIdleCallback(tick, { timeout: 2000 });
+    }
+  };
+
+  // Start after a short delay so document open doesn't compete for resources
+  if (typeof requestIdleCallback !== 'undefined') {
+    _bgIndexHandle = requestIdleCallback(tick, { timeout: 3000 });
+  }
+}
 
 /** @param {any} pageNum @param {any} text @returns {any} */
 export function buildOcrSearchEntry(pageNum, text) {
@@ -70,6 +199,9 @@ export function indexOcrPage(pageNum, text) {
   if (entry) {
     ocrSearchIndex.pages.set(pageNum, entry);
     ocrSearchIndex.version++;
+    // Keep MiniSearch in sync — remove old entry first to allow re-indexing
+    try { _miniSearch.remove({ id: pageNum }); } catch (_e) { /* not yet indexed */ }
+    try { _miniSearch.add({ id: pageNum, pageNum, text }); } catch (_e) { /* ignore */ }
   }
 }
 
@@ -77,19 +209,42 @@ export function indexOcrPage(pageNum, text) {
 export function searchOcrIndex(query) {
   const norm = (query || '').trim().toLowerCase();
   if (!norm) return [];
+
+  // Use MiniSearch for BM25 ranking + fuzzy matching across all indexed pages
+  let miniResults;
+  try {
+    miniResults = _miniSearch.search(norm);
+  } catch (_e) {
+    miniResults = [];
+  }
+
+  // Build a relevance score map from MiniSearch (page → score)
+  /** @type {Map<number, number>} */
+  const scoreMap = new Map(miniResults.map(r => [r.pageNum, r.score]));
+
+  // Collect per-page word matches from the coordinate index
   const results = [];
-  for (const [pageNum, entry] of ocrSearchIndex.pages) {
+  const pagesToSearch = miniResults.length > 0
+    ? miniResults.map(r => r.pageNum)
+    : [...ocrSearchIndex.pages.keys()];
+
+  for (const pageNum of pagesToSearch) {
+    const entry = ocrSearchIndex.pages.get(pageNum);
+    if (!entry) continue;
     const matches = [];
     for (const w of entry.words) {
-      if (w.word.includes(norm)) {
+      if (w.word.includes(norm) || w.word.startsWith(norm)) {
         matches.push({ word: w.original, line: w.line, offset: w.offset });
       }
     }
     if (matches.length > 0) {
-      results.push({ page: pageNum, matchCount: matches.length, matches });
+      results.push({ page: pageNum, matchCount: matches.length, matches, score: scoreMap.get(pageNum) || 0 });
     }
   }
-  return results.sort((a, b) => a.page - b.page);
+
+  // Sort by BM25 score descending (pages with more/better matches first),
+  // with page number as tiebreaker for stable output.
+  return results.sort((a, b) => (b.score - a.score) || (a.page - b.page));
 }
 
 /** @returns {any} */
@@ -801,12 +956,21 @@ export async function searchInPdf(query) {
   const ocrData = loadOcrTextData();
   const ocrPages = ocrData?.pagesText || [];
 
-  // Merge native text with OCR text for comprehensive search
+  /**
+   * Get full search text for a page (native + OCR).
+   * As a side effect, adds native text to the FlexSearch index if not yet done.
+   * @param {number} pageNum
+   * @returns {Promise<string>}
+   */
   const _getSearchText = async (pageNum) => {
     let native = '';
-    try { native = (await state.adapter.getText(pageNum)).toLowerCase(); } catch (_e) { /* text extraction failed for page */ }
+    try {
+      native = await state.adapter.getText(pageNum);
+      // Index native text lazily in FlexSearch for future instant searches
+      flexIndexPage(pageNum, native);
+      native = native.toLowerCase();
+    } catch (_e) { /* text extraction failed */ }
     const ocr = String(ocrPages[pageNum - 1] || '').toLowerCase();
-    // Use whichever is longer, or combine both if they differ substantially
     if (!native) return ocr;
     if (!ocr) return native;
     if (native.includes(normalized) || ocr.length < native.length * 0.3) return native;
@@ -821,16 +985,27 @@ export async function searchInPdf(query) {
       state.searchResultCounts[state.currentPage] = count;
     }
   } else {
-    // Also leverage OCR search index for fast pre-screening
+    const maxPage = state.pageCount;
+
+    // Phase 1: instant pre-screening via FlexSearch (already-indexed pages)
+    // and MiniSearch OCR index — both return results in <1ms.
+    const flexHitPages = new Set(flexSearch(query));
     const ocrHits = searchOcrIndex(query);
     const ocrHitPages = new Set(ocrHits.map(h => h.page));
 
-    const maxPage = state.pageCount;
-    for (let i = 1; i <= maxPage; i += 1) {
-      if (!state.adapter) break;
+    // Phase 2: build the list of pages to scan.
+    // Pre-screened hits go first (already fast), then unindexed pages sequentially.
+    const preScreened = new Set([...flexHitPages, ...ocrHitPages]);
+    const unindexed = [];
+    for (let i = 1; i <= maxPage; i++) {
+      if (!preScreened.has(i) && !_flexIndexed.get(i)) unindexed.push(i);
+    }
+
+    // Process pre-screened pages first (no getText call needed for FlexSearch hits)
+    for (const i of preScreened) {
+      if (!state.adapter || i < 1 || i > maxPage) continue;
       const txt = await _getSearchText(i);
       let count = txt.split(normalized).length - 1;
-      // Supplement with OCR index matches for pages not caught by text
       if (count === 0 && ocrHitPages.has(i)) {
         count = ocrHits.find(h => h.page === i)?.matchCount || 0;
       }
@@ -838,11 +1013,27 @@ export async function searchInPdf(query) {
         state.searchResults.push(i);
         state.searchResultCounts[i] = count;
       }
-      if (i % 10 === 0) {
-        els.searchStatus.textContent = `${i}/${maxPage}…`;
+    }
+
+    // Process unindexed pages sequentially, yielding every 10 pages
+    let processed = 0;
+    for (const i of unindexed) {
+      if (!state.adapter) break;
+      const txt = await _getSearchText(i);  // also adds to FlexSearch index
+      const count = txt.split(normalized).length - 1;
+      if (count > 0) {
+        state.searchResults.push(i);
+        state.searchResultCounts[i] = count;
+      }
+      if (++processed % 10 === 0) {
+        const scanned = preScreened.size + processed;
+        els.searchStatus.textContent = `${scanned}/${maxPage}…`;
         await yieldToMainThread();
       }
     }
+
+    // Sort results by page number for consistent navigation
+    state.searchResults.sort((a, b) => a - b);
   }
 
   const searchMs = Math.round(performance.now() - searchStartedAt);
