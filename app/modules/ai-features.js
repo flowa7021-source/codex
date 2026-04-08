@@ -228,13 +228,13 @@ export async function askQuestion(question, context) {
   }
 
   // Heuristic fallback: find the sentence/paragraph most relevant to the question
-  const qWords = question.toLowerCase().match(/[\p{L}]+/gu) || [];
+  const qWords = /** @type {string[]} */ (question.toLowerCase().match(/[\p{L}]+/gu) || []);
   const sentences = context.match(/[^.!?]+[.!?]?/g) || [];
   let best = '';
   let bestScore = 0;
   for (const sent of sentences) {
     const lower = sent.toLowerCase();
-    const score = qWords.reduce((s, w) => s + (lower.includes(w) ? 1 : 0), 0);
+    const score = qWords.reduce((s, w) => s + (lower.includes(w) ? 1 : 0), /** @type {number} */ (0));
     if (score > bestScore) { bestScore = score; best = sent.trim(); }
   }
   return best || context.slice(0, 200);
