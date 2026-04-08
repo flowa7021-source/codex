@@ -32,16 +32,30 @@ import { safeTimeout, clearSafeTimeout } from './safe-timers.js';
 let _katexInstance = null;
 
 /**
- * Load KaTeX from the bundled npm package.
- * Also injects the KaTeX CSS into the page once (for correct rendering).
- * Returns null in non-browser environments (Node.js/tests) where Image.onload
- * never fires and the HTML→PNG pipeline would hang.
+ * Load KaTeX, preferring an already-loaded CDN/global instance over the npm bundle.
+ *
+ * Priority:
+ *   1. globalThis.katex — set when KaTeX is loaded via a <script> tag or CDN.
+ *      This path is always safe because callers that set globalThis.katex are
+ *      expected to handle Image events themselves (e.g. tests patch Image).
+ *   2. npm bundle (dynamic import) — requires a real browser event loop where
+ *      Image.onload fires.  HTMLImageElement is only defined in real browsers;
+ *      test environments that polyfill `window` via setup-dom.js do NOT define
+ *      it, so the guard correctly prevents the HTML→PNG pipeline from hanging.
+ *
+ * Returns null in environments where neither path is viable.
  */
 async function _tryKatex() {
-  // KaTeX rendering requires a real browser event loop (Image.onload, canvas)
   if (typeof window === 'undefined') return null;
-  // Check for externally-provided KaTeX (CDN, test injection) — always wins over cache
-  if (/** @type {any} */ (globalThis).katex?.renderToString) return /** @type {any} */ (globalThis).katex;
+
+  // Priority 1: KaTeX already present on globalThis (CDN / script-tag load).
+  // @ts-ignore
+  if (globalThis.katex) return /** @type {any} */ (globalThis.katex);
+
+  // Priority 2: Load from npm bundle.
+  // Requires a real browser event loop (Image.onload must fire).
+  // HTMLImageElement is absent in Node.js test mocks, so bail out early.
+  if (typeof HTMLImageElement === 'undefined') return null;
   if (_katexInstance) return _katexInstance;
   try {
     // Load katex JS and CSS in parallel; CSS import is a no-op in non-Vite envs
