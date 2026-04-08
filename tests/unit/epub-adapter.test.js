@@ -169,6 +169,46 @@ describe('stripHtmlTags', () => {
     assert.ok(result.includes('Some & text'));
     assert.ok(result.includes('More <stuff>'));
   });
+
+  it('uses DOMParser path when DOMParser is available', () => {
+    const origDOMParser = globalThis.DOMParser;
+    try {
+      // Set up a minimal DOMParser mock
+      globalThis.DOMParser = class MockDOMParser {
+        parseFromString(html) {
+          return {
+            body: { textContent: 'parsed content' },
+          };
+        }
+      };
+      const result = stripHtmlTags('<p>anything</p>');
+      assert.equal(result, 'parsed content');
+    } finally {
+      if (origDOMParser === undefined) {
+        delete globalThis.DOMParser;
+      } else {
+        globalThis.DOMParser = origDOMParser;
+      }
+    }
+  });
+
+  it('falls through to regex when DOMParser throws', () => {
+    const origDOMParser = globalThis.DOMParser;
+    try {
+      globalThis.DOMParser = class BrokenParser {
+        parseFromString() { throw new Error('parse error'); }
+      };
+      // Should fall through to regex path and still return stripped text
+      const result = stripHtmlTags('<p>fallback</p>');
+      assert.equal(result, 'fallback');
+    } finally {
+      if (origDOMParser === undefined) {
+        delete globalThis.DOMParser;
+      } else {
+        globalThis.DOMParser = origDOMParser;
+      }
+    }
+  });
 });
 
 // ─── extractChapterTitle ─────────────────────────────────────────────────────

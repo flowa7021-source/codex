@@ -1243,6 +1243,142 @@ describe('_findParagraphSpans — additional', () => {
   });
 });
 
+// ── _createInlineEditor — blur and keydown events ──────────────────────────
+
+describe('_createInlineEditor — blur event', () => {
+  let origTextLayerDiv, origCanvas, origCurrentPage;
+  beforeEach(() => {
+    origTextLayerDiv = els.textLayerDiv;
+    origCanvas = els.canvas;
+    origCurrentPage = state.currentPage;
+  });
+  afterEach(() => {
+    els.textLayerDiv = origTextLayerDiv;
+    els.canvas = origCanvas;
+    state.currentPage = origCurrentPage;
+    setActiveInlineEditor(null);
+  });
+
+  it('blur with targetSpan and non-empty text updates span textContent', () => {
+    const container = document.createElement('div');
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    const span = makeSpan('original');
+    _createInlineEditor(10, 20, 'original', span, []);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+
+    // Simulate typing new text and blurring
+    editor.textContent = 'updated text';
+    editor.dispatchEvent(new Event('blur'));
+
+    assert.equal(span.textContent, 'updated text');
+  });
+
+  it('blur with empty text does not update span', () => {
+    const container = document.createElement('div');
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    const span = makeSpan('original');
+    _createInlineEditor(10, 20, 'original', span, []);
+    const editor = getActiveInlineEditor();
+
+    editor.textContent = '   '; // whitespace only
+    editor.dispatchEvent(new Event('blur'));
+
+    assert.equal(span.textContent, 'original'); // unchanged
+  });
+
+  it('blur with no targetSpan and non-empty text calls blockEditor.addTextBlock', () => {
+    const container = document.createElement('div');
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    // Set up a mock canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 600;
+    canvas.style.width = '800px';
+    canvas.style.height = '600px';
+    els.canvas = canvas;
+    state.currentPage = 1;
+
+    // blockEditor is imported as a module-level singleton; we trust it has addTextBlock
+    _createInlineEditor(100, 200, '', null, []);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+
+    editor.textContent = 'new text block';
+    editor.dispatchEvent(new Event('blur'));
+    // After blur, editor should be removed
+    assert.equal(getActiveInlineEditor(), null);
+  });
+});
+
+describe('_createInlineEditor — keydown event', () => {
+  let origTextLayerDiv;
+  beforeEach(() => { origTextLayerDiv = els.textLayerDiv; });
+  afterEach(() => { els.textLayerDiv = origTextLayerDiv; setActiveInlineEditor(null); });
+
+  it('Escape key removes editor and clears active editor', () => {
+    const container = document.createElement('div');
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    _createInlineEditor(10, 20, 'text', null, []);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'Escape' });
+    Object.defineProperty(e, 'shiftKey', { value: false });
+    editor.dispatchEvent(e);
+    assert.equal(getActiveInlineEditor(), null);
+  });
+
+  it('Enter key (no Shift) calls blur on editor', () => {
+    const container = document.createElement('div');
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    _createInlineEditor(10, 20, 'text', null, []);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+
+    let blurCalled = false;
+    editor.blur = () => { blurCalled = true; };
+
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'Enter' });
+    Object.defineProperty(e, 'shiftKey', { value: false });
+    e.preventDefault = () => {};
+    editor.dispatchEvent(e);
+    assert.ok(blurCalled);
+  });
+
+  it('Shift+Enter does not call blur', () => {
+    const container = document.createElement('div');
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    _createInlineEditor(10, 20, 'text', null, []);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+
+    let blurCalled = false;
+    editor.blur = () => { blurCalled = true; };
+
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'Enter' });
+    Object.defineProperty(e, 'shiftKey', { value: true });
+    e.preventDefault = () => {};
+    editor.dispatchEvent(e);
+    assert.ok(!blurCalled);
+  });
+});
+
 // ── _syncTextLayerToStorage — additional ────────────────────────────────────
 
 describe('_syncTextLayerToStorage — additional', () => {
