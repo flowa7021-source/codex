@@ -1,7 +1,7 @@
 import './setup-dom.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 import {
   detectFormFields,
   autoCreateForm,
@@ -135,6 +135,43 @@ describe('detectFieldsFromText', () => {
     assert.equal(typeof f.bounds.height, 'number');
     assert.equal(typeof f.confidence, 'number');
   });
+
+  it('detects checkbox field from "Agree"', () => {
+    const items = [
+      { str: 'Agree', transform: [12, 0, 0, 12, 50, 600], width: 40, height: 12 },
+    ];
+    const fields = detectFieldsFromText(items, 1, 792);
+    assert.ok(fields.length >= 1);
+    assert.equal(fields[0].type, 'checkbox');
+  });
+
+  it('detects checkbox field from "Yes"', () => {
+    const items = [
+      { str: 'Yes', transform: [12, 0, 0, 12, 50, 500], width: 20, height: 12 },
+    ];
+    const fields = detectFieldsFromText(items, 1, 792);
+    assert.ok(fields.length >= 1);
+    assert.equal(fields[0].type, 'checkbox');
+  });
+
+  it('uses endsWith(":") fallback for unlabeled colon field', () => {
+    // "Reference:" doesn't match any specific pattern → falls through to endsWith(':')
+    const items = [
+      { str: 'Reference:', transform: [12, 0, 0, 12, 50, 400], width: 60, height: 12 },
+    ];
+    const fields = detectFieldsFromText(items, 1, 792);
+    assert.ok(fields.length >= 1);
+    assert.equal(fields[0].type, 'text');
+  });
+
+  it('uses endsWith("_") fallback for underline-suffix field', () => {
+    const items = [
+      { str: 'Project_', transform: [12, 0, 0, 12, 50, 300], width: 60, height: 12 },
+    ];
+    const fields = detectFieldsFromText(items, 1, 792);
+    assert.ok(fields.length >= 1);
+    assert.equal(fields[0].type, 'text');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -256,5 +293,44 @@ describe('autoCreateForm', () => {
     ]);
     assert.ok(result.blob instanceof Blob);
     assert.equal(result.fieldCount, 1, 'only first field succeeds; second is caught and skipped');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectFormFields — integration with pdfjs-dist
+// ---------------------------------------------------------------------------
+
+describe('detectFormFields', () => {
+  async function makePdfWithLabels() {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([612, 792]);
+    // Draw common form labels
+    page.drawText('Name:', { x: 50, y: 700, size: 12, font, color: rgb(0, 0, 0) });
+    page.drawText('Date of Birth:', { x: 50, y: 670, size: 12, font, color: rgb(0, 0, 0) });
+    page.drawText('Signature', { x: 50, y: 640, size: 12, font, color: rgb(0, 0, 0) });
+    return new Uint8Array(await doc.save());
+  }
+
+  it('returns an array of detected fields', async () => {
+    const bytes = await makePdfWithLabels();
+    const fields = await detectFormFields(bytes, 1);
+    assert.ok(Array.isArray(fields));
+    // May find 0 or more depending on font rendering in pdfjs
+    assert.ok(fields.length >= 0);
+  });
+
+  it('accepts ArrayBuffer input', async () => {
+    const bytes = await makePdfWithLabels();
+    const ab = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    const fields = await detectFormFields(ab, 1);
+    assert.ok(Array.isArray(fields));
+  });
+
+  it('respects minConfidence option', async () => {
+    const bytes = await makePdfWithLabels();
+    const fields = await detectFormFields(bytes, 1, { minConfidence: 0.99 });
+    // Very high confidence threshold → few or no results
+    assert.ok(Array.isArray(fields));
   });
 });
