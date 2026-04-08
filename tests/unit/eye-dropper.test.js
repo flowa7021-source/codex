@@ -13,16 +13,6 @@ import {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Install a mock EyeDropper on globalThis. */
-function installMockEyeDropper(impl = {}) {
-  globalThis.EyeDropper = class EyeDropper {
-    open() {
-      return Promise.resolve({ sRGBHex: '#aabbcc' });
-    }
-    ...impl
-  };
-}
-
 /** Remove mock EyeDropper from globalThis. */
 function removeMockEyeDropper() {
   delete globalThis.EyeDropper;
