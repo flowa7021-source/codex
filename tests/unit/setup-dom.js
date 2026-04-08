@@ -170,8 +170,21 @@ if (typeof globalThis.document === 'undefined') {
     body: _createElement('body'),
     head: { appendChild() {} },
     documentElement: { style: {} },
-    addEventListener() {},
-    removeEventListener() {},
+    _listeners: {},
+    addEventListener(type, fn) {
+      if (!globalThis.document._listeners[type]) globalThis.document._listeners[type] = [];
+      globalThis.document._listeners[type].push(fn);
+    },
+    removeEventListener(type, fn) {
+      if (globalThis.document._listeners[type]) {
+        globalThis.document._listeners[type] = globalThis.document._listeners[type].filter(f => f !== fn);
+      }
+    },
+    dispatchEvent(evt) {
+      const fns = globalThis.document._listeners[evt.type] || [];
+      for (const fn of fns) fn(evt);
+      return true;
+    },
   };
 }
 
