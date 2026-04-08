@@ -91,4 +91,47 @@ describe('pluginToDocxXml', () => {
     assert.ok(xml);
     assert.ok(xml.includes('Heading2'));
   });
+
+  it('report plugin generates Heading3 XML for ### lines', () => {
+    const text = '### Sub-heading\nBody content';
+    const xml = pluginToDocxXml('report', text);
+    assert.ok(xml);
+    assert.ok(xml.includes('Heading3'));
+    assert.ok(xml.includes('Sub-heading'));
+  });
+
+  it('report plugin handles plain text lines (not heading)', () => {
+    const text = 'Just plain text without any heading markers';
+    const xml = pluginToDocxXml('report', text);
+    assert.ok(xml);
+    assert.ok(xml.includes('Just plain text'));
+    assert.ok(!xml.includes('Heading'));
+  });
+
+  it('custom-table plugin is detectable via detectApplicablePlugins', () => {
+    const tabData = 'Name\tAge\tCity\nAlice\t30\tNYC\nBob\t25\tLA\nCarol\t35\tSF';
+    const plugins = detectApplicablePlugins(tabData);
+    assert.ok(plugins.some(p => p.id === 'custom-table'));
+  });
+
+  it('custom-table plugin transform produces pipe-separated output', () => {
+    const text = 'Col1\tCol2\tCol3\nA\tB\tC\nX\tY\tZ';
+    const result = applyPlugin('custom-table', text);
+    assert.ok(result.includes('|'));
+    assert.ok(result.includes('Col1'));
+  });
+
+  it('custom-table toDocxXml delegates to InvoicePlugin', () => {
+    const text = '| Header1 | Header2 |\n| val1 | val2 |';
+    const xml = pluginToDocxXml('custom-table', text);
+    assert.ok(xml);
+    assert.ok(xml.includes('<w:tbl>'));
+  });
+
+  it('custom-table transform handles single-cell lines as plain text', () => {
+    const text = 'Only one cell here\nAnother single line';
+    const result = applyPlugin('custom-table', text);
+    assert.ok(result.includes('Only one cell here'));
+    assert.ok(!result.includes('|'));
+  });
 });

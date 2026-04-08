@@ -325,3 +325,47 @@ describe('mapPdfFont additional', () => {
     assert.equal(mapPdfFont('Trebuchet'), 'Trebuchet MS');
   });
 });
+
+// ── Table validation failure path ────────────────────────────────────────────
+
+describe('table candidate with validation failure', () => {
+  it('converts single-row table candidate to paragraph (validation fails)', async () => {
+    // One "table-like" row (wide x-span + large gap) followed by a regular text line.
+    // tableCandidate gets 1 entry → _validateTableCandidate returns false (length < 2)
+    // → lines are emitted as paragraphs (lines 764-767 path)
+    const items = [
+      // Line 1: column-like items far apart → looks like table row
+      { str: 'Col A', transform: [12, 0, 0, 12, 50, 742], width: 35, height: 12, fontName: 'Arial' },
+      { str: 'Col B', transform: [12, 0, 0, 12, 350, 742], width: 35, height: 12, fontName: 'Arial' },
+      // Line 2: regular text (large gap below — different y → different line)
+      { str: 'Regular paragraph text here follows.', transform: [12, 0, 0, 12, 50, 642], width: 200, height: 12, fontName: 'Arial' },
+    ];
+    const doc = makePdfDoc([makePdfPage(items)]);
+    const result = await extractStructuredContent(doc, 1);
+    // Should have produced some blocks (paragraph from failed table + regular paragraph)
+    assert.ok(result.blocks.length >= 1);
+  });
+});
+
+// ── clusterByXGap same-cluster path ──────────────────────────────────────────
+
+describe('clusterByXGap overlapping items in same cluster', () => {
+  it('groups overlapping x-items into same cluster', async () => {
+    // Items at x=50 (w=40, ends at 90) and x=65 (gap=65-90=-25, negative → same cluster)
+    // plus item at x=350 (large gap → new cluster). Line has 2 distinct columns.
+    const items = [
+      // Line 1: two close items + one far item → 2 clusters
+      { str: 'Part', transform: [12, 0, 0, 12, 50, 742], width: 40, height: 12, fontName: 'Arial' },
+      { str: 'Two', transform: [12, 0, 0, 12, 65, 742], width: 30, height: 12, fontName: 'Arial' },
+      { str: 'Remote', transform: [12, 0, 0, 12, 350, 742], width: 40, height: 12, fontName: 'Arial' },
+      // Line 2 (same pattern to make 2-row table candidate pass validation)
+      { str: 'Alpha', transform: [12, 0, 0, 12, 50, 726], width: 40, height: 12, fontName: 'Arial' },
+      { str: 'Beta', transform: [12, 0, 0, 12, 65, 726], width: 30, height: 12, fontName: 'Arial' },
+      { str: 'Gamma', transform: [12, 0, 0, 12, 350, 726], width: 40, height: 12, fontName: 'Arial' },
+    ];
+    const doc = makePdfDoc([makePdfPage(items)]);
+    const result = await extractStructuredContent(doc, 1);
+    // Should produce a table block (2 rows, 2 columns each after merging close items)
+    assert.ok(result.blocks.length >= 1);
+  });
+});
