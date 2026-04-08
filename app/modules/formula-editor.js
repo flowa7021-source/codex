@@ -45,6 +45,7 @@ async function _tryKatex() {
     // Load katex JS and CSS in parallel; CSS import is a no-op in non-Vite envs
     const [mod] = await Promise.all([
       import('katex'),
+      // @ts-ignore — CSS import; no-op in non-Vite environments, caught below
       import('katex/dist/katex.min.css').catch(() => {}),
     ]);
     _katexInstance = mod.default ?? mod;

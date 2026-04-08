@@ -126,7 +126,7 @@ export async function parseEpub(arrayBuffer) {
 
   // Spine → chapters
   const chapters = [];
-  const spineItems = book.spine?.items || [];
+  const spineItems = /** @type {any[]} */ (/** @type {any} */ (book.spine)?.items || []);
 
   for (let i = 0; i < spineItems.length; i++) {
     const item = spineItems[i];

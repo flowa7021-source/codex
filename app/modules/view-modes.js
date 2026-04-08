@@ -169,7 +169,7 @@ export async function renderTwoUp(currentPage, pageCount, isBook) {
 let _virtualScroll = null;
 /** @type {HTMLElement|null} */
 let _scrollTrackWrap = null;
-/** @type {Function|null} */
+/** @type {EventListener|null} */
 let _scrollTrackFn = null;
 /** @type {ReturnType<typeof setTimeout>|null} */
 let _scrollTrackTimer = null;

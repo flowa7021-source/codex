@@ -20,6 +20,7 @@ export class TabManager {
    * @param {Function} options.onActivate - (tab: DocumentTab) => void
    * @param {Function} options.onClose - (tab: DocumentTab) => boolean (return false to cancel)
    * @param {Function} [options.onDeactivate] - (tab: DocumentTab) => void
+   * @param {Function} [options.onNoTabs] - () => void, called when all tabs are closed
    * @param {number} [options.maxTabs=10]
    */
   constructor(options) {

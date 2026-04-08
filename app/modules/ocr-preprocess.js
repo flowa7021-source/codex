@@ -8,6 +8,8 @@
  * @param {object} [opts]
  * @param {boolean} [opts.deskew=true]
  * @param {boolean} [opts.denoise=true]
+ * @param {number} [opts.denoiseStrength=1] - Denoise intensity multiplier (0–2)
+ * @param {boolean} [opts.sharpen=false]
  * @param {boolean} [opts.binarize=true]
  * @param {boolean} [opts.removeBorders=true]
  * @returns {HTMLCanvasElement} Preprocessed canvas

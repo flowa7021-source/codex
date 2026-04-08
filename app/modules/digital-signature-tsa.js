@@ -141,7 +141,7 @@ export async function requestTimestamp(contentHash, tsaUrl) {
       'content-type': 'application/timestamp-query',
       'accept': 'application/timestamp-reply',
     },
-    body: reqDer,
+    body: /** @type {any} */ (reqDer),
   });
 
   if (!resp.ok) {
@@ -163,12 +163,12 @@ export async function requestTimestamp(contentHash, tsaUrl) {
  * @returns {{ ocsp: string[], caIssuers: string[] }}
  */
 export function extractAiaUrls(certDer) {
-  const cert = new X509Certificate(certDer);
+  const cert = new X509Certificate(/** @type {any} */ (certDer));
   const aia = cert.getExtension(AuthorityInfoAccessExtension);
   const result = { ocsp: /** @type {string[]} */ ([]), caIssuers: /** @type {string[]} */ ([]) };
   if (!aia) return result;
 
-  for (const ad of aia.value) {
+  for (const ad of /** @type {Iterable<any>} */ (/** @type {unknown} */ (aia.value))) {
     const url = ad.accessLocation.uniformResourceIdentifier;
     if (!url) continue;
     if (ad.accessMethod === _OID_OCSP) {
@@ -188,12 +188,12 @@ export function extractAiaUrls(certDer) {
  * @returns {{ ocsp: string[], caIssuers: string[] }}
  */
 export function extractAiaUrlsFull(certDer) {
-  const cert = new X509Certificate(certDer);
+  const cert = new X509Certificate(/** @type {any} */ (certDer));
   const aia = cert.getExtension(AuthorityInfoAccessExtension);
   const result = { ocsp: /** @type {string[]} */ ([]), caIssuers: /** @type {string[]} */ ([]) };
   if (!aia) return result;
 
-  for (const ad of aia.value) {
+  for (const ad of /** @type {Iterable<any>} */ (/** @type {unknown} */ (aia.value))) {
     const url = ad.accessLocation.uniformResourceIdentifier;
     if (!url) continue;
     if (ad.accessMethod === _OID_OCSP) {
@@ -218,7 +218,7 @@ export function extractAiaUrlsFull(certDer) {
 export async function buildOcspRequest(certDer, issuerDer) {
   // Parse issuer cert via asn1-x509 to get raw subject and SPKI DER
   const issuerAsn = AsnParser.parse(
-    issuerDer instanceof Uint8Array ? issuerDer.buffer : issuerDer,
+    /** @type {ArrayBuffer} */ (issuerDer instanceof Uint8Array ? issuerDer.buffer : issuerDer),
     Certificate,
   );
   const subjectDer = new Uint8Array(AsnConvert.serialize(issuerAsn.tbsCertificate.subject));
@@ -231,7 +231,7 @@ export async function buildOcspRequest(certDer, issuerDer) {
 
   // Serial number from target cert (big-endian integer bytes)
   const targetAsn = AsnParser.parse(
-    certDer instanceof Uint8Array ? certDer.buffer : certDer,
+    /** @type {ArrayBuffer} */ (certDer instanceof Uint8Array ? certDer.buffer : certDer),
     Certificate,
   );
   const serialBytes = new Uint8Array(targetAsn.tbsCertificate.serialNumber);
@@ -289,7 +289,7 @@ export async function checkOcsp(certDer, issuerDer, ocspUrl) {
         'content-type': 'application/ocsp-request',
         'accept': 'application/ocsp-response',
       },
-      body: reqDer,
+      body: /** @type {any} */ (reqDer),
     });
 
     if (!resp.ok) {
@@ -470,8 +470,8 @@ function _parseGeneralizedTime(s) {
  */
 export async function verifyCertChain(certDers, trustedDers = []) {
   try {
-    const certs = certDers.map(d => new X509Certificate(d));
-    const trusted = trustedDers.map(d => new X509Certificate(d));
+    const certs = certDers.map(d => new X509Certificate(/** @type {any} */ (d)));
+    const trusted = trustedDers.map(d => new X509Certificate(/** @type {any} */ (d)));
 
     const builder = new X509ChainBuilder({
       certificates: [...certs.slice(1), ...trusted],
