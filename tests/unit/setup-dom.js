@@ -134,6 +134,10 @@ if (typeof globalThis.document === 'undefined') {
         const all = _descendants(el);
         return all.filter(c => _matches(c, selector));
       },
+      contains(node) {
+        if (node === el) return true;
+        return _descendants(el).includes(node);
+      },
       get innerHTML() { return _innerHTML; },
       set innerHTML(val) { _innerHTML = val; _children.length = 0; },
       textContent: '',
