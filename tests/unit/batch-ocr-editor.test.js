@@ -669,3 +669,71 @@ describe('generateBatchReport()', () => {
     assert.ok(generateBatchReport(result).includes('Per-Page Summary'));
   });
 });
+
+// ─── _postProcess — rn pattern ─────────────────────────────────────────────────
+
+describe('BatchOcrEditor._postProcess() — rn OCR pattern', () => {
+  it('handles rn word boundary pattern (conservative — keeps as-is)', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { autoCorrect: true });
+    // The rn pattern: /\brn\b/ — 'rn' surrounded by word boundaries
+    // The implementation is conservative and always returns the original match
+    const result = editor._postProcess('test rn here');
+    // should remain as 'test rn here' (conservative: no change)
+    assert.equal(result, 'test rn here');
+  });
+
+  it('rn correction callback is invoked and returns original text', () => {
+    const editor = new BatchOcrEditor(new Uint8Array(0), { autoCorrect: true });
+    // Multiple rn words to exercise the callback function body (lines 287-288)
+    const text = 'rn rn test rn';
+    const result = editor._postProcess(text);
+    assert.equal(result, 'rn rn test rn');
+  });
+});
+
+// ─── _embedTextLayer ─────────────────────────────────────────────────────────
+
+describe('BatchOcrEditor._embedTextLayer()', () => {
+  it('processes results with charBoxes and plain text', async () => {
+    const { PDFDocument } = await import('pdf-lib');
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const pdfBytes = new Uint8Array(await doc.save());
+
+    const editor = new BatchOcrEditor(pdfBytes);
+    const results = [
+      {
+        page: 1,
+        correctedText: 'Hello world',
+        charBoxes: [],  // No charBoxes → uses _embedPlainText path
+        confidence: 95,
+        corrections: 0,
+      },
+    ];
+
+    const bytes = await editor._embedTextLayer(results);
+    assert.ok(bytes instanceof Uint8Array);
+    assert.ok(bytes.length > 0);
+  });
+
+  it('skips page results with invalid page number', async () => {
+    const { PDFDocument } = await import('pdf-lib');
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const pdfBytes = new Uint8Array(await doc.save());
+
+    const editor = new BatchOcrEditor(pdfBytes);
+    const results = [
+      {
+        page: 99, // Out of range — should be skipped
+        correctedText: 'Text',
+        charBoxes: [],
+        confidence: 90,
+        corrections: 0,
+      },
+    ];
+
+    const bytes = await editor._embedTextLayer(results);
+    assert.ok(bytes instanceof Uint8Array);
+  });
+});
