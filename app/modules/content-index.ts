@@ -16,14 +16,14 @@ export interface ContentEntry {
 
 /**
  * Whether the Content Index API is available in this environment.
- * Requires Service Worker support in navigator and the `index` property on
- * the SW registration (checked via ServiceWorkerRegistration.prototype).
+ * Requires Service Worker support in navigator and the `index` property
+ * on the service worker container object.
  */
 export function isContentIndexSupported(): boolean {
   try {
     if (!('serviceWorker' in navigator)) return false;
-    const swReg = (navigator as any).serviceWorker?._reg;
-    return !!(swReg && (swReg as any).index);
+    const sw = (navigator as any).serviceWorker;
+    return !!(sw && 'index' in sw);
   } catch {
     return false;
   }
