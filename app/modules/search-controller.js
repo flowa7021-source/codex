@@ -76,6 +76,11 @@ export function resetMiniSearchIndex() {
 let _flexIndex = _makeFlexIndex();
 /** @type {Map<number, boolean>} Pages already indexed in FlexSearch */
 const _flexIndexed = new Map();
+/**
+ * Monotonically increasing generation counter. Incremented on every reset so
+ * in-flight background-indexing promises can detect a document switch and abort.
+ */
+let _flexGeneration = 0;
 
 function _makeFlexIndex() {
   return new FlexSearch.Index({
@@ -86,6 +91,7 @@ function _makeFlexIndex() {
 }
 
 function _resetFlexIndex() {
+  _flexGeneration++;
   _flexIndex = _makeFlexIndex();
   _flexIndexed.clear();
 }
@@ -140,10 +146,12 @@ export function scheduleBackgroundFlexIndex(adapter, pageCount) {
   _bgIndexHandle = null;
 
   let nextPage = 1;
+  // Snapshot generation at scheduling time; callbacks abort if it changes.
+  const gen = _flexGeneration;
 
   const tick = (deadline) => {
-    // Stop if a new document reset the index
-    if (_flexIndexed.size === 0 && nextPage > 1) return;
+    // Stop if a new document reset the index (generation changed)
+    if (_flexGeneration !== gen) return;
 
     const PAGES_PER_SLOT = 5;
     let pagesThisTick = 0;
@@ -151,9 +159,10 @@ export function scheduleBackgroundFlexIndex(adapter, pageCount) {
     while (nextPage <= pageCount && pagesThisTick < PAGES_PER_SLOT && deadline.timeRemaining() > 2) {
       const p = nextPage++;
       if (_flexIndexed.get(p)) continue;
-      // Fire-and-forget: index the page text without blocking
+      // Fire-and-forget: guard with generation so stale callbacks never pollute the new index
+      const capturedGen = gen;
       adapter.getText(p).then((text) => {
-        if (text) flexIndexPage(p, text);
+        if (text && _flexGeneration === capturedGen) flexIndexPage(p, text);
       }).catch(() => {});
       pagesThisTick++;
     }
