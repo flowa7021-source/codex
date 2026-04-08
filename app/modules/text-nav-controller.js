@@ -305,7 +305,7 @@ export async function goToPage() {
       const zoom = state.zoom;
       const rotation = state.rotation;
       const offscreen = document.createElement('canvas');
-      state.adapter.renderPage(newPage, offscreen, { zoom, rotation })
+      state.adapter.renderPage?.(newPage, offscreen, { zoom, rotation })
         .then(() => {
           cacheRenderedPage(newPage, offscreen, zoom, rotation);
         })

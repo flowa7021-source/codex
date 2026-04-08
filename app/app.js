@@ -86,6 +86,7 @@ import { pdfEditState, initExportControllerDeps, setPageEdits, undoPageEdit, red
 import { ocrSearchIndex, searchOcrIndex, downloadOcrTextExport, canSearchCurrentDoc, loadSearchScope, saveSearchScope, copySearchResultsSummary, exportSearchResultsSummaryTxt, exportSearchResultsCsv, exportSearchResultsJson, importSearchResultsJson, importSearchResultsCsv, clearSearchResults, renderSearchResultsList, renderSearchHistory, exportSearchHistoryJson, exportSearchHistoryTxt, copySearchHistory, importSearchHistoryJson, clearSearchHistory, searchInPdf, jumpToSearchResult, initSearchControllerDeps, resetMiniSearchIndex, scheduleBackgroundFlexIndex } from './modules/search-controller.js';
 import { initOcrControllerDeps, getBatchOcrProgress, clearOcrRuntimeCaches, estimatePageSkewAngle, setOcrStatus, setOcrRegionMode, drawOcrSelectionPreview, runOcrOnRect, runOcrForCurrentPage, extractTextForPage, cancelAllOcrWork, scheduleBackgroundOcrScan, resetTesseractAvailability } from './modules/ocr-controller.js';
 import { warmupPhoton } from './modules/ocr-photon-proc.js';
+import { warmupPdfOxide, extractPageText as pdfOxideExtractPageText, searchText as pdfOxideSearch, isAvailable as isPdfOxideAvailable } from './modules/pdf-oxide-extractor.js';
 import { initWorkspaceDeps, setWorkspaceStatus, setStage4Status, initReleaseGuards, loadCloudSyncUrl, saveCloudSyncUrl, loadOcrTextData, saveOcrTextData, pushWorkspaceToCloud, pullWorkspaceFromCloud, broadcastWorkspaceSnapshot, toggleCollaborationChannel, importOcrJson, exportWorkspaceBundleJson, importWorkspaceBundleJson } from './modules/workspace-controller.js';
 import { initReadingProgressDeps, noteKey, bookmarkKey, loadReadingGoal, saveReadingGoal, clearReadingGoal, renderReadingGoalStatus, renderEtaStatus, renderDocStats, renderVisitTrail, trackVisitedPage, clearVisitTrail, updateHistoryButtons, resetHistory, capturePageHistoryOnRender, navigateHistoryBack, navigateHistoryForward, loadReadingTime, updateReadingTimeStatus, stopReadingTimer, startReadingTimer, syncReadingTimerWithVisibility, resetReadingTime, _saveViewStateNow, saveViewState, renderReadingProgress, restoreViewStateIfPresent, resetReadingProgress, saveRecent, clearRecent, renderRecent } from './modules/reading-progress-controller.js';
 import { initFileControllerDeps, revokeCurrentObjectUrl, saveDjvuData, openFile, reloadPdfFromBytes } from './modules/file-controller.js';
@@ -604,6 +605,8 @@ initFileControllerDeps({
     }
     // Warm up Photon WASM so first OCR call on a scanned page doesn't wait
     warmupPhoton();
+    // Warm up pdf-oxide WASM for fast text extraction
+    warmupPdfOxide();
   },
 });
 // When a thumbnail becomes ready, re-render the current page if it has no
@@ -855,6 +858,7 @@ window._pdfSecurity = { setPassword, cleanMetadata, getSecurityInfo, sanitizePdf
 window._textEdit = { applyTextEdits, addTextBlock, findAndReplace, spellCheck, getAvailableFonts };
 window._ocrCorrect = { correctOcrText, buildDictionary, recoverParagraphs, computeQualityScore };
 window._textExtractor = { extractTextInReadingOrder, extractMultiPageText, downloadText };
+window._pdfOxide = { isAvailable: isPdfOxideAvailable, extractPageText: pdfOxideExtractPageText, searchText: pdfOxideSearch };
 window._workerPool = { WorkerPool, initOcrPool, getOcrPool, runInWorker };
 window._indexedStorage = { openDatabase, cachePageRender, getCachedPageRender, clearDocumentCache, getStorageUsage, clearAllCache };
 window._errorHandler = { reportError, getErrorLog, withRetry, saveStateSnapshot, restoreStateSnapshot };
