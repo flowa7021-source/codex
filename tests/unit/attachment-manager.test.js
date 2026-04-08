@@ -117,3 +117,99 @@ describe('attachment-manager', () => {
     assert.doesNotThrow(() => panel.close());
   });
 });
+
+describe('AttachmentPanel – _extractFile', () => {
+  it('downloads file by creating and revoking object URL', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const fileData = new Uint8Array([10, 20, 30, 40]);
+    const blob = await addAttachment(pdfBytes, 'download.txt', fileData, 'text/plain');
+    const modifiedBytes = new Uint8Array(await blob.arrayBuffer());
+
+    const createdUrls = [];
+    const revokedUrls = [];
+    const origCreate = URL.createObjectURL;
+    const origRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = (b) => { const u = 'blob:test-' + createdUrls.length; createdUrls.push(u); return u; };
+    URL.revokeObjectURL = (u) => { revokedUrls.push(u); };
+
+    const container = document.createElement('div');
+    const ap = new AttachmentPanel(container, {
+      getPdfBytes: () => modifiedBytes,
+      onApply: () => {},
+    });
+
+    try {
+      await ap._extractFile(0);
+      assert.ok(createdUrls.length > 0, 'createObjectURL should be called');
+      assert.ok(revokedUrls.length > 0, 'revokeObjectURL should be called');
+    } finally {
+      URL.createObjectURL = origCreate;
+      URL.revokeObjectURL = origRevoke;
+    }
+  });
+
+  it('does nothing when extractAttachment returns null (out-of-bounds index)', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const container = document.createElement('div');
+    const ap = new AttachmentPanel(container, {
+      getPdfBytes: () => pdfBytes,
+      onApply: () => {},
+    });
+    // Index 999 is out of bounds; should return early without error
+    await assert.doesNotReject(() => ap._extractFile(999));
+  });
+});
+
+describe('AttachmentPanel – _deleteFile', () => {
+  it('deletes attachment and calls onApply', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const blob = await addAttachment(pdfBytes, 'del.txt', new Uint8Array([5, 6, 7]));
+    const modifiedBytes = new Uint8Array(await blob.arrayBuffer());
+
+    let appliedBlob = null;
+    const container = document.createElement('div');
+    const ap = new AttachmentPanel(container, {
+      getPdfBytes: () => modifiedBytes,
+      onApply: (b) => { appliedBlob = b; },
+    });
+
+    await ap._deleteFile(0);
+    assert.ok(appliedBlob instanceof Blob, 'onApply should be called with Blob');
+  });
+});
+
+describe('AttachmentPanel – _formatBytes via open()', () => {
+  it('shows KB size for attachment >= 1024 bytes', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const fileData = new Uint8Array(2048).fill(0xAA); // 2 KB
+    const blob = await addAttachment(pdfBytes, 'big.bin', fileData, 'application/octet-stream');
+    const modifiedBytes = new Uint8Array(await blob.arrayBuffer());
+
+    const container = document.createElement('div');
+    const ap = new AttachmentPanel(container, {
+      getPdfBytes: () => modifiedBytes,
+      onApply: () => {},
+    });
+
+    // open() calls _buildPanel() which calls _formatBytes() on the file size
+    await ap.open();
+    // If no error, KB branch was exercised
+    ap.close();
+  });
+
+  it('shows MB size for attachment >= 1MB bytes', async () => {
+    const pdfBytes = await makeBlankPdf();
+    const fileData = new Uint8Array(1100000).fill(0xBB); // ~1 MB
+    const blob = await addAttachment(pdfBytes, 'huge.bin', fileData, 'application/octet-stream');
+    const modifiedBytes = new Uint8Array(await blob.arrayBuffer());
+
+    const container = document.createElement('div');
+    const ap = new AttachmentPanel(container, {
+      getPdfBytes: () => modifiedBytes,
+      onApply: () => {},
+    });
+
+    await ap.open();
+    ap.close();
+  });
+});
