@@ -166,15 +166,17 @@ describe('applyRecoveredSnapshot', () => {
 });
 
 describe('checkForRecovery — old snapshot rejection (>24h)', () => {
-  beforeEach(() => {
-    localStorage.clear();
+  beforeEach(async () => {
     initAutosave(makeDeps());
+    // Clear ALL recovery data (IDB store + localStorage) so IDB returns empty
+    await clearRecoveryData();
   });
 
   it('returns null and marks clean for snapshots older than 24h', async () => {
-    // Put an old unclean snapshot in localStorage fallback
+    // Put an old unclean snapshot in localStorage AFTER clearRecoveryData
+    // (IDB is empty, so the LS fallback is used)
     const oldSnapshot = {
-      sessionId: 'old-session',
+      sessionId: 'old-session-test',
       fileName: 'old.pdf',
       timestamp: Date.now() - (25 * 60 * 60 * 1000), // 25 hours ago
       wasCleanExit: false,
@@ -184,13 +186,13 @@ describe('checkForRecovery — old snapshot rejection (>24h)', () => {
     };
     localStorage.setItem(LS_FALLBACK_KEY, JSON.stringify([oldSnapshot]));
 
-    // checkForRecovery should reject the old snapshot and return null
+    // checkForRecovery should find the old snapshot, reject it (>24h), and return null
     const result = await checkForRecovery();
     assert.equal(result, null);
   });
 
   it('returns null when no unclean snapshots exist', async () => {
-    localStorage.clear();
+    // IDB is empty and localStorage was cleared by clearRecoveryData
     const result = await checkForRecovery();
     assert.equal(result, null);
   });
