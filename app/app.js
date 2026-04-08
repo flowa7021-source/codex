@@ -35,7 +35,7 @@ import { initTooltips } from './modules/tooltip.js';
 import { initContextMenu } from './modules/context-menu.js';
 import { initA11y } from './modules/a11y.js';
 import { bindUndoRedoKeys, undoRedoManager } from './modules/undo-redo.js';
-import { VIEW_MODES, initViewModes, setViewMode, getCurrentMode } from './modules/view-modes.js';
+import { VIEW_MODES, initViewModes, setViewMode, getCurrentMode, continuousScrollToPage } from './modules/view-modes.js';
 import { convertToHtml, downloadHtml } from './modules/html-converter.js';
 import { applyTextEdits, addTextBlock, findAndReplace, spellCheck, getAvailableFonts } from './modules/pdf-text-edit.js';
 import { setPassword, cleanMetadata, getSecurityInfo, sanitizePdf } from './modules/pdf-security.js';
@@ -733,7 +733,23 @@ initViewModes({
   },
   getPageCount: () => state.pageCount,
   getCurrentPage: () => state.currentPage,
-  setCurrentPage: async (n) => { const p = Math.max(1, Math.min(n, state.pageCount)); state.currentPage = p; els.pageInput.value = String(p); await renderCurrentPage(); },
+  setCurrentPage: async (n) => {
+    const p = Math.max(1, Math.min(n, state.pageCount));
+    state.currentPage = p;
+    els.pageInput.value = String(p);
+    if (getCurrentMode() === VIEW_MODES.CONTINUOUS) {
+      // In continuous mode, scroll to the page instead of re-rendering the main canvas
+      continuousScrollToPage(p);
+    } else {
+      await renderCurrentPage();
+    }
+  },
+  onScrollPage: (n) => {
+    // Lightweight scroll tracker: update the page indicator without triggering a canvas re-render
+    const p = Math.max(1, Math.min(n, state.pageCount));
+    state.currentPage = p;
+    els.pageInput.value = String(p);
+  },
   getZoom: () => state.zoom,
   viewport: document.querySelector('.document-viewport'),
   canvas: els.canvas,

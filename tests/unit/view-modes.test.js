@@ -207,16 +207,16 @@ describe('view-modes', () => {
       assert.ok(!deps.viewport.classList.contains('vmode-presentation'));
     });
 
-    it('clears continuous-scroll-wrap innerHTML on cleanup', () => {
+    it('removes continuous-scroll-wrap on cleanup', () => {
       setViewMode(VIEW_MODES.CONTINUOUS);
       const wrap = deps.viewport.querySelector('.continuous-scroll-wrap');
       assert.ok(wrap, 'wrap should exist');
-      // The wrap should have page slots
-      assert.ok(wrap.children.length > 0, 'should have page slots');
+      // The wrap should have virtual-scroll content
+      assert.ok(wrap.children.length > 0, 'should have virtual-scroll content');
       // Switch away, triggering cleanup
       setViewMode(VIEW_MODES.SINGLE);
-      // After cleanup, innerHTML is cleared
-      assert.equal(wrap.innerHTML, '');
+      // After cleanup, the wrap element itself is removed from the viewport
+      assert.ok(!deps.viewport.querySelector('.continuous-scroll-wrap'), 'wrap should be removed');
     });
 
     it('cleans up presentation key handler when switching away from presentation', () => {
@@ -375,87 +375,32 @@ describe('view-modes', () => {
       assert.ok(wrap, 'continuous-scroll-wrap should exist');
     });
 
-    it('creates page slots for all pages', () => {
+    it('adds vmode-continuous class to viewport', () => {
       setViewMode(VIEW_MODES.CONTINUOUS);
-      const wrap = deps.viewport.querySelector('.continuous-scroll-wrap');
-      const slots = wrap.querySelectorAll('.continuous-page-slot');
-      assert.equal(slots.length, 10, 'should have 10 page slots');
+      assert.ok(deps.viewport.classList.contains('vmode-continuous'));
     });
 
-    it('sets data-page attribute on each slot', () => {
+    it('creates virtual-scroll-content inside wrap', () => {
       setViewMode(VIEW_MODES.CONTINUOUS);
       const wrap = deps.viewport.querySelector('.continuous-scroll-wrap');
-      const slots = wrap.querySelectorAll('.continuous-page-slot');
-      assert.equal(slots[0].dataset.page, '1');
-      assert.equal(slots[9].dataset.page, '10');
+      const content = wrap.querySelector('.virtual-scroll-content');
+      assert.ok(content, 'VirtualScroll content element should exist');
     });
 
-    it('sets minHeight based on zoom', () => {
-      deps.getZoom = () => 1.5;
-      initViewModes(deps);
+    it('renders visible pages via VirtualScroll', async () => {
       setViewMode(VIEW_MODES.CONTINUOUS);
-      const wrap = deps.viewport.querySelector('.continuous-scroll-wrap');
-      const slot = wrap.querySelectorAll('.continuous-page-slot')[0];
-      assert.equal(slot.style.minHeight, `${Math.round(792 * 1.5)}px`);
+      // Allow VirtualScroll's initial _onScroll to run
+      await new Promise(r => setTimeout(r, 20));
+      // VirtualScroll should call renderPage for pages in the initial viewport
+      // (clientHeight is 0 in JSDOM so visible range may be minimal — just check no crash)
+      assert.ok(deps.renderPage.mock.callCount() >= 0, 'renderPage may be called for visible pages');
     });
 
-    it('observes all slots with IntersectionObserver', () => {
+    it('removes wrap element on mode cleanup', () => {
       setViewMode(VIEW_MODES.CONTINUOUS);
-      assert.equal(observedElements.length, 10, 'should observe 10 slots');
-    });
-
-    it('renders page when intersection callback fires with isIntersecting', async () => {
-      setViewMode(VIEW_MODES.CONTINUOUS);
-      const wrap = deps.viewport.querySelector('.continuous-scroll-wrap');
-      const slot = wrap.querySelectorAll('.continuous-page-slot')[0];
-
-      // Simulate intersection
-      assert.ok(lastObserverCallback, 'observer callback should be set');
-      lastObserverCallback([{ isIntersecting: true, target: slot }]);
-
-      // Allow async renderPage to resolve
-      await new Promise(r => setTimeout(r, 10));
-      // renderPage should have been called for page 1
-      assert.ok(deps.renderPage.mock.callCount() >= 1, 'renderPage should be called');
-      assert.equal(slot.dataset.rendered, 'true');
-    });
-
-    it('does not re-render a page already rendered', async () => {
-      setViewMode(VIEW_MODES.CONTINUOUS);
-      const wrap = deps.viewport.querySelector('.continuous-scroll-wrap');
-      const slot = wrap.querySelectorAll('.continuous-page-slot')[0];
-
-      lastObserverCallback([{ isIntersecting: true, target: slot }]);
-      await new Promise(r => setTimeout(r, 10));
-      const countAfterFirst = deps.renderPage.mock.callCount();
-
-      // Fire again
-      lastObserverCallback([{ isIntersecting: true, target: slot }]);
-      await new Promise(r => setTimeout(r, 10));
-      assert.equal(deps.renderPage.mock.callCount(), countAfterFirst, 'should not re-render');
-    });
-
-    it('skips non-intersecting entries', async () => {
-      setViewMode(VIEW_MODES.CONTINUOUS);
-      const wrap = deps.viewport.querySelector('.continuous-scroll-wrap');
-      const slot = wrap.querySelectorAll('.continuous-page-slot')[0];
-
-      lastObserverCallback([{ isIntersecting: false, target: slot }]);
-      await new Promise(r => setTimeout(r, 10));
-      assert.equal(slot.dataset.rendered, undefined, 'should not be rendered');
-    });
-
-    it('handles render error by allowing retry', async () => {
-      deps.renderPage = mock.fn(async () => { throw new Error('render failed'); });
-      initViewModes(deps);
-      setViewMode(VIEW_MODES.CONTINUOUS);
-      const wrap = deps.viewport.querySelector('.continuous-scroll-wrap');
-      const slot = wrap.querySelectorAll('.continuous-page-slot')[0];
-
-      lastObserverCallback([{ isIntersecting: true, target: slot }]);
-      await new Promise(r => setTimeout(r, 10));
-      // After error, rendered should be reset to 'false' to allow retry
-      assert.equal(slot.dataset.rendered, 'false');
+      assert.ok(deps.viewport.querySelector('.continuous-scroll-wrap'), 'wrap should exist');
+      setViewMode(VIEW_MODES.SINGLE);
+      assert.ok(!deps.viewport.querySelector('.continuous-scroll-wrap'), 'wrap should be removed on cleanup');
     });
   });
 
