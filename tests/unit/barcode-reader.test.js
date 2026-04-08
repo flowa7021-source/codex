@@ -97,6 +97,70 @@ describe('detectBarcodesInPdf', () => {
   it('has correct arity (pdfDocument, pageNums, options)', () => {
     assert.ok(detectBarcodesInPdf.length >= 1);
   });
+
+  it('returns a Map with results for each page', async () => {
+    // Mock pdfDocument with 2 pages
+    const mockPage = {
+      getViewport: ({ scale }) => ({ width: 10 * scale, height: 10 * scale }),
+      render: ({ canvasContext: _ctx, viewport: _vp }) => ({
+        promise: Promise.resolve(),
+      }),
+    };
+    const pdfDoc = {
+      numPages: 2,
+      getPage: async (_n) => mockPage,
+    };
+    const result = await detectBarcodesInPdf(pdfDoc, [1, 2]);
+    assert.ok(result instanceof Map);
+    assert.ok(result.has(1));
+    assert.ok(result.has(2));
+    assert.ok(Array.isArray(result.get(1)));
+    assert.ok(Array.isArray(result.get(2)));
+  });
+
+  it('uses all pages when pageNums is null', async () => {
+    const mockPage = {
+      getViewport: ({ scale }) => ({ width: 5 * scale, height: 5 * scale }),
+      render: () => ({ promise: Promise.resolve() }),
+    };
+    const pdfDoc = {
+      numPages: 3,
+      getPage: async (_n) => mockPage,
+    };
+    const result = await detectBarcodesInPdf(pdfDoc, null);
+    assert.ok(result instanceof Map);
+    assert.equal(result.size, 3);
+  });
+
+  it('skips out-of-range page numbers', async () => {
+    const mockPage = {
+      getViewport: ({ scale }) => ({ width: 5 * scale, height: 5 * scale }),
+      render: () => ({ promise: Promise.resolve() }),
+    };
+    const pdfDoc = {
+      numPages: 2,
+      getPage: async (_n) => mockPage,
+    };
+    // page 0 and page 5 should be skipped
+    const result = await detectBarcodesInPdf(pdfDoc, [0, 1, 5]);
+    assert.ok(result.has(1));
+    assert.ok(!result.has(0));
+    assert.ok(!result.has(5));
+  });
+
+  it('handles canvas getContext returning null', async () => {
+    const mockPage = {
+      getViewport: (_opts) => ({ width: 0, height: 0 }),
+      render: () => ({ promise: Promise.resolve() }),
+    };
+    const pdfDoc = {
+      numPages: 1,
+      getPage: async (_n) => mockPage,
+    };
+    // Zero-size canvas → getContext returns null or returns context with empty data
+    const result = await detectBarcodesInPdf(pdfDoc, [1]);
+    assert.ok(result instanceof Map);
+  });
 });
 
 // ---------------------------------------------------------------------------
