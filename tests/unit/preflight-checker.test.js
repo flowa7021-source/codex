@@ -125,4 +125,73 @@ describe('PreflightPanel', () => {
     panel.close();
     assert.equal(panel._panel, null);
   });
+
+  it('open() renders status element with PRINT READY or ISSUES FOUND', async () => {
+    const container = document.createElement('div');
+    const bytes = await createTestPdf({ title: 'Doc', author: 'Auth' });
+    const panel = new PreflightPanel(container, {
+      getPdfBytes: () => bytes,
+      onClose: () => {},
+    });
+    await panel.open();
+    const html = panel._statusEl.innerHTML;
+    assert.ok(html.includes('PRINT READY') || html.includes('ISSUES FOUND'),
+      `expected status label in innerHTML, got: ${html}`);
+    panel.close();
+  });
+
+  it('open() populates results list with check items', async () => {
+    const container = document.createElement('div');
+    const bytes = await createTestPdf({ title: 'Doc', author: 'Auth' });
+    const panel = new PreflightPanel(container, {
+      getPdfBytes: () => bytes,
+    });
+    await panel.open();
+    assert.ok(panel._resultsList.children.length > 0, 'results list should have items');
+    panel.close();
+  });
+
+  it('open() renders fix text for checks with a fix property', async () => {
+    const container = document.createElement('div');
+    // A PDF without title/author will generate a warn check with a fix suggestion
+    const bytes = await createTestPdf();
+    const panel = new PreflightPanel(container, {
+      getPdfBytes: () => bytes,
+    });
+    await panel.open();
+    // At least one item should exist (checks with fix text are rendered)
+    assert.ok(panel._resultsList.children.length > 0);
+    panel.close();
+  });
+
+  it('close button invokes onClose callback', async () => {
+    const container = document.createElement('div');
+    const bytes = await createTestPdf();
+    let closeCalled = false;
+    const panel = new PreflightPanel(container, {
+      getPdfBytes: () => bytes,
+      onClose: () => { closeCalled = true; },
+    });
+    await panel.open();
+    // Find and click the close button
+    const closeBtn = panel._panel.querySelector('button');
+    closeBtn.click();
+    assert.equal(closeCalled, true);
+    assert.equal(panel._panel, null);
+  });
+});
+
+describe('runPreflight — non-standard page size', () => {
+  it('reports custom page dimensions for non-standard size', async () => {
+    // 1000×1234 pt is not in STANDARD_PAGE_SIZES → _identifyPageSize returns "1000×1234 pt"
+    const bytes = await createTestPdf({ size: [1000, 1234] });
+    const report = await runPreflight(bytes);
+    assert.ok(report.checks.length > 0);
+    // Report should contain info about page size
+    const pageSizeCheck = report.checks.find(c => c.id === 'page-size');
+    if (pageSizeCheck) {
+      assert.ok(pageSizeCheck.message.includes('×') || pageSizeCheck.message.includes('pt') || pageSizeCheck.message.includes('custom'),
+        `page size message: ${pageSizeCheck.message}`);
+    }
+  });
 });

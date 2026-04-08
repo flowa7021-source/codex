@@ -11,6 +11,8 @@ import {
   openExternal,
   setWindowTitle,
   getAppDataDir,
+  writeFileBytes,
+  saveOrDownload,
 } from '../../app/modules/platform.js';
 
 describe('platform', () => {
@@ -90,6 +92,31 @@ describe('platform', () => {
     it('returns null in browser mode', async () => {
       const result = await getAppDataDir();
       assert.strictEqual(result, null);
+    });
+  });
+
+  describe('writeFileBytes()', () => {
+    it('throws in browser mode (not Tauri)', async () => {
+      await assert.rejects(
+        () => writeFileBytes('/some/path', new Uint8Array([1, 2, 3])),
+        /writeFileBytes: only available in Tauri/,
+      );
+    });
+  });
+
+  describe('saveOrDownload()', () => {
+    it('downloads blob in browser mode and returns true', async () => {
+      const blob = new Blob(['test content'], { type: 'text/plain' });
+      const result = await saveOrDownload(blob, 'test.txt');
+      assert.strictEqual(result, true);
+    });
+
+    it('returns true with custom filters in browser mode', async () => {
+      const blob = new Blob(['pdf data'], { type: 'application/pdf' });
+      const result = await saveOrDownload(blob, 'doc.pdf', [
+        { name: 'PDF', extensions: ['pdf'] },
+      ]);
+      assert.strictEqual(result, true);
     });
   });
 });

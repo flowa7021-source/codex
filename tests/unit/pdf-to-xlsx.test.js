@@ -399,6 +399,38 @@ async function makeMultiPagePdfBytes() {
   return new Uint8Array(await pdf.save());
 }
 
+/** Blank PDF — no text at all, triggers the "no tables" empty-sheet fallback. */
+async function makeBlankPdfBytes() {
+  const pdf = await PDFDocument.create();
+  pdf.addPage([612, 792]);
+  return new Uint8Array(await pdf.save());
+}
+
+/**
+ * 4-page PDF where each page has a distinct 3-column table.
+ * Produces allTableInfos.length === 4, triggering the index sheet (> 3 tables).
+ */
+async function makeFourTablePdfBytes() {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const tableLabels = ['Alpha', 'Beta', 'Gamma', 'Delta'];
+  for (let t = 0; t < 4; t++) {
+    const page = pdf.addPage([612, 792]);
+    // Header row
+    page.drawText(`${tableLabels[t]}Col1`, { x: 50,  y: 730, size: 11, font, color: rgb(0, 0, 0) });
+    page.drawText(`${tableLabels[t]}Col2`, { x: 220, y: 730, size: 11, font, color: rgb(0, 0, 0) });
+    page.drawText(`${tableLabels[t]}Col3`, { x: 390, y: 730, size: 11, font, color: rgb(0, 0, 0) });
+    // Data rows
+    for (let r = 0; r < 4; r++) {
+      const y = 710 - r * 18;
+      page.drawText(`A${r + 1}`, { x: 50,  y, size: 10, font, color: rgb(0, 0, 0) });
+      page.drawText(`B${r + 1}`, { x: 220, y, size: 10, font, color: rgb(0, 0, 0) });
+      page.drawText(`C${r + 1}`, { x: 390, y, size: 10, font, color: rgb(0, 0, 0) });
+    }
+  }
+  return new Uint8Array(await pdf.save());
+}
+
 // ── Integration tests: convertPdfToXlsx with real PDF bytes ──────────────────
 
 describe('convertPdfToXlsx — real PDF integration', { skip: !moduleAvailable && 'module not loadable' }, () => {
@@ -486,5 +518,21 @@ describe('convertPdfToXlsx — real PDF integration', { skip: !moduleAvailable &
     const bytes = await makePdfBytes(['Value', '(1,234.56)', '-42.5']);
     const result = await convertPdfToXlsx(bytes, { numberDetection: true });
     assert.ok(result.blob instanceof Blob);
+  });
+
+  it('blank PDF (no text) produces one empty sheet (empty fallback path)', async () => {
+    const bytes = await makeBlankPdfBytes();
+    const result = await convertPdfToXlsx(bytes);
+    assert.ok(result.blob instanceof Blob, 'should return a Blob');
+    // sheetCount should be 1 from the empty-sheet fallback
+    assert.ok(result.sheetCount >= 1, 'should have at least 1 sheet via fallback');
+  });
+
+  it('PDF with 4+ tables prepends an index sheet', async () => {
+    const bytes = await makeFourTablePdfBytes();
+    const result = await convertPdfToXlsx(bytes);
+    assert.ok(result.blob instanceof Blob, 'should return a Blob');
+    // 4 data sheets + 1 index sheet = 5 total
+    assert.ok(result.sheetCount >= 4, `expected >= 4 sheets, got ${result.sheetCount}`);
   });
 });

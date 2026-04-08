@@ -126,4 +126,119 @@ describe('PresentationMode', () => {
     assert.equal(pres._currentPage, 5);
     pres.stop();
   });
+
+  it('Home key navigates to page 1', async () => {
+    await pres.start(3);
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'Home' });
+    e.preventDefault = () => {};
+    pres._onKeyDown(e);
+    assert.equal(pres._currentPage, 1);
+    pres.stop();
+  });
+
+  it('End key navigates to last page', async () => {
+    await pres.start(2);
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'End' });
+    e.preventDefault = () => {};
+    pres._onKeyDown(e);
+    assert.equal(pres._currentPage, 5); // totalPages = 5
+    pres.stop();
+  });
+
+  it('b key toggles black blank', async () => {
+    await pres.start(1);
+    assert.equal(pres._blanked, null);
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'b' });
+    pres._onKeyDown(e);
+    assert.equal(pres._blanked, 'black');
+    pres.stop();
+  });
+
+  it('w key toggles white blank', async () => {
+    await pres.start(1);
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'w' });
+    pres._onKeyDown(e);
+    assert.equal(pres._blanked, 'white');
+    pres.stop();
+  });
+
+  it('l key toggles laser', async () => {
+    await pres.start(1);
+    assert.equal(pres._laserOn, false);
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'l' });
+    pres._onKeyDown(e);
+    assert.equal(pres._laserOn, true);
+    pres.stop();
+  });
+
+  it('f key skips fullscreen request when already in fullscreen', async () => {
+    await pres.start(1);
+    // Set fullscreenElement so the if-branch is skipped — no error thrown
+    document.fullscreenElement = pres._overlay;
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'f' });
+    pres._onKeyDown(e);
+    document.fullscreenElement = null;
+    pres.stop();
+  });
+
+  it('f key requests fullscreen when not in fullscreen', async () => {
+    await pres.start(1);
+    document.fullscreenElement = null;
+    // Mock requestFullscreen to return a thenable so .catch() works
+    pres._overlay.requestFullscreen = () => ({ catch: () => {} });
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'f' });
+    pres._onKeyDown(e);
+    pres.stop();
+  });
+
+  it('_onMouseMove updates cursor style and laser dot position when laser on', async () => {
+    await pres.start(1);
+    pres._laserOn = true;
+    const e = new Event('mousemove');
+    Object.defineProperty(e, 'clientX', { value: 200 });
+    Object.defineProperty(e, 'clientY', { value: 300 });
+    pres._overlay.dispatchEvent(e);
+    assert.equal(pres._laserDot.style.left, '200px');
+    assert.equal(pres._laserDot.style.top, '300px');
+    assert.equal(pres._overlay.style.cursor, 'default');
+    pres.stop();
+  });
+
+  it('_onMouseMove updates cursor style when laser is off', async () => {
+    await pres.start(1);
+    pres._laserOn = false;
+    const e = new Event('mousemove');
+    Object.defineProperty(e, 'clientX', { value: 50 });
+    Object.defineProperty(e, 'clientY', { value: 50 });
+    pres._overlay.dispatchEvent(e);
+    assert.equal(pres._overlay.style.cursor, 'default');
+    pres.stop();
+  });
+
+  it('_onClick left half navigates to previous page', async () => {
+    await pres.start(3);
+    const half = (window.innerWidth || 1024) / 2;
+    const e = new Event('click');
+    Object.defineProperty(e, 'clientX', { value: half / 2 }); // left half
+    pres._overlay.dispatchEvent(e);
+    assert.equal(pres._currentPage, 2);
+    pres.stop();
+  });
+
+  it('_onClick right half navigates to next page', async () => {
+    await pres.start(2);
+    const half = (window.innerWidth || 1024) / 2;
+    const e = new Event('click');
+    Object.defineProperty(e, 'clientX', { value: half + 100 }); // right half
+    pres._overlay.dispatchEvent(e);
+    assert.equal(pres._currentPage, 3);
+    pres.stop();
+  });
 });
