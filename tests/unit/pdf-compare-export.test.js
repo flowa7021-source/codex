@@ -8,6 +8,8 @@ import {
   PdfCompare,
   pdfCompare,
   exportAsAnnotatedPdf,
+  exportAsDocxTrackChanges,
+  exportDiffTable,
 } from '../../app/modules/pdf-compare.js';
 
 // ---------------------------------------------------------------------------
@@ -157,6 +159,65 @@ describe('exportAsAnnotatedPdf', () => {
     const blob = await exportAsAnnotatedPdf(pdfBytes, [
       { type: 'add', text: 'something' },
     ]);
+    assert.ok(blob instanceof Blob);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// exportAsDocxTrackChanges
+// ---------------------------------------------------------------------------
+
+describe('exportAsDocxTrackChanges', () => {
+  it('returns a Blob for a diff with equal/add/remove entries', async () => {
+    const diff = [
+      { type: 'equal', text: 'Same text. ' },
+      { type: 'remove', text: 'Old sentence. ' },
+      { type: 'add', text: 'New sentence. ' },
+    ];
+    const blob = await exportAsDocxTrackChanges(diff);
+    assert.ok(blob instanceof Blob);
+    assert.ok(blob.size > 0);
+  });
+
+  it('handles empty diff', async () => {
+    const blob = await exportAsDocxTrackChanges([]);
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('handles diff with only equal entries', async () => {
+    const diff = [{ type: 'equal', text: 'All same.' }];
+    const blob = await exportAsDocxTrackChanges(diff);
+    assert.ok(blob instanceof Blob);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// exportDiffTable
+// ---------------------------------------------------------------------------
+
+describe('exportDiffTable', () => {
+  it('returns a Blob containing a diff table', async () => {
+    const diff = [
+      { type: 'equal', text: 'No change.' },
+      { type: 'remove', text: 'Removed line.' },
+      { type: 'add', text: 'Added line.' },
+    ];
+    const blob = await exportDiffTable(diff);
+    assert.ok(blob instanceof Blob);
+    assert.ok(blob.size > 0);
+  });
+
+  it('handles empty diff', async () => {
+    const blob = await exportDiffTable([]);
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('handles only-changes diff (no equal entries)', async () => {
+    const diff = [
+      { type: 'remove', text: 'Old.' },
+      { type: 'add', text: 'New.' },
+    ];
+    const blob = await exportDiffTable(diff);
     assert.ok(blob instanceof Blob);
   });
 });
