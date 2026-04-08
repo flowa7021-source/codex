@@ -1,7 +1,14 @@
 import './setup-dom.js';
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { StampManager } from '../../app/modules/stamp-manager.js';
+import { PDFDocument } from 'pdf-lib';
+
+async function makePdfBytes() {
+  const doc = await PDFDocument.create();
+  doc.addPage([612, 792]);
+  return new Uint8Array(await doc.save());
+}
 
 describe('StampManager', () => {
   it('predefined stamps: getAllStamps contains standard stamps', () => {
@@ -83,5 +90,100 @@ describe('StampManager', () => {
     const count = await mgr.importStamps(text);
     // custom stamp already exists with same id, should not be added again
     assert.equal(count, 0);
+  });
+});
+
+describe('StampManager – applyStamp (text-based)', () => {
+  it('applies a text stamp to a PDF page and returns a blob', async () => {
+    const mgr = new StampManager();
+    const bytes = await makePdfBytes();
+    // 'approved' is a text-based standard stamp (no imageBytes)
+    const result = await mgr.applyStamp(bytes, 'approved', 1, { x: 100, y: 400 });
+    assert.ok(result && result.blob instanceof Blob);
+    assert.equal(result.blob.type, 'application/pdf');
+  });
+
+  it('applies stamp with custom width/height/opacity options', async () => {
+    const mgr = new StampManager();
+    const bytes = await makePdfBytes();
+    const result = await mgr.applyStamp(bytes, 'draft', 1, { x: 50, y: 300 }, {
+      width: 150,
+      height: 50,
+      opacity: 0.5,
+    });
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('throws when stamp ID not found', async () => {
+    const mgr = new StampManager();
+    const bytes = await makePdfBytes();
+    await assert.rejects(
+      () => mgr.applyStamp(bytes, 'nonexistent_id', 1, { x: 0, y: 0 }),
+      /Stamp not found/,
+    );
+  });
+
+  it('clamps pageNum to valid range', async () => {
+    const mgr = new StampManager();
+    const bytes = await makePdfBytes(); // 1 page only
+    // pageNum=99 should clamp to last page (0-indexed 0)
+    const result = await mgr.applyStamp(bytes, 'final', 99, { x: 50, y: 200 });
+    assert.ok(result.blob instanceof Blob);
+  });
+});
+
+describe('StampManager – save() and load()', () => {
+  let storage;
+
+  beforeEach(() => {
+    // Mock localStorage
+    storage = {};
+    globalThis.localStorage = {
+      getItem: (key) => storage[key] ?? null,
+      setItem: (key, value) => { storage[key] = value; },
+      removeItem: (key) => { delete storage[key]; },
+    };
+  });
+
+  afterEach(() => {
+    delete globalThis.localStorage;
+  });
+
+  it('save() writes stamps JSON to localStorage', async () => {
+    const mgr = new StampManager();
+    mgr.addCustomStamp('Saved Stamp', null);
+    await mgr.save();
+    assert.ok(storage['novareader-stamps']);
+    const parsed = JSON.parse(storage['novareader-stamps']);
+    assert.ok(parsed.custom);
+    assert.ok(parsed.custom.some(s => s.name === 'Saved Stamp'));
+  });
+
+  it('load() restores stamps from localStorage', async () => {
+    // Pre-populate localStorage with a custom stamp
+    const data = { custom: [{ id: 'loaded_test', name: 'Loaded Stamp', imageBytes: null, color: { r: 0, g: 0, b: 1 } }] };
+    storage['novareader-stamps'] = JSON.stringify(data);
+
+    const mgr = new StampManager();
+    await mgr.load();
+    const custom = mgr.getStampsByCategory('custom');
+    assert.ok(custom.some(s => s.id === 'loaded_test'));
+  });
+
+  it('load() does nothing when localStorage is empty', async () => {
+    const mgr = new StampManager();
+    await mgr.load(); // should not throw
+    assert.equal(mgr.getStampsByCategory('custom').length, 0);
+  });
+
+  it('save() handles localStorage errors gracefully', async () => {
+    globalThis.localStorage = {
+      getItem: () => null,
+      setItem: () => { throw new Error('QuotaExceeded'); },
+      removeItem: () => {},
+    };
+    const mgr = new StampManager();
+    // Should not throw even when localStorage.setItem fails
+    await mgr.save();
   });
 });
