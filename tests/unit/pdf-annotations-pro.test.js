@@ -2,12 +2,60 @@
 // Tests the AnnotationManager class and its pure helper methods.
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { PDFDocument } from 'pdf-lib';
 
 // Ensure crypto.randomUUID is available
 if (!globalThis.crypto) {
   globalThis.crypto = { randomUUID: () => `${Date.now()}-${Math.random().toString(36).slice(2)}` };
 } else if (!globalThis.crypto.randomUUID) {
   globalThis.crypto.randomUUID = () => `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// Minimal XML DOMParser for importFromXFDF tests (not in setup-dom to avoid
+// affecting epub-adapter which relies on DOMParser being undefined in Node.js)
+if (typeof globalThis.DOMParser === 'undefined') {
+  class _El {
+    constructor(tag, attrs, children) {
+      this.tagName = tag;
+      this._a = attrs;
+      this.children = children;
+      this.textContent = '';
+    }
+    getAttribute(k) { return Object.prototype.hasOwnProperty.call(this._a, k) ? this._a[k] : null; }
+    querySelector(sel) {
+      const t = sel.toLowerCase();
+      for (const c of this.children) {
+        if (c.tagName && c.tagName.toLowerCase() === t) return c;
+        const f = c.querySelector && c.querySelector(sel);
+        if (f) return f;
+      }
+      return null;
+    }
+  }
+  function _attrs(s) {
+    const a = {};
+    const r = /([a-zA-Z_][\w:.-]*)="([^"]*)"/g;
+    let m;
+    while ((m = r.exec(s)) !== null) a[m[1]] = m[2];
+    return a;
+  }
+  function _kids(xml) {
+    const out = [];
+    const re = /<([a-zA-Z][a-zA-Z0-9:_-]*)([^>]*?)\/?>(?:([\s\S]*?)<\/\1>)?/g;
+    let m;
+    while ((m = re.exec(xml)) !== null) {
+      const el = new _El(m[1], _attrs(m[2]), m[3] !== undefined ? _kids(m[3]) : []);
+      if (m[3] !== undefined) el.textContent = m[3].replace(/<[^>]+>/g, '').trim();
+      out.push(el);
+    }
+    return out;
+  }
+  globalThis.DOMParser = class DOMParser {
+    parseFromString(s) {
+      const root = new _El('document', {}, _kids(s));
+      return { querySelector: sel => root.querySelector(sel) };
+    }
+  };
 }
 
 import {
@@ -382,6 +430,138 @@ describe('AnnotationManager', () => {
       assert.ok(calls.includes('save'));
       assert.ok(calls.includes('restore'));
       assert.ok(calls.some(c => Array.isArray(c) && c[0] === 'fillRect'));
+    });
+  });
+
+  describe('embedIntoPdf', () => {
+    async function makeOnePage() {
+      const doc = await PDFDocument.create();
+      doc.addPage([612, 792]);
+      return new Uint8Array(await doc.save());
+    }
+
+    it('returns a Blob with PDF type for highlight annotation', async () => {
+      const bytes = await makeOnePage();
+      mgr.add(1, { type: ANNOTATION_TYPES.HIGHLIGHT, bounds: { x: 50, y: 100, w: 200, h: 20 }, color: '#ffd84d' });
+      const blob = await mgr.embedIntoPdf(bytes);
+      assert.ok(blob instanceof Blob);
+      assert.equal(blob.type, 'application/pdf');
+    });
+
+    it('embeds underline annotation without throwing', async () => {
+      const bytes = await makeOnePage();
+      mgr.add(1, { type: ANNOTATION_TYPES.UNDERLINE, bounds: { x: 50, y: 200, w: 200, h: 10 }, color: '#ff0000' });
+      const blob = await mgr.embedIntoPdf(bytes);
+      assert.ok(blob instanceof Blob);
+    });
+
+    it('embeds strikethrough annotation without throwing', async () => {
+      const bytes = await makeOnePage();
+      mgr.add(1, { type: ANNOTATION_TYPES.STRIKETHROUGH, bounds: { x: 50, y: 300, w: 200, h: 10 }, color: '#0000ff' });
+      const blob = await mgr.embedIntoPdf(bytes);
+      assert.ok(blob instanceof Blob);
+    });
+
+    it('embeds text-box annotation with text', async () => {
+      const bytes = await makeOnePage();
+      mgr.add(1, { type: ANNOTATION_TYPES.TEXT_BOX, bounds: { x: 50, y: 400, w: 150, h: 40 }, color: '#000000', text: 'Box text' });
+      const blob = await mgr.embedIntoPdf(bytes);
+      assert.ok(blob instanceof Blob);
+    });
+
+    it('embeds text-box annotation without text', async () => {
+      const bytes = await makeOnePage();
+      mgr.add(1, { type: ANNOTATION_TYPES.TEXT_BOX, bounds: { x: 50, y: 400, w: 150, h: 40 }, color: '#000000' });
+      const blob = await mgr.embedIntoPdf(bytes);
+      assert.ok(blob instanceof Blob);
+    });
+
+    it('embeds sticky-note annotation without throwing', async () => {
+      const bytes = await makeOnePage();
+      mgr.add(1, { type: ANNOTATION_TYPES.STICKY_NOTE, bounds: { x: 50, y: 500, w: 20, h: 20 }, color: '#ffff00', text: 'Note' });
+      const blob = await mgr.embedIntoPdf(bytes);
+      assert.ok(blob instanceof Blob);
+    });
+
+    it('skips annotations with missing bounds', async () => {
+      const bytes = await makeOnePage();
+      mgr.add(1, { type: ANNOTATION_TYPES.HIGHLIGHT, bounds: null });
+      const blob = await mgr.embedIntoPdf(bytes);
+      assert.ok(blob instanceof Blob);
+    });
+
+    it('embeds multiple annotation types on one page', async () => {
+      const bytes = await makeOnePage();
+      mgr.add(1, { type: ANNOTATION_TYPES.HIGHLIGHT, bounds: { x: 50, y: 700, w: 200, h: 15 }, color: '#ffd84d' });
+      mgr.add(1, { type: ANNOTATION_TYPES.UNDERLINE, bounds: { x: 50, y: 670, w: 200, h: 10 }, color: '#ff0000' });
+      mgr.add(1, { type: ANNOTATION_TYPES.STRIKETHROUGH, bounds: { x: 50, y: 640, w: 200, h: 10 } });
+      mgr.add(1, { type: ANNOTATION_TYPES.TEXT_BOX, bounds: { x: 50, y: 580, w: 150, h: 40 }, text: 'Hi' });
+      mgr.add(1, { type: ANNOTATION_TYPES.STICKY_NOTE, bounds: { x: 50, y: 540, w: 20, h: 20 }, text: 'Note' });
+      const blob = await mgr.embedIntoPdf(bytes);
+      assert.ok(blob instanceof Blob);
+      assert.equal(blob.type, 'application/pdf');
+    });
+  });
+
+  describe('importFromXFDF', () => {
+    it('imports highlights from XFDF and returns count', () => {
+      const xfdf = `<?xml version="1.0" encoding="UTF-8"?>
+<xfdf xmlns="http://ns.adobe.com/xfdf/" xml:space="preserve">
+  <annots>
+    <highlight page="0" rect="50,100,250,120" color="#ffd84d" date="2024-01-01T00:00:00Z" name="ann-1">
+      <contents>Selected text</contents>
+    </highlight>
+  </annots>
+  <f href="doc.pdf" />
+</xfdf>`;
+      const count = mgr.importFromXFDF(xfdf);
+      assert.equal(count, 1);
+      assert.equal(mgr.count, 1);
+      const ann = mgr.getForPage(1)[0];
+      assert.equal(ann.type, ANNOTATION_TYPES.HIGHLIGHT);
+      assert.equal(ann.color, '#ffd84d');
+    });
+
+    it('imports multiple annotation types from XFDF', () => {
+      const xfdf = `<?xml version="1.0" encoding="UTF-8"?>
+<xfdf xmlns="http://ns.adobe.com/xfdf/" xml:space="preserve">
+  <annots>
+    <highlight page="0" rect="50,100,250,120" color="#ffd84d" date="2024-01-01T00:00:00Z" name="h1" />
+    <underline page="0" rect="50,200,250,215" color="#ff0000" date="2024-01-01T00:00:00Z" name="u1" />
+    <strikeout page="0" rect="50,300,250,315" color="#0000ff" date="2024-01-01T00:00:00Z" name="s1" />
+    <text page="1" rect="50,400,250,420" color="#ffff00" date="2024-01-01T00:00:00Z" name="t1" icon="Comment">
+      <contents>Sticky note text</contents>
+    </text>
+    <freetext page="1" rect="50,500,200,540" color="#000000" date="2024-01-01T00:00:00Z" name="f1">
+      <contents>Free text</contents>
+    </freetext>
+    <square page="2" rect="50,600,200,650" color="#008000" date="2024-01-01T00:00:00Z" name="sq1" />
+  </annots>
+  <f href="doc.pdf" />
+</xfdf>`;
+      const count = mgr.importFromXFDF(xfdf);
+      assert.equal(count, 6);
+      assert.equal(mgr.getForPage(1).length, 3);
+      assert.equal(mgr.getForPage(2).length, 2);
+      assert.equal(mgr.getForPage(3).length, 1);
+    });
+
+    it('returns 0 and does not add annotations when annots element is missing', () => {
+      const xfdf = `<?xml version="1.0"?><xfdf><f href="doc.pdf" /></xfdf>`;
+      const count = mgr.importFromXFDF(xfdf);
+      assert.equal(count, 0);
+      assert.equal(mgr.count, 0);
+    });
+
+    it('skips unknown tag types', () => {
+      const xfdf = `<?xml version="1.0" encoding="UTF-8"?>
+<xfdf xmlns="http://ns.adobe.com/xfdf/" xml:space="preserve">
+  <annots>
+    <unknowntag page="0" rect="0,0,100,100" color="#ff0000" date="2024-01-01T00:00:00Z" name="x1" />
+  </annots>
+</xfdf>`;
+      const count = mgr.importFromXFDF(xfdf);
+      assert.equal(count, 0);
     });
   });
 });
