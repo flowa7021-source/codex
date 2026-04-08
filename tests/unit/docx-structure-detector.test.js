@@ -9,7 +9,37 @@ import {
   isMonospaceFont,
   isUnderlineFont,
   isStrikethroughFont,
+  extractStructuredContent,
 } from '../../app/modules/docx-structure-detector.js';
+
+// ── Mock pdfjs page/doc helpers ──────────────────────────────────────────────
+
+function mockTextItem(str, x, y, fontSize = 12, fontName = 'Arial') {
+  return {
+    str,
+    fontName,
+    width: str.length * fontSize * 0.5,
+    height: fontSize,
+    transform: [fontSize, 0, 0, fontSize, x, y],
+  };
+}
+
+function mockPage(textItems, opts = {}) {
+  const pageHeight = opts.pageHeight || 842;
+  const pageWidth = opts.pageWidth || 595;
+  return {
+    getTextContent: async () => ({ items: textItems }),
+    getViewport: () => ({ width: pageWidth, height: pageHeight }),
+    getOperatorList: async () => ({ fnArray: opts.fnArray || [], argsArray: opts.argsArray || [] }),
+    getAnnotations: async () => opts.annotations || [],
+    objs: { get: () => null },
+    commonObjs: { get: () => null },
+  };
+}
+
+function mockPdfDoc(page) {
+  return { getPage: async () => page };
+}
 
 // ── mapPdfFont ──────────────────────────────────────────────────────────────
 
@@ -242,5 +272,93 @@ describe('isStrikethroughFont', () => {
   it('returns false for null/empty', () => {
     assert.equal(isStrikethroughFont(null), false);
     assert.equal(isStrikethroughFont(''), false);
+  });
+});
+
+// ── extractStructuredContent ────────────────────────────────────────────────
+
+describe('extractStructuredContent', () => {
+  it('returns empty blocks for page with no text', async () => {
+    const page = mockPage([]);
+    const doc = mockPdfDoc(page);
+    const result = await extractStructuredContent(doc, 1);
+    assert.deepEqual(result.blocks, []);
+    assert.equal(typeof result.pageWidth, 'number');
+    assert.equal(typeof result.pageHeight, 'number');
+    assert.ok(Array.isArray(result.images));
+    assert.ok(Array.isArray(result.links));
+  });
+
+  it('returns paragraph blocks for normal body text', async () => {
+    const items = [
+      mockTextItem('Hello world this is body text', 50, 750, 12),
+      mockTextItem('Another paragraph of text here', 50, 730, 12),
+    ];
+    const page = mockPage(items);
+    const doc = mockPdfDoc(page);
+    const result = await extractStructuredContent(doc, 1);
+    assert.ok(result.blocks.length >= 1);
+    const types = result.blocks.map(b => b.type);
+    assert.ok(types.some(t => t === 'paragraph' || t === 'heading'));
+  });
+
+  it('detects heading from large font size', async () => {
+    const items = [
+      mockTextItem('Chapter 1', 50, 780, 24, 'Arial-Bold'),
+      mockTextItem('This is body text that follows the heading.', 50, 750, 12),
+    ];
+    const page = mockPage(items);
+    const doc = mockPdfDoc(page);
+    const result = await extractStructuredContent(doc, 1);
+    assert.ok(result.blocks.length >= 1);
+    // heading block should be present
+    const headings = result.blocks.filter(b => b.type === 'heading');
+    assert.ok(headings.length >= 1);
+  });
+
+  it('returns bodyFontSize as a number', async () => {
+    const items = [mockTextItem('Some text', 50, 700, 11)];
+    const page = mockPage(items);
+    const doc = mockPdfDoc(page);
+    const result = await extractStructuredContent(doc, 1);
+    assert.equal(typeof result.bodyFontSize, 'number');
+  });
+
+  it('returns margins object with numeric values', async () => {
+    const items = [mockTextItem('Edge text', 50, 700, 12)];
+    const page = mockPage(items);
+    const doc = mockPdfDoc(page);
+    const result = await extractStructuredContent(doc, 1);
+    assert.ok(typeof result.margins === 'object');
+  });
+
+  it('processes multiple lines of text into blocks', async () => {
+    // Items at widely different Y positions become separate lines
+    const items = [];
+    for (let i = 0; i < 8; i++) {
+      items.push(mockTextItem(`Line ${i + 1} of text content here.`, 50, 780 - i * 30, 12));
+    }
+    const page = mockPage(items);
+    const doc = mockPdfDoc(page);
+    const result = await extractStructuredContent(doc, 1);
+    assert.ok(result.blocks.length >= 1);
+  });
+
+  it('handles link annotations in items', async () => {
+    const items = [
+      mockTextItem('Click here', 50, 700, 12),
+    ];
+    const page = mockPage(items, {
+      annotations: [{
+        subtype: 'Link',
+        url: 'https://example.com',
+        rect: [48, 120, 110, 130],
+      }],
+    });
+    const doc = mockPdfDoc(page);
+    const result = await extractStructuredContent(doc, 1);
+    assert.ok(Array.isArray(result.links));
+    assert.equal(result.links.length, 1);
+    assert.equal(result.links[0].url, 'https://example.com');
   });
 });
