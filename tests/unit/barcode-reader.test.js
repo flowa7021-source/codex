@@ -1,5 +1,5 @@
 import './setup-dom.js';
-import { describe, it } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   detectBarcodes,
@@ -95,7 +95,72 @@ describe('detectBarcodesInPdf', () => {
   });
 
   it('has correct arity (pdfDocument, pageNums, options)', () => {
-    // The function accepts 3 parameters
     assert.ok(detectBarcodesInPdf.length >= 1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectBarcodes with BarcodeDetector mock
+// ---------------------------------------------------------------------------
+
+describe('detectBarcodes — BarcodeDetector path', () => {
+  afterEach(() => {
+    delete globalThis.BarcodeDetector;
+  });
+
+  it('uses BarcodeDetector when available and returns results', async () => {
+    // Mock BarcodeDetector API (Chrome/Edge shape)
+    globalThis.BarcodeDetector = class MockBarcodeDetector {
+      constructor() {}
+      async detect(_canvas) {
+        return [
+          {
+            format: 'qr_code',
+            rawValue: 'https://example.com',
+            boundingBox: { x: 10, y: 20, width: 50, height: 50 },
+          },
+        ];
+      }
+    };
+
+    const data = new Uint8ClampedArray(100 * 100 * 4).fill(128);
+    const imageData = { width: 100, height: 100, data };
+    const results = await detectBarcodes(imageData);
+
+    assert.ok(Array.isArray(results));
+    assert.equal(results.length, 1);
+    assert.equal(results[0].format, 'QR_CODE');
+    assert.equal(results[0].text, 'https://example.com');
+    assert.equal(results[0].bounds.x, 10);
+    assert.equal(results[0].confidence, 0.9);
+  });
+
+  it('returns empty array when BarcodeDetector.detect throws', async () => {
+    globalThis.BarcodeDetector = class {
+      constructor() {}
+      async detect() { throw new Error('detect failed'); }
+    };
+
+    const data = new Uint8ClampedArray(10 * 10 * 4);
+    const imageData = { width: 10, height: 10, data };
+    const results = await detectBarcodes(imageData);
+    assert.ok(Array.isArray(results));
+    assert.equal(results.length, 0);
+  });
+
+  it('handles formats option passed to BarcodeDetector', async () => {
+    const ctorArgs = [];
+    globalThis.BarcodeDetector = class {
+      constructor(opts) { ctorArgs.push(opts); }
+      async detect() { return []; }
+    };
+
+    const data = new Uint8ClampedArray(4 * 4 * 4);
+    const imageData = { width: 4, height: 4, data };
+    await detectBarcodes(imageData, { formats: ['QR_CODE', 'EAN_13'] });
+
+    assert.equal(ctorArgs.length, 1);
+    assert.ok(ctorArgs[0].formats.includes('qr_code'));
+    assert.ok(ctorArgs[0].formats.includes('ean_13'));
   });
 });

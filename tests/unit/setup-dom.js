@@ -338,7 +338,12 @@ if (typeof globalThis.HTMLCanvasElement === 'undefined') {
 if (typeof globalThis.OffscreenCanvas === 'undefined') {
   globalThis.OffscreenCanvas = class OffscreenCanvas {
     constructor(w, h) { this.width = w; this.height = h; }
-    getContext() { return { drawImage() {}, getImageData: () => ({ data: new Uint8Array(0) }), fillRect() {}, clearRect() {} }; }
+    getContext() {
+      return {
+        drawImage() {}, fillRect() {}, clearRect() {}, putImageData() {},
+        getImageData: () => ({ data: new Uint8Array(0), width: 0, height: 0 }),
+      };
+    }
   };
 }
 
