@@ -23,6 +23,7 @@ import {
   _syncTextLayerToStorage,
   renderTextLayer,
 } from '../../app/modules/render-text-layer.js';
+import { blockEditor } from '../../app/modules/pdf-advanced-edit.js';
 import { state, els as _els } from '../../app/modules/state.js';
 
 /** @type {Record<string, any>} */
@@ -1376,6 +1377,157 @@ describe('_createInlineEditor — keydown event', () => {
     e.preventDefault = () => {};
     editor.dispatchEvent(e);
     assert.ok(!blurCalled);
+  });
+});
+
+// ── _createParagraphEditor — blur and keydown events ──────────────────────────
+
+describe('_createParagraphEditor — blur event', () => {
+  let origTextLayerDiv;
+  beforeEach(() => { origTextLayerDiv = els.textLayerDiv; });
+  afterEach(() => { els.textLayerDiv = origTextLayerDiv; setActiveInlineEditor(null); });
+
+  it('blur with non-empty text calls _reflowTextToSpans on original spans', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 });
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    const spans = [
+      makeSpan('Hello', { fontSize: '14px', _top: 10, _left: 10, _width: 40, _height: 14 }),
+      makeSpan('World', { fontSize: '14px', _top: 10, _left: 55, _width: 40, _height: 14 }),
+    ];
+
+    _createParagraphEditor(spans);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+
+    editor.textContent = 'Updated content here';
+    editor.dispatchEvent(new Event('blur'));
+
+    // Editor should be removed and activeEditor cleared
+    assert.equal(getActiveInlineEditor(), null);
+    // Original spans visibility should be restored
+    for (const s of spans) {
+      assert.equal(s.style.visibility, '');
+    }
+  });
+
+  it('blur with empty text restores spans but does not reflow', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 });
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    const spans = [makeSpan('text', { fontSize: '14px', _top: 10, _left: 10, _width: 40, _height: 14 })];
+    _createParagraphEditor(spans);
+    const editor = getActiveInlineEditor();
+
+    editor.textContent = '   '; // whitespace only → empty after trim
+    editor.dispatchEvent(new Event('blur'));
+
+    assert.equal(getActiveInlineEditor(), null);
+    assert.equal(spans[0].style.visibility, '');
+  });
+});
+
+describe('_createParagraphEditor — keydown event', () => {
+  let origTextLayerDiv;
+  beforeEach(() => { origTextLayerDiv = els.textLayerDiv; });
+  afterEach(() => { els.textLayerDiv = origTextLayerDiv; setActiveInlineEditor(null); });
+
+  it('Escape key restores span visibility and removes editor', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 });
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    const spans = [makeSpan('text', { fontSize: '14px', _top: 10, _left: 10, _width: 40, _height: 14 })];
+    _createParagraphEditor(spans);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'Escape' });
+    Object.defineProperty(e, 'shiftKey', { value: false });
+    editor.dispatchEvent(e);
+
+    assert.equal(getActiveInlineEditor(), null);
+    assert.equal(spans[0].style.visibility, '');
+  });
+
+  it('Enter key (no Shift) calls blur on paragraph editor', () => {
+    const container = document.createElement('div');
+    container.getBoundingClientRect = () => ({ top: 0, left: 0, width: 800, height: 600 });
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    const spans = [makeSpan('text', { fontSize: '14px', _top: 10, _left: 10, _width: 40, _height: 14 })];
+    _createParagraphEditor(spans);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+
+    let blurCalled = false;
+    editor.blur = () => { blurCalled = true; };
+
+    const e = new Event('keydown');
+    Object.defineProperty(e, 'key', { value: 'Enter' });
+    Object.defineProperty(e, 'shiftKey', { value: false });
+    e.preventDefault = () => {};
+    editor.dispatchEvent(e);
+
+    assert.ok(blurCalled);
+  });
+});
+
+// ── _createInlineEditor — blockEditor.active path ──────────────────────────
+
+describe('_createInlineEditor — blockEditor.active = true path', () => {
+  let origTextLayerDiv, origCanvas, origCurrentPage;
+  beforeEach(() => {
+    origTextLayerDiv = els.textLayerDiv;
+    origCanvas = els.canvas;
+    origCurrentPage = state.currentPage;
+  });
+  afterEach(() => {
+    els.textLayerDiv = origTextLayerDiv;
+    els.canvas = origCanvas;
+    state.currentPage = origCurrentPage;
+    setActiveInlineEditor(null);
+    blockEditor.active = false; // reset blockEditor state
+  });
+
+  it('calls blockEditor.refreshOverlay when blockEditor.active is true', () => {
+    const container = document.createElement('div');
+    container.appendChild = (child) => child;
+    els.textLayerDiv = container;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 800;
+    canvas.height = 600;
+    canvas.style.width = '800px';
+    canvas.style.height = '600px';
+    els.canvas = canvas;
+    els.canvasWrap = document.createElement('div');
+    state.currentPage = 1;
+
+    // Set blockEditor.active = true so the refreshOverlay path is hit
+    blockEditor.active = true;
+    let refreshCalled = false;
+    const origRefresh = blockEditor.refreshOverlay.bind(blockEditor);
+    blockEditor.refreshOverlay = (...args) => { refreshCalled = true; };
+
+    _createInlineEditor(100, 200, '', null, []);
+    const editor = getActiveInlineEditor();
+    assert.ok(editor);
+
+    editor.textContent = 'block content';
+    editor.dispatchEvent(new Event('blur'));
+
+    assert.ok(refreshCalled, 'refreshOverlay should be called when blockEditor.active');
+
+    // Restore
+    blockEditor.refreshOverlay = origRefresh;
   });
 });
 
