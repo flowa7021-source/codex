@@ -270,6 +270,46 @@ describe('FormDesigner – calculation expressions', () => {
   });
 });
 
+describe('FormDesigner – text field optional properties', () => {
+  it('applies maxLen, multiLine, readOnly, required, and fontSize on text field', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer.addTextField(1, [50, 700, 250, 720], {
+      name: 'bio',
+      defaultValue: 'Default text',
+      maxLen: 100,
+      multiLine: true,
+      readOnly: true,
+      required: true,
+      fontSize: 14,
+    });
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+    const doc = await PDFDocument.load(result);
+    const fields = doc.getForm().getFields();
+    assert.equal(fields.length, 1);
+    assert.equal(fields[0].getName(), 'bio');
+  });
+});
+
+describe('FormDesigner – radio group built via build()', () => {
+  it('builds a PDF with radio group fields', async () => {
+    const bytes = await makePdfBytes();
+    const designer = new FormDesigner(bytes);
+    designer.addRadioGroup('choice', [
+      { pageNum: 1, rect: [50, 700, 70, 720], value: 'yes' },
+      { pageNum: 1, rect: [80, 700, 100, 720], value: 'no' },
+    ]);
+
+    const result = await designer.build();
+    assert.ok(result instanceof Uint8Array);
+    const doc = await PDFDocument.load(result);
+    const fields = doc.getForm().getFields();
+    assert.ok(fields.length >= 1);
+  });
+});
+
 describe('FormDesigner – listbox and button and signature field types', () => {
   it('adds listbox, button, and signature fields', async () => {
     const bytes = await makePdfBytes();

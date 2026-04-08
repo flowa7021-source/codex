@@ -93,6 +93,45 @@ describe('StampManager', () => {
   });
 });
 
+describe('StampManager – importStamps new category and non-array skip', () => {
+  it('creates new category during import when it does not exist', async () => {
+    const mgr = new StampManager();
+    const data = {
+      'newcategory': [{ id: 'new_1', name: 'New Stamp', imageBytes: null, color: { r: 0, g: 0, b: 1 } }],
+    };
+    const count = await mgr.importStamps(JSON.stringify(data));
+    assert.ok(count >= 1);
+    assert.ok(mgr.getStampsByCategory('newcategory').some(s => s.id === 'new_1'));
+  });
+
+  it('skips non-array category values during import', async () => {
+    const mgr = new StampManager();
+    const data = {
+      'badcat': 'not an array',
+    };
+    const count = await mgr.importStamps(JSON.stringify(data));
+    assert.equal(count, 0);
+  });
+
+  it('imports stamps with imageBytes array', async () => {
+    const mgr = new StampManager();
+    const data = {
+      'custom': [{
+        id: 'img_stamp',
+        name: 'Image Stamp',
+        imageBytes: [1, 2, 3, 4],
+        color: { r: 0, g: 0, b: 0 },
+      }],
+    };
+    const count = await mgr.importStamps(JSON.stringify(data));
+    assert.ok(count >= 1);
+    const custom = mgr.getStampsByCategory('custom');
+    const imported = custom.find(s => s.id === 'img_stamp');
+    assert.ok(imported);
+    assert.ok(imported.imageBytes instanceof Uint8Array);
+  });
+});
+
 describe('StampManager – applyStamp (text-based)', () => {
   it('applies a text stamp to a PDF page and returns a blob', async () => {
     const mgr = new StampManager();
@@ -111,6 +150,19 @@ describe('StampManager – applyStamp (text-based)', () => {
       height: 50,
       opacity: 0.5,
     });
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('applies a PNG image stamp to a PDF page', async () => {
+    const mgr = new StampManager();
+    const bytes = await makePdfBytes();
+
+    // Minimal valid 1x1 PNG bytes (starts with 0x89 0x50 = PNG signature)
+    const PNG_1X1_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI6QAAAABJRU5ErkJggg==';
+    const pngBytes = Uint8Array.from(atob(PNG_1X1_B64), c => c.charCodeAt(0));
+
+    const stamp = mgr.addCustomStamp('PNG Stamp', pngBytes);
+    const result = await mgr.applyStamp(bytes, stamp.id, 1, { x: 50, y: 400 });
     assert.ok(result.blob instanceof Blob);
   });
 
