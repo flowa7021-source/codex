@@ -183,4 +183,171 @@ describe('BatchConverter', () => {
     assert.equal(results.length, 1);
     assert.equal(results[0].status, 'ok');
   });
+
+  it('supports xlsx format conversion', { skip: !moduleAvailable && 'module not loadable' }, async () => {
+    const bc = new BatchConverter();
+    const file = await createMockPdfFile('data.pdf');
+    bc.addFile(file, 'xlsx');
+
+    const results = await bc.run();
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].status, 'ok');
+    assert.ok(results[0].blob instanceof Blob);
+  });
+
+  it('supports pptx format conversion', { skip: !moduleAvailable && 'module not loadable' }, async () => {
+    const bc = new BatchConverter();
+    const file = await createMockPdfFile('pres.pdf');
+    bc.addFile(file, 'pptx');
+
+    const results = await bc.run();
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].status, 'ok');
+    assert.ok(results[0].blob instanceof Blob);
+  });
+
+  it('supports csv format conversion', { skip: !moduleAvailable && 'module not loadable' }, async () => {
+    const bc = new BatchConverter();
+    const file = await createMockPdfFile('table.pdf');
+    bc.addFile(file, 'csv');
+
+    const results = await bc.run();
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].status, 'ok');
+    assert.ok(results[0].blob instanceof Blob);
+  });
+
+  it('supports svg format conversion', { skip: !moduleAvailable && 'module not loadable' }, async () => {
+    const bc = new BatchConverter();
+    const file = await createMockPdfFile('graphic.pdf');
+    bc.addFile(file, 'svg');
+
+    const results = await bc.run();
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].status, 'ok');
+    assert.ok(results[0].blob instanceof Blob);
+  });
+
+  it('supports tiff format conversion', { skip: !moduleAvailable && 'module not loadable' }, async () => {
+    const bc = new BatchConverter();
+    const file = await createMockPdfFile('scan.pdf');
+    bc.addFile(file, 'tiff');
+
+    const results = await bc.run();
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].status, 'ok');
+    assert.ok(results[0].blob instanceof Blob);
+  });
+
+  it('supports png format conversion using OffscreenCanvas', { skip: !moduleAvailable && 'module not loadable' }, async () => {
+    // Provide a complete OffscreenCanvas + Path2D mock for pdfjs rendering
+    const origOffscreen = globalThis.OffscreenCanvas;
+    const origPath2D = globalThis.Path2D;
+
+    globalThis.Path2D = class Path2D {
+      moveTo() {} lineTo() {} arc() {} arcTo() {}
+      bezierCurveTo() {} quadraticCurveTo() {}
+      rect() {} ellipse() {} closePath() {} addPath() {}
+    };
+    globalThis.OffscreenCanvas = class OffscreenCanvas {
+      constructor(w, h) { this.width = w; this.height = h; }
+      getContext() {
+        return {
+          canvas: this, save() {}, restore() {}, transform() {}, setTransform() {},
+          getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; },
+          scale() {}, translate() {}, rotate() {}, resetTransform() {},
+          fillRect() {}, clearRect() {}, strokeRect() {}, rect() {}, ellipse() {},
+          fillText() {}, strokeText() {}, drawImage() {},
+          beginPath() {}, closePath() {}, moveTo() {}, lineTo() {},
+          stroke() {}, fill() {}, clip() {},
+          bezierCurveTo() {}, arc() {}, arcTo() {}, quadraticCurveTo() {},
+          putImageData() {},
+          getImageData: () => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 }),
+          createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+          measureText: (t) => ({ width: t.length * 5, actualBoundingBoxAscent: 5, actualBoundingBoxDescent: 2 }),
+          createLinearGradient: () => ({ addColorStop() {} }),
+          createRadialGradient: () => ({ addColorStop() {} }),
+          createPattern: () => null,
+          isPointInPath: () => false,
+          strokeStyle: '', fillStyle: '#000', lineWidth: 1, globalAlpha: 1,
+          globalCompositeOperation: 'source-over', lineCap: 'butt', lineJoin: 'miter',
+          miterLimit: 10, shadowBlur: 0, shadowColor: '', shadowOffsetX: 0, shadowOffsetY: 0,
+          font: '10px sans-serif', textAlign: 'left', textBaseline: 'alphabetic',
+          direction: 'ltr', imageSmoothingEnabled: true,
+        };
+      }
+      async convertToBlob(opts) { return new Blob(['png-data'], { type: opts?.type || 'image/png' }); }
+    };
+
+    try {
+      const bc = new BatchConverter();
+      const file = await createMockPdfFile('img.pdf');
+      bc.addFile(file, 'png');
+      const results = await bc.run();
+      assert.equal(results.length, 1);
+      assert.equal(results[0].status, 'ok');
+      assert.ok(results[0].blob instanceof Blob);
+    } finally {
+      globalThis.OffscreenCanvas = origOffscreen;
+      globalThis.Path2D = origPath2D;
+    }
+  });
+
+  it('supports jpg format conversion using OffscreenCanvas', { skip: !moduleAvailable && 'module not loadable' }, async () => {
+    const origOffscreen = globalThis.OffscreenCanvas;
+    const origPath2D = globalThis.Path2D;
+
+    globalThis.Path2D = class Path2D {
+      moveTo() {} lineTo() {} arc() {} arcTo() {}
+      bezierCurveTo() {} quadraticCurveTo() {}
+      rect() {} ellipse() {} closePath() {} addPath() {}
+    };
+    globalThis.OffscreenCanvas = class OffscreenCanvas {
+      constructor(w, h) { this.width = w; this.height = h; }
+      getContext() {
+        return {
+          canvas: this, save() {}, restore() {}, transform() {}, setTransform() {},
+          getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; },
+          scale() {}, translate() {}, rotate() {}, resetTransform() {},
+          fillRect() {}, clearRect() {}, strokeRect() {}, rect() {}, ellipse() {},
+          fillText() {}, strokeText() {}, drawImage() {},
+          beginPath() {}, closePath() {}, moveTo() {}, lineTo() {},
+          stroke() {}, fill() {}, clip() {},
+          bezierCurveTo() {}, arc() {}, arcTo() {}, quadraticCurveTo() {},
+          putImageData() {},
+          getImageData: () => ({ data: new Uint8ClampedArray(4), width: 1, height: 1 }),
+          createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }),
+          measureText: (t) => ({ width: t.length * 5, actualBoundingBoxAscent: 5, actualBoundingBoxDescent: 2 }),
+          createLinearGradient: () => ({ addColorStop() {} }),
+          createRadialGradient: () => ({ addColorStop() {} }),
+          createPattern: () => null,
+          isPointInPath: () => false,
+          strokeStyle: '', fillStyle: '#000', lineWidth: 1, globalAlpha: 1,
+          globalCompositeOperation: 'source-over', lineCap: 'butt', lineJoin: 'miter',
+          miterLimit: 10, shadowBlur: 0, shadowColor: '', shadowOffsetX: 0, shadowOffsetY: 0,
+          font: '10px sans-serif', textAlign: 'left', textBaseline: 'alphabetic',
+          direction: 'ltr', imageSmoothingEnabled: true,
+        };
+      }
+      async convertToBlob(opts) { return new Blob(['jpg-data'], { type: opts?.type || 'image/jpeg' }); }
+    };
+
+    try {
+      const bc = new BatchConverter();
+      const file = await createMockPdfFile('photo.pdf');
+      bc.addFile(file, 'jpg');
+      const results = await bc.run();
+      assert.equal(results.length, 1);
+      assert.equal(results[0].status, 'ok');
+      assert.ok(results[0].blob instanceof Blob);
+    } finally {
+      globalThis.OffscreenCanvas = origOffscreen;
+      globalThis.Path2D = origPath2D;
+    }
+  });
 });
