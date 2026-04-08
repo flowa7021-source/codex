@@ -1,31 +1,25 @@
-// @ts-check
 // ─── Event Bus ──────────────────────────────────────────────────────────────
 // Decoupled inter-module communication. Modules emit events; others subscribe.
 // This replaces direct function calls between unrelated modules.
 
-/** @type {EventTarget} */
 const _bus = new EventTarget();
 
-/** @type {Array<{event: string, wrapper: EventListener}>} */
-let _listeners = [];
+let _listeners: Array<{ event: string; wrapper: EventListener }> = [];
 
 /**
  * Emit a named event with optional detail payload.
- * @param {string} event - Event name, e.g. 'ocr:page-done', 'file:opened'
- * @param {object} [detail] - Arbitrary data
+ * @param event - Event name, e.g. 'ocr:page-done', 'file:opened'
  */
-export function emit(event, detail) {
+export function emit(event: string, detail?: unknown): void {
   _bus.dispatchEvent(new CustomEvent(event, { detail }));
 }
 
 /**
  * Subscribe to a named event.
- * @param {string} event
- * @param {(detail: any) => void} handler
- * @returns {() => void} unsubscribe function
+ * @returns unsubscribe function
  */
-export function on(event, handler) {
-  const wrapper = (e) => handler(e.detail);
+export function on(event: string, handler: (detail: unknown) => void): () => void {
+  const wrapper = (e: Event) => handler((e as CustomEvent).detail);
   _bus.addEventListener(event, wrapper);
   _listeners.push({ event, wrapper });
   return () => {
@@ -36,12 +30,10 @@ export function on(event, handler) {
 
 /**
  * Subscribe to a named event, but only fire once.
- * @param {string} event
- * @param {(detail: any) => void} handler
- * @returns {() => void} unsubscribe function
+ * @returns unsubscribe function
  */
-export function once(event, handler) {
-  const wrapper = (e) => handler(e.detail);
+export function once(event: string, handler: (detail: unknown) => void): () => void {
+  const wrapper = (e: Event) => handler((e as CustomEvent).detail);
   _bus.addEventListener(event, wrapper, { once: true });
   _listeners.push({ event, wrapper });
   return () => {
@@ -52,12 +44,10 @@ export function once(event, handler) {
 
 /**
  * Subscribe with tracking for bulk removal.
- * @param {string} event
- * @param {(detail: any) => void} handler
- * @returns {() => void} unsubscribe
+ * @returns unsubscribe
  */
-export function subscribe(event, handler) {
-  const wrapper = (e) => handler(e.detail);
+export function subscribe(event: string, handler: (detail: unknown) => void): () => void {
+  const wrapper = (e: Event) => handler((e as CustomEvent).detail);
   _bus.addEventListener(event, wrapper);
   _listeners.push({ event, wrapper });
   return () => {
@@ -69,7 +59,7 @@ export function subscribe(event, handler) {
 /**
  * Remove all tracked subscriptions.
  */
-export function removeAllListeners() {
+export function removeAllListeners(): void {
   const toRemove = [..._listeners];
   _listeners = [];
   for (const { event, wrapper } of toRemove) {

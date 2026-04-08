@@ -1,4 +1,3 @@
-// @ts-check
 // ─── Async Lock ─────────────────────────────────────────────────────────────
 // Mutex for protecting async state transitions from race conditions.
 // Used primarily by OCR background scan to prevent concurrent mutations.
@@ -15,17 +14,15 @@
  *   }
  */
 export class AsyncLock {
-  /** @type {boolean} */
   #locked = false;
-  /** @type {Array<() => void>} */
-  #queue = [];
+  #queue: Array<() => void> = [];
 
   /**
    * Acquire the lock. Resolves with a release function.
    * If the lock is held, the caller waits until it's released.
-   * @returns {Promise<() => void>} release function — MUST be called in finally
+   * @returns release function — MUST be called in finally
    */
-  acquire() {
+  acquire(): Promise<() => void> {
     if (!this.#locked) {
       this.#locked = true;
       return Promise.resolve(this.#createRelease());
@@ -35,14 +32,13 @@ export class AsyncLock {
     });
   }
 
-  /** @returns {() => void} */
-  #createRelease() {
+  #createRelease(): () => void {
     let released = false;
     return () => {
       if (released) return;
       released = true;
       if (this.#queue.length > 0) {
-        const next = this.#queue.shift();
+        const next = this.#queue.shift()!;
         Promise.resolve().then(next);
       } else {
         this.#locked = false;
@@ -51,12 +47,12 @@ export class AsyncLock {
   }
 
   /** Whether the lock is currently held. */
-  get isLocked() {
+  get isLocked(): boolean {
     return this.#locked;
   }
 
   /** Number of waiters in the queue. */
-  get queueLength() {
+  get queueLength(): number {
     return this.#queue.length;
   }
 }

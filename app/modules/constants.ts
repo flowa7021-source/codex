@@ -1,4 +1,3 @@
-// @ts-check
 // ─── Application Constants ──────────────────────────────────────────────────
 
 export const APP_VERSION = '4.0.0';
@@ -26,7 +25,7 @@ export const EVENT_LISTENER_WARN_THRESHOLD = 200;
 export const SUPPORTED_EXTENSIONS = ['.pdf', '.djvu', '.djv', '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff', '.tif', '.xps', '.oxps', '.epub', '.cbz', '.cbr', '.docx'];
 export const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff', '.tif'];
 
-export const SIDEBAR_SECTION_CONFIG = [
+export const SIDEBAR_SECTION_CONFIG: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'recent', label: 'Недавние файлы' },
   { key: 'bookmarks', label: 'Закладки' },
   { key: 'outline', label: 'Оглавление' },
@@ -37,7 +36,7 @@ export const SIDEBAR_SECTION_CONFIG = [
   { key: 'notes', label: 'Заметки' },
 ];
 
-export const TOOLBAR_SECTION_CONFIG = [
+export const TOOLBAR_SECTION_CONFIG: ReadonlyArray<{ key: string; label: string }> = [
   { key: 'navigation', label: 'Навигация (верхняя панель)' },
   { key: 'zoom', label: 'Масштаб и поворот' },
   { key: 'view', label: 'Вид и служебные кнопки' },

@@ -1,13 +1,16 @@
-// @ts-check
 // ─── View Transitions API ───────────────────────────────────────────────────
 // Smooth page transitions using the View Transitions API.
 // Falls back to direct DOM updates when the API is unavailable.
 
+// ViewTransition is not yet in all TS libs
+declare const document: Document & {
+  startViewTransition?: (callback: () => void | Promise<void>) => { finished: Promise<void> };
+};
+
 /**
  * Check whether the View Transitions API is available.
- * @returns {boolean}
  */
-export function isViewTransitionsSupported() {
+export function isViewTransitionsSupported(): boolean {
   return typeof document !== 'undefined' && 'startViewTransition' in document;
 }
 
@@ -16,12 +19,11 @@ export function isViewTransitionsSupported() {
  *
  * If the View Transitions API is available, the callback runs inside
  * `document.startViewTransition()`. Otherwise it is called directly.
- *
- * @param {() => void | Promise<void>} updateCallback — mutates the DOM
- * @param {{ classNames?: string[] }} [options]
- * @returns {Promise<void>}
  */
-export async function withViewTransition(updateCallback, options) {
+export async function withViewTransition(
+  updateCallback: () => void | Promise<void>,
+  options?: { classNames?: string[] }
+): Promise<void> {
   if (!isViewTransitionsSupported()) {
     await updateCallback();
     return;
@@ -36,8 +38,7 @@ export async function withViewTransition(updateCallback, options) {
   }
 
   try {
-    // @ts-ignore — startViewTransition is not yet in all TS libs
-    const transition = document.startViewTransition(updateCallback);
+    const transition = document.startViewTransition!(updateCallback);
     await transition.finished;
   } finally {
     // Always clean up class names, even if the transition fails
@@ -49,36 +50,28 @@ export async function withViewTransition(updateCallback, options) {
 
 /**
  * Navigate to a page with a page-nav view transition.
- * @param {() => void | Promise<void>} updateFn
- * @returns {Promise<void>}
  */
-export function navigateToPage(updateFn) {
+export function navigateToPage(updateFn: () => void | Promise<void>): Promise<void> {
   return withViewTransition(updateFn, { classNames: ['page-nav'] });
 }
 
 /**
  * Crossfade view transition.
- * @param {() => void | Promise<void>} updateFn
- * @returns {Promise<void>}
  */
-export function crossfade(updateFn) {
+export function crossfade(updateFn: () => void | Promise<void>): Promise<void> {
   return withViewTransition(updateFn, { classNames: ['crossfade'] });
 }
 
 /**
  * Slide-left view transition.
- * @param {() => void | Promise<void>} updateFn
- * @returns {Promise<void>}
  */
-export function slideLeft(updateFn) {
+export function slideLeft(updateFn: () => void | Promise<void>): Promise<void> {
   return withViewTransition(updateFn, { classNames: ['slide-left'] });
 }
 
 /**
  * Slide-right view transition.
- * @param {() => void | Promise<void>} updateFn
- * @returns {Promise<void>}
  */
-export function slideRight(updateFn) {
+export function slideRight(updateFn: () => void | Promise<void>): Promise<void> {
   return withViewTransition(updateFn, { classNames: ['slide-right'] });
 }

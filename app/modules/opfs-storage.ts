@@ -1,13 +1,11 @@
-// @ts-check
 // ─── OPFS Storage ───────────────────────────────────────────────────────────
 // Origin Private File System for fast binary storage (thumbnails, autosave).
 // Fallback: IndexedDB via persistence-facade.js when OPFS is unavailable.
 
 /**
  * Check whether OPFS is supported in the current environment.
- * @returns {Promise<boolean>}
  */
-export async function isOpfsSupported() {
+export async function isOpfsSupported(): Promise<boolean> {
   try {
     if (!navigator.storage?.getDirectory) return false;
     await navigator.storage.getDirectory();
@@ -19,10 +17,8 @@ export async function isOpfsSupported() {
 
 /**
  * Split a slash-separated path into directory segments and a file name.
- * @param {string} path - e.g. 'thumbnails/page-1.png'
- * @returns {{ dirs: string[], fileName: string }}
  */
-function parsePath(path) {
+function parsePath(path: string): { dirs: string[]; fileName: string } {
   const parts = path.split('/').filter(Boolean);
   const fileName = parts.pop() ?? '';
   return { dirs: parts, fileName };
@@ -30,12 +26,12 @@ function parsePath(path) {
 
 /**
  * Navigate (and optionally create) nested directory handles.
- * @param {FileSystemDirectoryHandle} root
- * @param {string[]} dirs
- * @param {{ create?: boolean }} [opts]
- * @returns {Promise<FileSystemDirectoryHandle>}
  */
-async function resolveDir(root, dirs, opts = {}) {
+async function resolveDir(
+  root: FileSystemDirectoryHandle,
+  dirs: string[],
+  opts: { create?: boolean } = {}
+): Promise<FileSystemDirectoryHandle> {
   let current = root;
   for (const name of dirs) {
     current = await current.getDirectoryHandle(name, { create: !!opts.create });
@@ -45,18 +41,15 @@ async function resolveDir(root, dirs, opts = {}) {
 
 /**
  * Write binary data to an OPFS file path, creating directories as needed.
- * @param {string} path - e.g. 'thumbnails/page-1.png'
- * @param {Uint8Array | ArrayBuffer | Blob} data
- * @returns {Promise<void>}
  */
-export async function writeFile(path, data) {
+export async function writeFile(path: string, data: Uint8Array | ArrayBuffer | Blob): Promise<void> {
   const { dirs, fileName } = parsePath(path);
   const root = await navigator.storage.getDirectory();
   const dir = await resolveDir(root, dirs, { create: true });
   const fileHandle = await dir.getFileHandle(fileName, { create: true });
   const writable = await fileHandle.createWritable();
   try {
-    await writable.write(/** @type {any} */ (data));
+    await writable.write(data as FileSystemWriteChunkType);
   } finally {
     await writable.close();
   }
@@ -64,10 +57,8 @@ export async function writeFile(path, data) {
 
 /**
  * Read a file from OPFS. Returns null if the file does not exist.
- * @param {string} path
- * @returns {Promise<Uint8Array | null>}
  */
-export async function readFile(path) {
+export async function readFile(path: string): Promise<Uint8Array | null> {
   try {
     const { dirs, fileName } = parsePath(path);
     const root = await navigator.storage.getDirectory();
@@ -83,10 +74,8 @@ export async function readFile(path) {
 
 /**
  * Delete a file from OPFS. Returns true if deleted, false if not found.
- * @param {string} path
- * @returns {Promise<boolean>}
  */
-export async function deleteFile(path) {
+export async function deleteFile(path: string): Promise<boolean> {
   try {
     const { dirs, fileName } = parsePath(path);
     const root = await navigator.storage.getDirectory();
@@ -100,15 +89,13 @@ export async function deleteFile(path) {
 
 /**
  * List file names in an OPFS directory. Returns empty array if dir not found.
- * @param {string} dirPath
- * @returns {Promise<string[]>}
  */
-export async function listFiles(dirPath) {
+export async function listFiles(dirPath: string): Promise<string[]> {
   try {
     const parts = dirPath.split('/').filter(Boolean);
     const root = await navigator.storage.getDirectory();
     const dir = await resolveDir(root, parts);
-    const names = [];
+    const names: string[] = [];
     for await (const entry of dir.values()) {
       if (entry.kind === 'file') {
         names.push(entry.name);
@@ -122,10 +109,8 @@ export async function listFiles(dirPath) {
 
 /**
  * Get the byte size of a file. Returns -1 if not found.
- * @param {string} path
- * @returns {Promise<number>}
  */
-export async function getFileSize(path) {
+export async function getFileSize(path: string): Promise<number> {
   try {
     const { dirs, fileName } = parsePath(path);
     const root = await navigator.storage.getDirectory();
@@ -140,17 +125,14 @@ export async function getFileSize(path) {
 
 /**
  * Remove all files in a directory. Returns count of files removed.
- * @param {string} dirPath
- * @returns {Promise<number>}
  */
-export async function clearDirectory(dirPath) {
+export async function clearDirectory(dirPath: string): Promise<number> {
   try {
     const parts = dirPath.split('/').filter(Boolean);
     const root = await navigator.storage.getDirectory();
     const dir = await resolveDir(root, parts);
     let count = 0;
-    /** @type {string[]} */
-    const names = [];
+    const names: string[] = [];
     for await (const entry of dir.values()) {
       names.push(entry.name);
     }

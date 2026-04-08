@@ -1,31 +1,26 @@
-// @ts-check
 // ─── File System Access API ─────────────────────────────────────────────────
 // Native file handles for true edit-in-place workflow.
 // Fallback: <input type="file"> for open, <a download> for save.
 
-/**
- * @typedef {Object} FilePickerType
- * @property {string} description
- * @property {Record<string, string[]>} accept
- */
+interface FilePickerType {
+  description: string;
+  accept: Record<string, string[]>;
+}
 
-/**
- * @typedef {Object} OpenFilePickerOptions
- * @property {FilePickerType[]} [types]
- * @property {boolean} [multiple]
- */
+interface OpenFilePickerOptions {
+  types?: FilePickerType[];
+  multiple?: boolean;
+}
 
-/**
- * @typedef {Object} OpenResult
- * @property {File} file
- * @property {FileSystemFileHandle | null} handle
- */
+interface OpenResult {
+  file: File;
+  handle: FileSystemFileHandle | null;
+}
 
-/** @type {FileSystemFileHandle | null} */
-let _lastHandle = null;
+let _lastHandle: FileSystemFileHandle | null = null;
 
 /** Default file types accepted by the picker */
-const DEFAULT_TYPES = /** @type {FilePickerType[]} */ ([
+const DEFAULT_TYPES: FilePickerType[] = [
   {
     description: 'Documents',
     accept: {
@@ -44,15 +39,14 @@ const DEFAULT_TYPES = /** @type {FilePickerType[]} */ ([
       'image/bmp': ['.bmp'],
     },
   },
-]);
+];
 
 // ── Detection ───────────────────────────────────────────────────────────────
 
 /**
  * Check whether the File System Access API is available.
- * @returns {boolean}
  */
-export function isFsAccessSupported() {
+export function isFsAccessSupported(): boolean {
   return typeof window !== 'undefined' && 'showOpenFilePicker' in window;
 }
 
@@ -60,11 +54,9 @@ export function isFsAccessSupported() {
 
 /**
  * Build the accept string for the fallback `<input>` element.
- * @param {FilePickerType[]} types
- * @returns {string}
  */
-function buildAcceptString(types) {
-  const extensions = [];
+function buildAcceptString(types: FilePickerType[]): string {
+  const extensions: string[] = [];
   for (const t of types) {
     for (const exts of Object.values(t.accept)) {
       extensions.push(...exts);
@@ -78,23 +70,19 @@ function buildAcceptString(types) {
  *
  * Uses the native File System Access API when available, otherwise falls
  * back to a hidden `<input type="file">`.
- *
- * @param {OpenFilePickerOptions} [options]
- * @returns {Promise<OpenResult[]>}
  */
-export async function openFilePicker(options) {
+export async function openFilePicker(options?: OpenFilePickerOptions): Promise<OpenResult[]> {
   const types = options?.types ?? DEFAULT_TYPES;
   const multiple = options?.multiple ?? false;
 
   // ── Native path ─────────────────────────────────────────────────────────
   if (isFsAccessSupported()) {
     try {
-      const handles = await /** @type {any} */ (window).showOpenFilePicker({
+      const handles = await (window as any).showOpenFilePicker({
         types,
         multiple,
       });
-      /** @type {OpenResult[]} */
-      const results = [];
+      const results: OpenResult[] = [];
       for (const handle of handles) {
         const file = await handle.getFile();
         results.push({ file, handle });
@@ -105,7 +93,7 @@ export async function openFilePicker(options) {
       return results;
     } catch (err) {
       // User cancelled or API error — return empty
-      if (/** @type {any} */ (err).name === 'AbortError') {
+      if ((err as any).name === 'AbortError') {
         return [];
       }
       throw err;
@@ -122,13 +110,12 @@ export async function openFilePicker(options) {
     }
 
     input.addEventListener('change', () => {
-      const fileList = /** @type {HTMLInputElement} */ (input).files;
+      const fileList = (input as HTMLInputElement).files;
       if (!fileList || fileList.length === 0) {
         resolve([]);
         return;
       }
-      /** @type {OpenResult[]} */
-      const results = [];
+      const results: OpenResult[] = [];
       for (let i = 0; i < fileList.length; i++) {
         results.push({ file: fileList[i], handle: null });
       }
@@ -149,18 +136,16 @@ export async function openFilePicker(options) {
  * 1. If a stored handle exists, write via `handle.createWritable()`.
  * 2. If `showSaveFilePicker` is available, prompt a save dialog.
  * 3. Fallback: create an `<a>` with `URL.createObjectURL` and click it.
- *
- * @param {Blob} blob         Data to save.
- * @param {string} suggestedName  Default filename.
- * @param {Object} [options]
- * @param {FilePickerType[]} [options.types]
- * @returns {Promise<boolean>}  true if saved successfully.
  */
-export async function saveFile(blob, suggestedName, options) {
+export async function saveFile(
+  blob: Blob,
+  suggestedName: string,
+  options?: { types?: FilePickerType[] }
+): Promise<boolean> {
   // ── 1. Re-save to existing handle ───────────────────────────────────────
   if (_lastHandle) {
     try {
-      const writable = await /** @type {any} */ (_lastHandle).createWritable();
+      const writable = await (_lastHandle as any).createWritable();
       await writable.write(blob);
       await writable.close();
       return true;
@@ -172,19 +157,18 @@ export async function saveFile(blob, suggestedName, options) {
   // ── 2. Native save picker ──────────────────────────────────────────────
   if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
     try {
-      /** @type {any} */
-      const pickerOpts = { suggestedName };
+      const pickerOpts: any = { suggestedName };
       if (options?.types) {
         pickerOpts.types = options.types;
       }
-      const handle = await /** @type {any} */ (window).showSaveFilePicker(pickerOpts);
+      const handle = await (window as any).showSaveFilePicker(pickerOpts);
       const writable = await handle.createWritable();
       await writable.write(blob);
       await writable.close();
       _lastHandle = handle;
       return true;
     } catch (err) {
-      if (/** @type {any} */ (err).name === 'AbortError') {
+      if ((err as any).name === 'AbortError') {
         return false;
       }
       throw err;
@@ -210,15 +194,14 @@ export async function saveFile(blob, suggestedName, options) {
 /**
  * Return the last stored `FileSystemFileHandle`, or null.
  * Useful for re-saving to the same file without prompting.
- * @returns {FileSystemFileHandle | null}
  */
-export function getLastHandle() {
+export function getLastHandle(): FileSystemFileHandle | null {
   return _lastHandle;
 }
 
 /**
  * Clear the stored file handle (e.g. after closing a document).
  */
-export function clearHandle() {
+export function clearHandle(): void {
   _lastHandle = null;
 }

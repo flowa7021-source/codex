@@ -1,22 +1,18 @@
-// @ts-check
 // ─── Web Share API ──────────────────────────────────────────────────────────
 // Native sharing of documents via the Web Share API.
 // Falls back to download when sharing is unavailable.
 
 /**
  * Check whether the Web Share API is available.
- * @returns {boolean}
  */
-export function isShareSupported() {
+export function isShareSupported(): boolean {
   return !!navigator.share;
 }
 
 /**
  * Check whether file sharing is supported for a given MIME type.
- * @param {string} [mimeType='application/pdf']
- * @returns {boolean}
  */
-export function isFileShareSupported(mimeType) {
+export function isFileShareSupported(mimeType?: string): boolean {
   try {
     if (!navigator.canShare) return false;
     const file = new File([], 'test', { type: mimeType || 'application/pdf' });
@@ -29,12 +25,12 @@ export function isFileShareSupported(mimeType) {
 /**
  * Share a document file via the Web Share API.
  * Falls back to {@link downloadFallback} when sharing is unavailable or fails.
- * @param {Blob} blob
- * @param {string} filename
- * @param {{ title?: string, text?: string }} [options]
- * @returns {Promise<boolean>} true if shared successfully
  */
-export async function shareDocument(blob, filename, options) {
+export async function shareDocument(
+  blob: Blob,
+  filename: string,
+  options?: { title?: string; text?: string }
+): Promise<boolean> {
   const title = options?.title;
   const text = options?.text;
 
@@ -51,7 +47,7 @@ export async function shareDocument(blob, filename, options) {
     if (err instanceof Error && err.name === 'AbortError') {
       return false;
     }
-    console.warn('[web-share] share failed:', /** @type {Error} */ (err)?.message);
+    console.warn('[web-share] share failed:', (err as Error)?.message);
     downloadFallback(blob, filename);
     return false;
   }
@@ -59,11 +55,8 @@ export async function shareDocument(blob, filename, options) {
 
 /**
  * Share plain text via the Web Share API.
- * @param {string} text
- * @param {string} [title]
- * @returns {Promise<boolean>} true if shared successfully
  */
-export async function shareText(text, title) {
+export async function shareText(text: string, title?: string): Promise<boolean> {
   if (!navigator.share) return false;
 
   try {
@@ -73,18 +66,15 @@ export async function shareText(text, title) {
     if (err instanceof Error && err.name === 'AbortError') {
       return false;
     }
-    console.warn('[web-share] shareText failed:', /** @type {Error} */ (err)?.message);
+    console.warn('[web-share] shareText failed:', (err as Error)?.message);
     return false;
   }
 }
 
 /**
  * Share a URL via the Web Share API.
- * @param {string} url
- * @param {string} [title]
- * @returns {Promise<boolean>} true if shared successfully
  */
-export async function shareUrl(url, title) {
+export async function shareUrl(url: string, title?: string): Promise<boolean> {
   if (!navigator.share) return false;
 
   try {
@@ -94,7 +84,7 @@ export async function shareUrl(url, title) {
     if (err instanceof Error && err.name === 'AbortError') {
       return false;
     }
-    console.warn('[web-share] shareUrl failed:', /** @type {Error} */ (err)?.message);
+    console.warn('[web-share] shareUrl failed:', (err as Error)?.message);
     return false;
   }
 }
@@ -102,10 +92,8 @@ export async function shareUrl(url, title) {
 /**
  * Fallback download using a temporary anchor element.
  * Always available regardless of browser support.
- * @param {Blob} blob
- * @param {string} filename
  */
-export function downloadFallback(blob, filename) {
+export function downloadFallback(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

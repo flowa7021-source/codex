@@ -201,10 +201,11 @@ if (typeof globalThis.window === 'undefined') {
     innerWidth: 1920,
     innerHeight: 1080,
     devicePixelRatio: 1,
-    location: { href: '', search: '', hash: '' },
+    location: { href: '', search: '', hash: '', origin: 'http://localhost' },
     history: { pushState() {}, replaceState() {} },
     requestAnimationFrame: (fn) => setTimeout(fn, 0),
     cancelAnimationFrame: (id) => clearTimeout(id),
+    open: () => null,
   };
 }
 

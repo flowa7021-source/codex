@@ -1,27 +1,22 @@
-// @ts-check
 // ─── Task Scheduler ─────────────────────────────────────────────────────────
 // Priority-based task scheduling using the Scheduler API (scheduler.postTask).
 // Fallback chain: scheduler.postTask → requestIdleCallback → setTimeout.
 
-/**
- * @typedef {'user-blocking' | 'user-visible' | 'background'} TaskPriority
- */
+type TaskPriority = 'user-blocking' | 'user-visible' | 'background';
 
-/**
- * @typedef {Object} PostTaskOptions
- * @property {TaskPriority} [priority='user-visible']
- * @property {number} [delay]
- * @property {AbortSignal} [signal]
- */
+interface PostTaskOptions {
+  priority?: TaskPriority;
+  delay?: number;
+  signal?: AbortSignal;
+}
 
 /**
  * Check whether the Scheduler API (scheduler.postTask) is available.
- * @returns {boolean}
  */
-export function isSchedulerSupported() {
+export function isSchedulerSupported(): boolean {
   return (
-    typeof globalThis.scheduler !== 'undefined' &&
-    typeof globalThis.scheduler.postTask === 'function'
+    typeof (globalThis as any).scheduler !== 'undefined' &&
+    typeof (globalThis as any).scheduler.postTask === 'function'
   );
 }
 
@@ -30,19 +25,15 @@ export function isSchedulerSupported() {
  *
  * Uses the native Scheduler API when available, falls back to
  * requestIdleCallback for background tasks, and finally to setTimeout.
- *
- * @param {() => any} callback
- * @param {PostTaskOptions} [options]
- * @returns {Promise<any>} resolves with the callback's return value
  */
-export function postTask(callback, options) {
+export function postTask(callback: () => any, options?: PostTaskOptions): Promise<any> {
   const priority = options?.priority ?? 'user-visible';
   const delay = options?.delay ?? 0;
   const signal = options?.signal;
 
   // Native scheduler.postTask path
   if (isSchedulerSupported()) {
-    return globalThis.scheduler.postTask(callback, { priority, delay, signal });
+    return (globalThis as any).scheduler.postTask(callback, { priority, delay, signal });
   }
 
   // Fallback path
@@ -53,8 +44,7 @@ export function postTask(callback, options) {
       return;
     }
 
-    /** @type {ReturnType<typeof setTimeout> | undefined} */
-    let timerId;
+    let timerId: ReturnType<typeof setTimeout> | undefined;
 
     const onAbort = () => {
       if (timerId !== undefined) {
@@ -103,19 +93,15 @@ export function postTask(callback, options) {
 
 /**
  * Shorthand: schedule a user-blocking priority task.
- * @param {() => any} callback
- * @returns {Promise<any>}
  */
-export function postUserBlockingTask(callback) {
+export function postUserBlockingTask(callback: () => any): Promise<any> {
   return postTask(callback, { priority: 'user-blocking' });
 }
 
 /**
  * Shorthand: schedule a background priority task.
- * @param {() => any} callback
- * @returns {Promise<any>}
  */
-export function postBackgroundTask(callback) {
+export function postBackgroundTask(callback: () => any): Promise<any> {
   return postTask(callback, { priority: 'background' });
 }
 
@@ -125,15 +111,13 @@ export function postBackgroundTask(callback) {
  *
  * Uses `scheduler.yield()` when available, otherwise falls back to
  * `setTimeout(0)`.
- *
- * @returns {Promise<void>}
  */
-export function yieldToMain() {
+export function yieldToMain(): Promise<void> {
   if (
-    typeof globalThis.scheduler !== 'undefined' &&
-    typeof globalThis.scheduler.yield === 'function'
+    typeof (globalThis as any).scheduler !== 'undefined' &&
+    typeof ((globalThis as any).scheduler as any).yield === 'function'
   ) {
-    return globalThis.scheduler.yield();
+    return ((globalThis as any).scheduler as any).yield();
   }
   return new Promise((resolve) => setTimeout(resolve, 0));
 }

@@ -1,4 +1,3 @@
-// @ts-check
 // ─── Persistence Facade ─────────────────────────────────────────────────────
 // Unified persistence API for NovaReader.
 // Provides a single interface for all storage needs.
@@ -30,14 +29,12 @@ const SIZE_THRESHOLD_BYTES = 100 * 1024; // 100 KB
 
 /**
  * Estimate the byte size of a value when serialized to JSON.
- * @param {any} value
- * @returns {number}
  */
-function estimateJsonSize(value) {
+function estimateJsonSize(value: unknown): number {
   try {
     return new Blob([JSON.stringify(value)]).size;
   } catch (e) {
-    console.warn('[persistence-facade] size estimate failed:', e?.message);
+    console.warn('[persistence-facade] size estimate failed:', (e as Error)?.message);
     return 0;
   }
 }
@@ -46,11 +43,11 @@ function estimateJsonSize(value) {
  * Generic IDB get helper.  Opens the database, runs a readonly transaction,
  * and returns the record (or null).
  */
-async function idbGet(storeName, key) {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
+async function idbGet(storeName: string, key: string): Promise<unknown> {
+  const db: IDBDatabase = await openDatabase();
+  return new Promise<unknown>((resolve, reject) => {
     const tx = db.transaction(storeName, 'readonly');
-    const req = tx.objectStore(storeName).get(key);
+    const req: IDBRequest = tx.objectStore(storeName).get(key);
     req.onsuccess = () => resolve(req.result ?? null);
     req.onerror = () => reject(req.error);
   });
@@ -59,9 +56,9 @@ async function idbGet(storeName, key) {
 /**
  * Generic IDB put helper.
  */
-async function idbPut(storeName, record) {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
+async function idbPut(storeName: string, record: unknown): Promise<void> {
+  const db: IDBDatabase = await openDatabase();
+  return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite');
     tx.objectStore(storeName).put(record);
     tx.oncomplete = () => resolve();
@@ -72,9 +69,9 @@ async function idbPut(storeName, record) {
 /**
  * Generic IDB delete helper.
  */
-async function idbDelete(storeName, key) {
-  const db = await openDatabase();
-  return new Promise((resolve, reject) => {
+async function idbDelete(storeName: string, key: string): Promise<void> {
+  const db: IDBDatabase = await openDatabase();
+  return new Promise<void>((resolve, reject) => {
     const tx = db.transaction(storeName, 'readwrite');
     tx.objectStore(storeName).delete(key);
     tx.oncomplete = () => resolve();
@@ -84,11 +81,9 @@ async function idbDelete(storeName, key) {
 
 /**
  * Collect all localStorage keys that match a given prefix.
- * @param {string} prefix
- * @returns {string[]}
  */
-function localStorageKeysWithPrefix(prefix) {
-  const keys = [];
+function localStorageKeysWithPrefix(prefix: string): string[] {
+  const keys: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
     if (k && k.startsWith(prefix)) {
@@ -96,6 +91,16 @@ function localStorageKeysWithPrefix(prefix) {
     }
   }
   return keys;
+}
+
+// ─── Option types ────────────────────────────────────────────────────────────
+
+interface RawOption {
+  raw?: boolean;
+}
+
+interface SmartPutOptions {
+  idbStore?: string;
 }
 
 // ─── Facade ─────────────────────────────────────────────────────────────────
@@ -112,20 +117,14 @@ export const persistence = {
    * For prefixed keys (app-persistence style) pass the short key; the nr3_
    * prefix is added automatically.  For legacy unprefixed keys pass the full
    * key and set `options.raw = true`.
-   *
-   * @param {string} key
-   * @param {any}    [defaultValue=null]
-   * @param {object} [options]
-   * @param {boolean} [options.raw=false] - If true, read the key as-is (no prefix).
-   * @returns {any}
    */
-  getSettings(key, defaultValue = null, options = {}) {
+  getSettings(key: string, defaultValue: unknown = null, options: RawOption = {}): unknown {
     if (options.raw) {
       try {
         const raw = localStorage.getItem(key);
         return raw !== null ? JSON.parse(raw) : defaultValue;
       } catch (e) {
-        console.warn('[persistence-facade] getSettings parse failed for key:', key, e?.message);
+        console.warn('[persistence-facade] getSettings parse failed for key:', key, (e as Error)?.message);
         return defaultValue;
       }
     }
@@ -134,17 +133,13 @@ export const persistence = {
 
   /**
    * Write a settings value.
-   * @param {string}  key
-   * @param {any}     value
-   * @param {object}  [options]
-   * @param {boolean} [options.raw=false]
    */
-  setSettings(key, value, options = {}) {
+  setSettings(key: string, value: unknown, options: RawOption = {}): void {
     if (options.raw) {
       try {
         localStorage.setItem(key, JSON.stringify(value));
       } catch (err) {
-        console.warn('[persistence-facade] setSettings error:', err?.message);
+        console.warn('[persistence-facade] setSettings error:', (err as Error)?.message);
       }
       return;
     }
@@ -153,11 +148,8 @@ export const persistence = {
 
   /**
    * Remove a settings key.
-   * @param {string}  key
-   * @param {object}  [options]
-   * @param {boolean} [options.raw=false]
    */
-  removeSettings(key, options = {}) {
+  removeSettings(key: string, options: RawOption = {}): void {
     if (options.raw) {
       localStorage.removeItem(key);
       return;
@@ -174,27 +166,22 @@ export const persistence = {
    * Read a per-document value that lives inside a top-level map.
    * Equivalent to: load(mapKey, {})[docName]  or  defaultValue.
    *
-   * @param {string} docName
-   * @param {string} key       - The map key (e.g. 'viewStates', 'bookmarks').
-   * @param {any}    [defaultValue=null]
-   * @returns {any}
+   * @param docName
+   * @param key       - The map key (e.g. 'viewStates', 'bookmarks').
+   * @param defaultValue
    */
-  getDocState(docName, key, defaultValue = null) {
+  getDocState(docName: string, key: string, defaultValue: unknown = null): unknown {
     if (!docName) return defaultValue;
-    const map = apLoad(key, {});
+    const map = apLoad(key, {}) as Record<string, unknown>;
     return map[docName] !== undefined ? map[docName] : defaultValue;
   },
 
   /**
    * Write a per-document value into a top-level map.
-   *
-   * @param {string} docName
-   * @param {string} key
-   * @param {any}    value
    */
-  setDocState(docName, key, value) {
+  setDocState(docName: string, key: string, value: unknown): void {
     if (!docName) return;
-    const map = apLoad(key, {});
+    const map = apLoad(key, {}) as Record<string, unknown>;
     map[docName] = value;
     apSave(key, map);
   },
@@ -203,16 +190,16 @@ export const persistence = {
    * Remove all state for a specific document across all known map keys and
    * per-page keys.
    *
-   * @param {string} docName
-   * @param {number} [pageCount=0] - If provided, also cleans per-page keys.
+   * @param docName
+   * @param pageCount - If provided, also cleans per-page keys.
    */
-  clearDocState(docName, pageCount = 0) {
+  clearDocState(docName: string, pageCount = 0): void {
     if (!docName) return;
 
     // Remove from map-style keys
     const mapKeys = ['viewStates', 'bookmarks', 'notes', 'readingProgress'];
     for (const mk of mapKeys) {
-      const map = apLoad(mk, {});
+      const map = apLoad(mk, {}) as Record<string, unknown>;
       if (docName in map) {
         delete map[docName];
         apSave(mk, map);
@@ -235,15 +222,14 @@ export const persistence = {
   /**
    * Read a record from IndexedDB.
    *
-   * @param {string} store - Object store name (e.g. 'rendered-pages').
-   * @param {string} key
-   * @returns {Promise<any|null>}
+   * @param store - Object store name (e.g. 'rendered-pages').
+   * @param key
    */
-  async getLargeData(store, key) {
+  async getLargeData(store: string, key: string): Promise<unknown> {
     try {
       return await idbGet(store, key);
     } catch (err) {
-      console.warn('[persistence-facade] getLargeData error:', err?.message);
+      console.warn('[persistence-facade] getLargeData error:', (err as Error)?.message);
       return null;
     }
   },
@@ -251,31 +237,29 @@ export const persistence = {
   /**
    * Write a record to IndexedDB.
    *
-   * @param {string} store
-   * @param {string} key
-   * @param {any}    value  - Stored as-is (should include the keyPath field).
-   * @returns {Promise<void>}
+   * @param store
+   * @param key
+   * @param value  - Stored as-is (should include the keyPath field).
    */
-  async setLargeData(store, key, value) {
+  async setLargeData(store: string, key: string, value: unknown): Promise<void> {
     try {
       await idbPut(store, value);
     } catch (err) {
-      console.warn('[persistence-facade] setLargeData error:', err?.message);
+      console.warn('[persistence-facade] setLargeData error:', (err as Error)?.message);
     }
   },
 
   /**
    * Delete a record from IndexedDB.
    *
-   * @param {string} store
-   * @param {string} key
-   * @returns {Promise<void>}
+   * @param store
+   * @param key
    */
-  async deleteLargeData(store, key) {
+  async deleteLargeData(store: string, key: string): Promise<void> {
     try {
       await idbDelete(store, key);
     } catch (err) {
-      console.warn('[persistence-facade] deleteLargeData error:', err?.message);
+      console.warn('[persistence-facade] deleteLargeData error:', (err as Error)?.message);
     }
   },
 
@@ -287,13 +271,12 @@ export const persistence = {
    * Values under SIZE_THRESHOLD_BYTES go to localStorage (via app-persistence);
    * larger values go to IndexedDB ('document-meta' store by default).
    *
-   * @param {string} key
-   * @param {any}    value
-   * @param {object} [options]
-   * @param {string} [options.idbStore='document-meta'] - IndexedDB store for large data.
-   * @returns {Promise<'localStorage'|'indexedDB'>} - Which backend was used.
+   * @param key
+   * @param value
+   * @param options
+   * @returns Which backend was used.
    */
-  async smartPut(key, value, options = {}) {
+  async smartPut(key: string, value: unknown, options: SmartPutOptions = {}): Promise<'localStorage' | 'indexedDB'> {
     const size = estimateJsonSize(value);
     if (size < SIZE_THRESHOLD_BYTES) {
       apSave(key, value);
@@ -311,11 +294,10 @@ export const persistence = {
    * IndexedDB object store.  After a successful copy the localStorage entry
    * is removed.
    *
-   * @param {string} prefix      - localStorage key prefix to migrate.
-   * @param {string} [targetStore='document-meta'] - Target IDB store.
-   * @returns {Promise<{migrated: number, errors: number}>}
+   * @param prefix      - localStorage key prefix to migrate.
+   * @param targetStore - Target IDB store.
    */
-  async migrateLocalStorageToIndexedDB(prefix, targetStore = 'document-meta') {
+  async migrateLocalStorageToIndexedDB(prefix: string, targetStore = 'document-meta'): Promise<{ migrated: number; errors: number }> {
     const keys = localStorageKeysWithPrefix(prefix);
     let migrated = 0;
     let errors = 0;
@@ -325,7 +307,7 @@ export const persistence = {
         const raw = localStorage.getItem(fullKey);
         if (raw === null) continue;
 
-        const value = JSON.parse(raw);
+        const value: unknown = JSON.parse(raw);
         await idbPut(targetStore, {
           key: fullKey,
           value,
@@ -335,7 +317,7 @@ export const persistence = {
         localStorage.removeItem(fullKey);
         migrated++;
       } catch (err) {
-        console.warn(`[persistence-facade] migration error for key "${fullKey}":`, err?.message);
+        console.warn(`[persistence-facade] migration error for key "${fullKey}":`, (err as Error)?.message);
         errors++;
       }
     }
@@ -348,10 +330,8 @@ export const persistence = {
   /**
    * Clear ALL persisted data (both localStorage and IndexedDB).
    * Use with caution.
-   *
-   * @returns {Promise<void>}
    */
-  async clearAll() {
+  async clearAll(): Promise<void> {
     // Clear prefixed localStorage entries
     const prefixedKeys = localStorageKeysWithPrefix(STORAGE_PREFIX);
     for (const k of prefixedKeys) {
@@ -376,14 +356,12 @@ export const persistence = {
 
   /**
    * Gather usage statistics for both backends.
-   *
-   * @returns {Promise<{
-   *   localStorage: { keys: number, bytes: number },
-   *   indexedDB: { total: number, pages: number, ocr: number, annotations: number },
-   *   totalEstimatedBytes: number
-   * }>}
    */
-  async getStorageStats() {
+  async getStorageStats(): Promise<{
+    localStorage: { keys: number; bytes: number };
+    indexedDB: { total: number; pages: number; ocr: number; annotations: number };
+    totalEstimatedBytes: number;
+  }> {
     // localStorage stats
     let lsBytes = 0;
     let lsKeys = 0;
@@ -401,7 +379,7 @@ export const persistence = {
     try {
       idbStats = await idbGetUsage();
     } catch (err) {
-      console.warn('[persistence-facade] idb stats error:', err?.message);
+      console.warn('[persistence-facade] idb stats error:', (err as Error)?.message);
     }
 
     return {

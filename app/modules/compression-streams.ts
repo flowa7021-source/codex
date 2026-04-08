@@ -1,4 +1,3 @@
-// @ts-check
 // ─── Compression Streams ────────────────────────────────────────────────────
 // Compression Streams API wrapper with fflate fallback.
 // Uses native CompressionStream/DecompressionStream when available,
@@ -6,15 +5,15 @@
 
 import { gzipSync, gunzipSync, deflateSync, inflateSync } from 'fflate';
 
-/**
- * @typedef {'gzip' | 'deflate' | 'deflate-raw'} CompressionFormat
- */
+declare const CompressionStream: any;
+declare const DecompressionStream: any;
+
+type CompressionFormat = 'gzip' | 'deflate' | 'deflate-raw';
 
 /**
  * Check whether the native Compression Streams API is available.
- * @returns {boolean}
  */
-export function isCompressionStreamsSupported() {
+export function isCompressionStreamsSupported(): boolean {
   return (
     typeof globalThis.CompressionStream === 'function' &&
     typeof globalThis.DecompressionStream === 'function'
@@ -24,11 +23,8 @@ export function isCompressionStreamsSupported() {
 /**
  * Pipe data through a transform stream and collect the output chunks
  * into a single Uint8Array.
- * @param {Uint8Array} data
- * @param {TransformStream} transform
- * @returns {Promise<Uint8Array>}
  */
-async function pipeThrough(data, transform) {
+async function pipeThrough(data: Uint8Array, transform: TransformStream): Promise<Uint8Array> {
   const readable = new ReadableStream({
     start(controller) {
       controller.enqueue(data);
@@ -37,8 +33,7 @@ async function pipeThrough(data, transform) {
   });
 
   const reader = readable.pipeThrough(transform).getReader();
-  /** @type {Uint8Array[]} */
-  const chunks = [];
+  const chunks: Uint8Array[] = [];
   let totalLength = 0;
 
   for (;;) {
@@ -63,11 +58,8 @@ async function pipeThrough(data, transform) {
 /**
  * Compress data using the specified format.
  * Uses native CompressionStream when available, otherwise fflate.
- * @param {Uint8Array} data - Raw bytes to compress
- * @param {CompressionFormat} [format='gzip'] - Compression format
- * @returns {Promise<Uint8Array>} Compressed bytes
  */
-export async function compress(data, format = 'gzip') {
+export async function compress(data: Uint8Array, format: CompressionFormat = 'gzip'): Promise<Uint8Array> {
   if (isCompressionStreamsSupported()) {
     return pipeThrough(data, new CompressionStream(format));
   }
@@ -87,11 +79,8 @@ export async function compress(data, format = 'gzip') {
 /**
  * Decompress data using the specified format.
  * Uses native DecompressionStream when available, otherwise fflate.
- * @param {Uint8Array} data - Compressed bytes
- * @param {CompressionFormat} [format='gzip'] - Compression format
- * @returns {Promise<Uint8Array>} Decompressed bytes
  */
-export async function decompress(data, format = 'gzip') {
+export async function decompress(data: Uint8Array, format: CompressionFormat = 'gzip'): Promise<Uint8Array> {
   if (isCompressionStreamsSupported()) {
     return pipeThrough(data, new DecompressionStream(format));
   }
@@ -110,20 +99,16 @@ export async function decompress(data, format = 'gzip') {
 
 /**
  * Compress a UTF-8 string to gzip bytes.
- * @param {string} str - String to compress
- * @returns {Promise<Uint8Array>} Gzip-compressed bytes
  */
-export async function compressString(str) {
+export async function compressString(str: string): Promise<Uint8Array> {
   const encoded = new TextEncoder().encode(str);
   return compress(encoded, 'gzip');
 }
 
 /**
  * Decompress gzip bytes back to a UTF-8 string.
- * @param {Uint8Array} data - Gzip-compressed bytes
- * @returns {Promise<string>} Decompressed string
  */
-export async function decompressString(data) {
+export async function decompressString(data: Uint8Array): Promise<string> {
   const decompressed = await decompress(data, 'gzip');
   return new TextDecoder().decode(decompressed);
 }

@@ -1,4 +1,3 @@
-// @ts-check
 // ─── IndexedDB Storage ──────────────────────────────────────────────────────
 // Persistent storage for rendered pages, OCR data, annotations. LRU eviction.
 
@@ -15,21 +14,19 @@ const STORES = {
 const _MAX_CACHE_SIZE_MB = 200;
 const MAX_CACHE_ENTRIES = 1000;
 
-/** @type {IDBDatabase|null} */
-let db = null;
+let db: IDBDatabase | null = null;
 
 /**
  * Open or create the IndexedDB database.
- * @returns {Promise<IDBDatabase>}
  */
-export async function openDatabase() {
+export async function openDatabase(): Promise<IDBDatabase> {
   if (db) return db;
 
-  return new Promise((resolve, reject) => {
+  return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
 
     request.onupgradeneeded = (event) => {
-      const database = /** @type {any} */ (event.target).result;
+      const database = (event.target as any).result as IDBDatabase;
 
       // Rendered pages store
       if (!database.objectStoreNames.contains(STORES.pages)) {
@@ -57,8 +54,8 @@ export async function openDatabase() {
     };
 
     request.onsuccess = (event) => {
-      db = /** @type {any} */ (event.target).result;
-      resolve(db);
+      db = (event.target as any).result as IDBDatabase;
+      resolve(db!);
     };
 
     request.onerror = () => reject(request.error);
@@ -67,12 +64,13 @@ export async function openDatabase() {
 
 /**
  * Store a rendered page in cache.
- * @param {string} docName
- * @param {number} pageNum
- * @param {Blob} blob - Rendered page image
- * @param {object} [meta] - Additional metadata (zoom, dpi, etc.)
  */
-export async function cachePageRender(docName, pageNum, blob, meta = {}) {
+export async function cachePageRender(
+  docName: string,
+  pageNum: number,
+  blob: Blob,
+  meta: Record<string, unknown> = {},
+): Promise<void> {
   const database = await openDatabase();
   const key = `${docName}:page:${pageNum}`;
 
@@ -93,17 +91,14 @@ export async function cachePageRender(docName, pageNum, blob, meta = {}) {
 
 /**
  * Retrieve a cached page render.
- * @param {string} docName
- * @param {number} pageNum
- * @returns {Promise<Blob|null>}
  */
-export async function getCachedPageRender(docName, pageNum) {
+export async function getCachedPageRender(docName: string, pageNum: number): Promise<Blob | null> {
   const database = await openDatabase();
   const key = `${docName}:page:${pageNum}`;
 
   const tx = database.transaction(STORES.pages, 'readwrite');
   const store = tx.objectStore(STORES.pages);
-  const record = await getRecord(store, key);
+  const record = await getRecord(store, key) as { blob: Blob; accessedAt: number } | null;
 
   if (record) {
     // Update access time (LRU)
@@ -116,11 +111,12 @@ export async function getCachedPageRender(docName, pageNum) {
 
 /**
  * Store OCR result for a page.
- * @param {string} docName
- * @param {number} pageNum
- * @param {object} ocrResult - { text, confidence, words, language }
  */
-export async function cacheOcrResult(docName, pageNum, ocrResult) {
+export async function cacheOcrResult(
+  docName: string,
+  pageNum: number,
+  ocrResult: Record<string, unknown>,
+): Promise<void> {
   const database = await openDatabase();
   const key = `${docName}:ocr:${pageNum}`;
 
@@ -138,25 +134,26 @@ export async function cacheOcrResult(docName, pageNum, ocrResult) {
 
 /**
  * Retrieve cached OCR result.
- * @param {string} docName
- * @param {number} pageNum
- * @returns {Promise<object|null>}
  */
-export async function getCachedOcrResult(docName, pageNum) {
+export async function getCachedOcrResult(
+  docName: string,
+  pageNum: number,
+): Promise<Record<string, unknown> | null> {
   const database = await openDatabase();
   const key = `${docName}:ocr:${pageNum}`;
 
   const tx = database.transaction(STORES.ocr, 'readonly');
-  return getRecord(tx.objectStore(STORES.ocr), key);
+  return getRecord(tx.objectStore(STORES.ocr), key) as Promise<Record<string, unknown> | null>;
 }
 
 /**
  * Store annotations for a document.
- * @param {string} docName
- * @param {number} pageNum
- * @param {Array} annotations
  */
-export async function saveAnnotations(docName, pageNum, annotations) {
+export async function saveAnnotations(
+  docName: string,
+  pageNum: number,
+  annotations: Array<unknown>,
+): Promise<void> {
   const database = await openDatabase();
   const key = `${docName}:annot:${pageNum}`;
 
@@ -174,24 +171,23 @@ export async function saveAnnotations(docName, pageNum, annotations) {
 
 /**
  * Load annotations for a page.
- * @param {string} docName
- * @param {number} pageNum
- * @returns {Promise<Array|null>}
  */
-export async function loadAnnotations(docName, pageNum) {
+export async function loadAnnotations(
+  docName: string,
+  pageNum: number,
+): Promise<Array<unknown> | null> {
   const database = await openDatabase();
   const key = `${docName}:annot:${pageNum}`;
 
   const tx = database.transaction(STORES.annotations, 'readonly');
-  const record = await getRecord(tx.objectStore(STORES.annotations), key);
+  const record = await getRecord(tx.objectStore(STORES.annotations), key) as { annotations: Array<unknown> } | null;
   return record?.annotations || null;
 }
 
 /**
  * Clear all cached data for a document.
- * @param {string} docName
  */
-export async function clearDocumentCache(docName) {
+export async function clearDocumentCache(docName: string): Promise<void> {
   const database = await openDatabase();
 
   for (const storeName of [STORES.pages, STORES.ocr, STORES.annotations]) {
@@ -210,11 +206,10 @@ export async function clearDocumentCache(docName) {
 
 /**
  * Get total storage usage in bytes.
- * @returns {Promise<{total: number, pages: number, ocr: number, annotations: number}>}
  */
-export async function getStorageUsage() {
+export async function getStorageUsage(): Promise<{ total: number; pages: number; ocr: number; annotations: number }> {
   const database = await openDatabase();
-  const usage = { total: 0, pages: 0, ocr: 0, annotations: 0 };
+  const usage: { total: number; pages: number; ocr: number; annotations: number; [key: string]: number } = { total: 0, pages: 0, ocr: 0, annotations: 0 };
 
   for (const [label, storeName] of Object.entries(STORES)) {
     if (label === 'documents') continue;
@@ -231,7 +226,7 @@ export async function getStorageUsage() {
 /**
  * Clear all cached data.
  */
-export async function clearAllCache() {
+export async function clearAllCache(): Promise<void> {
   const database = await openDatabase();
   for (const storeName of Object.values(STORES)) {
     const tx = database.transaction(storeName, 'readwrite');
@@ -242,7 +237,7 @@ export async function clearAllCache() {
 
 // ─── LRU Eviction ───────────────────────────────────────────────────────────
 
-async function _evictIfNeeded(storeName) {
+async function _evictIfNeeded(storeName: string): Promise<void> {
   const database = await openDatabase();
   const tx = database.transaction(storeName, 'readwrite');
   const store = tx.objectStore(storeName);
@@ -258,10 +253,10 @@ async function _evictIfNeeded(storeName) {
   let safetyCounter = 0;
   const cursor = index.openCursor();
 
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     cursor.onsuccess = (event) => {
       if (++safetyCounter > toEvict + 50) { resolve(); return; }
-      const c = /** @type {any} */ (event.target).result;
+      const c = (event.target as any).result as IDBCursorWithValue | null;
       if (c && evicted < toEvict) {
         c.delete();
         evicted++;
@@ -276,31 +271,31 @@ async function _evictIfNeeded(storeName) {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function txComplete(tx) {
-  return new Promise((resolve, reject) => {
+function txComplete(tx: IDBTransaction): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
 
-function getRecord(store, key) {
-  return new Promise((resolve, reject) => {
+function getRecord(store: IDBObjectStore, key: string): Promise<unknown> {
+  return new Promise<unknown>((resolve, reject) => {
     const req = store.get(key);
     req.onsuccess = () => resolve(req.result || null);
     req.onerror = () => reject(req.error);
   });
 }
 
-function getAllKeys(index, range) {
-  return new Promise((resolve, reject) => {
+function getAllKeys(index: IDBIndex, range: IDBKeyRange): Promise<IDBValidKey[]> {
+  return new Promise<IDBValidKey[]>((resolve, reject) => {
     const req = index.getAllKeys(range);
     req.onsuccess = () => resolve(req.result || []);
     req.onerror = () => reject(req.error);
   });
 }
 
-function countRecords(store) {
-  return new Promise((resolve, reject) => {
+function countRecords(store: IDBObjectStore): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
     const req = store.count();
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);

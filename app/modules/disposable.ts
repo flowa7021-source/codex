@@ -1,4 +1,3 @@
-// @ts-check
 // ─── Disposable Resources ───────────────────────────────────────────────────
 // Deterministic resource cleanup using Symbol.dispose (TC39 Explicit Resource
 // Management). Provides helpers for making objects disposable and a
@@ -19,13 +18,12 @@
 
 /**
  * Make any object disposable by attaching a Symbol.dispose method.
- * @template T
- * @param {T} resource - The resource to make disposable
- * @param {(resource: T) => void} cleanupFn - Cleanup function to call on dispose
- * @returns {T & { [Symbol.dispose]: () => void, disposed: boolean }}
  */
-export function makeDisposable(resource, cleanupFn) {
-  const wrapped = /** @type {any} */ (resource);
+export function makeDisposable<T>(
+  resource: T,
+  cleanupFn: (resource: T) => void
+): T & { [Symbol.dispose](): void; disposed: boolean } {
+  const wrapped = resource as any;
   wrapped.disposed = false;
   wrapped[Symbol.dispose] = () => {
     if (wrapped.disposed) return;
@@ -38,10 +36,10 @@ export function makeDisposable(resource, cleanupFn) {
 /**
  * Create a disposable wrapper around a Blob URL.
  * Automatically calls URL.revokeObjectURL on dispose.
- * @param {string} url - The blob URL to manage
- * @returns {{ url: string, [Symbol.dispose]: () => void, disposed: boolean }}
  */
-export function disposableBlobUrl(url) {
+export function disposableBlobUrl(
+  url: string
+): { url: string; [Symbol.dispose](): void; disposed: boolean } {
   return makeDisposable({ url }, (r) => {
     try { URL.revokeObjectURL(r.url); } catch (_e) { /* ignore */ }
   });
@@ -50,10 +48,10 @@ export function disposableBlobUrl(url) {
 /**
  * Create a disposable canvas context.
  * Resets transform and clears canvas on dispose.
- * @param {HTMLCanvasElement} canvas
- * @returns {{ ctx: CanvasRenderingContext2D | null, canvas: HTMLCanvasElement, [Symbol.dispose]: () => void, disposed: boolean }}
  */
-export function disposableCanvas(canvas) {
+export function disposableCanvas(
+  canvas: HTMLCanvasElement
+): { ctx: CanvasRenderingContext2D | null; canvas: HTMLCanvasElement; [Symbol.dispose](): void; disposed: boolean } {
   const ctx = canvas.getContext('2d');
   return makeDisposable({ ctx, canvas }, (r) => {
     try {
@@ -70,34 +68,26 @@ export function disposableCanvas(canvas) {
  * Mirrors the TC39 DisposableStack proposal.
  */
 export class DisposableStack {
-  constructor() {
-    /** @type {Array<() => void>} */
-    this._cleanups = [];
-    this._disposed = false;
-  }
+  private _cleanups: Array<() => void> = [];
+  private _disposed = false;
 
-  /** @returns {boolean} */
-  get disposed() { return this._disposed; }
+  get disposed(): boolean { return this._disposed; }
 
   /**
    * Add a disposable resource to the stack.
-   * @template T
-   * @param {T & { [Symbol.dispose]?: () => void }} resource
-   * @returns {T}
    */
-  use(resource) {
+  use<T>(resource: T & { [Symbol.dispose]?: () => void }): T {
     if (this._disposed) throw new Error('DisposableStack already disposed');
-    if (resource && typeof resource[Symbol.dispose] === 'function') {
-      this._cleanups.push(() => /** @type {any} */ (resource)[Symbol.dispose]());
+    if (resource && typeof (resource as any)[Symbol.dispose] === 'function') {
+      this._cleanups.push(() => (resource as any)[Symbol.dispose]());
     }
     return resource;
   }
 
   /**
    * Add a cleanup callback to be called on dispose.
-   * @param {() => void} fn
    */
-  defer(fn) {
+  defer(fn: () => void): void {
     if (this._disposed) throw new Error('DisposableStack already disposed');
     this._cleanups.push(fn);
   }
@@ -105,7 +95,7 @@ export class DisposableStack {
   /**
    * Dispose all resources in reverse order.
    */
-  dispose() {
+  dispose(): void {
     if (this._disposed) return;
     this._disposed = true;
     // Dispose in LIFO order
@@ -116,7 +106,7 @@ export class DisposableStack {
   }
 
   /** Alias for dispose — allows DisposableStack itself to be disposable. */
-  [Symbol.dispose]() {
+  [Symbol.dispose](): void {
     this.dispose();
   }
 }

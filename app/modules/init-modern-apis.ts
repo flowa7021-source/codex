@@ -1,4 +1,3 @@
-// @ts-check
 // ─── Modern APIs Initialization ─────────────────────────────────────────────
 // Wires up next-gen Web APIs into the application: File System Access,
 // OPFS, WebCodecs, Compression Streams, Task Scheduler, Wake Lock,
@@ -16,21 +15,19 @@ import { isShareSupported, isFileShareSupported, shareDocument, downloadFallback
 import { isViewTransitionsSupported, navigateToPage } from './view-transitions.js';
 import { DisposableStack } from './disposable.js';
 
-/**
- * @typedef {object} ModernApiCapabilities
- * @property {boolean} fsAccess   — File System Access API
- * @property {boolean} opfs       — Origin Private File System
- * @property {boolean} webCodecs  — WebCodecs ImageDecoder
- * @property {boolean} compression — Compression Streams API
- * @property {boolean} scheduler  — scheduler.postTask
- * @property {boolean} wakeLock   — Screen Wake Lock
- * @property {boolean} share      — Web Share API
- * @property {boolean} fileShare  — Web Share with files
- * @property {boolean} viewTransitions — View Transitions API
- */
+interface ModernApiCapabilities {
+  fsAccess: boolean;
+  opfs: boolean;
+  webCodecs: boolean;
+  compression: boolean;
+  scheduler: boolean;
+  wakeLock: boolean;
+  share: boolean;
+  fileShare: boolean;
+  viewTransitions: boolean;
+}
 
-/** @type {ModernApiCapabilities} */
-let _capabilities = {
+let _capabilities: ModernApiCapabilities = {
   fsAccess: false,
   opfs: false,
   webCodecs: false,
@@ -44,9 +41,8 @@ let _capabilities = {
 
 /**
  * Detect and log available modern API capabilities.
- * @returns {Promise<ModernApiCapabilities>}
  */
-export async function detectCapabilities() {
+export async function detectCapabilities(): Promise<ModernApiCapabilities> {
   _capabilities = {
     fsAccess: isFsAccessSupported(),
     opfs: await isOpfsSupported(),
@@ -63,9 +59,8 @@ export async function detectCapabilities() {
 
 /**
  * Get previously detected capabilities.
- * @returns {ModernApiCapabilities}
  */
-export function getCapabilities() {
+export function getCapabilities(): ModernApiCapabilities {
   return { ..._capabilities };
 }
 
@@ -73,7 +68,7 @@ export function getCapabilities() {
  * Initialize modern API integrations.
  * Call once during app startup (after DOM ready).
  */
-export async function initModernApis() {
+export async function initModernApis(): Promise<ModernApiCapabilities> {
   const caps = await detectCapabilities();
 
   // Log available APIs (development aid)
