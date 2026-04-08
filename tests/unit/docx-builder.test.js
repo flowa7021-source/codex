@@ -106,4 +106,101 @@ describe('buildDocxDocument', () => {
     const blob = await buildDocxDocument(sections, { title: 'PB' });
     assert.ok(blob);
   });
+
+  it('handles runs with underline, strikethrough, superscript formatting', async () => {
+    const sections = [{
+      startPage: 1, endPage: 1,
+      blocks: [{
+        type: 'paragraph',
+        content: {
+          lines: [{
+            runs: [
+              { text: 'underlined', underline: true, fontSize: 12 },
+              { text: 'struck', strikethrough: true, fontSize: 12 },
+              { text: 'sup', superscript: true, fontSize: 8 },
+            ],
+          }],
+        },
+      }],
+    }];
+    const blob = await buildDocxDocument(sections, { title: 'Format' });
+    assert.ok(blob);
+  });
+
+  it('handles runs with subscript and color formatting', async () => {
+    const sections = [{
+      startPage: 1, endPage: 1,
+      blocks: [{
+        type: 'paragraph',
+        content: {
+          lines: [{
+            runs: [
+              { text: 'sub', subscript: true, fontSize: 8 },
+              { text: 'colored', color: '#FF0000', fontSize: 12 },
+              { text: 'charspaced', charSpacing: 2, fontSize: 12 },
+            ],
+          }],
+        },
+      }],
+    }];
+    const blob = await buildDocxDocument(sections, { title: 'Sub' });
+    assert.ok(blob);
+  });
+
+  it('handles runs with URL (hyperlinks)', async () => {
+    const sections = [{
+      startPage: 1, endPage: 1,
+      blocks: [{
+        type: 'paragraph',
+        content: {
+          lines: [{
+            runs: [
+              { text: 'Visit site', url: 'https://example.com', fontSize: 12 },
+              { text: 'normal text', fontSize: 12 },
+            ],
+          }],
+        },
+      }],
+    }];
+    const blob = await buildDocxDocument(sections, { title: 'Links' });
+    assert.ok(blob);
+  });
+
+  it('uses buildRunsFromContentLines for header content', async () => {
+    const sections = [{
+      startPage: 1, endPage: 1,
+      blocks: [],
+      header: [{
+        lines: [{
+          runs: [{ text: 'Header Title', fontSize: 14 }],
+        }],
+      }],
+    }];
+    const blob = await buildDocxDocument(sections, { title: 'Header', includeHeader: true });
+    assert.ok(blob);
+  });
+
+  it('uses buildRunsFromContentLines for footer content', async () => {
+    const sections = [{
+      startPage: 1, endPage: 1,
+      blocks: [],
+      footer: [{
+        lines: [{
+          runs: [{ text: 'Footer text', fontSize: 10 }],
+        }],
+      }],
+    }];
+    const blob = await buildDocxDocument(sections, { title: 'Footer', includeFooter: true });
+    assert.ok(blob);
+  });
+
+  it('handles empty buildRunsFromContentLines regions (fallback to empty run)', async () => {
+    const sections = [{
+      startPage: 1, endPage: 1,
+      blocks: [],
+      header: [],
+    }];
+    const blob = await buildDocxDocument(sections, { title: 'H', includeHeader: true });
+    assert.ok(blob);
+  });
 });
