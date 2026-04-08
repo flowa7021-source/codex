@@ -87,4 +87,129 @@ describe('ProgressiveLoader', () => {
 
     await assert.rejects(loadPromise, /cancelled/i);
   });
+
+  it('loadPdfProgressive throws when pdfjsLib is null', async () => {
+    const loader = new ProgressiveLoader();
+    const file = { size: 100, name: 'test.pdf', stream: () => ({ getReader: () => {} }) };
+    await assert.rejects(
+      () => loader.loadPdfProgressive(file, null),
+      /PDF.js not available/,
+    );
+  });
+
+  it('loadPdfProgressive reads file via stream and returns pdfDoc', async () => {
+    const loader = new ProgressiveLoader();
+
+    const data = new Uint8Array(1024).fill(42);
+    let readCount = 0;
+    const mockFile = {
+      size: 1024,
+      name: 'test.pdf',
+      stream: () => ({
+        getReader: () => ({
+          read: async () => {
+            if (readCount === 0) {
+              readCount++;
+              return { done: false, value: data };
+            }
+            return { done: true, value: undefined };
+          },
+          cancel: async () => {},
+        }),
+      }),
+    };
+
+    const mockPdfjs = {
+      getDocument: (_opts) => {
+        const task = {
+          promise: Promise.resolve({ numPages: 3 }),
+          onProgress: null,
+        };
+        return task;
+      },
+    };
+
+    const events = [];
+    loader.onEvent((evt) => events.push(evt));
+    const pdfDoc = await loader.loadPdfProgressive(mockFile, mockPdfjs);
+    assert.ok(pdfDoc);
+    assert.equal(pdfDoc.numPages, 3);
+    assert.ok(events.includes('start'));
+    assert.ok(events.includes('complete'));
+  });
+
+  it('loadPdfProgressive calls onProgress callback', async () => {
+    const loader = new ProgressiveLoader();
+
+    const data = new Uint8Array(100).fill(0);
+    let readCount = 0;
+    const mockFile = {
+      size: 100,
+      name: 'test.pdf',
+      stream: () => ({
+        getReader: () => ({
+          read: async () => {
+            if (readCount === 0) {
+              readCount++;
+              return { done: false, value: data };
+            }
+            return { done: true, value: undefined };
+          },
+          cancel: async () => {},
+        }),
+      }),
+    };
+
+    const mockPdfjs = {
+      getDocument: () => ({ promise: Promise.resolve({ numPages: 1 }), onProgress: null }),
+    };
+
+    const progressCalls = [];
+    await loader.loadPdfProgressive(mockFile, mockPdfjs, (pct) => progressCalls.push(pct));
+    assert.ok(progressCalls.length > 0);
+    assert.equal(progressCalls[0], 100);
+  });
+
+  it('loadPdfProgressive fires pdf-parse progress events via loadingTask.onProgress', async () => {
+    const loader = new ProgressiveLoader();
+
+    const data = new Uint8Array(50).fill(0);
+    let readCount = 0;
+    const mockFile = {
+      size: 50,
+      name: 'test.pdf',
+      stream: () => ({
+        getReader: () => ({
+          read: async () => {
+            if (readCount === 0) { readCount++; return { done: false, value: data }; }
+            return { done: true, value: undefined };
+          },
+          cancel: async () => {},
+        }),
+      }),
+    };
+
+    const events = [];
+    loader.onEvent((evt) => events.push(evt));
+
+    let onProgressFn = null;
+    const mockPdfjs = {
+      getDocument: () => {
+        const task = {};
+        task.promise = Promise.resolve({ numPages: 1 });
+        // Simulate calling onProgress after getDocument
+        queueMicrotask(() => {
+          if (onProgressFn) onProgressFn({ loaded: 50, total: 100 });
+        });
+        Object.defineProperty(task, 'onProgress', {
+          set(fn) { onProgressFn = fn; },
+          get() { return onProgressFn; },
+        });
+        return task;
+      },
+    };
+
+    await loader.loadPdfProgressive(mockFile, mockPdfjs);
+    assert.ok(events.includes('complete'));
+  });
 });
