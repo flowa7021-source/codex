@@ -145,3 +145,48 @@ describe('floating-search', () => {
     assert.equal(result.state.visible, false);
   });
 });
+
+describe('floating-search — replace functionality', () => {
+  it('onReplace callback is called with correct text when replaceOneBtn is clicked', async () => {
+    const { createFloatingSearch } = await import('../../app/modules/floating-search.js');
+    const calls = [];
+    const { panel } = createFloatingSearch({
+      onReplace: (text, match) => calls.push({ text, match }),
+    });
+
+    const replaceInput = panel.querySelector('#fs-replace-input');
+    const replaceOneBtn = panel.querySelector('#fs-replace-one');
+    if (replaceInput && replaceOneBtn) {
+      replaceInput.value = 'new text';
+      replaceOneBtn.dispatchEvent(new Event('click'));
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].text, 'new text');
+    }
+  });
+
+  it('onReplaceAll callback is called with correct text when replaceAllBtn is clicked', async () => {
+    const { createFloatingSearch } = await import('../../app/modules/floating-search.js');
+    const calls = [];
+    const { panel } = createFloatingSearch({
+      onReplaceAll: (text) => calls.push(text),
+    });
+
+    const replaceInput = panel.querySelector('#fs-replace-input');
+    const replaceAllBtn = panel.querySelector('#fs-replace-all');
+    if (replaceInput && replaceAllBtn) {
+      replaceInput.value = 'replacement';
+      replaceAllBtn.dispatchEvent(new Event('click'));
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0], 'replacement');
+    }
+  });
+
+  it('Escape key on panel calls hide', async () => {
+    const { createFloatingSearch } = await import('../../app/modules/floating-search.js');
+    const { panel, show, state } = createFloatingSearch();
+    show();
+    assert.equal(state.visible, true);
+    panel.dispatchEvent(Object.assign(new Event('keydown'), { key: 'Escape', stopPropagation: () => {} }));
+    assert.equal(state.visible, false);
+  });
+});
