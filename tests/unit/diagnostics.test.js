@@ -15,6 +15,7 @@ import {
   withPerformanceLog,
   formatDiagnosticsForChat,
   collectPerfBaseline,
+  setupRuntimeDiagnostics,
 } from '../../app/modules/diagnostics.js';
 
 // Access state.diagnostics to verify events
@@ -296,5 +297,120 @@ describe('collectPerfBaseline', () => {
     assert.ok('perfMetricsSummary' in baseline);
     assert.ok('pageCacheSize' in baseline);
     assert.ok('trackedUrls' in baseline);
+  });
+});
+
+// ─── setupRuntimeDiagnostics ────────────────────────────────────────────────
+
+describe('setupRuntimeDiagnostics — window error/unhandledrejection handlers', () => {
+  it('handles window error event and pushes runtime.error diagnostic', () => {
+    clearDiagnostics();
+    setupRuntimeDiagnostics();
+
+    const e = new Event('error');
+    Object.defineProperty(e, 'message', { value: 'Test error message' });
+    Object.defineProperty(e, 'filename', { value: 'test.js' });
+    Object.defineProperty(e, 'lineno', { value: 42 });
+    Object.defineProperty(e, 'colno', { value: 7 });
+    window.dispatchEvent(e);
+
+    const events = state.diagnostics.events;
+    const errEvent = events.find(ev => ev.type === 'runtime.error');
+    assert.ok(errEvent, 'runtime.error event should be pushed');
+    assert.equal(errEvent.payload.message, 'Test error message');
+  });
+
+  it('handles unhandledrejection event and pushes diagnostic', () => {
+    clearDiagnostics();
+    setupRuntimeDiagnostics();
+
+    const e = new Event('unhandledrejection');
+    const reason = new Error('rejection reason');
+    Object.defineProperty(e, 'reason', { value: reason });
+    window.dispatchEvent(e);
+
+    const events = state.diagnostics.events;
+    const rejEvent = events.find(ev => ev.type === 'runtime.unhandledrejection');
+    assert.ok(rejEvent, 'runtime.unhandledrejection event should be pushed');
+    assert.ok(rejEvent.payload.message.includes('rejection reason'));
+  });
+
+  it('handles unhandledrejection with non-Error reason', () => {
+    clearDiagnostics();
+    setupRuntimeDiagnostics();
+
+    const e = new Event('unhandledrejection');
+    Object.defineProperty(e, 'reason', { value: 'string reason' });
+    window.dispatchEvent(e);
+
+    const events = state.diagnostics.events;
+    const rejEvent = events.find(ev => ev.type === 'runtime.unhandledrejection');
+    assert.ok(rejEvent);
+    assert.ok(rejEvent.payload.message.includes('string reason'));
+  });
+});
+
+describe('setupRuntimeDiagnostics — PerformanceObserver setup', () => {
+  it('exercises PerformanceObserver callback with longtask entry >= 50ms', () => {
+    clearDiagnostics();
+    let observerCallback = null;
+    const origPO = globalThis.PerformanceObserver;
+
+    globalThis.PerformanceObserver = function (cb) {
+      observerCallback = cb;
+      this.observe = () => {};
+    };
+
+    try {
+      setupRuntimeDiagnostics();
+
+      // Simulate the observer callback with a longtask entry
+      if (observerCallback) {
+        observerCallback({
+          getEntries: () => [{ name: 'longtask', duration: 80 }],
+        });
+        const events = state.diagnostics.events;
+        const ltEvent = events.find(ev => ev.type === 'perf.longtask');
+        assert.ok(ltEvent, 'perf.longtask should be pushed for duration >= 50ms');
+        assert.equal(ltEvent.payload.duration, 80);
+      }
+    } finally {
+      if (origPO === undefined) delete globalThis.PerformanceObserver;
+      else globalThis.PerformanceObserver = origPO;
+    }
+  });
+
+  it('handles PerformanceObserver constructor throwing', () => {
+    clearDiagnostics();
+    const origPO = globalThis.PerformanceObserver;
+
+    globalThis.PerformanceObserver = function () {
+      throw new Error('PerformanceObserver not supported');
+    };
+
+    try {
+      // Should not throw; catch block handles observer setup failure
+      assert.doesNotThrow(() => setupRuntimeDiagnostics());
+
+      const events = state.diagnostics.events;
+      const unavailable = events.find(ev => ev.type === 'perf.observer.unavailable');
+      assert.ok(unavailable, 'perf.observer.unavailable should be pushed on error');
+    } finally {
+      if (origPO === undefined) delete globalThis.PerformanceObserver;
+      else globalThis.PerformanceObserver = origPO;
+    }
+  });
+
+  it('does not crash when PerformanceObserver is not a function', () => {
+    clearDiagnostics();
+    const origPO = globalThis.PerformanceObserver;
+    delete globalThis.PerformanceObserver;
+
+    try {
+      // Should not throw; if-guard skips the PerformanceObserver block
+      assert.doesNotThrow(() => setupRuntimeDiagnostics());
+    } finally {
+      if (origPO !== undefined) globalThis.PerformanceObserver = origPO;
+    }
   });
 });
