@@ -312,7 +312,16 @@ if (typeof globalThis.FileReader === 'undefined') {
 }
 
 if (typeof globalThis.Image === 'undefined') {
-  globalThis.Image = class Image { constructor() { this.src = ''; } };
+  globalThis.Image = class Image {
+    constructor() { this._src = ''; this.onload = null; this.onerror = null; }
+    set src(v) {
+      this._src = v;
+      // In Node.js test environments images never actually load — fire onerror
+      // so code paths that await Image.onload/onerror don't hang forever.
+      queueMicrotask(() => { if (this.onerror) this.onerror(new Error('mock Image load')); });
+    }
+    get src() { return this._src; }
+  };
 }
 
 if (typeof globalThis.FontFace === 'undefined') {

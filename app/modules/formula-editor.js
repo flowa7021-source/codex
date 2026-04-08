@@ -40,6 +40,8 @@ let _katexInstance = null;
 async function _tryKatex() {
   // KaTeX rendering requires a real browser event loop (Image.onload, canvas)
   if (typeof window === 'undefined') return null;
+  // Check for externally-provided KaTeX (CDN, test injection) — always wins over cache
+  if (/** @type {any} */ (globalThis).katex?.renderToString) return /** @type {any} */ (globalThis).katex;
   if (_katexInstance) return _katexInstance;
   try {
     // Load katex JS and CSS in parallel; CSS import is a no-op in non-Vite envs

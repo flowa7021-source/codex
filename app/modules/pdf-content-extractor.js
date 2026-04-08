@@ -147,10 +147,12 @@ function processTextItems(items, styles, viewport) {
     if (!item.transform) continue;
 
     const tx = item.transform;
-    // Font size from transform matrix — handle rotated text gracefully
+    // Font size from transform matrix — handle rotated text gracefully.
+    // Only use item.height as fallback when it represents a meaningful size (>=2pt),
+    // so that truly tiny items (watermarks, hidden text) are always skipped.
     let fontSize = Math.sqrt(tx[0] * tx[0] + tx[1] * tx[1]);
-    if (fontSize < 0.5 && item.height) fontSize = Math.abs(item.height);
-    if (fontSize < 0.5) continue;
+    if (fontSize < 2 && item.height && Math.abs(item.height) >= 2) fontSize = Math.abs(item.height);
+    if (fontSize < 2) continue;
 
     // Position in PDF coords (origin bottom-left)
     const x = tx[4];
