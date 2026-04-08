@@ -215,4 +215,46 @@ describe('autoCreateForm', () => {
     const result = await autoCreateForm(pdfBytes, detectedFields);
     assert.equal(result.fieldCount, 1);
   });
+
+  it('creates a text field placeholder for signature type', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const pdfBytes = new Uint8Array(await doc.save());
+
+    const result = await autoCreateForm(pdfBytes, [
+      { type: 'signature', label: 'Signature', name: 'sig_1', pageNum: 1,
+        bounds: { x: 100, y: 400, width: 200, height: 40 }, confidence: 0.9 },
+    ]);
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.fieldCount, 1);
+  });
+
+  it('skips fields with unknown type via default case', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const pdfBytes = new Uint8Array(await doc.save());
+
+    const result = await autoCreateForm(pdfBytes, [
+      { type: 'unknown_type', label: 'X', name: 'x_1', pageNum: 1,
+        bounds: { x: 50, y: 600, width: 100, height: 20 }, confidence: 0.5 },
+    ]);
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.fieldCount, 0);
+  });
+
+  it('skips duplicate field names without throwing', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    const pdfBytes = new Uint8Array(await doc.save());
+
+    // Two fields with the same name — second should be caught and skipped
+    const result = await autoCreateForm(pdfBytes, [
+      { type: 'text', label: 'First', name: 'dup_field', pageNum: 1,
+        bounds: { x: 50, y: 700, width: 200, height: 20 }, confidence: 0.8 },
+      { type: 'text', label: 'Second', name: 'dup_field', pageNum: 1,
+        bounds: { x: 50, y: 670, width: 200, height: 20 }, confidence: 0.8 },
+    ]);
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.fieldCount, 1, 'only first field succeeds; second is caught and skipped');
+  });
 });

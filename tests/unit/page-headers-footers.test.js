@@ -1,11 +1,12 @@
 import './setup-dom.js';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { PDFDocument } from 'pdf-lib';
 
 // page-headers-footers.js imports pdf-lib which needs to be available.
 // We test the HeaderFooterEditor UI class and the addHeadersFooters function
 // at a structural level.
-import { HeaderFooterEditor } from '../../app/modules/page-headers-footers.js';
+import { HeaderFooterEditor, addHeadersFooters } from '../../app/modules/page-headers-footers.js';
 
 describe('HeaderFooterEditor', () => {
   it('opens and creates a panel in the container', () => {
@@ -66,5 +67,113 @@ describe('HeaderFooterEditor', () => {
     assert.ok(appliedOpts !== null);
     assert.strictEqual(typeof appliedOpts.fontSize, 'number');
     assert.strictEqual(typeof appliedOpts.separator, 'boolean');
+  });
+});
+
+async function makeTestPdfBytes(opts = {}) {
+  const doc = await PDFDocument.create();
+  if (opts.title) doc.setTitle(opts.title);
+  if (opts.author) doc.setAuthor(opts.author);
+  const pages = opts.pages || 1;
+  for (let i = 0; i < pages; i++) doc.addPage([612, 792]);
+  return new Uint8Array(await doc.save());
+}
+
+describe('addHeadersFooters', () => {
+  it('returns a Blob with PDF type', async () => {
+    const bytes = await makeTestPdfBytes();
+    const blob = await addHeadersFooters(bytes, {
+      header: { left: '{page}', center: 'NovaReader', right: '{date}' },
+    });
+    assert.ok(blob instanceof Blob);
+    assert.equal(blob.type, 'application/pdf');
+  });
+
+  it('draws header with left/center/right slots and separator', async () => {
+    const bytes = await makeTestPdfBytes({ title: 'My Doc', author: 'Alice' });
+    const blob = await addHeadersFooters(bytes, {
+      header: { left: '{page} of {total}', center: '{title}', right: '{author}' },
+      separator: true,
+    });
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('draws footer with left/center/right slots', async () => {
+    const bytes = await makeTestPdfBytes();
+    const blob = await addHeadersFooters(bytes, {
+      footer: { left: '{date}', center: 'Page {page}', right: 'Total {total}' },
+      separator: false,
+    });
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('resolves {page}, {total}, {date}, {title}, {author} placeholders', async () => {
+    const bytes = await makeTestPdfBytes({ pages: 2, title: 'T', author: 'A' });
+    const blob = await addHeadersFooters(bytes, {
+      header: { center: 'p{page}/{total} {date} {title} {author}' },
+    });
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('uses US date format', async () => {
+    const bytes = await makeTestPdfBytes();
+    const blob = await addHeadersFooters(bytes, {
+      header: { left: '{date}' },
+      dateFormat: 'us',
+    });
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('uses EU date format', async () => {
+    const bytes = await makeTestPdfBytes();
+    const blob = await addHeadersFooters(bytes, {
+      header: { left: '{date}' },
+      dateFormat: 'eu',
+    });
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('uses ISO date format (default)', async () => {
+    const bytes = await makeTestPdfBytes();
+    const blob = await addHeadersFooters(bytes, {
+      footer: { right: '{date}' },
+      dateFormat: 'iso',
+    });
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('applies only to specified pages', async () => {
+    const bytes = await makeTestPdfBytes({ pages: 3 });
+    const blob = await addHeadersFooters(bytes, {
+      header: { center: 'Page {page}' },
+      pages: [1, 3],
+    });
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('uses firstPageHeader for first page', async () => {
+    const bytes = await makeTestPdfBytes({ pages: 2 });
+    const blob = await addHeadersFooters(bytes, {
+      header: { center: 'Normal Header' },
+      firstPageHeader: { center: 'First Page Header' },
+    });
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('uses evenHeader for even pages', async () => {
+    const bytes = await makeTestPdfBytes({ pages: 4 });
+    const blob = await addHeadersFooters(bytes, {
+      header: { left: 'Odd' },
+      evenHeader: { right: 'Even' },
+    });
+    assert.ok(blob instanceof Blob);
+  });
+
+  it('accepts ArrayBuffer input', async () => {
+    const bytes = await makeTestPdfBytes();
+    const blob = await addHeadersFooters(bytes.buffer, {
+      footer: { center: 'Footer' },
+    });
+    assert.ok(blob instanceof Blob);
   });
 });

@@ -1,6 +1,7 @@
 import './setup-dom.js';
 import { describe, it, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
+import { PDFDocument, PDFName, PDFString } from 'pdf-lib';
 import { PdfRedactor, REDACTION_PATTERNS, redactor } from '../../app/modules/pdf-redact.js';
 
 describe('REDACTION_PATTERNS', () => {
@@ -662,5 +663,74 @@ describe('PdfRedactor — constructor', () => {
     const r = new PdfRedactor();
     assert.ok(r.redactions instanceof Map);
     assert.equal(r.redactions.size, 0);
+  });
+});
+
+// ── PdfRedactor — sanitizeDocument ──────────────────────────────────────────
+
+describe('PdfRedactor — sanitizeDocument', () => {
+  let r;
+
+  beforeEach(() => { r = new PdfRedactor(); });
+
+  it('returns blob and removedItems for a plain PDF', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    doc.setAuthor('Test Author');
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.blob instanceof Blob);
+    assert.equal(result.blob.type, 'application/pdf');
+    assert.ok(typeof result.removedItems === 'object');
+    assert.ok(result.removedItems.metadata === true);
+  });
+
+  it('removes annotations from a page', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([612, 792]);
+
+    // Add a minimal annotation dict directly
+    const annotDict = doc.context.obj({
+      Type: PDFName.of('Annot'),
+      Subtype: PDFName.of('Text'),
+      Rect: doc.context.obj([50, 700, 200, 720]),
+      Contents: PDFString.of('Test note'),
+    });
+    const annotRef = doc.context.register(annotDict);
+    page.node.set(PDFName.of('Annots'), doc.context.obj([annotRef]));
+
+    const bytes = new Uint8Array(await doc.save());
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.annotations >= 1, 'should count at least one annotation');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('removes bookmarks (Outlines) when present', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+
+    // Add a minimal Outlines dict to the catalog
+    const outlinesRef = doc.context.register(
+      doc.context.obj({ Type: PDFName.of('Outlines'), Count: 0 }),
+    );
+    doc.catalog.set(PDFName.of('Outlines'), outlinesRef);
+
+    const bytes = new Uint8Array(await doc.save());
+    const result = await r.sanitizeDocument(bytes);
+    assert.ok(result.removedItems.bookmarks === true, 'bookmarks should be flagged as removed');
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  it('sets metadata fields to sanitized values', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([612, 792]);
+    doc.setAuthor('Sensitive Author');
+    doc.setSubject('Confidential Subject');
+    const bytes = new Uint8Array(await doc.save());
+
+    const result = await r.sanitizeDocument(bytes);
+    assert.equal(result.removedItems.metadata, true);
+    assert.ok(result.blob instanceof Blob);
   });
 });
