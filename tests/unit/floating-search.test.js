@@ -13,11 +13,18 @@ function createEnhancedElement(tag) {
   el.select = el.select || (() => {});
   el.getBoundingClientRect = () => ({ top: 0, left: 0, bottom: 0, right: 0, width: 0, height: 0 });
 
+  // Cache for mock children keyed by selector — ensures the same element is returned
+  // for each querySelector call, so event listeners are preserved
+  const _mockCache = new Map();
+
   // Enhanced querySelector: if no children match but innerHTML contains the class, create a mock
   const origQS = el.querySelector.bind(el);
   el.querySelector = function (selector) {
     const result = origQS(selector);
     if (result) return result;
+
+    // Return cached mock to preserve registered event listeners
+    if (_mockCache.has(selector)) return _mockCache.get(selector);
 
     // Fallback: check innerHTML for the class name and return a mock element
     const html = el.innerHTML || '';
@@ -36,6 +43,7 @@ function createEnhancedElement(tag) {
           mockChild.checked = false;
         }
       }
+      _mockCache.set(selector, mockChild);
       return mockChild;
     }
     return null;
@@ -154,14 +162,14 @@ describe('floating-search — replace functionality', () => {
       onReplace: (text, match) => calls.push({ text, match }),
     });
 
-    const replaceInput = panel.querySelector('#fs-replace-input');
-    const replaceOneBtn = panel.querySelector('#fs-replace-one');
-    if (replaceInput && replaceOneBtn) {
-      replaceInput.value = 'new text';
-      replaceOneBtn.dispatchEvent(new Event('click'));
-      assert.equal(calls.length, 1);
-      assert.equal(calls[0].text, 'new text');
-    }
+    const replaceInput = panel.querySelector('.replace-input');
+    const replaceOneBtn = panel.querySelector('.replace-one');
+    assert.ok(replaceInput, 'replace-input element should exist');
+    assert.ok(replaceOneBtn, 'replace-one button should exist');
+    replaceInput.value = 'new text';
+    replaceOneBtn.dispatchEvent(new Event('click'));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].text, 'new text');
   });
 
   it('onReplaceAll callback is called with correct text when replaceAllBtn is clicked', async () => {
@@ -171,14 +179,36 @@ describe('floating-search — replace functionality', () => {
       onReplaceAll: (text) => calls.push(text),
     });
 
-    const replaceInput = panel.querySelector('#fs-replace-input');
-    const replaceAllBtn = panel.querySelector('#fs-replace-all');
-    if (replaceInput && replaceAllBtn) {
-      replaceInput.value = 'replacement';
-      replaceAllBtn.dispatchEvent(new Event('click'));
-      assert.equal(calls.length, 1);
-      assert.equal(calls[0], 'replacement');
-    }
+    const replaceInput = panel.querySelector('.replace-input');
+    const replaceAllBtn = panel.querySelector('.replace-all');
+    assert.ok(replaceInput, 'replace-input element should exist');
+    assert.ok(replaceAllBtn, 'replace-all button should exist');
+    replaceInput.value = 'replacement';
+    replaceAllBtn.dispatchEvent(new Event('click'));
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0], 'replacement');
+  });
+
+  it('toggleReplace button toggles replace row visibility', async () => {
+    const { createFloatingSearch } = await import('../../app/modules/floating-search.js');
+    const { panel } = createFloatingSearch();
+
+    const toggleBtn = panel.querySelector('.search-toggle-replace');
+    const replaceRow = panel.querySelector('.search-replace-row');
+    assert.ok(toggleBtn, 'toggle button should exist');
+    assert.ok(replaceRow, 'replace row should exist');
+
+    // The HTML initializes the row with style="display:none"
+    // Since the mock doesn't parse inline styles, replaceRow.style.display may not be 'none'
+    // We set it explicitly to simulate the initial state, then test toggle behavior
+    replaceRow.style.display = 'none';
+
+    // Click to show (isHidden = true → set to flex)
+    toggleBtn.dispatchEvent(new Event('click'));
+    assert.equal(replaceRow.style.display, 'flex');
+    // Click again to hide
+    toggleBtn.dispatchEvent(new Event('click'));
+    assert.equal(replaceRow.style.display, 'none');
   });
 
   it('Escape key on panel calls hide', async () => {
