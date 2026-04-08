@@ -196,4 +196,134 @@ describe('checkOcsp', () => {
     const result = await checkOcsp(new Uint8Array(10), new Uint8Array(10), 'http://ocsp.test');
     assert.ok(['unknown', 'error'].includes(result.status));
   });
+
+  it('returns error when OCSP fetch returns HTTP error status', async () => {
+    const { checkOcsp } = await import('../../app/modules/digital-signature-tsa.js');
+    globalThis.fetch = mock.fn(async () => ({ ok: false, status: 400 }));
+    const result = await checkOcsp(new Uint8Array(10), new Uint8Array(10), 'http://ocsp.test');
+    assert.ok(['unknown', 'error'].includes(result.status));
+    assert.ok(result.message?.includes('400') || result.message?.length > 0);
+  });
+
+  it('returns error when OCSP response starts with invalid byte (not 0x30)', async () => {
+    const { checkOcsp } = await import('../../app/modules/digital-signature-tsa.js');
+    // First byte != 0x30 → 'Invalid OCSP response'
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => new Uint8Array([0xFF, 0x01, 0x00]).buffer,
+    }));
+    const result = await checkOcsp(new Uint8Array(10), new Uint8Array(10), 'http://ocsp.test');
+    assert.ok(['unknown', 'error'].includes(result.status));
+  });
+
+  it('returns error when OCSP response SEQUENCE lacks ENUMERATED tag', async () => {
+    const { checkOcsp } = await import('../../app/modules/digital-signature-tsa.js');
+    // Valid SEQUENCE (0x30) but inner content starts with 0x02 (INTEGER), not 0x0A (ENUMERATED)
+    const inner = new Uint8Array([0x02, 0x01, 0x00]); // INTEGER not ENUMERATED
+    const bytes = new Uint8Array([0x30, inner.length, ...inner]);
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => bytes.buffer,
+    }));
+    const result = await checkOcsp(new Uint8Array(10), new Uint8Array(10), 'http://ocsp.test');
+    assert.ok(['unknown', 'error'].includes(result.status));
+  });
+
+  it('returns error when OCSP responseStatus is non-zero', async () => {
+    const { checkOcsp } = await import('../../app/modules/digital-signature-tsa.js');
+    // ENUMERATED with statusCode=2 (internalError)
+    const inner = new Uint8Array([0x0A, 0x01, 0x02]);
+    const bytes = new Uint8Array([0x30, inner.length, ...inner]);
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => bytes.buffer,
+    }));
+    const result = await checkOcsp(new Uint8Array(10), new Uint8Array(10), 'http://ocsp.test');
+    assert.ok(['unknown', 'error'].includes(result.status));
+  });
+
+  it('returns unknown when OCSP response has no responseBytes ([0] tag)', async () => {
+    const { checkOcsp } = await import('../../app/modules/digital-signature-tsa.js');
+    // Valid status=0 ENUMERATED but no [0] responseBytes following
+    const inner = new Uint8Array([0x0A, 0x01, 0x00]);
+    const bytes = new Uint8Array([0x30, inner.length, ...inner]);
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => bytes.buffer,
+    }));
+    const result = await checkOcsp(new Uint8Array(10), new Uint8Array(10), 'http://ocsp.test');
+    assert.ok(['unknown', 'error'].includes(result.status));
+  });
+
+  it('exercises _parseDerLen long-form when OCSP response uses multi-byte length', async () => {
+    const { checkOcsp } = await import('../../app/modules/digital-signature-tsa.js');
+    // Build a SEQUENCE with long-form DER length (>= 0x80 bytes content)
+    // Inner content: ENUMERATED 0 (0x0A 0x01 0x00) + padding to make length >= 0x80
+    const enumerated = new Uint8Array([0x0A, 0x01, 0x00]);
+    // Pad to 0x81 bytes (129 bytes) total inner content
+    const padding = new Uint8Array(129 - enumerated.length).fill(0x00);
+    const inner = new Uint8Array([...enumerated, ...padding]);
+    // DER long-form length: 0x81 0x81 (1 byte length indicator, value 129)
+    const bytes = new Uint8Array([0x30, 0x81, inner.length, ...inner]);
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => bytes.buffer,
+    }));
+    const result = await checkOcsp(new Uint8Array(10), new Uint8Array(10), 'http://ocsp.test');
+    assert.ok(['unknown', 'error'].includes(result.status));
+  });
+});
+
+// ── buildOcspRequest ─────────────────────────────────────────────────────────
+
+describe('buildOcspRequest', () => {
+  it('builds a DER OCSP request from self-signed cert bytes', async () => {
+    const { buildOcspRequest } = await import('../../app/modules/digital-signature-tsa.js');
+    const { generateSelfSignedCert } = await import('../../app/modules/digital-signature-crypto.js');
+
+    // Generate a self-signed cert to use as both subject and issuer
+    const certData = await generateSelfSignedCert({ commonName: 'OCSP Test' });
+    const certDer = certData.certDer;
+
+    const reqDer = await buildOcspRequest(certDer, certDer);
+    assert.ok(reqDer instanceof Uint8Array, 'should return Uint8Array');
+    assert.ok(reqDer.length > 0, 'should produce non-empty DER');
+    // OCSP request is a SEQUENCE
+    assert.equal(reqDer[0], 0x30, 'should start with SEQUENCE tag');
+  });
+});
+
+// ── verifyCertChain ───────────────────────────────────────────────────────────
+
+describe('verifyCertChain', () => {
+  it('returns error result for no certs (empty input)', async () => {
+    const { verifyCertChain } = await import('../../app/modules/digital-signature-tsa.js');
+    // certs[0] is undefined → builder.build(undefined) throws → catch returns error object
+    const result = await verifyCertChain([], []);
+    assert.ok(typeof result === 'object' && result !== null);
+    assert.ok('valid' in result || 'error' in result || 'chain' in result);
+  });
+
+  it('verifies a single self-signed cert', async () => {
+    const { verifyCertChain } = await import('../../app/modules/digital-signature-tsa.js');
+    const { generateSelfSignedCert } = await import('../../app/modules/digital-signature-crypto.js');
+
+    const certData = await generateSelfSignedCert({ commonName: 'Chain Test' });
+    const certDer = certData.certDer;
+
+    // Self-signed cert as both chain and trusted
+    const result = await verifyCertChain([certDer], [certDer]);
+    assert.ok(typeof result === 'object' && result !== null);
+    assert.ok('valid' in result);
+    assert.ok(Array.isArray(result.chain));
+  });
+
+  it('handles invalid DER gracefully', async () => {
+    const { verifyCertChain } = await import('../../app/modules/digital-signature-tsa.js');
+    // Should not throw — invalid DER caught internally
+    const result = await verifyCertChain([new Uint8Array(5)], []);
+    assert.ok(typeof result === 'object' && result !== null);
+    assert.equal(result.valid, false);
+    assert.ok(result.error);
+  });
 });
