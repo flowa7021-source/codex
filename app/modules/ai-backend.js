@@ -230,3 +230,18 @@ export async function aiGenerateToc(combinedText) {
   }
   return toc;
 }
+
+/**
+ * Answer a question about provided document text using the configured LLM.
+ * @param {string} question  - User question
+ * @param {string} context   - Relevant document text (will be truncated if too long)
+ * @returns {Promise<string>} - Answer text
+ */
+export async function aiAskQuestion(question, context) {
+  const truncated = context.slice(0, 8000);
+  const prompt =
+    `You are a helpful document assistant. Answer the following question based ` +
+    `only on the provided document text. Be concise and accurate.\n\n` +
+    `Document:\n${truncated}\n\nQuestion: ${question}\n\nAnswer:`;
+  return _callLLM(prompt, 512);
+}

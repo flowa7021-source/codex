@@ -112,3 +112,25 @@ describe('generateToc', () => {
     assert.equal(toc.length, 0);
   });
 });
+
+describe('askQuestion', () => {
+  it('returns empty string for empty inputs', async () => {
+    const { askQuestion } = await import('../../app/modules/ai-features.js');
+    assert.equal(await askQuestion('', 'some context'), '');
+    assert.equal(await askQuestion('question', ''), '');
+  });
+
+  it('finds best-matching sentence as heuristic fallback', async () => {
+    const { askQuestion } = await import('../../app/modules/ai-features.js');
+    const context = 'The sky is blue. Water is wet. The answer is 42. Clouds are white.';
+    const result = await askQuestion('What is the answer?', context);
+    assert.ok(result.includes('42'), `expected to find "42" in: "${result}"`);
+  });
+
+  it('returns a string (not null/undefined)', async () => {
+    const { askQuestion } = await import('../../app/modules/ai-features.js');
+    const result = await askQuestion('Who?', 'Alice went to the market.');
+    assert.equal(typeof result, 'string');
+    assert.ok(result.length > 0);
+  });
+});

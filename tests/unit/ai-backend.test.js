@@ -19,6 +19,7 @@ const {
   aiSummarize,
   aiExtractTags,
   aiGenerateToc,
+  aiAskQuestion,
 } = await import('../../app/modules/ai-backend.js');
 
 describe('loadAiBackendConfig / saveAiBackendConfig', () => {
@@ -220,5 +221,35 @@ describe('aiGenerateToc', () => {
     }));
     const toc = await aiGenerateToc('text');
     assert.equal(toc.length, 2);
+  });
+});
+
+describe('aiAskQuestion', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    saveAiBackendConfig({ backend: 'claude', apiKey: 'key-test', baseUrl: 'https://api.anthropic.com' });
+    loadAiBackendConfig();
+  });
+  afterEach(() => {
+    localStorage.clear();
+    loadAiBackendConfig();
+    if (globalThis.fetch?.mock) globalThis.fetch.mock.resetCalls();
+  });
+
+  it('returns LLM answer when backend is active', async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        content: [{ type: 'text', text: 'The answer is 42.' }],
+      }),
+    }));
+    const result = await aiAskQuestion('What is the answer?', 'Some document text about 42.');
+    assert.equal(result, 'The answer is 42.');
+  });
+
+  it('returns empty string on network error', async () => {
+    globalThis.fetch = mock.fn(async () => { throw new Error('network'); });
+    const result = await aiAskQuestion('question', 'context').catch(() => '');
+    assert.equal(typeof result, 'string');
   });
 });

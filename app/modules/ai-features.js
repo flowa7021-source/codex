@@ -6,7 +6,7 @@
 // Priority: LLM backend (Claude / OpenAI) → local heuristic fallback.
 // Configure the backend via ai-backend.js saveAiBackendConfig().
 
-import { isAiBackendActive, aiSummarize, aiExtractTags, aiGenerateToc } from './ai-backend.js';
+import { isAiBackendActive, aiSummarize, aiExtractTags, aiGenerateToc, aiAskQuestion as aiAskQuestionBackend } from './ai-backend.js';
 
 /** @type {'stub'|'partial'|'ready'} Module readiness — 'ready' = LLM backend may be active */
 export const MODULE_STATUS = 'ready';
@@ -206,6 +206,38 @@ export async function generateToc(pages) {
   }
 
   return toc;
+}
+
+/**
+ * Answer a question about document content.
+ * Uses LLM when configured; falls back to a simple keyword-search answer.
+ *
+ * @param {string} question  - Natural language question
+ * @param {string} context   - Relevant document text to search
+ * @returns {Promise<string>} - Answer or best-matching excerpt
+ */
+export async function askQuestion(question, context) {
+  if (!question || !context) return '';
+
+  // Try LLM backend first
+  if (isAiBackendActive()) {
+    try {
+      const answer = await aiAskQuestionBackend(question, context);
+      if (answer) return answer;
+    } catch (_e) { /* fall through to heuristic */ }
+  }
+
+  // Heuristic fallback: find the sentence/paragraph most relevant to the question
+  const qWords = question.toLowerCase().match(/[\p{L}]+/gu) || [];
+  const sentences = context.match(/[^.!?]+[.!?]?/g) || [];
+  let best = '';
+  let bestScore = 0;
+  for (const sent of sentences) {
+    const lower = sent.toLowerCase();
+    const score = qWords.reduce((s, w) => s + (lower.includes(w) ? 1 : 0), 0);
+    if (score > bestScore) { bestScore = score; best = sent.trim(); }
+  }
+  return best || context.slice(0, 200);
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
