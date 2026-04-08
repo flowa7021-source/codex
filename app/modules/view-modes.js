@@ -2,6 +2,8 @@
 // ─── View Modes ─────────────────────────────────────────────────────────────
 // Single page, two-up (spread), book mode, continuous scroll, presentation.
 
+import { VirtualScroll } from './virtual-scroll.js';
+
 export const VIEW_MODES = {
   SINGLE: 'single',
   TWO_UP: 'two-up',
@@ -20,6 +22,7 @@ let deps = null;
  * @param {Function} d.getPageCount - () => number
  * @param {Function} d.getCurrentPage - () => number
  * @param {Function} d.setCurrentPage - (n) => void
+ * @param {Function} [d.onScrollPage] - lightweight scroll tracker (no re-render); called with current page on scroll
  * @param {Function} d.getZoom - () => number
  * @param {HTMLElement} d.viewport - .document-viewport element
  * @param {HTMLCanvasElement} d.canvas - #viewerCanvas
@@ -74,15 +77,21 @@ function cleanupMode(mode) {
 
   vp.classList.remove('vmode-two-up', 'vmode-book', 'vmode-continuous', 'vmode-presentation');
 
-  // Disconnect continuous scroll observer BEFORE clearing DOM to prevent stale callbacks
-  if (continuousObserver) {
-    continuousObserver.disconnect();
-    continuousObserver = null;
+  // Destroy VirtualScroll instance BEFORE clearing DOM to prevent stale callbacks
+  if (_virtualScroll) {
+    _virtualScroll.destroy();
+    _virtualScroll = null;
   }
+  if (_scrollTrackWrap && _scrollTrackFn) {
+    _scrollTrackWrap.removeEventListener('scroll', _scrollTrackFn);
+    _scrollTrackWrap = null;
+    _scrollTrackFn = null;
+  }
+  _scrollTrackTimer = null;
 
-  // Clean up continuous scroll canvases
+  // Remove the continuous scroll wrap (VirtualScroll already cleared its content)
   const scrollWrap = vp.querySelector('.continuous-scroll-wrap');
-  if (scrollWrap) scrollWrap.innerHTML = '';
+  if (scrollWrap) scrollWrap.remove();
 
   // Clean up presentation mode listeners
   if (mode === VIEW_MODES.PRESENTATION) {
@@ -156,63 +165,71 @@ export async function renderTwoUp(currentPage, pageCount, isBook) {
 
 // ─── Continuous Scroll ──────────────────────────────────────────────────────
 
-let continuousObserver = null;
+/** @type {VirtualScroll|null} */
+let _virtualScroll = null;
+/** @type {HTMLElement|null} */
+let _scrollTrackWrap = null;
+/** @type {EventListener|null} */
+let _scrollTrackFn = null;
+/** @type {ReturnType<typeof setTimeout>|null} */
+let _scrollTrackTimer = null;
 
 function setupContinuousScroll() {
   if (!deps) return;
   deps.viewport.classList.add('vmode-continuous');
 
-  const wrap = deps.viewport.querySelector('.continuous-scroll-wrap') || document.createElement('div');
+  const wrap = document.createElement('div');
   wrap.className = 'continuous-scroll-wrap';
-  if (!deps.viewport.contains(wrap)) deps.viewport.appendChild(wrap);
+  deps.viewport.appendChild(wrap);
 
   const pageCount = deps.getPageCount();
-  const zoom = deps.getZoom();
 
-  // Create placeholder slots for all pages
-  for (let i = 1; i <= pageCount; i++) {
-    const slot = document.createElement('div');
-    slot.className = 'continuous-page-slot';
-    slot.dataset.page = String(i);
-    slot.style.minHeight = `${Math.round(792 * zoom)}px`; // A4 estimate
-    slot.style.marginBottom = '8px';
-    wrap.appendChild(slot);
-  }
-
-  // IntersectionObserver for lazy rendering
-  continuousObserver = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (entry.isIntersecting) {
-        const page = parseInt(/** @type {HTMLElement} */ (entry.target).dataset.page, 10);
-        renderContinuousPage(entry.target, page);
+  _virtualScroll = new VirtualScroll({
+    container: wrap,
+    pageCount,
+    getPageHeight: () => Math.round(792 * deps.getZoom()),
+    renderPage: async (pageNum, element) => {
+      if (!deps?.renderPage) return;
+      const canvas = document.createElement('canvas');
+      canvas.className = 'continuous-page-canvas';
+      element.appendChild(canvas);
+      await deps.renderPage(pageNum, canvas);
+      // Sync element height to actual rendered canvas height to improve offset accuracy
+      if (canvas.height > 0) {
+        element.style.height = `${canvas.height}px`;
       }
-    }
-  }, {
-    root: deps.viewport,
-    rootMargin: '200px 0px',
+    },
+    destroyPage: (_pageNum, element) => {
+      element.innerHTML = '';
+    },
+    overscan: 1,
+    gap: 8,
   });
 
-  wrap.querySelectorAll('.continuous-page-slot').forEach(slot => {
-    continuousObserver.observe(slot);
-  });
+  // Scroll tracking: update the page indicator without triggering a full re-render
+  _scrollTrackWrap = wrap;
+  _scrollTrackFn = () => {
+    if (_scrollTrackTimer !== null) return;
+    _scrollTrackTimer = setTimeout(() => {
+      _scrollTrackTimer = null;
+      if (!_virtualScroll || !deps) return;
+      const page = _virtualScroll.getCurrentPage();
+      if (deps.onScrollPage) {
+        deps.onScrollPage(page);
+      }
+    }, 120);
+  };
+  wrap.addEventListener('scroll', _scrollTrackFn, { passive: true });
 }
 
-async function renderContinuousPage(slot, pageNum) {
-  if (slot.dataset.rendered === 'true') return;
-  if (!deps?.renderPage) return;
-  slot.dataset.rendered = 'true';
-
-  const canvas = document.createElement('canvas');
-  canvas.className = 'continuous-page-canvas';
-  slot.appendChild(canvas);
-
-  try {
-    await deps.renderPage(pageNum, canvas);
-    slot.style.minHeight = ''; // Remove placeholder height
-  } catch (err) {
-    console.warn('[view-modes] error rendering page', pageNum, ':', err?.message);
-    slot.dataset.rendered = 'false'; // Allow retry
-  }
+/**
+ * Scroll the continuous scroll view to a specific page.
+ * No-op when not in continuous scroll mode.
+ * @param {number} pageNum
+ * @param {boolean} [smooth]
+ */
+export function continuousScrollToPage(pageNum, smooth = true) {
+  _virtualScroll?.scrollToPage(pageNum, smooth);
 }
 
 // ─── Presentation Mode ──────────────────────────────────────────────────────

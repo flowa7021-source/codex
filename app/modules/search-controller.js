@@ -76,6 +76,11 @@ export function resetMiniSearchIndex() {
 let _flexIndex = _makeFlexIndex();
 /** @type {Map<number, boolean>} Pages already indexed in FlexSearch */
 const _flexIndexed = new Map();
+/**
+ * Monotonically increasing generation counter. Incremented on every reset so
+ * in-flight background-indexing promises can detect a document switch and abort.
+ */
+let _flexGeneration = 0;
 
 function _makeFlexIndex() {
   return new FlexSearch.Index({
@@ -86,6 +91,7 @@ function _makeFlexIndex() {
 }
 
 function _resetFlexIndex() {
+  _flexGeneration++;
   _flexIndex = _makeFlexIndex();
   _flexIndexed.clear();
 }
@@ -140,10 +146,12 @@ export function scheduleBackgroundFlexIndex(adapter, pageCount) {
   _bgIndexHandle = null;
 
   let nextPage = 1;
+  // Snapshot generation at scheduling time; callbacks abort if it changes.
+  const gen = _flexGeneration;
 
   const tick = (deadline) => {
-    // Stop if a new document reset the index
-    if (_flexIndexed.size === 0 && nextPage > 1) return;
+    // Stop if a new document reset the index (generation changed)
+    if (_flexGeneration !== gen) return;
 
     const PAGES_PER_SLOT = 5;
     let pagesThisTick = 0;
@@ -151,9 +159,10 @@ export function scheduleBackgroundFlexIndex(adapter, pageCount) {
     while (nextPage <= pageCount && pagesThisTick < PAGES_PER_SLOT && deadline.timeRemaining() > 2) {
       const p = nextPage++;
       if (_flexIndexed.get(p)) continue;
-      // Fire-and-forget: index the page text without blocking
+      // Fire-and-forget: guard with generation so stale callbacks never pollute the new index
+      const capturedGen = gen;
       adapter.getText(p).then((text) => {
-        if (text) flexIndexPage(p, text);
+        if (text && _flexGeneration === capturedGen) flexIndexPage(p, text);
       }).catch(() => {});
       pagesThisTick++;
     }
@@ -169,7 +178,7 @@ export function scheduleBackgroundFlexIndex(adapter, pageCount) {
   }
 }
 
-/** @param {any} pageNum @param {any} text @returns {any} */
+/** @param {number} pageNum @param {string} text @returns {{pageNum: number, text: string, words: Array<{word: string, original: string, page: number, line: number, offset: number, length: number}>, indexedAt: number}|null} */
 export function buildOcrSearchEntry(pageNum, text) {
   if (!text) return null;
   const words = [];
@@ -193,7 +202,7 @@ export function buildOcrSearchEntry(pageNum, text) {
   return { pageNum, text, words, indexedAt: Date.now() };
 }
 
-/** @param {any} pageNum @param {any} text @returns {any} */
+/** @param {number} pageNum @param {string} text @returns {void} */
 export function indexOcrPage(pageNum, text) {
   const entry = buildOcrSearchEntry(pageNum, text);
   if (entry) {
@@ -205,7 +214,7 @@ export function indexOcrPage(pageNum, text) {
   }
 }
 
-/** @param {any} query @returns {any} */
+/** @param {string} query @returns {Array<{page: number, matchCount: number, matches: Array<any>, score: number}>} */
 export function searchOcrIndex(query) {
   const norm = (query || '').trim().toLowerCase();
   if (!norm) return [];
@@ -286,17 +295,17 @@ export function downloadOcrTextExport() {
 
 // ─── Search Scope / History Keys ────────────────────────────────────────────
 
-/** @returns {any} */
+/** @returns {boolean} */
 export function canSearchCurrentDoc() {
   return !!(state.adapter && (state.adapter.type === 'pdf' || state.adapter.type === 'djvu'));
 }
 
-/** @returns {any} */
+/** @returns {string} */
 export function searchScopeKey() {
   return 'novareader-search-scope';
 }
 
-/** @returns {any} */
+/** @returns {void} */
 export function loadSearchScope() {
   const scope = localStorage.getItem(searchScopeKey());
   if (scope === 'current' || scope === 'all') {
@@ -306,13 +315,13 @@ export function loadSearchScope() {
   }
 }
 
-/** @returns {any} */
+/** @returns {void} */
 export function saveSearchScope() {
   const scope = els.searchScope.value === 'current' ? 'current' : 'all';
   localStorage.setItem(searchScopeKey(), scope);
 }
 
-/** @returns {any} */
+/** @returns {string} */
 export function searchHistoryKey() {
   return `novareader-search-history:${state.docName || 'global'}`;
 }
@@ -517,7 +526,7 @@ export async function importSearchResultsJson(file) {
   }
 }
 
-/** @param {any} line @returns {any} */
+/** @param {string} line @returns {string[]} */
 export function parseCsvLine(line) {
   const cells = [];
   let current = '';

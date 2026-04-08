@@ -37,6 +37,7 @@
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
+    "@peculiar/x509": "^2.0.0",
     "@silvia-odwyer/photon": "^0.3.3",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
@@ -53,6 +54,8 @@
     "marked": "^12.0.0",
     "minisearch": "^7.1.0",
     "pdf-lib": "^1.17.1",
+    "pdf-oxide-wasm": "^0.3.21",
+    "reflect-metadata": "^0.2.2",
     "zxing-wasm": "^1.3.0"
   },
   "devDependencies": {

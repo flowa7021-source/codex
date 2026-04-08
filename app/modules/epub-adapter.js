@@ -126,13 +126,13 @@ export async function parseEpub(arrayBuffer) {
 
   // Spine → chapters
   const chapters = [];
-  const spineItems = book.spine.items || [];
+  const spineItems = /** @type {any[]} */ (/** @type {any} */ (book.spine)?.items || []);
 
   for (let i = 0; i < spineItems.length; i++) {
     const item = spineItems[i];
     try {
       // Load section as a DOM Document
-      const section = book.spine.get(i);
+      const section = book.spine?.get(i);
       if (!section) continue;
 
       // epubjs section.load() resolves to a Document when a custom resolver is provided

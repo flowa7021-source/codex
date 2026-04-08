@@ -312,8 +312,8 @@ export async function renderCurrentPage() {
   // even for cold GoToPage jumps where no full-res cache exists.
   if (!cached) {
     const thumb = thumbnailStore.get(page);
-    if (thumb && els.canvas.width > 0) {
-      _blitThumbToCanvas(thumb, els.canvas);
+    if (thumb && /** @type {any} */ (els.canvas).width > 0) {
+      _blitThumbToCanvas(thumb, /** @type {HTMLCanvasElement} */ (/** @type {any} */ (els.canvas)));
     }
   }
 
