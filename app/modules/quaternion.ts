@@ -205,26 +205,40 @@ export function quatSlerp(a: Quat, b: Quat, t: number): Quat {
 
 /**
  * Converts a unit quaternion to Euler angles (pitch/yaw/roll in radians).
- * Produces the same convention as quatFromEuler (ZYX intrinsic).
+ * Produces the same convention as quatFromEuler (ZYX intrinsic / XYZ extrinsic):
+ * R = Rx(pitch) * Ry(yaw) * Rz(roll).
+ *
+ * Extraction formulas derived from the rotation matrix:
+ *   yaw   = asin(R[0][2])
+ *   roll  = atan2(-R[0][1], R[0][0])
+ *   pitch = atan2(-R[1][2], R[2][2])
  *
  * @param q - Unit quaternion
  */
 export function quatToEuler(q: Quat): { pitch: number; yaw: number; roll: number } {
-  // Pitch (X)
-  const sinPitchCosYaw = 2 * (q.w * q.x + q.y * q.z);
-  const cosPitchCosYaw = 1 - 2 * (q.x * q.x + q.y * q.y);
-  const pitch = Math.atan2(sinPitchCosYaw, cosPitchCosYaw);
+  const { x, y, z, w } = q;
 
-  // Yaw (Y)
-  const sinYaw = 2 * (q.w * q.y - q.z * q.x);
-  const yaw = Math.abs(sinYaw) >= 1
-    ? Math.sign(sinYaw) * (Math.PI / 2)
-    : Math.asin(sinYaw);
+  // Rotation matrix elements needed (from unit quaternion)
+  // R[0][2] = 2*(xz + wy)
+  const R02 = 2 * (x * z + w * y);
+  // R[0][1] = 2*(xy - wz)
+  const R01 = 2 * (x * y - w * z);
+  // R[0][0] = 1 - 2*(y^2 + z^2)
+  const R00 = 1 - 2 * (y * y + z * z);
+  // R[1][2] = 2*(yz - wx)
+  const R12 = 2 * (y * z - w * x);
+  // R[2][2] = 1 - 2*(x^2 + y^2)
+  const R22 = 1 - 2 * (x * x + y * y);
 
-  // Roll (Z)
-  const sinRollCosYaw = 2 * (q.w * q.z + q.x * q.y);
-  const cosRollCosYaw = 1 - 2 * (q.y * q.y + q.z * q.z);
-  const roll = Math.atan2(sinRollCosYaw, cosRollCosYaw);
+  // Yaw (Y rotation) — clamp to valid asin range
+  const sinYaw = Math.max(-1, Math.min(1, R02));
+  const yaw = Math.asin(sinYaw);
+
+  // Roll (Z rotation)
+  const roll = Math.atan2(-R01, R00);
+
+  // Pitch (X rotation)
+  const pitch = Math.atan2(-R12, R22);
 
   return { pitch, yaw, roll };
 }
