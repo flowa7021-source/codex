@@ -82,8 +82,12 @@ if (typeof globalThis.document === 'undefined') {
         },
         contains(c) { return _classList.has(c); },
       },
-      setAttribute(k, v) { _attributes[k] = String(v); if (k === 'class') { el.className = v; } },
+      setAttribute(k, v) { _attributes[k] = String(v); if (k === 'class') { el.className = v; } if (k === 'id') { el.id = String(v); } },
       getAttribute(k) { if (k === 'class') return el.className; return _attributes[k] ?? null; },
+      hasAttribute(k) { return k === 'class' ? true : Object.prototype.hasOwnProperty.call(_attributes, k); },
+      removeAttribute(k) { delete _attributes[k]; if (k === 'class') { el.className = ''; } if (k === 'id') { el.id = ''; } },
+      get attributes() { return Object.entries(_attributes).map(([name, value]) => ({ name, value })); },
+      offsetParent: null,
       addEventListener(type, fn) {
         if (!_listeners[type]) _listeners[type] = [];
         _listeners[type].push(fn);
@@ -99,11 +103,16 @@ if (typeof globalThis.document === 'undefined') {
         el.dispatchEvent(new Event('click'));
       },
       appendChild(child) {
-        if (child && !_children.includes(child)) {
-          _children.push(child);
-          child.parentNode = el;
-          if (el.tagName === 'SELECT' && child.tagName === 'OPTION' && _children.length === 1) {
-            el.value = child.value;
+        if (child) {
+          if (child.nodeType === 3) {
+            // text node: accumulate into textContent
+            el.textContent = (el.textContent || '') + (child.textContent || '');
+          } else if (!_children.includes(child)) {
+            _children.push(child);
+            child.parentNode = el;
+            if (el.tagName === 'SELECT' && child.tagName === 'OPTION' && _children.length === 1) {
+              el.value = child.value;
+            }
           }
         }
         return child;
@@ -167,6 +176,10 @@ if (typeof globalThis.document === 'undefined') {
     querySelector: () => null,
     querySelectorAll: () => [],
     createElement: _createElement,
+    createTextNode: (text) => {
+      const node = { nodeType: 3, textContent: text, parentNode: null };
+      return node;
+    },
     createDocumentFragment: () => {
       const frag = { children: [], appendChild(child) { frag.children.push(child); return child; }, append(...nodes) { for (const n of nodes) if (n != null) frag.appendChild(n); } };
       return frag;
