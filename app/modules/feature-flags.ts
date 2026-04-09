@@ -1,109 +1,128 @@
 // @ts-check
-// ─── Feature Flags ───────────────────────────────────────────────────────────
-// Runtime feature-flag registry with optional percentage-based rollouts.
+// ─── Feature Flags ────────────────────────────────────────────────────────────
+// Class-based feature flag system with subscription support.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/**
- * Feature flag definition.
- */
+export type FlagValue = boolean | string | number;
+
 export interface FeatureFlag {
-  name: string;
-  enabled: boolean;
+  key: string;
+  value: FlagValue;
   description?: string;
-  /** 0-100: percentage of users that see this flag as enabled. */
-  rolloutPercentage?: number;
+  enabled: boolean;
 }
 
-// ─── Module state ─────────────────────────────────────────────────────────────
-
-const flags = new Map<string, FeatureFlag>();
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * djb2 hash — returns an unsigned 32-bit integer for the given string.
- */
-function djb2Hash(str: string): number {
-  return str.split('').reduce((h, c) => ((h << 5) + h + c.charCodeAt(0)) | 0, 5381) >>> 0;
+export interface FeatureFlagsOptions {
+  defaults?: Record<string, FlagValue>;
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
+// ─── FeatureFlags ─────────────────────────────────────────────────────────────
 
-/**
- * Register a feature flag.
- * If a flag with the same name already exists it is replaced.
- */
-export function registerFlag(flag: FeatureFlag): void {
-  flags.set(flag.name, { ...flag });
-}
+export class FeatureFlags {
+  #flags: Map<string, FeatureFlag> = new Map();
+  #subscribers: Map<string, Set<(value: FlagValue | undefined, enabled: boolean) => void>> = new Map();
 
-/**
- * Check if a feature flag is enabled.
- *
- * - If the flag does not exist, returns `false`.
- * - If `rolloutPercentage` is set and a `userId` is supplied, uses a
- *   deterministic hash to decide: `hash(userId) % 100 < rolloutPercentage`.
- * - Otherwise returns the flag's `enabled` value.
- */
-export function isEnabled(name: string, userId?: string): boolean {
-  const flag = flags.get(name);
-  if (!flag) return false;
-
-  if (typeof flag.rolloutPercentage === 'number' && userId !== undefined) {
-    return djb2Hash(userId) % 100 < flag.rolloutPercentage;
+  constructor(options?: FeatureFlagsOptions) {
+    if (options?.defaults) {
+      for (const [key, value] of Object.entries(options.defaults)) {
+        this.set(key, value, true);
+      }
+    }
   }
 
-  return flag.enabled;
-}
-
-/**
- * Enable or disable a feature flag at runtime.
- * No-op if the flag does not exist.
- */
-export function setEnabled(name: string, enabled: boolean): void {
-  const flag = flags.get(name);
-  if (flag) {
-    flags.set(name, { ...flag, enabled });
+  /** Define/update a flag. */
+  set(key: string, value: FlagValue, enabled = true): void {
+    const existing = this.#flags.get(key);
+    this.#flags.set(key, {
+      key,
+      value,
+      description: existing?.description,
+      enabled,
+    });
+    this.#notify(key);
   }
-}
 
-/**
- * Get all registered feature flags (shallow copies).
- */
-export function getFlags(): FeatureFlag[] {
-  return Array.from(flags.values()).map((f) => ({ ...f }));
-}
+  /** Get flag value (returns undefined if not set). */
+  get(key: string): FlagValue | undefined {
+    return this.#flags.get(key)?.value;
+  }
 
-/**
- * Get a feature flag by name.
- * Returns `undefined` if not found.
- */
-export function getFlag(name: string): FeatureFlag | undefined {
-  const flag = flags.get(name);
-  return flag ? { ...flag } : undefined;
-}
+  /** Check if flag is enabled and truthy. */
+  isEnabled(key: string): boolean {
+    const flag = this.#flags.get(key);
+    if (!flag) return false;
+    return flag.enabled && Boolean(flag.value);
+  }
 
-/**
- * Remove a feature flag.
- */
-export function removeFlag(name: string): void {
-  flags.delete(name);
-}
+  /** Get all flags. */
+  getAll(): FeatureFlag[] {
+    return Array.from(this.#flags.values());
+  }
 
-/**
- * Clear all registered feature flags.
- */
-export function clearFlags(): void {
-  flags.clear();
-}
+  /** Enable a flag (keeps existing value). */
+  enable(key: string): void {
+    const flag = this.#flags.get(key);
+    if (!flag) return;
+    flag.enabled = true;
+    this.#notify(key);
+  }
 
-/**
- * Load feature flags from an array, replacing all existing flags.
- */
-export function loadFlags(incoming: FeatureFlag[]): void {
-  flags.clear();
-  for (const flag of incoming) {
-    flags.set(flag.name, { ...flag });
+  /** Disable a flag (keeps existing value). */
+  disable(key: string): void {
+    const flag = this.#flags.get(key);
+    if (!flag) return;
+    flag.enabled = false;
+    this.#notify(key);
+  }
+
+  /** Remove a flag. */
+  remove(key: string): void {
+    this.#flags.delete(key);
+    this.#notify(key);
+  }
+
+  /** Load flags from a plain object. */
+  load(flags: Record<string, FlagValue | { value: FlagValue; enabled: boolean }>): void {
+    for (const [key, entry] of Object.entries(flags)) {
+      if (
+        entry !== null &&
+        typeof entry === 'object' &&
+        'value' in (entry as object) &&
+        'enabled' in (entry as object)
+      ) {
+        const typed = entry as { value: FlagValue; enabled: boolean };
+        this.set(key, typed.value, typed.enabled);
+      } else {
+        this.set(key, entry as FlagValue, true);
+      }
+    }
+  }
+
+  /** Subscribe to flag changes. Returns unsubscribe fn. */
+  subscribe(
+    key: string,
+    callback: (value: FlagValue | undefined, enabled: boolean) => void,
+  ): () => void {
+    let listeners = this.#subscribers.get(key);
+    if (!listeners) {
+      listeners = new Set();
+      this.#subscribers.set(key, listeners);
+    }
+    listeners.add(callback);
+    return () => {
+      listeners!.delete(callback);
+    };
+  }
+
+  #notify(key: string): void {
+    const listeners = this.#subscribers.get(key);
+    if (!listeners || listeners.size === 0) return;
+    const flag = this.#flags.get(key);
+    const value = flag?.value;
+    const enabled = flag?.enabled ?? false;
+    for (const cb of listeners) {
+      cb(value, enabled);
+    }
   }
 }

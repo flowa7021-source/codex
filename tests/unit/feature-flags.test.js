@@ -1,244 +1,320 @@
-// ─── Unit Tests: feature-flags ───────────────────────────────────────────────
-import { describe, it, beforeEach } from 'node:test';
+// ─── Unit Tests: FeatureFlags ─────────────────────────────────────────────────
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  registerFlag,
-  isEnabled,
-  setEnabled,
-  getFlags,
-  getFlag,
-  removeFlag,
-  clearFlags,
-  loadFlags,
-} from '../../app/modules/feature-flags.js';
+import { FeatureFlags } from '../../app/modules/feature-flags.js';
 
-// Reset flag registry before every test
-beforeEach(() => {
-  clearFlags();
-});
+// ─── constructor / defaults ───────────────────────────────────────────────────
 
-// ─── registerFlag() ───────────────────────────────────────────────────────────
-
-describe('registerFlag()', () => {
-  it('adds a flag that can be retrieved', () => {
-    registerFlag({ name: 'dark-mode', enabled: true });
-    const flag = getFlag('dark-mode');
-    assert.ok(flag);
-    assert.equal(flag.name, 'dark-mode');
-    assert.equal(flag.enabled, true);
+describe('FeatureFlags – constructor', () => {
+  it('creates an empty registry when no options provided', () => {
+    const ff = new FeatureFlags();
+    assert.deepEqual(ff.getAll(), []);
   });
 
-  it('replaces an existing flag with the same name', () => {
-    registerFlag({ name: 'feat', enabled: false });
-    registerFlag({ name: 'feat', enabled: true, description: 'updated' });
-    const flag = getFlag('feat');
-    assert.equal(flag?.enabled, true);
-    assert.equal(flag?.description, 'updated');
+  it('populates defaults from options', () => {
+    const ff = new FeatureFlags({ defaults: { dark: true, beta: false } });
+    assert.equal(ff.get('dark'), true);
+    assert.equal(ff.get('beta'), false);
   });
 
-  it('stores optional description and rolloutPercentage', () => {
-    registerFlag({ name: 'rollout', enabled: true, description: 'gradual', rolloutPercentage: 50 });
-    const flag = getFlag('rollout');
-    assert.equal(flag?.description, 'gradual');
-    assert.equal(flag?.rolloutPercentage, 50);
+  it('defaults are enabled by default', () => {
+    const ff = new FeatureFlags({ defaults: { feature: true } });
+    assert.equal(ff.isEnabled('feature'), true);
   });
 });
 
-// ─── isEnabled() ─────────────────────────────────────────────────────────────
+// ─── set / get ────────────────────────────────────────────────────────────────
 
-describe('isEnabled()', () => {
-  it('returns false for an unknown flag', () => {
-    assert.equal(isEnabled('nonexistent'), false);
+describe('FeatureFlags – set / get', () => {
+  it('set stores a flag retrievable by get', () => {
+    const ff = new FeatureFlags();
+    ff.set('x', 42);
+    assert.equal(ff.get('x'), 42);
   });
 
-  it('returns true for an enabled flag', () => {
-    registerFlag({ name: 'feat-on', enabled: true });
-    assert.equal(isEnabled('feat-on'), true);
+  it('set with boolean value', () => {
+    const ff = new FeatureFlags();
+    ff.set('flag', true);
+    assert.equal(ff.get('flag'), true);
   });
 
-  it('returns false for a disabled flag', () => {
-    registerFlag({ name: 'feat-off', enabled: false });
-    assert.equal(isEnabled('feat-off'), false);
-  });
-});
-
-// ─── isEnabled() with rolloutPercentage ───────────────────────────────────────
-
-describe('isEnabled() with rolloutPercentage', () => {
-  it('uses a deterministic hash of userId to decide eligibility', () => {
-    // djb2('user-42') % 100 can be pre-computed to verify determinism
-    registerFlag({ name: 'partial', enabled: false, rolloutPercentage: 100 });
-    // 100% rollout — every userId should be enabled
-    assert.equal(isEnabled('partial', 'any-user'), true);
+  it('set with string value', () => {
+    const ff = new FeatureFlags();
+    ff.set('theme', 'dark');
+    assert.equal(ff.get('theme'), 'dark');
   });
 
-  it('returns false for 0% rollout regardless of userId', () => {
-    registerFlag({ name: 'zero-rollout', enabled: true, rolloutPercentage: 0 });
-    assert.equal(isEnabled('zero-rollout', 'user-a'), false);
-    assert.equal(isEnabled('zero-rollout', 'user-b'), false);
+  it('set overwrites an existing flag', () => {
+    const ff = new FeatureFlags();
+    ff.set('k', 1);
+    ff.set('k', 2);
+    assert.equal(ff.get('k'), 2);
   });
 
-  it('is deterministic for the same userId', () => {
-    registerFlag({ name: 'det', enabled: false, rolloutPercentage: 50 });
-    const first = isEnabled('det', 'stable-user');
-    const second = isEnabled('det', 'stable-user');
-    assert.equal(first, second);
+  it('get returns undefined for unknown key', () => {
+    const ff = new FeatureFlags();
+    assert.equal(ff.get('nope'), undefined);
   });
 
-  it('can produce different results for different userIds at 50% rollout', () => {
-    // With a 50% rollout, at least some users will be in and some out.
-    // Iterate a few IDs and ensure we get both true and false.
-    registerFlag({ name: 'half', enabled: false, rolloutPercentage: 50 });
-    const results = new Set();
-    for (let i = 0; i < 20; i++) {
-      results.add(isEnabled('half', `user-${i}`));
-    }
-    assert.ok(results.has(true), 'expected at least one user to be enabled');
-    assert.ok(results.has(false), 'expected at least one user to be disabled');
-  });
-
-  it('falls back to flag.enabled when no userId supplied', () => {
-    registerFlag({ name: 'nouserid', enabled: true, rolloutPercentage: 0 });
-    // No userId → rollout branch not taken → uses flag.enabled
-    assert.equal(isEnabled('nouserid'), true);
+  it('set accepts explicit enabled=false', () => {
+    const ff = new FeatureFlags();
+    ff.set('k', true, false);
+    assert.equal(ff.isEnabled('k'), false);
   });
 });
 
-// ─── setEnabled() ─────────────────────────────────────────────────────────────
+// ─── isEnabled ────────────────────────────────────────────────────────────────
 
-describe('setEnabled()', () => {
-  it('enables a disabled flag', () => {
-    registerFlag({ name: 'toggle', enabled: false });
-    setEnabled('toggle', true);
-    assert.equal(isEnabled('toggle'), true);
+describe('FeatureFlags – isEnabled', () => {
+  it('returns false for unknown key', () => {
+    const ff = new FeatureFlags();
+    assert.equal(ff.isEnabled('ghost'), false);
   });
 
-  it('disables an enabled flag', () => {
-    registerFlag({ name: 'toggle2', enabled: true });
-    setEnabled('toggle2', false);
-    assert.equal(isEnabled('toggle2'), false);
+  it('returns true when enabled=true and value is truthy', () => {
+    const ff = new FeatureFlags();
+    ff.set('on', true, true);
+    assert.equal(ff.isEnabled('on'), true);
   });
 
-  it('is a no-op for an unknown flag', () => {
-    assert.doesNotThrow(() => setEnabled('ghost', true));
-    assert.equal(isEnabled('ghost'), false);
+  it('returns false when enabled=false even if value is truthy', () => {
+    const ff = new FeatureFlags();
+    ff.set('off', true, false);
+    assert.equal(ff.isEnabled('off'), false);
+  });
+
+  it('returns false when enabled=true but value is falsy (false)', () => {
+    const ff = new FeatureFlags();
+    ff.set('zero-val', false, true);
+    assert.equal(ff.isEnabled('zero-val'), false);
+  });
+
+  it('returns false when enabled=true but value is 0', () => {
+    const ff = new FeatureFlags();
+    ff.set('zero', 0, true);
+    assert.equal(ff.isEnabled('zero'), false);
+  });
+
+  it('returns false when enabled=true but value is empty string', () => {
+    const ff = new FeatureFlags();
+    ff.set('empty', '', true);
+    assert.equal(ff.isEnabled('empty'), false);
+  });
+
+  it('returns true when value is a non-zero number', () => {
+    const ff = new FeatureFlags();
+    ff.set('num', 5, true);
+    assert.equal(ff.isEnabled('num'), true);
   });
 });
 
-// ─── getFlags() ───────────────────────────────────────────────────────────────
+// ─── getAll ───────────────────────────────────────────────────────────────────
 
-describe('getFlags()', () => {
-  it('returns all registered flags', () => {
-    registerFlag({ name: 'a', enabled: true });
-    registerFlag({ name: 'b', enabled: false });
-    const all = getFlags();
+describe('FeatureFlags – getAll', () => {
+  it('returns empty array when no flags set', () => {
+    const ff = new FeatureFlags();
+    assert.deepEqual(ff.getAll(), []);
+  });
+
+  it('returns all set flags', () => {
+    const ff = new FeatureFlags();
+    ff.set('a', true);
+    ff.set('b', 'hello');
+    const all = ff.getAll();
     assert.equal(all.length, 2);
-    const names = all.map((f) => f.name).sort();
-    assert.deepEqual(names, ['a', 'b']);
+    const keys = all.map((f) => f.key).sort();
+    assert.deepEqual(keys, ['a', 'b']);
   });
 
-  it('returns an empty array when no flags are registered', () => {
-    assert.deepEqual(getFlags(), []);
-  });
-
-  it('returns shallow copies — mutations do not affect the registry', () => {
-    registerFlag({ name: 'copy-test', enabled: true });
-    const flags = getFlags();
-    flags[0].enabled = false;
-    assert.equal(isEnabled('copy-test'), true);
+  it('each flag has key, value, and enabled fields', () => {
+    const ff = new FeatureFlags();
+    ff.set('f', 99, true);
+    const flags = ff.getAll();
+    assert.equal(flags[0].key, 'f');
+    assert.equal(flags[0].value, 99);
+    assert.equal(flags[0].enabled, true);
   });
 });
 
-// ─── getFlag() ────────────────────────────────────────────────────────────────
+// ─── enable / disable ─────────────────────────────────────────────────────────
 
-describe('getFlag()', () => {
-  it('returns the flag matching the given name', () => {
-    registerFlag({ name: 'exact', enabled: true, description: 'hello' });
-    const flag = getFlag('exact');
-    assert.ok(flag);
-    assert.equal(flag.description, 'hello');
+describe('FeatureFlags – enable / disable', () => {
+  it('enable turns an existing disabled flag on', () => {
+    const ff = new FeatureFlags();
+    ff.set('f', true, false);
+    ff.enable('f');
+    assert.equal(ff.isEnabled('f'), true);
   });
 
-  it('returns undefined when flag does not exist', () => {
-    assert.equal(getFlag('nope'), undefined);
+  it('disable turns an existing enabled flag off', () => {
+    const ff = new FeatureFlags();
+    ff.set('f', true, true);
+    ff.disable('f');
+    assert.equal(ff.isEnabled('f'), false);
   });
 
-  it('returns a shallow copy — mutations do not affect the registry', () => {
-    registerFlag({ name: 'immutable', enabled: true });
-    const flag = getFlag('immutable');
-    flag.enabled = false;
-    assert.equal(isEnabled('immutable'), true);
-  });
-});
-
-// ─── removeFlag() ─────────────────────────────────────────────────────────────
-
-describe('removeFlag()', () => {
-  it('removes the flag from the registry', () => {
-    registerFlag({ name: 'to-remove', enabled: true });
-    removeFlag('to-remove');
-    assert.equal(getFlag('to-remove'), undefined);
+  it('enable keeps the original value', () => {
+    const ff = new FeatureFlags();
+    ff.set('v', 'hello', false);
+    ff.enable('v');
+    assert.equal(ff.get('v'), 'hello');
   });
 
-  it('isEnabled() returns false after removal', () => {
-    registerFlag({ name: 'gone', enabled: true });
-    removeFlag('gone');
-    assert.equal(isEnabled('gone'), false);
+  it('disable keeps the original value', () => {
+    const ff = new FeatureFlags();
+    ff.set('v', 'world', true);
+    ff.disable('v');
+    assert.equal(ff.get('v'), 'world');
   });
 
-  it('is a no-op for an unknown flag', () => {
-    assert.doesNotThrow(() => removeFlag('phantom'));
-  });
-});
-
-// ─── clearFlags() ─────────────────────────────────────────────────────────────
-
-describe('clearFlags()', () => {
-  it('removes all registered flags', () => {
-    registerFlag({ name: 'x', enabled: true });
-    registerFlag({ name: 'y', enabled: false });
-    clearFlags();
-    assert.deepEqual(getFlags(), []);
+  it('enable on unknown key is a no-op', () => {
+    const ff = new FeatureFlags();
+    assert.doesNotThrow(() => ff.enable('nokey'));
   });
 
-  it('isEnabled() returns false for all previously registered flags', () => {
-    registerFlag({ name: 'was-on', enabled: true });
-    clearFlags();
-    assert.equal(isEnabled('was-on'), false);
+  it('disable on unknown key is a no-op', () => {
+    const ff = new FeatureFlags();
+    assert.doesNotThrow(() => ff.disable('nokey'));
   });
 });
 
-// ─── loadFlags() ──────────────────────────────────────────────────────────────
+// ─── remove ───────────────────────────────────────────────────────────────────
 
-describe('loadFlags()', () => {
-  it('replaces all flags with the provided set', () => {
-    registerFlag({ name: 'old', enabled: true });
-    loadFlags([
-      { name: 'new-a', enabled: true },
-      { name: 'new-b', enabled: false },
-    ]);
-    assert.equal(getFlag('old'), undefined);
-    assert.ok(getFlag('new-a'));
-    assert.ok(getFlag('new-b'));
+describe('FeatureFlags – remove', () => {
+  it('removes a flag so get returns undefined', () => {
+    const ff = new FeatureFlags();
+    ff.set('r', true);
+    ff.remove('r');
+    assert.equal(ff.get('r'), undefined);
   });
 
-  it('resulting flags are accessible via isEnabled()', () => {
-    loadFlags([{ name: 'loaded', enabled: true }]);
-    assert.equal(isEnabled('loaded'), true);
+  it('isEnabled returns false after remove', () => {
+    const ff = new FeatureFlags();
+    ff.set('r', true);
+    ff.remove('r');
+    assert.equal(ff.isEnabled('r'), false);
   });
 
-  it('replacing with an empty array clears all flags', () => {
-    registerFlag({ name: 'existing', enabled: true });
-    loadFlags([]);
-    assert.deepEqual(getFlags(), []);
+  it('remove on unknown key is a no-op', () => {
+    const ff = new FeatureFlags();
+    assert.doesNotThrow(() => ff.remove('phantom'));
   });
 
-  it('flags loaded from array are independent copies', () => {
-    const source = [{ name: 'src', enabled: true }];
-    loadFlags(source);
-    source[0].enabled = false;
-    // Mutation of source array must not affect the registry
-    assert.equal(isEnabled('src'), true);
+  it('decrements getAll count', () => {
+    const ff = new FeatureFlags();
+    ff.set('a', true);
+    ff.set('b', true);
+    ff.remove('a');
+    assert.equal(ff.getAll().length, 1);
+  });
+});
+
+// ─── load ─────────────────────────────────────────────────────────────────────
+
+describe('FeatureFlags – load', () => {
+  it('loads plain value flags (enabled defaults to true)', () => {
+    const ff = new FeatureFlags();
+    ff.load({ theme: 'dark', count: 3 });
+    assert.equal(ff.get('theme'), 'dark');
+    assert.equal(ff.get('count'), 3);
+    assert.equal(ff.isEnabled('theme'), true);
+  });
+
+  it('loads object flags with explicit value and enabled', () => {
+    const ff = new FeatureFlags();
+    ff.load({ feat: { value: true, enabled: false } });
+    assert.equal(ff.get('feat'), true);
+    assert.equal(ff.isEnabled('feat'), false);
+  });
+
+  it('load merges — does not clear existing flags', () => {
+    const ff = new FeatureFlags();
+    ff.set('existing', 1);
+    ff.load({ new: 2 });
+    assert.equal(ff.get('existing'), 1);
+    assert.equal(ff.get('new'), 2);
+  });
+
+  it('load overwrites flag with same key', () => {
+    const ff = new FeatureFlags();
+    ff.set('k', 1);
+    ff.load({ k: 99 });
+    assert.equal(ff.get('k'), 99);
+  });
+});
+
+// ─── subscribe ────────────────────────────────────────────────────────────────
+
+describe('FeatureFlags – subscribe', () => {
+  it('calls subscriber when set is called', () => {
+    const ff = new FeatureFlags();
+    const calls = [];
+    ff.subscribe('watch', (value, enabled) => calls.push({ value, enabled }));
+    ff.set('watch', true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].value, true);
+    assert.equal(calls[0].enabled, true);
+  });
+
+  it('calls subscriber when enable is called', () => {
+    const ff = new FeatureFlags();
+    ff.set('w', true, false);
+    const calls = [];
+    ff.subscribe('w', (value, enabled) => calls.push({ value, enabled }));
+    ff.enable('w');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].enabled, true);
+  });
+
+  it('calls subscriber when disable is called', () => {
+    const ff = new FeatureFlags();
+    ff.set('w', true, true);
+    const calls = [];
+    ff.subscribe('w', (value, enabled) => calls.push({ value, enabled }));
+    ff.disable('w');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].enabled, false);
+  });
+
+  it('calls subscriber with undefined value and enabled=false when removed', () => {
+    const ff = new FeatureFlags();
+    ff.set('w', 42);
+    const calls = [];
+    ff.subscribe('w', (value, enabled) => calls.push({ value, enabled }));
+    ff.remove('w');
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].value, undefined);
+    assert.equal(calls[0].enabled, false);
+  });
+
+  it('unsubscribe stops future notifications', () => {
+    const ff = new FeatureFlags();
+    const calls = [];
+    const unsub = ff.subscribe('u', (v) => calls.push(v));
+    ff.set('u', 1);
+    unsub();
+    ff.set('u', 2);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0], 1);
+  });
+
+  it('multiple subscribers on same key all get notified', () => {
+    const ff = new FeatureFlags();
+    const a = [];
+    const b = [];
+    ff.subscribe('m', (v) => a.push(v));
+    ff.subscribe('m', (v) => b.push(v));
+    ff.set('m', true);
+    assert.equal(a.length, 1);
+    assert.equal(b.length, 1);
+  });
+
+  it('subscriber on key A is not called when key B changes', () => {
+    const ff = new FeatureFlags();
+    const calls = [];
+    ff.subscribe('a', () => calls.push(1));
+    ff.set('b', true);
+    assert.equal(calls.length, 0);
   });
 });
