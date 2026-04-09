@@ -6,8 +6,9 @@
 
 /** Read a File/Blob as text (UTF-8). */
 export function readAsText(blob: Blob): Promise<string> {
+  if (typeof blob.text === 'function') return blob.text();
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+    const reader = new (globalThis as any).FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(reader.error);
     reader.readAsText(blob, 'utf-8');
@@ -16,8 +17,9 @@ export function readAsText(blob: Blob): Promise<string> {
 
 /** Read a File/Blob as ArrayBuffer. */
 export function readAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
+  if (typeof blob.arrayBuffer === 'function') return blob.arrayBuffer();
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+    const reader = new (globalThis as any).FileReader();
     reader.onload = () => resolve(reader.result as ArrayBuffer);
     reader.onerror = () => reject(reader.error);
     reader.readAsArrayBuffer(blob);
@@ -27,7 +29,7 @@ export function readAsArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
 /** Read a File/Blob as a data URL. */
 export function readAsDataURL(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+    const reader = new (globalThis as any).FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(blob);
