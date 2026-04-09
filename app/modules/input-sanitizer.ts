@@ -47,7 +47,9 @@ export function normalizeWhitespace(input: string): string {
 /** Truncate to max length, adding ellipsis if needed. */
 export function truncateText(input: string, maxLength: number, ellipsis = '…'): string {
   if (input.length <= maxLength) return input;
-  return input.slice(0, maxLength - ellipsis.length) + ellipsis;
+  const sliceEnd = maxLength - ellipsis.length;
+  if (sliceEnd <= 0) return ellipsis.slice(0, maxLength);
+  return input.slice(0, sliceEnd) + ellipsis;
 }
 
 /** Remove non-printable/control characters (U+0000–U+001F and U+007F). */
