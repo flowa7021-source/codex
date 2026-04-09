@@ -190,3 +190,202 @@ export class TTLCache<K = string, V = unknown> {
     return this.#inner.size;
   }
 }
+
+// ─── CacheManager ─────────────────────────────────────────────────────────────
+
+export interface CacheEntry<T> {
+  key: string;
+  value: T;
+  createdAt: number;
+  expiresAt?: number;
+  hits: number;
+  size?: number; // estimated size in bytes
+}
+
+export interface CacheManagerOptions {
+  maxSize?: number;    // max number of entries, default 500
+  defaultTtl?: number; // default TTL ms, default none
+  onEvict?: (key: string, value: unknown) => void;
+}
+
+/**
+ * Multi-layer cache with TTL, size limits, eviction callbacks, hit rate
+ * tracking, and memoization support.
+ *
+ * @template T - Value type (default: unknown)
+ *
+ * @example
+ *   const cache = new CacheManager<string>({ maxSize: 100, defaultTtl: 5000 });
+ *   cache.set('key', 'value');
+ *   const result = cache.memoize('expensive', () => computeExpensive());
+ */
+export class CacheManager<T = unknown> {
+  #store: Map<string, CacheEntry<T>> = new Map();
+  #maxSize: number;
+  #defaultTtl: number | undefined;
+  #onEvict: ((key: string, value: unknown) => void) | undefined;
+  #hits = 0;
+  #misses = 0;
+
+  constructor(options?: CacheManagerOptions) {
+    this.#maxSize = options?.maxSize ?? 500;
+    this.#defaultTtl = options?.defaultTtl;
+    this.#onEvict = options?.onEvict;
+  }
+
+  /** Store a value. Optionally override the TTL for this entry. */
+  set(key: string, value: T, ttl?: number): void {
+    // Remove existing entry first to reset insertion order
+    if (this.#store.has(key)) {
+      this.#store.delete(key);
+    }
+
+    const effectiveTtl = ttl ?? this.#defaultTtl;
+    const now = Date.now();
+
+    const entry: CacheEntry<T> = {
+      key,
+      value,
+      createdAt: now,
+      expiresAt: effectiveTtl !== undefined ? now + effectiveTtl : undefined,
+      hits: 0,
+    };
+
+    this.#store.set(key, entry);
+
+    // Evict oldest entries when over capacity
+    while (this.#store.size > this.#maxSize) {
+      const oldestKey = this.#store.keys().next().value as string;
+      const oldestEntry = this.#store.get(oldestKey)!;
+      this.#store.delete(oldestKey);
+      this.#onEvict?.(oldestKey, oldestEntry.value);
+    }
+  }
+
+  /** Retrieve a value. Returns undefined if missing or expired. */
+  get(key: string): T | undefined {
+    const entry = this.#store.get(key);
+
+    if (entry === undefined) {
+      this.#misses += 1;
+      return undefined;
+    }
+
+    if (this.#isExpired(entry)) {
+      this.#store.delete(key);
+      this.#onEvict?.(key, entry.value);
+      this.#misses += 1;
+      return undefined;
+    }
+
+    entry.hits += 1;
+    this.#hits += 1;
+    return entry.value;
+  }
+
+  /** Check whether a non-expired entry exists for the key. */
+  has(key: string): boolean {
+    const entry = this.#store.get(key);
+    if (entry === undefined) return false;
+    if (this.#isExpired(entry)) {
+      this.#store.delete(key);
+      this.#onEvict?.(key, entry.value);
+      return false;
+    }
+    return true;
+  }
+
+  /** Remove an entry. Returns true if the key existed. */
+  delete(key: string): boolean {
+    const entry = this.#store.get(key);
+    if (entry === undefined) return false;
+    this.#store.delete(key);
+    this.#onEvict?.(key, entry.value);
+    return true;
+  }
+
+  /** Remove all entries. */
+  clear(): void {
+    if (this.#onEvict) {
+      for (const [key, entry] of this.#store) {
+        this.#onEvict(key, entry.value);
+      }
+    }
+    this.#store.clear();
+  }
+
+  /** Get entry metadata without incrementing the hit counter. */
+  getEntry(key: string): CacheEntry<T> | undefined {
+    const entry = this.#store.get(key);
+    if (entry === undefined) return undefined;
+    if (this.#isExpired(entry)) {
+      this.#store.delete(key);
+      this.#onEvict?.(key, entry.value);
+      return undefined;
+    }
+    return entry;
+  }
+
+  /** Get all non-expired keys. */
+  keys(): string[] {
+    const now = Date.now();
+    const result: string[] = [];
+    for (const [key, entry] of this.#store) {
+      if (!this.#isExpiredAt(entry, now)) {
+        result.push(key);
+      }
+    }
+    return result;
+  }
+
+  /** Evict all expired entries. Returns the count of entries evicted. */
+  evictExpired(): number {
+    const now = Date.now();
+    let count = 0;
+    for (const [key, entry] of this.#store) {
+      if (this.#isExpiredAt(entry, now)) {
+        this.#store.delete(key);
+        this.#onEvict?.(key, entry.value);
+        count += 1;
+      }
+    }
+    return count;
+  }
+
+  /** Number of non-expired entries. */
+  get size(): number {
+    return this.keys().length;
+  }
+
+  /** Hit rate: hits / (hits + misses). Returns 0 when no lookups have occurred. */
+  get hitRate(): number {
+    const total = this.#hits + this.#misses;
+    if (total === 0) return 0;
+    return this.#hits / total;
+  }
+
+  /**
+   * Memoize a function — cache the result by key.
+   * If the key exists and is not expired, return the cached value.
+   * Otherwise call fn, cache the result, and return it.
+   */
+  memoize<R>(key: string, fn: () => R, ttl?: number): R {
+    const existing = this.get(key);
+    if (existing !== undefined) {
+      return existing as unknown as R;
+    }
+    const result = fn();
+    this.set(key, result as unknown as T, ttl);
+    return result;
+  }
+
+  // ─── Private helpers ──────────────────────────────────────────────────────
+
+  #isExpired(entry: CacheEntry<T>): boolean {
+    return this.#isExpiredAt(entry, Date.now());
+  }
+
+  #isExpiredAt(entry: CacheEntry<T>, now: number): boolean {
+    return entry.expiresAt !== undefined && now >= entry.expiresAt;
+  }
+}

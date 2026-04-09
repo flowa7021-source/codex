@@ -2,7 +2,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LRUCache, TTLCache } from '../../app/modules/cache-manager.js';
+import { LRUCache, TTLCache, CacheManager } from '../../app/modules/cache-manager.js';
 
 // ─── LRUCache ─────────────────────────────────────────────────────────────────
 
@@ -354,5 +354,324 @@ describe('TTLCache – capacity', () => {
     cache.set('c', 3); // should evict 'a'
     assert.equal(cache.size, 2);
     assert.equal(cache.has('a'), false);
+  });
+});
+
+// ─── CacheManager ─────────────────────────────────────────────────────────────
+
+describe('CacheManager – set / get', () => {
+  it('stores and retrieves a value', () => {
+    const cache = new CacheManager();
+    cache.set('foo', 'bar');
+    assert.equal(cache.get('foo'), 'bar');
+  });
+
+  it('returns undefined for a missing key', () => {
+    const cache = new CacheManager();
+    assert.equal(cache.get('nope'), undefined);
+  });
+
+  it('overwriting a key updates the value', () => {
+    const cache = new CacheManager();
+    cache.set('k', 1);
+    cache.set('k', 99);
+    assert.equal(cache.get('k'), 99);
+  });
+});
+
+describe('CacheManager – has', () => {
+  it('returns true for a present entry', () => {
+    const cache = new CacheManager();
+    cache.set('x', 42);
+    assert.equal(cache.has('x'), true);
+  });
+
+  it('returns false for a missing entry', () => {
+    const cache = new CacheManager();
+    assert.equal(cache.has('missing'), false);
+  });
+});
+
+describe('CacheManager – delete', () => {
+  it('returns true and removes the entry', () => {
+    const cache = new CacheManager();
+    cache.set('a', 1);
+    assert.equal(cache.delete('a'), true);
+    assert.equal(cache.get('a'), undefined);
+  });
+
+  it('returns false when key does not exist', () => {
+    const cache = new CacheManager();
+    assert.equal(cache.delete('ghost'), false);
+  });
+});
+
+describe('CacheManager – clear', () => {
+  it('removes all entries', () => {
+    const cache = new CacheManager();
+    cache.set('a', 1);
+    cache.set('b', 2);
+    cache.clear();
+    assert.equal(cache.size, 0);
+    assert.equal(cache.get('a'), undefined);
+    assert.equal(cache.get('b'), undefined);
+  });
+
+  it('calls onEvict for each entry on clear', () => {
+    const evicted = [];
+    const cache = new CacheManager({ onEvict: (k, v) => evicted.push([k, v]) });
+    cache.set('x', 10);
+    cache.set('y', 20);
+    cache.clear();
+    assert.equal(evicted.length, 2);
+    assert.ok(evicted.some(([k]) => k === 'x'));
+    assert.ok(evicted.some(([k]) => k === 'y'));
+  });
+});
+
+describe('CacheManager – size', () => {
+  it('starts at 0', () => {
+    const cache = new CacheManager();
+    assert.equal(cache.size, 0);
+  });
+
+  it('increments with each new entry', () => {
+    const cache = new CacheManager();
+    cache.set('a', 1);
+    assert.equal(cache.size, 1);
+    cache.set('b', 2);
+    assert.equal(cache.size, 2);
+  });
+
+  it('does not increment when overwriting', () => {
+    const cache = new CacheManager();
+    cache.set('a', 1);
+    cache.set('a', 2);
+    assert.equal(cache.size, 1);
+  });
+});
+
+describe('CacheManager – maxSize eviction', () => {
+  it('evicts oldest entry when maxSize is exceeded', () => {
+    const cache = new CacheManager({ maxSize: 2 });
+    cache.set('a', 1);
+    cache.set('b', 2);
+    cache.set('c', 3); // should evict 'a'
+    assert.equal(cache.size, 2);
+    assert.equal(cache.has('a'), false);
+    assert.equal(cache.get('b'), 2);
+    assert.equal(cache.get('c'), 3);
+  });
+
+  it('calls onEvict when evicting due to maxSize', () => {
+    const evicted = [];
+    const cache = new CacheManager({
+      maxSize: 1,
+      onEvict: (k, v) => evicted.push([k, v]),
+    });
+    cache.set('first', 1);
+    cache.set('second', 2); // evicts 'first'
+    assert.equal(evicted.length, 1);
+    assert.equal(evicted[0][0], 'first');
+  });
+});
+
+describe('CacheManager – TTL expiry', () => {
+  it('returns undefined for an entry with TTL -1 (immediate expiry)', () => {
+    const cache = new CacheManager();
+    cache.set('k', 'v', -1);
+    assert.equal(cache.get('k'), undefined);
+  });
+
+  it('has() returns false for an expired entry', () => {
+    const cache = new CacheManager();
+    cache.set('k', 'v', -1);
+    assert.equal(cache.has('k'), false);
+  });
+
+  it('expired entry is removed so size decreases', () => {
+    const cache = new CacheManager();
+    cache.set('expired', 42, -1);
+    cache.get('expired'); // triggers eviction
+    assert.equal(cache.size, 0);
+  });
+
+  it('returns value within TTL window', () => {
+    const cache = new CacheManager({ defaultTtl: 60_000 });
+    cache.set('live', 'value');
+    assert.equal(cache.get('live'), 'value');
+  });
+
+  it('real short TTL: value gone after expiry', async () => {
+    const cache = new CacheManager();
+    cache.set('short', 'data', 20);
+    assert.equal(cache.get('short'), 'data');
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(cache.get('short'), undefined);
+  });
+});
+
+describe('CacheManager – evictExpired', () => {
+  it('returns 0 when no entries are expired', () => {
+    const cache = new CacheManager();
+    cache.set('a', 1);
+    cache.set('b', 2);
+    assert.equal(cache.evictExpired(), 0);
+  });
+
+  it('removes expired entries and returns count', () => {
+    const cache = new CacheManager();
+    cache.set('expired1', 1, -1);
+    cache.set('expired2', 2, -1);
+    cache.set('live', 3, 60_000);
+    const count = cache.evictExpired();
+    assert.equal(count, 2);
+    assert.equal(cache.size, 1);
+    assert.equal(cache.get('live'), 3);
+  });
+
+  it('calls onEvict for each evicted entry', () => {
+    const evicted = [];
+    const cache = new CacheManager({ onEvict: (k) => evicted.push(k) });
+    cache.set('gone', 99, -1);
+    cache.evictExpired();
+    assert.ok(evicted.includes('gone'));
+  });
+});
+
+describe('CacheManager – getEntry', () => {
+  it('returns entry metadata for an existing key', () => {
+    const cache = new CacheManager();
+    cache.set('x', 100);
+    const entry = cache.getEntry('x');
+    assert.ok(entry !== undefined);
+    assert.equal(entry.key, 'x');
+    assert.equal(entry.value, 100);
+    assert.ok(typeof entry.createdAt === 'number');
+    assert.equal(entry.hits, 0);
+  });
+
+  it('returns undefined for a missing key', () => {
+    const cache = new CacheManager();
+    assert.equal(cache.getEntry('missing'), undefined);
+  });
+
+  it('does not increment hits', () => {
+    const cache = new CacheManager();
+    cache.set('x', 1);
+    cache.getEntry('x');
+    cache.getEntry('x');
+    const entry = cache.getEntry('x');
+    assert.equal(entry?.hits, 0);
+  });
+
+  it('returns undefined for expired entry', () => {
+    const cache = new CacheManager();
+    cache.set('gone', 1, -1);
+    assert.equal(cache.getEntry('gone'), undefined);
+  });
+});
+
+describe('CacheManager – keys', () => {
+  it('returns all non-expired keys', () => {
+    const cache = new CacheManager();
+    cache.set('a', 1);
+    cache.set('b', 2);
+    cache.set('c', 3);
+    const keys = cache.keys();
+    assert.equal(keys.length, 3);
+    assert.ok(keys.includes('a'));
+    assert.ok(keys.includes('b'));
+    assert.ok(keys.includes('c'));
+  });
+
+  it('excludes expired keys', () => {
+    const cache = new CacheManager();
+    cache.set('expired', 1, -1);
+    cache.set('live', 2, 60_000);
+    const keys = cache.keys();
+    assert.ok(!keys.includes('expired'));
+    assert.ok(keys.includes('live'));
+  });
+
+  it('returns empty array when cache is empty', () => {
+    const cache = new CacheManager();
+    assert.deepEqual(cache.keys(), []);
+  });
+});
+
+describe('CacheManager – hitRate', () => {
+  it('returns 0 when no lookups have been made', () => {
+    const cache = new CacheManager();
+    assert.equal(cache.hitRate, 0);
+  });
+
+  it('returns 1 when all lookups hit', () => {
+    const cache = new CacheManager();
+    cache.set('a', 1);
+    cache.get('a');
+    cache.get('a');
+    assert.equal(cache.hitRate, 1);
+  });
+
+  it('returns 0 when all lookups miss', () => {
+    const cache = new CacheManager();
+    cache.get('missing1');
+    cache.get('missing2');
+    assert.equal(cache.hitRate, 0);
+  });
+
+  it('calculates mixed hit rate correctly', () => {
+    const cache = new CacheManager();
+    cache.set('a', 1);
+    cache.get('a');     // hit
+    cache.get('a');     // hit
+    cache.get('nope');  // miss
+    cache.get('nope2'); // miss
+    // 2 hits, 2 misses → 0.5
+    assert.equal(cache.hitRate, 0.5);
+  });
+
+  it('expired entry counts as miss', () => {
+    const cache = new CacheManager();
+    cache.set('k', 1, -1);
+    cache.get('k'); // miss (expired)
+    assert.equal(cache.hitRate, 0);
+  });
+});
+
+describe('CacheManager – memoize', () => {
+  it('calls fn and caches result on first call', () => {
+    const cache = new CacheManager();
+    let calls = 0;
+    const result = cache.memoize('key', () => { calls += 1; return 42; });
+    assert.equal(result, 42);
+    assert.equal(calls, 1);
+  });
+
+  it('returns cached value without calling fn again', () => {
+    const cache = new CacheManager();
+    let calls = 0;
+    cache.memoize('key', () => { calls += 1; return 42; });
+    const result = cache.memoize('key', () => { calls += 1; return 99; });
+    assert.equal(result, 42);
+    assert.equal(calls, 1);
+  });
+
+  it('re-calls fn after TTL expiry', () => {
+    const cache = new CacheManager();
+    let calls = 0;
+    cache.memoize('k', () => { calls += 1; return 'first'; }, -1); // expires immediately
+    const result = cache.memoize('k', () => { calls += 1; return 'second'; });
+    assert.equal(result, 'second');
+    assert.equal(calls, 2);
+  });
+
+  it('different keys are independent', () => {
+    const cache = new CacheManager();
+    const a = cache.memoize('a', () => 1);
+    const b = cache.memoize('b', () => 2);
+    assert.equal(a, 1);
+    assert.equal(b, 2);
   });
 });

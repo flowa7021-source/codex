@@ -1,174 +1,266 @@
 // ─── Unit Tests: StateMachine ─────────────────────────────────────────────────
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createMachine, StateMachine } from '../../app/modules/state-machine.js';
+import { StateMachine } from '../../app/modules/state-machine.js';
 
-// ─── Shared traffic-light config factory ─────────────────────────────────────
+// ─── Traffic-light machine factory ───────────────────────────────────────────
+//
+// States:  red -> green -> yellow -> red  (cyclic)
+// Event:   NEXT triggers every hop
 
-function trafficLightConfig() {
-  return {
+function makeTrafficLight(onTransition) {
+  return new StateMachine({
     initial: 'red',
-    states: {
-      red:    { on: { NEXT: 'green' } },
-      green:  { on: { NEXT: 'yellow' } },
-      yellow: { on: { NEXT: 'red' } },
-    },
-  };
+    transitions: [
+      { from: 'red',    event: 'NEXT', to: 'green'  },
+      { from: 'green',  event: 'NEXT', to: 'yellow' },
+      { from: 'yellow', event: 'NEXT', to: 'red'    },
+    ],
+    onTransition,
+  });
 }
 
-// ─── createMachine() ─────────────────────────────────────────────────────────
+// ─── Basic transitions ────────────────────────────────────────────────────────
 
-describe('createMachine()', () => {
-  it('returns a StateMachine instance', () => {
-    const m = createMachine(trafficLightConfig());
-    assert.ok(m instanceof StateMachine);
+describe('StateMachine – basic transitions', () => {
+  it('starts in the initial state', () => {
+    const m = makeTrafficLight();
+    assert.equal(m.state, 'red');
   });
 
-  it('starts in the configured initial state', () => {
-    const m = createMachine(trafficLightConfig());
-    assert.equal(m.current, 'red');
+  it('red -> green on NEXT', () => {
+    const m = makeTrafficLight();
+    const result = m.send('NEXT');
+    assert.equal(result, true);
+    assert.equal(m.state, 'green');
   });
 
-  it('different initial states are respected', () => {
-    const m = createMachine({
-      initial: 'green',
-      states: {
-        red:    { on: { NEXT: 'green' } },
-        green:  { on: { NEXT: 'yellow' } },
-        yellow: { on: { NEXT: 'red' } },
-      },
-    });
-    assert.equal(m.current, 'green');
-  });
-});
-
-// ─── matches() ───────────────────────────────────────────────────────────────
-
-describe('matches()', () => {
-  it('returns true for the current state', () => {
-    const m = createMachine(trafficLightConfig());
-    assert.equal(m.matches('red'), true);
-  });
-
-  it('returns false for other states', () => {
-    const m = createMachine(trafficLightConfig());
-    assert.equal(m.matches('green'), false);
-    assert.equal(m.matches('yellow'), false);
-  });
-
-  it('updates after a transition', () => {
-    const m = createMachine(trafficLightConfig());
-    m.send('NEXT');
-    assert.equal(m.matches('green'), true);
-    assert.equal(m.matches('red'), false);
-  });
-});
-
-// ─── send() ──────────────────────────────────────────────────────────────────
-
-describe('send()', () => {
-  it('transitions to the correct next state', () => {
-    const m = createMachine(trafficLightConfig());
-    m.send('NEXT');
-    assert.equal(m.current, 'green');
-  });
-
-  it('returns the new state', () => {
-    const m = createMachine(trafficLightConfig());
-    const next = m.send('NEXT');
-    assert.equal(next, 'green');
-  });
-
-  it('chains multiple transitions correctly', () => {
-    const m = createMachine(trafficLightConfig());
+  it('green -> yellow on NEXT', () => {
+    const m = makeTrafficLight();
     m.send('NEXT'); // red -> green
     m.send('NEXT'); // green -> yellow
-    m.send('NEXT'); // yellow -> red
-    assert.equal(m.current, 'red');
+    assert.equal(m.state, 'yellow');
   });
 
-  it('stays in current state when no transition is defined', () => {
-    const m = createMachine(trafficLightConfig());
-    const result = m.send('UNKNOWN_EVENT');
-    assert.equal(result, 'red');
-    assert.equal(m.current, 'red');
-  });
-
-  it('returns current state when no transition is defined', () => {
-    const m = createMachine(trafficLightConfig());
-    m.send('NEXT'); // -> green
-    const result = m.send('BOGUS');
-    assert.equal(result, 'green');
-    assert.equal(m.current, 'green');
+  it('yellow -> red on NEXT (full cycle)', () => {
+    const m = makeTrafficLight();
+    m.send('NEXT');
+    m.send('NEXT');
+    m.send('NEXT');
+    assert.equal(m.state, 'red');
   });
 });
 
-// ─── can() ───────────────────────────────────────────────────────────────────
+// ─── Invalid event ────────────────────────────────────────────────────────────
 
-describe('can()', () => {
-  it('returns true when a transition exists for the event', () => {
-    const m = createMachine(trafficLightConfig());
+describe('StateMachine – invalid event', () => {
+  it('send() returns false for an unknown event', () => {
+    const m = makeTrafficLight();
+    assert.equal(m.send('STOP'), false);
+  });
+
+  it('state does not change after an invalid event', () => {
+    const m = makeTrafficLight();
+    m.send('BOGUS');
+    assert.equal(m.state, 'red');
+  });
+
+  it('send() returns false for a valid event in the wrong state', () => {
+    const m = makeTrafficLight();
+    m.send('NEXT'); // now green
+    // NEXT from red is defined but we are in green — still valid here
+    // Use a machine where BACK is only from yellow
+    const m2 = new StateMachine({
+      initial: 'red',
+      transitions: [
+        { from: 'red',    event: 'NEXT', to: 'green'  },
+        { from: 'yellow', event: 'BACK', to: 'red'    },
+      ],
+    });
+    assert.equal(m2.send('BACK'), false); // no BACK from red
+  });
+});
+
+// ─── can() and validEvents() ─────────────────────────────────────────────────
+
+describe('StateMachine – can() and validEvents()', () => {
+  it('can() returns true for NEXT when in red', () => {
+    const m = makeTrafficLight();
     assert.equal(m.can('NEXT'), true);
   });
 
-  it('returns false when no transition exists for the event', () => {
-    const m = createMachine(trafficLightConfig());
+  it('can() returns false for an unregistered event', () => {
+    const m = makeTrafficLight();
     assert.equal(m.can('STOP'), false);
   });
 
-  it('reflects the current state (not initial)', () => {
-    const m = createMachine({
-      initial: 'idle',
-      states: {
-        idle:    { on: { START: 'running' } },
-        running: { on: { STOP: 'idle' } },
-      },
+  it('validEvents() lists available events from current state', () => {
+    const m = makeTrafficLight();
+    assert.deepEqual(m.validEvents(), ['NEXT']);
+  });
+
+  it('validEvents() is empty when no events apply', () => {
+    const m = new StateMachine({
+      initial: 'done',
+      transitions: [{ from: 'start', event: 'GO', to: 'done' }],
     });
-    assert.equal(m.can('START'), true);
-    assert.equal(m.can('STOP'), false);
-    m.send('START');
-    assert.equal(m.can('START'), false);
-    assert.equal(m.can('STOP'), true);
+    assert.deepEqual(m.validEvents(), []);
   });
 });
 
-// ─── onTransition() ──────────────────────────────────────────────────────────
+// ─── Guard condition ──────────────────────────────────────────────────────────
 
-describe('onTransition()', () => {
-  it('callback is called with from, to, event on a valid transition', () => {
-    const m = createMachine(trafficLightConfig());
+describe('StateMachine – guard condition', () => {
+  it('transition is blocked when guard returns false', () => {
+    const m = new StateMachine({
+      initial: 'idle',
+      transitions: [
+        {
+          from: 'idle',
+          event: 'START',
+          to: 'running',
+          guard: (ctx) => ctx === 'ready',
+        },
+      ],
+    });
+    const result = m.send('START', 'not-ready');
+    assert.equal(result, false);
+    assert.equal(m.state, 'idle');
+  });
+
+  it('transition proceeds when guard returns true', () => {
+    const m = new StateMachine({
+      initial: 'idle',
+      transitions: [
+        {
+          from: 'idle',
+          event: 'START',
+          to: 'running',
+          guard: (ctx) => ctx === 'ready',
+        },
+      ],
+    });
+    const result = m.send('START', 'ready');
+    assert.equal(result, true);
+    assert.equal(m.state, 'running');
+  });
+
+  it('can() returns false when guard blocks the event', () => {
+    const m = new StateMachine({
+      initial: 'idle',
+      transitions: [
+        {
+          from: 'idle',
+          event: 'START',
+          to: 'running',
+          guard: () => false,
+        },
+      ],
+    });
+    assert.equal(m.can('START'), false);
+  });
+
+  it('validEvents() excludes events blocked by guard', () => {
+    const m = new StateMachine({
+      initial: 'idle',
+      transitions: [
+        { from: 'idle', event: 'START', to: 'running', guard: () => false },
+        { from: 'idle', event: 'RESET', to: 'idle' },
+      ],
+    });
+    assert.deepEqual(m.validEvents(), ['RESET']);
+  });
+});
+
+// ─── Action updates context ───────────────────────────────────────────────────
+
+describe('StateMachine – action updates context', () => {
+  it('action receives context and event, its return value becomes new context', () => {
+    const m = new StateMachine({
+      initial: 'counting',
+      transitions: [
+        {
+          from: 'counting',
+          event: 'INC',
+          to: 'counting',
+          action: (ctx, _event) => (/** @type {number} */ (ctx) ?? 0) + 1,
+        },
+      ],
+    });
+
+    m.send('INC');
+    assert.equal(m.context, 1);
+
+    m.send('INC');
+    assert.equal(m.context, 2);
+
+    m.send('INC');
+    assert.equal(m.context, 3);
+  });
+
+  it('context passed to send() is forwarded to the action', () => {
+    const received = [];
+    const m = new StateMachine({
+      initial: 'a',
+      transitions: [
+        {
+          from: 'a',
+          event: 'GO',
+          to: 'b',
+          action: (ctx, event) => {
+            received.push({ ctx, event });
+            return ctx;
+          },
+        },
+      ],
+    });
+    m.send('GO', 'hello');
+    assert.deepEqual(received, [{ ctx: 'hello', event: 'GO' }]);
+  });
+
+  it('context is undefined initially', () => {
+    const m = makeTrafficLight();
+    assert.equal(m.context, undefined);
+  });
+});
+
+// ─── subscribe / unsubscribe ──────────────────────────────────────────────────
+
+describe('StateMachine – subscribe / unsubscribe', () => {
+  it('listener is called after a successful transition', () => {
+    const m = makeTrafficLight();
     const calls = [];
-    m.onTransition((from, to, event) => calls.push({ from, to, event }));
+    m.subscribe((state, event) => calls.push({ state, event }));
 
     m.send('NEXT');
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0], { from: 'red', to: 'green', event: 'NEXT' });
+    assert.deepEqual(calls[0], { state: 'green', event: 'NEXT' });
   });
 
-  it('callback not called when no transition occurs', () => {
-    const m = createMachine(trafficLightConfig());
+  it('listener is NOT called when transition is blocked', () => {
+    const m = makeTrafficLight();
     const calls = [];
-    m.onTransition(() => calls.push(true));
+    m.subscribe(() => calls.push(true));
 
-    m.send('INVALID');
+    m.send('UNKNOWN');
     assert.equal(calls.length, 0);
   });
 
-  it('multiple callbacks are all called', () => {
-    const m = createMachine(trafficLightConfig());
+  it('multiple listeners are all called', () => {
+    const m = makeTrafficLight();
     let count = 0;
-    m.onTransition(() => count++);
-    m.onTransition(() => count++);
+    m.subscribe(() => count++);
+    m.subscribe(() => count++);
 
     m.send('NEXT');
     assert.equal(count, 2);
   });
 
-  it('returns an unsubscribe function', () => {
-    const m = createMachine(trafficLightConfig());
+  it('subscribe() returns an unsubscribe function', () => {
+    const m = makeTrafficLight();
     const calls = [];
-    const unsub = m.onTransition(() => calls.push(true));
+    const unsub = m.subscribe(() => calls.push(true));
 
     assert.equal(typeof unsub, 'function');
     unsub();
@@ -176,12 +268,12 @@ describe('onTransition()', () => {
     assert.equal(calls.length, 0);
   });
 
-  it('after unsubscribe the callback is no longer called', () => {
-    const m = createMachine(trafficLightConfig());
+  it('unsubscribed listener is no longer called', () => {
+    const m = makeTrafficLight();
     const calls = [];
-    const unsub = m.onTransition(() => calls.push(true));
+    const unsub = m.subscribe(() => calls.push(true));
 
-    m.send('NEXT'); // should fire
+    m.send('NEXT'); // fires
     unsub();
     m.send('NEXT'); // should NOT fire
     m.send('NEXT'); // should NOT fire
@@ -189,12 +281,12 @@ describe('onTransition()', () => {
     assert.equal(calls.length, 1);
   });
 
-  it('unsubscribing one listener does not affect others', () => {
-    const m = createMachine(trafficLightConfig());
+  it('unsubscribing one does not affect others', () => {
+    const m = makeTrafficLight();
     const a = [];
     const b = [];
-    const unsubA = m.onTransition(() => a.push(true));
-    m.onTransition(() => b.push(true));
+    const unsubA = m.subscribe(() => a.push(true));
+    m.subscribe(() => b.push(true));
 
     unsubA();
     m.send('NEXT');
@@ -204,122 +296,90 @@ describe('onTransition()', () => {
   });
 });
 
-// ─── Entry / exit callbacks ───────────────────────────────────────────────────
+// ─── reset() ─────────────────────────────────────────────────────────────────
 
-describe('entry / exit callbacks', () => {
-  it('exit callback is called on the state being left', () => {
-    const log = [];
-    const m = createMachine({
-      initial: 'idle',
-      states: {
-        idle:    { on: { GO: 'active' }, exit: () => log.push('exit:idle') },
-        active:  { on: { STOP: 'idle' } },
-      },
-    });
-
-    m.send('GO');
-    assert.deepEqual(log, ['exit:idle']);
+describe('StateMachine – reset()', () => {
+  it('returns the machine to its initial state', () => {
+    const m = makeTrafficLight();
+    m.send('NEXT'); // green
+    m.send('NEXT'); // yellow
+    m.reset();
+    assert.equal(m.state, 'red');
   });
 
-  it('entry callback is called on the state being entered', () => {
-    const log = [];
-    const m = createMachine({
-      initial: 'idle',
-      states: {
-        idle:    { on: { GO: 'active' } },
-        active:  { on: { STOP: 'idle' }, entry: () => log.push('entry:active') },
-      },
-    });
-
-    m.send('GO');
-    assert.deepEqual(log, ['entry:active']);
-  });
-
-  it('exit is called before entry', () => {
-    const log = [];
-    const m = createMachine({
-      initial: 'a',
-      states: {
-        a: { on: { NEXT: 'b' }, exit: () => log.push('exit:a') },
-        b: { on: { NEXT: 'a' }, entry: () => log.push('entry:b') },
-      },
-    });
-
-    m.send('NEXT');
-    assert.deepEqual(log, ['exit:a', 'entry:b']);
-  });
-
-  it('entry callback fires for the initial state on construction', () => {
-    const log = [];
-    createMachine({
-      initial: 'start',
-      states: {
-        start: { entry: () => log.push('entry:start') },
-      },
-    });
-    assert.deepEqual(log, ['entry:start']);
-  });
-
-  it('callbacks not called when no transition occurs', () => {
-    const log = [];
-    const m = createMachine({
-      initial: 'idle',
-      states: {
-        idle: {
-          exit:  () => log.push('exit:idle'),
-          entry: () => log.push('entry:idle'),
+  it('clears context on reset', () => {
+    const m = new StateMachine({
+      initial: 'counting',
+      transitions: [
+        {
+          from: 'counting',
+          event: 'INC',
+          to: 'counting',
+          action: (ctx) => (/** @type {number} */ (ctx) ?? 0) + 1,
         },
-      },
+      ],
     });
+    m.send('INC'); // context = 1
+    assert.equal(m.context, 1);
+    m.reset();
+    assert.equal(m.context, undefined);
+  });
 
-    // Clear the initial entry
-    log.length = 0;
-    m.send('BOGUS');
-    assert.deepEqual(log, []);
+  it('machine transitions normally after reset', () => {
+    const m = makeTrafficLight();
+    m.send('NEXT'); // green
+    m.reset();
+    const ok = m.send('NEXT');
+    assert.equal(ok, true);
+    assert.equal(m.state, 'green');
   });
 });
 
-// ─── reset() ─────────────────────────────────────────────────────────────────
+// ─── onTransition callback ────────────────────────────────────────────────────
 
-describe('reset()', () => {
-  it('returns the machine to its initial state', () => {
-    const m = createMachine(trafficLightConfig());
-    m.send('NEXT'); // -> green
-    m.send('NEXT'); // -> yellow
-    m.reset();
-    assert.equal(m.current, 'red');
-  });
+describe('StateMachine – onTransition option', () => {
+  it('onTransition is called with from, to, event after each transition', () => {
+    const calls = [];
+    const m = makeTrafficLight((from, to, event) => calls.push({ from, to, event }));
 
-  it('matches initial state after reset', () => {
-    const m = createMachine(trafficLightConfig());
     m.send('NEXT');
-    m.reset();
-    assert.equal(m.matches('red'), true);
+    assert.deepEqual(calls, [{ from: 'red', to: 'green', event: 'NEXT' }]);
   });
 
-  it('machine can transition normally after reset', () => {
-    const m = createMachine(trafficLightConfig());
-    m.send('NEXT'); // -> green
-    m.reset();
-    m.send('NEXT'); // -> green again
-    assert.equal(m.current, 'green');
-  });
+  it('onTransition is NOT called when transition is invalid', () => {
+    const calls = [];
+    const m = makeTrafficLight(() => calls.push(true));
 
-  it('calls exit on current state and entry on initial state during reset', () => {
-    const log = [];
-    const m = createMachine({
-      initial: 'idle',
-      states: {
-        idle:   { on: { GO: 'active' }, entry: () => log.push('entry:idle') },
-        active: { on: { STOP: 'idle' }, exit: () => log.push('exit:active') },
-      },
+    m.send('BOGUS');
+    assert.equal(calls.length, 0);
+  });
+});
+
+// ─── from array ───────────────────────────────────────────────────────────────
+
+describe('StateMachine – from as array', () => {
+  it('transition with from array fires from any listed state', () => {
+    const m = new StateMachine({
+      initial: 'a',
+      transitions: [
+        { from: ['a', 'b'], event: 'GO', to: 'done' },
+        { from: 'done',     event: 'BACK', to: 'a'  },
+      ],
     });
 
-    log.length = 0; // ignore construction entry
-    m.send('GO');
-    log.length = 0; // start fresh
+    assert.equal(m.send('GO'), true);
+    assert.equal(m.state, 'done');
 
-    m.reset();
-    assert.deepEqual(log, ['exit:active', 'entry:idle']);
+    m.send('BACK'); // back to a
+    m.send('GO');   // transition to done from a... but test from b
+    // reset to test from 'b'
+    const m2 = new StateMachine({
+      initial: 'b',
+      transitions: [
+        { from: ['a', 'b'], event: 'GO', to: 'done' },
+      ],
+    });
+    assert.equal(m2.send('GO'), true);
+    assert.equal(m2.state, 'done');
   });
 });

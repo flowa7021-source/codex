@@ -1,108 +1,136 @@
 // @ts-check
 // ─── State Machine ───────────────────────────────────────────────────────────
-// A simple synchronous finite state machine with entry/exit hooks and
-// transition subscriptions.
+// Generic finite state machine with guards, actions, and subscriptions.
 
-/**
- * State machine configuration.
- */
-export interface StateMachineConfig<S extends string, E extends string> {
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+export interface Transition<S extends string, E extends string> {
+  /** Source state(s) this transition applies from. */
+  from: S | S[];
+  /** Event that triggers this transition. */
+  event: E;
+  /** Target state to move to. */
+  to: S;
+  /** Optional guard — if it returns false the transition is blocked. */
+  guard?: (context: unknown) => boolean;
+  /** Optional side effect — receives context + event, returns updated context. */
+  action?: (context: unknown, event: E) => unknown;
+}
+
+export interface StateMachineOptions<S extends string, E extends string> {
   initial: S;
-  states: {
-    [state in S]: {
-      on?: { [event in E]?: S };
-      entry?: () => void;
-      exit?: () => void;
-    };
-  };
+  transitions: Transition<S, E>[];
+  onTransition?: (from: S, to: S, event: E) => void;
 }
 
-/**
- * A simple synchronous finite state machine.
- */
+// ─── StateMachine ─────────────────────────────────────────────────────────────
+
 export class StateMachine<S extends string, E extends string> {
-  #config: StateMachineConfig<S, E>;
-  #current: S;
-  #listeners: Array<(from: S, to: S, event: E) => void> = [];
+  #initial: S;
+  #state: S;
+  #context: unknown;
+  #transitions: Transition<S, E>[];
+  #onTransition: ((from: S, to: S, event: E) => void) | undefined;
+  #listeners: Set<(state: S, event: E) => void>;
 
-  constructor(config: StateMachineConfig<S, E>) {
-    this.#config = config;
-    this.#current = config.initial;
-    // Run entry callback for the initial state if defined.
-    config.states[config.initial]?.entry?.();
+  constructor(options: StateMachineOptions<S, E>) {
+    this.#initial = options.initial;
+    this.#state = options.initial;
+    this.#context = undefined;
+    this.#transitions = options.transitions;
+    this.#onTransition = options.onTransition;
+    this.#listeners = new Set();
+  }
+
+  /** Current state. */
+  get state(): S {
+    return this.#state;
+  }
+
+  /** Current context value (may be undefined). */
+  get context(): unknown {
+    return this.#context;
   }
 
   /**
-   * The current state of the machine.
+   * Send an event. Returns true if a transition occurred, false if blocked or
+   * no matching transition exists.
+   * An optional context value is passed to the guard / action.
    */
-  get current(): S {
-    return this.#current;
-  }
+  send(event: E, context?: unknown): boolean {
+    const transition = this.#findTransition(event);
+    if (!transition) return false;
 
-  /**
-   * Send an event to the machine, triggering a transition if defined.
-   * Returns the new state (same state if no transition exists).
-   */
-  send(event: E): S {
-    const stateDef = this.#config.states[this.#current];
-    const next = stateDef?.on?.[event];
-    if (next === undefined) return this.#current;
+    const ctx = context !== undefined ? context : this.#context;
 
-    const from = this.#current;
-    stateDef?.exit?.();
-    this.#current = next;
-    this.#config.states[next]?.entry?.();
+    if (transition.guard && !transition.guard(ctx)) return false;
 
-    for (const cb of this.#listeners.slice()) {
-      cb(from, next, event);
+    const from = this.#state;
+
+    if (transition.action) {
+      this.#context = transition.action(ctx, event);
+    } else if (context !== undefined) {
+      this.#context = context;
     }
 
-    return this.#current;
+    this.#state = transition.to;
+
+    this.#onTransition?.(from, transition.to, event);
+
+    for (const listener of this.#listeners) {
+      listener(this.#state, event);
+    }
+
+    return true;
   }
 
-  /**
-   * Whether the machine can transition from the current state on the given event.
-   */
+  /** Check whether an event is valid from the current state (guard respected). */
   can(event: E): boolean {
-    return this.#config.states[this.#current]?.on?.[event] !== undefined;
+    const transition = this.#findTransition(event);
+    if (!transition) return false;
+    if (transition.guard && !transition.guard(this.#context)) return false;
+    return true;
+  }
+
+  /** Return all events that can be sent from the current state (guards respected). */
+  validEvents(): E[] {
+    const seen = new Set<E>();
+    const result: E[] = [];
+    for (const t of this.#transitions) {
+      const froms: S[] = Array.isArray(t.from) ? t.from : [t.from];
+      if (!froms.includes(this.#state)) continue;
+      if (seen.has(t.event)) continue;
+      if (t.guard && !t.guard(this.#context)) continue;
+      seen.add(t.event);
+      result.push(t.event);
+    }
+    return result;
+  }
+
+  /** Reset to the initial state and clear context. */
+  reset(): void {
+    this.#state = this.#initial;
+    this.#context = undefined;
   }
 
   /**
-   * Subscribe to state changes. Returns an unsubscribe function.
+   * Subscribe to state changes. The listener is called after every successful
+   * transition with the new state and the triggering event.
+   * Returns an unsubscribe function.
    */
-  onTransition(callback: (from: S, to: S, event: E) => void): () => void {
-    this.#listeners.push(callback);
+  subscribe(listener: (state: S, event: E) => void): () => void {
+    this.#listeners.add(listener);
     return () => {
-      const idx = this.#listeners.indexOf(callback);
-      if (idx !== -1) this.#listeners.splice(idx, 1);
+      this.#listeners.delete(listener);
     };
   }
 
-  /**
-   * Whether the machine is in a given state.
-   */
-  matches(state: S): boolean {
-    return this.#current === state;
-  }
+  // ─── Private helpers ───────────────────────────────────────────────────────
 
-  /**
-   * Reset the machine to its initial state, firing exit on current state
-   * and entry on the initial state.
-   */
-  reset(): void {
-    if (this.#current !== this.#config.initial) {
-      this.#config.states[this.#current]?.exit?.();
-    }
-    this.#current = this.#config.initial;
-    this.#config.states[this.#config.initial]?.entry?.();
+  #findTransition(event: E): Transition<S, E> | undefined {
+    return this.#transitions.find((t) => {
+      const froms: S[] = Array.isArray(t.from) ? t.from : [t.from];
+      return t.event === event && froms.includes(this.#state);
+    });
   }
-}
-
-/**
- * Create a state machine from a config.
- */
-export function createMachine<S extends string, E extends string>(
-  config: StateMachineConfig<S, E>
-): StateMachine<S, E> {
-  return new StateMachine(config);
 }
