@@ -1,277 +1,295 @@
-// ─── Unit Tests: Background Sync Queue ──────────────────────────────────────
-import './setup-dom.js';
-
-import { describe, it, before, beforeEach } from 'node:test';
+// ─── Unit Tests: SyncQueue ────────────────────────────────────────────────────
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  isSyncSupported,
-  enqueueSyncOperation,
-  dequeueSyncOperation,
-  getPendingCount,
-  getAllPending,
-  removeSyncOperation,
-  clearAll,
-  _resetDbForTesting,
-} from '../../app/modules/sync-queue.js';
+import { SyncQueue } from '../../app/modules/sync-queue.js';
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ─── enqueue ──────────────────────────────────────────────────────────────────
 
-function makeOp(overrides = {}) {
-  return {
-    type: 'upload',
-    providerId: 'gdrive',
-    fileName: 'test.pdf',
-    ...overrides,
-  };
-}
-
-function deleteIdbDatabase(name) {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(name);
-    req.onsuccess = () => resolve();
-    if (req.onerror) req.onerror = () => resolve();
-  });
-}
-
-// ── Reset DB state before each test ──────────────────────────────────────────
-
-beforeEach(async () => {
-  // Reset the module-level DB reference so a fresh DB is opened
-  _resetDbForTesting();
-  // Delete the in-memory IDB database so stores are recreated fresh
-  await deleteIdbDatabase('novareader-sync');
-});
-
-// ── Tests ─────────────────────────────────────────────────────────────────────
-
-describe('sync-queue — isSyncSupported', () => {
-  it('returns a boolean', () => {
-    const result = isSyncSupported();
-    assert.equal(typeof result, 'boolean');
+describe('SyncQueue – enqueue', () => {
+  it('adds item with pending status', () => {
+    const queue = new SyncQueue();
+    const item = queue.enqueue('create', { id: 1 });
+    assert.equal(item.status, 'pending');
+    assert.equal(item.operation, 'create');
+    assert.deepEqual(item.payload, { id: 1 });
+    assert.equal(item.attempts, 0);
   });
 
-  it('returns false in Node.js test environment (no SyncManager)', () => {
-    // Node.js doesn't have SyncManager, so this should be false
-    assert.equal(isSyncSupported(), false);
+  it('assigns a unique id to each item', () => {
+    const queue = new SyncQueue();
+    const a = queue.enqueue('op', {});
+    const b = queue.enqueue('op', {});
+    assert.notEqual(a.id, b.id);
+  });
+
+  it('sets createdAt timestamp', () => {
+    const before = Date.now();
+    const queue = new SyncQueue();
+    const item = queue.enqueue('op', null);
+    const after = Date.now();
+    assert.ok(item.createdAt >= before && item.createdAt <= after);
+  });
+
+  it('uses queue maxAttempts for the item', () => {
+    const queue = new SyncQueue({ maxAttempts: 5 });
+    const item = queue.enqueue('op', {});
+    assert.equal(item.maxAttempts, 5);
   });
 });
 
-describe('sync-queue — enqueueSyncOperation', () => {
-  it('returns a string ID', async () => {
-    const id = await enqueueSyncOperation(makeOp());
-    assert.equal(typeof id, 'string');
-    assert.ok(id.length > 0);
-  });
+// ─── process ──────────────────────────────────────────────────────────────────
 
-  it('returns unique IDs for each operation', async () => {
-    const id1 = await enqueueSyncOperation(makeOp({ fileName: 'a.pdf' }));
-    const id2 = await enqueueSyncOperation(makeOp({ fileName: 'b.pdf' }));
-    assert.notEqual(id1, id2);
-  });
+describe('SyncQueue – process', () => {
+  it('calls syncFn for pending items and marks them synced', async () => {
+    const queue = new SyncQueue();
+    queue.enqueue('save', { data: 'abc' });
 
-  it('increments pending count after enqueue', async () => {
-    assert.equal(await getPendingCount(), 0);
-    await enqueueSyncOperation(makeOp());
-    assert.equal(await getPendingCount(), 1);
-    await enqueueSyncOperation(makeOp());
-    assert.equal(await getPendingCount(), 2);
-  });
-
-  it('stores all provided fields', async () => {
-    const op = makeOp({ type: 'download', fileId: 'file-abc', mimeType: 'application/pdf' });
-    await enqueueSyncOperation(op);
-
-    const all = await getAllPending();
-    assert.equal(all.length, 1);
-    assert.equal(all[0].type, 'download');
-    assert.equal(all[0].providerId, 'gdrive');
-    assert.equal(all[0].fileId, 'file-abc');
-    assert.equal(all[0].mimeType, 'application/pdf');
-    assert.equal(typeof all[0].createdAt, 'number');
-    assert.equal(all[0].retries, 0);
-  });
-});
-
-describe('sync-queue — dequeueSyncOperation', () => {
-  it('returns null for an empty queue', async () => {
-    const op = await dequeueSyncOperation();
-    assert.equal(op, null);
-  });
-
-  it('returns the oldest operation (FIFO order)', async () => {
-    // Enqueue with slight time difference to guarantee ordering
-    const id1 = await enqueueSyncOperation(makeOp({ fileName: 'first.pdf' }));
-    // Force a timestamp difference by manipulating Date - but since mock IDB
-    // uses structuredClone, createdAt will be real. Add a small delay via
-    // queueMicrotask isn't enough; instead enqueue and rely on Date.now()
-    // incrementing or use explicit createdAt via a direct put.
-    const id2 = await enqueueSyncOperation(makeOp({ fileName: 'second.pdf' }));
-
-    const first = await dequeueSyncOperation();
-    assert.ok(first);
-    assert.equal(first.id, id1);
-    assert.equal(first.fileName, 'first.pdf');
-  });
-
-  it('does NOT remove the operation from the queue', async () => {
-    await enqueueSyncOperation(makeOp());
-    assert.equal(await getPendingCount(), 1);
-
-    await dequeueSyncOperation();
-
-    // Still 1 because dequeue only peeks
-    assert.equal(await getPendingCount(), 1);
-  });
-
-  it('returns the same operation on repeated calls', async () => {
-    const id = await enqueueSyncOperation(makeOp());
-    const op1 = await dequeueSyncOperation();
-    const op2 = await dequeueSyncOperation();
-    assert.equal(op1.id, id);
-    assert.equal(op2.id, id);
-  });
-});
-
-describe('sync-queue — getPendingCount', () => {
-  it('returns 0 for empty queue', async () => {
-    assert.equal(await getPendingCount(), 0);
-  });
-
-  it('returns correct count after multiple enqueues', async () => {
-    await enqueueSyncOperation(makeOp());
-    await enqueueSyncOperation(makeOp());
-    await enqueueSyncOperation(makeOp());
-    assert.equal(await getPendingCount(), 3);
-  });
-
-  it('decrements after removeSyncOperation', async () => {
-    const id = await enqueueSyncOperation(makeOp());
-    assert.equal(await getPendingCount(), 1);
-    await removeSyncOperation(id);
-    assert.equal(await getPendingCount(), 0);
-  });
-});
-
-describe('sync-queue — getAllPending', () => {
-  it('returns empty array for empty queue', async () => {
-    const all = await getAllPending();
-    assert.deepEqual(all, []);
-  });
-
-  it('returns all operations sorted by createdAt ascending', async () => {
-    const id1 = await enqueueSyncOperation(makeOp({ fileName: 'a.pdf' }));
-    const id2 = await enqueueSyncOperation(makeOp({ fileName: 'b.pdf' }));
-    const id3 = await enqueueSyncOperation(makeOp({ fileName: 'c.pdf' }));
-
-    const all = await getAllPending();
-    assert.equal(all.length, 3);
-
-    // Verify sorted order (createdAt ascending)
-    for (let i = 1; i < all.length; i++) {
-      assert.ok(all[i].createdAt >= all[i - 1].createdAt);
-    }
-
-    // IDs should be present
-    const ids = all.map(op => op.id);
-    assert.ok(ids.includes(id1));
-    assert.ok(ids.includes(id2));
-    assert.ok(ids.includes(id3));
-  });
-
-  it('returns operations with all required fields', async () => {
-    await enqueueSyncOperation({
-      type: 'delete',
-      providerId: 'dropbox',
-      fileId: 'xyz',
-      fileName: 'file.docx',
+    const called = [];
+    await queue.process(async (item) => {
+      called.push(item.operation);
     });
 
-    const all = await getAllPending();
+    assert.deepEqual(called, ['save']);
+    assert.equal(queue.syncedCount, 1);
+    assert.equal(queue.pendingCount, 0);
+  });
+
+  it('does not call syncFn for already-synced items', async () => {
+    const queue = new SyncQueue();
+    queue.enqueue('op1', {});
+
+    // First process — syncs the item
+    await queue.process(async () => {});
+
+    const called = [];
+    // Second process — should not re-process
+    await queue.process(async (item) => {
+      called.push(item.id);
+    });
+
+    assert.equal(called.length, 0);
+  });
+
+  it('sets lastAttemptAt on each processed item', async () => {
+    const queue = new SyncQueue();
+    queue.enqueue('op', {});
+
+    const before = Date.now();
+    await queue.process(async () => {});
+    const after = Date.now();
+
+    const [item] = queue.getAll();
+    assert.ok(item.lastAttemptAt !== undefined);
+    assert.ok(item.lastAttemptAt >= before && item.lastAttemptAt <= after);
+  });
+});
+
+// ─── failed item ──────────────────────────────────────────────────────────────
+
+describe('SyncQueue – failed item', () => {
+  it('marks item as failed after maxAttempts exhausted', async () => {
+    const queue = new SyncQueue({ maxAttempts: 1 });
+    queue.enqueue('op', {});
+
+    await queue.process(async () => {
+      throw new Error('network error');
+    });
+
+    const [item] = queue.getAll();
+    assert.equal(item.status, 'failed');
+    assert.equal(item.attempts, 1);
+  });
+
+  it('stores the error message on the failed item', async () => {
+    const queue = new SyncQueue({ maxAttempts: 1 });
+    queue.enqueue('op', {});
+
+    await queue.process(async () => {
+      throw new Error('timeout');
+    });
+
+    const [item] = queue.getAll();
+    assert.equal(item.error, 'timeout');
+  });
+
+  it('stores non-Error thrown values as strings', async () => {
+    const queue = new SyncQueue({ maxAttempts: 1 });
+    queue.enqueue('op', {});
+
+    await queue.process(async () => {
+      throw 'string error'; // eslint-disable-line no-throw-literal
+    });
+
+    const [item] = queue.getAll();
+    assert.equal(item.error, 'string error');
+  });
+});
+
+// ─── retry ────────────────────────────────────────────────────────────────────
+
+describe('SyncQueue – retry', () => {
+  it('failed item is retried on next process call if attempts < maxAttempts', async () => {
+    const queue = new SyncQueue({ maxAttempts: 3, retryDelayMs: 0 });
+    queue.enqueue('op', {});
+
+    let calls = 0;
+
+    // First process — fail
+    await queue.process(async () => {
+      calls++;
+      throw new Error('fail');
+    });
+
+    assert.equal(calls, 1);
+
+    const [item] = queue.getAll();
+    assert.equal(item.status, 'failed');
+    assert.equal(item.attempts, 1);
+
+    // Second process — retry
+    await queue.process(async () => {
+      calls++;
+      throw new Error('fail again');
+    });
+
+    assert.equal(calls, 2);
+    assert.equal(item.attempts, 2);
+  });
+
+  it('eventually syncs on successful retry', async () => {
+    const queue = new SyncQueue({ maxAttempts: 3, retryDelayMs: 0 });
+    queue.enqueue('op', {});
+
+    let calls = 0;
+    const tryProcess = () =>
+      queue.process(async () => {
+        calls++;
+        if (calls < 3) throw new Error('not yet');
+      });
+
+    await tryProcess(); // fail (attempt 1)
+    await tryProcess(); // fail (attempt 2)
+    await tryProcess(); // succeed (attempt 3)
+
+    const [item] = queue.getAll();
+    assert.equal(item.status, 'synced');
+    assert.equal(item.attempts, 3);
+  });
+});
+
+// ─── getAll ───────────────────────────────────────────────────────────────────
+
+describe('SyncQueue – getAll', () => {
+  it('returns all items regardless of status', async () => {
+    const queue = new SyncQueue({ maxAttempts: 1 });
+    queue.enqueue('op1', {});
+    queue.enqueue('op2', {});
+
+    let first = true;
+    await queue.process(async () => {
+      if (first) { first = false; throw new Error('fail'); }
+    });
+
+    const all = queue.getAll();
+    assert.equal(all.length, 2);
+  });
+
+  it('returns a copy — mutations do not affect the queue', () => {
+    const queue = new SyncQueue();
+    queue.enqueue('op', {});
+    const all = queue.getAll();
+    all.pop();
+    assert.equal(queue.getAll().length, 1);
+  });
+});
+
+// ─── getByStatus ──────────────────────────────────────────────────────────────
+
+describe('SyncQueue – getByStatus', () => {
+  it('filters by status correctly', async () => {
+    const queue = new SyncQueue({ maxAttempts: 1 });
+    queue.enqueue('op1', {});
+    queue.enqueue('op2', {});
+
+    let first = true;
+    await queue.process(async () => {
+      if (first) { first = false; throw new Error('fail'); }
+    });
+
+    assert.equal(queue.getByStatus('failed').length, 1);
+    assert.equal(queue.getByStatus('synced').length, 1);
+    assert.equal(queue.getByStatus('pending').length, 0);
+  });
+});
+
+// ─── clearSynced ──────────────────────────────────────────────────────────────
+
+describe('SyncQueue – clearSynced', () => {
+  it('removes only synced items', async () => {
+    const queue = new SyncQueue({ maxAttempts: 1 });
+    queue.enqueue('synced-op', {});
+    queue.enqueue('pending-op', {});
+
+    // Process both items — fail the second one
+    let first = true;
+    await queue.process(async () => {
+      if (!first) throw new Error('keep failed');
+      first = false;
+    });
+
+    // At this point: one synced, one failed
+    queue.clearSynced();
+
+    const all = queue.getAll();
     assert.equal(all.length, 1);
-    const op = all[0];
-    assert.ok(op.id);
-    assert.equal(op.type, 'delete');
-    assert.equal(op.providerId, 'dropbox');
-    assert.equal(op.fileId, 'xyz');
-    assert.equal(op.fileName, 'file.docx');
-    assert.equal(typeof op.createdAt, 'number');
-    assert.equal(op.retries, 0);
+    assert.equal(all[0].status, 'failed');
+  });
+
+  it('does not remove pending or failed items', () => {
+    const queue = new SyncQueue();
+    queue.enqueue('p', {});
+    queue.clearSynced();
+    assert.equal(queue.getAll().length, 1);
   });
 });
 
-describe('sync-queue — removeSyncOperation', () => {
-  it('removes the operation with the given ID', async () => {
-    const id1 = await enqueueSyncOperation(makeOp({ fileName: 'keep.pdf' }));
-    const id2 = await enqueueSyncOperation(makeOp({ fileName: 'remove.pdf' }));
+// ─── clear ────────────────────────────────────────────────────────────────────
 
-    await removeSyncOperation(id2);
-
-    const all = await getAllPending();
-    assert.equal(all.length, 1);
-    assert.equal(all[0].id, id1);
-  });
-
-  it('does not throw when removing a non-existent ID', async () => {
-    await assert.doesNotReject(() => removeSyncOperation('nonexistent-id'));
-  });
-
-  it('leaves other operations intact', async () => {
-    const id1 = await enqueueSyncOperation(makeOp({ fileName: 'a.pdf' }));
-    const id2 = await enqueueSyncOperation(makeOp({ fileName: 'b.pdf' }));
-    const id3 = await enqueueSyncOperation(makeOp({ fileName: 'c.pdf' }));
-
-    await removeSyncOperation(id2);
-
-    const all = await getAllPending();
-    const ids = all.map(op => op.id);
-    assert.ok(ids.includes(id1));
-    assert.ok(!ids.includes(id2));
-    assert.ok(ids.includes(id3));
+describe('SyncQueue – clear', () => {
+  it('removes all items', async () => {
+    const queue = new SyncQueue();
+    queue.enqueue('op1', {});
+    queue.enqueue('op2', {});
+    await queue.process(async () => {});
+    queue.clear();
+    assert.equal(queue.getAll().length, 0);
   });
 });
 
-describe('sync-queue — clearAll', () => {
-  it('empties the queue', async () => {
-    await enqueueSyncOperation(makeOp());
-    await enqueueSyncOperation(makeOp());
-    await clearAll();
-    assert.equal(await getPendingCount(), 0);
-    assert.deepEqual(await getAllPending(), []);
-  });
+// ─── counts ───────────────────────────────────────────────────────────────────
 
-  it('does not throw on empty queue', async () => {
-    await assert.doesNotReject(() => clearAll());
-  });
+describe('SyncQueue – pendingCount/syncedCount/failedCount', () => {
+  it('returns correct counts', async () => {
+    const queue = new SyncQueue({ maxAttempts: 1 });
 
-  it('returns null from dequeueSyncOperation after clearAll', async () => {
-    await enqueueSyncOperation(makeOp());
-    await clearAll();
-    const op = await dequeueSyncOperation();
-    assert.equal(op, null);
-  });
-});
+    queue.enqueue('a', {});
+    queue.enqueue('b', {});
+    queue.enqueue('c', {});
 
-describe('sync-queue — persistence across dequeue calls', () => {
-  it('operations persist across multiple dequeueSyncOperation calls', async () => {
-    const id1 = await enqueueSyncOperation(makeOp({ fileName: 'one.pdf' }));
-    const id2 = await enqueueSyncOperation(makeOp({ fileName: 'two.pdf' }));
+    assert.equal(queue.pendingCount, 3);
+    assert.equal(queue.syncedCount, 0);
+    assert.equal(queue.failedCount, 0);
 
-    // Dequeue does not remove items
-    const peek1 = await dequeueSyncOperation();
-    const peek2 = await dequeueSyncOperation();
-    const peek3 = await dequeueSyncOperation();
+    let calls = 0;
+    await queue.process(async () => {
+      calls++;
+      if (calls === 2) throw new Error('fail b');
+    });
 
-    assert.equal(peek1.id, id1);
-    assert.equal(peek2.id, id1); // same item still there
-    assert.equal(peek3.id, id1); // still the same
-
-    // Both items still in queue
-    assert.equal(await getPendingCount(), 2);
-
-    // Manually remove first, then dequeue should return second
-    await removeSyncOperation(id1);
-    const next = await dequeueSyncOperation();
-    assert.equal(next.id, id2);
+    // After: a=synced, b=failed, c=synced
+    assert.equal(queue.pendingCount, 0);
+    assert.equal(queue.syncedCount, 2);
+    assert.equal(queue.failedCount, 1);
   });
 });

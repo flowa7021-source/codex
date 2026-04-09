@@ -1,198 +1,127 @@
 // @ts-check
-// ─── Background Sync Queue ────────────────────────────────────────────────────
-// Persists pending cloud operations to IndexedDB so they can be replayed
-// when connectivity is restored via the Service Worker Background Sync API.
+// ─── Sync Queue ───────────────────────────────────────────────────────────────
+// Offline-first sync queue for operations that need to be retried.
 
-const DB_NAME = 'novareader-sync';
-const DB_VERSION = 1;
-const STORE_NAME = 'sync-queue';
-const SW_SYNC_TAG = 'cloud-sync';
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface SyncOperation {
+export type SyncStatus = 'pending' | 'syncing' | 'synced' | 'failed';
+
+export interface SyncItem<T = unknown> {
   id: string;
-  type: 'upload' | 'download' | 'delete';
-  providerId: string;
-  fileId?: string;
-  fileName?: string;
-  data?: ArrayBuffer;
-  mimeType?: string;
+  operation: string;
+  payload: T;
+  status: SyncStatus;
+  attempts: number;
+  maxAttempts: number;
   createdAt: number;
-  retries: number;
+  lastAttemptAt?: number;
+  error?: string;
 }
 
-let _db: IDBDatabase | null = null;
-
-/**
- * Open or return the sync queue IndexedDB database.
- */
-async function openSyncDb(): Promise<IDBDatabase> {
-  if (_db) return _db;
-
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-
-    request.onupgradeneeded = (event) => {
-      const database = (event.target as IDBOpenDBRequest).result;
-      if (!database.objectStoreNames.contains(STORE_NAME)) {
-        database.createObjectStore(STORE_NAME, { keyPath: 'id' });
-      }
-    };
-
-    request.onsuccess = (event) => {
-      _db = (event.target as IDBOpenDBRequest).result;
-      resolve(_db);
-    };
-
-    request.onerror = () => reject(request.error);
-  });
+export interface SyncQueueOptions {
+  maxAttempts?: number;  // default 3
+  retryDelayMs?: number; // default 1000
 }
 
-/**
- * Generate a unique ID for a sync operation.
- */
+// ─── ID generation ────────────────────────────────────────────────────────────
+
+let _counter = 0;
+
 function generateId(): string {
-  return `sync-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  _counter += 1;
+  return `sync-${Date.now()}-${_counter}`;
 }
 
-/**
- * Checks whether Background Sync is supported in this environment.
- */
-export function isSyncSupported(): boolean {
-  return 'serviceWorker' in navigator && 'SyncManager' in window;
-}
+// ─── SyncQueue ────────────────────────────────────────────────────────────────
 
-/**
- * Add a new operation to the IDB queue and register a Background Sync tag
- * with the Service Worker (if available).
- *
- * @returns The generated operation ID.
- */
-export async function enqueueSyncOperation(
-  op: Omit<SyncOperation, 'id' | 'createdAt' | 'retries'>,
-): Promise<string> {
-  const id = generateId();
-  const record: SyncOperation = {
-    ...op,
-    id,
-    createdAt: Date.now(),
-    retries: 0,
-  };
+export class SyncQueue<T = unknown> {
+  #items: SyncItem<T>[] = [];
+  #maxAttempts: number;
+  #retryDelayMs: number;
 
-  const db = await openSyncDb();
+  constructor(options?: SyncQueueOptions) {
+    this.#maxAttempts = options?.maxAttempts ?? 3;
+    this.#retryDelayMs = options?.retryDelayMs ?? 1000;
+  }
 
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.put(record);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
+  // ─── Public API ───────────────────────────────────────────────────────────
 
-  // Register Background Sync tag if SW + SyncManager are available
-  if (isSyncSupported()) {
-    try {
-      const registration = await navigator.serviceWorker.ready;
-      // SyncManager is a browser API; cast to avoid TS complaints in non-browser envs
-      const syncManager = (registration as ServiceWorkerRegistration & { sync?: { register(tag: string): Promise<void> } }).sync;
-      if (syncManager) {
-        await syncManager.register(SW_SYNC_TAG);
+  /** Add an item to the sync queue. Returns the newly created item. */
+  enqueue(operation: string, payload: T): SyncItem<T> {
+    const item: SyncItem<T> = {
+      id: generateId(),
+      operation,
+      payload,
+      status: 'pending',
+      attempts: 0,
+      maxAttempts: this.#maxAttempts,
+      createdAt: Date.now(),
+    };
+    this.#items.push(item);
+    return item;
+  }
+
+  /**
+   * Process the queue with a sync function.
+   * Runs the syncFn for each pending item (and failed items that still have
+   * attempts remaining). Marks items as 'synced' on success or increments
+   * attempts and marks as 'failed' when maxAttempts is exhausted.
+   */
+  async process(syncFn: (item: SyncItem<T>) => Promise<void>): Promise<void> {
+    const candidates = this.#items.filter(
+      (item) =>
+        item.status === 'pending' ||
+        (item.status === 'failed' && item.attempts < item.maxAttempts),
+    );
+
+    for (const item of candidates) {
+      item.status = 'syncing';
+      item.attempts++;
+      item.lastAttemptAt = Date.now();
+
+      try {
+        await syncFn(item);
+        item.status = 'synced';
+        item.error = undefined;
+      } catch (err) {
+        item.error = err instanceof Error ? err.message : String(err);
+        item.status = 'failed';
       }
-    } catch {
-      // SW not available or sync registration failed — silently ignore
     }
   }
 
-  return id;
-}
+  /** Get all items (all statuses). */
+  getAll(): SyncItem<T>[] {
+    return this.#items.slice();
+  }
 
-/**
- * Return the oldest pending operation (FIFO by createdAt), or null if the
- * queue is empty. The operation is NOT removed from the queue.
- */
-export async function dequeueSyncOperation(): Promise<SyncOperation | null> {
-  const db = await openSyncDb();
+  /** Get items filtered by status. */
+  getByStatus(status: SyncStatus): SyncItem<T>[] {
+    return this.#items.filter((item) => item.status === status);
+  }
 
-  const all = await new Promise<SyncOperation[]>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.getAll();
-    req.onsuccess = () => resolve((req.result as SyncOperation[]) || []);
-    req.onerror = () => reject(req.error);
-  });
+  /** Remove all items with status 'synced'. */
+  clearSynced(): void {
+    this.#items = this.#items.filter((item) => item.status !== 'synced');
+  }
 
-  if (all.length === 0) return null;
+  /** Remove all items from the queue. */
+  clear(): void {
+    this.#items = [];
+  }
 
-  // Sort ascending by createdAt to get the oldest first
-  all.sort((a, b) => a.createdAt - b.createdAt);
-  return all[0];
-}
+  /** Number of pending items. */
+  get pendingCount(): number {
+    return this.#items.filter((item) => item.status === 'pending').length;
+  }
 
-/**
- * Remove a completed (or permanently failed) operation from the queue.
- */
-export async function removeSyncOperation(id: string): Promise<void> {
-  const db = await openSyncDb();
+  /** Number of synced items. */
+  get syncedCount(): number {
+    return this.#items.filter((item) => item.status === 'synced').length;
+  }
 
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.delete(id);
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
-
-/**
- * Return the number of pending operations in the queue.
- */
-export async function getPendingCount(): Promise<number> {
-  const db = await openSyncDb();
-
-  return new Promise<number>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.count();
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-/**
- * Return all pending operations sorted oldest-first by createdAt.
- */
-export async function getAllPending(): Promise<SyncOperation[]> {
-  const db = await openSyncDb();
-
-  const all = await new Promise<SyncOperation[]>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.getAll();
-    req.onsuccess = () => resolve((req.result as SyncOperation[]) || []);
-    req.onerror = () => reject(req.error);
-  });
-
-  return all.sort((a, b) => a.createdAt - b.createdAt);
-}
-
-/**
- * Clear the entire sync queue.
- */
-export async function clearAll(): Promise<void> {
-  const db = await openSyncDb();
-
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, 'readwrite');
-    const store = tx.objectStore(STORE_NAME);
-    const req = store.clear();
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
-}
-
-/**
- * Reset the cached DB reference (for testing only).
- * @internal
- */
-export function _resetDbForTesting(): void {
-  _db = null;
+  /** Number of failed items. */
+  get failedCount(): number {
+    return this.#items.filter((item) => item.status === 'failed').length;
+  }
 }
