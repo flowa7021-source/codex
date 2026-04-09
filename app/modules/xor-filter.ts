@@ -9,7 +9,7 @@
 const NUM_HASHES = 3;
 
 /** Maximum construction attempts before giving up. */
-const MAX_CONSTRUCT_ATTEMPTS = 100;
+const MAX_CONSTRUCT_ATTEMPTS = 1000;
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ export class XorFilter {
     }
 
     // Table size must be ~1.23x the number of items, split across 3 segments.
-    const segmentLength = Math.max(1, Math.ceil(unique.length * 1.23 / NUM_HASHES));
+    const segmentLength = Math.max(4, Math.ceil(unique.length * 1.23 / NUM_HASHES));
     this.#tableSize = segmentLength * NUM_HASHES;
 
     // Try different seeds until construction succeeds.
