@@ -215,9 +215,9 @@ export function parsePatch(unifiedDiff: string): Patch | null {
     hunks.push({ oldStart, oldLines, newStart, newLines, lines: hunkLines });
   }
 
+  // If the input is non-empty but produced no hunks, it is not a valid patch
   if (hunks.length === 0 && unifiedDiff.trim() !== '') {
-    // Check if it looked like it had hunk headers but we failed to parse
-    if (!unifiedDiff.includes('@@')) return null;
+    return null;
   }
 
   return { version: 1, hunks };
