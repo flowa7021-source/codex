@@ -4,10 +4,8 @@
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-const enum Color {
-  Red = 0,
-  Black = 1,
-}
+const Color = { Red: 0, Black: 1 } as const;
+type Color = (typeof Color)[keyof typeof Color];
 
 interface RBNode<K, V> {
   key: K;
