@@ -1,129 +1,199 @@
 // @ts-check
-// ─── Config Manager ──────────────────────────────────────────────────────────
-// Layered configuration: defaults < stored (localStorage) < runtime overrides.
+// ─── Config Manager ───────────────────────────────────────────────────────────
+// Hierarchical configuration manager with dot-notation key access,
+// change subscriptions, and defaults/reset support.
 
-// ─── Public API ──────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-/**
- * Configuration manager that supports layered configs (defaults < stored < runtime).
- */
-export class ConfigManager<T extends Record<string, unknown>> {
-  #defaults: T;
-  #current: T;
-  #storageKey: string | undefined;
-  #listeners: Map<keyof T, Set<(value: unknown) => void>>;
+export interface ConfigManagerOptions {
+  defaults?: Record<string, unknown>;
+  /** If true, throw on access of undefined key; default false */
+  strict?: boolean;
+}
 
-  constructor(defaults: T, storageKey?: string) {
-    this.#defaults = { ...defaults };
-    this.#storageKey = storageKey;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Split a dot-notation key into path segments. */
+function splitKey(key: string): string[] {
+  return key.split('.');
+}
+
+/** Read a value from a nested object by path segments. */
+function getByPath(obj: Record<string, unknown>, segments: string[]): unknown {
+  let current: unknown = obj;
+  for (const seg of segments) {
+    if (current === null || typeof current !== 'object') return undefined;
+    current = (current as Record<string, unknown>)[seg];
+  }
+  return current;
+}
+
+/** Set a value in a nested object by path segments, creating intermediate objects. */
+function setByPath(
+  obj: Record<string, unknown>,
+  segments: string[],
+  value: unknown,
+): void {
+  let current: Record<string, unknown> = obj;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const seg = segments[i];
+    const next = current[seg];
+    if (next === null || typeof next !== 'object') {
+      current[seg] = {};
+    }
+    current = current[seg] as Record<string, unknown>;
+  }
+  current[segments[segments.length - 1]] = value;
+}
+
+/** Delete a key from a nested object by path segments. Returns true if the key existed. */
+function deleteByPath(obj: Record<string, unknown>, segments: string[]): boolean {
+  let current: unknown = obj;
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (current === null || typeof current !== 'object') return false;
+    current = (current as Record<string, unknown>)[segments[i]];
+  }
+  if (current === null || typeof current !== 'object') return false;
+  const parent = current as Record<string, unknown>;
+  const lastSeg = segments[segments.length - 1];
+  if (!(lastSeg in parent)) return false;
+  delete parent[lastSeg];
+  return true;
+}
+
+/** Deep clone a plain object (no functions, no class instances). */
+function deepClone(obj: Record<string, unknown>): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+// ─── ConfigManager ────────────────────────────────────────────────────────────
+
+export class ConfigManager {
+  #data: Record<string, unknown>;
+  #defaults: Record<string, unknown>;
+  #strict: boolean;
+  #listeners: Map<string, Set<(value: unknown) => void>>;
+
+  constructor(options?: ConfigManagerOptions) {
+    this.#defaults = options?.defaults ? deepClone(options.defaults) : {};
+    this.#strict = options?.strict ?? false;
+    this.#data = deepClone(this.#defaults);
     this.#listeners = new Map();
-
-    // Load persisted values if a storage key was given
-    const stored = storageKey ? this.#loadFromStorage() : {};
-    this.#current = { ...defaults, ...stored };
   }
 
-  /** Get a config value by key. */
-  get<K extends keyof T>(key: K): T[K] {
-    return this.#current[key];
+  /** Set a single key (dot-notation: 'db.host'). */
+  set(key: string, value: unknown): void {
+    const segments = splitKey(key);
+    setByPath(this.#data, segments, value);
+    this.#notifyListeners(key, value);
   }
 
-  /** Set a config value. Persists to localStorage if storageKey was given. */
-  set<K extends keyof T>(key: K, value: T[K]): void {
-    this.#current[key] = value;
-    this.#persist();
-    this.#notify(key, value);
-  }
-
-  /** Set multiple values at once. */
-  setMany(values: Partial<T>): void {
-    for (const key of Object.keys(values) as (keyof T)[]) {
-      if (key in values) {
-        this.#current[key] = values[key] as T[keyof T];
-        this.#notify(key, values[key]);
-      }
+  /** Get value by key (dot-notation). Returns undefined if absent. */
+  get<T = unknown>(key: string): T | undefined {
+    const segments = splitKey(key);
+    const value = getByPath(this.#data, segments) as T | undefined;
+    if (this.#strict && value === undefined) {
+      throw new Error(`ConfigManager: key "${key}" is not defined`);
     }
-    this.#persist();
+    return value;
   }
 
-  /** Reset a key to its default value. */
-  reset<K extends keyof T>(key: K): void {
-    this.#current[key] = this.#defaults[key];
-    this.#persist();
-    this.#notify(key, this.#defaults[key]);
+  /** Get with a fallback default. */
+  getOrDefault<T>(key: string, defaultValue: T): T {
+    const segments = splitKey(key);
+    const value = getByPath(this.#data, segments);
+    return value !== undefined ? (value as T) : defaultValue;
   }
 
-  /** Reset all keys to defaults. */
-  resetAll(): void {
-    for (const key of Object.keys(this.#defaults) as (keyof T)[]) {
-      this.#current[key] = this.#defaults[key];
-      this.#notify(key, this.#defaults[key]);
+  /** Check if key exists. */
+  has(key: string): boolean {
+    const segments = splitKey(key);
+    return getByPath(this.#data, segments) !== undefined;
+  }
+
+  /** Delete a key. */
+  delete(key: string): boolean {
+    const segments = splitKey(key);
+    const deleted = deleteByPath(this.#data, segments);
+    if (deleted) {
+      this.#notifyListeners(key, undefined);
     }
-    this.#persist();
+    return deleted;
   }
 
-  /**
-   * Subscribe to changes for a specific key.
-   * @returns unsubscribe function
-   */
-  onChange<K extends keyof T>(key: K, callback: (value: T[K]) => void): () => void {
+  /** Merge a plain object into config (shallow merge at root level). */
+  merge(obj: Record<string, unknown>): void {
+    Object.assign(this.#data, obj);
+    for (const key of Object.keys(obj)) {
+      this.#notifyListeners(key, obj[key]);
+    }
+  }
+
+  /** Get entire config as plain object. */
+  toObject(): Record<string, unknown> {
+    return deepClone(this.#data);
+  }
+
+  /** Reset to defaults. */
+  reset(): void {
+    this.#data = deepClone(this.#defaults);
+  }
+
+  /** Subscribe to changes on a specific key. Returns unsubscribe fn. */
+  onChange(key: string, callback: (value: unknown) => void): () => void {
     if (!this.#listeners.has(key)) {
       this.#listeners.set(key, new Set());
     }
-    const cb = callback as (value: unknown) => void;
-    this.#listeners.get(key)!.add(cb);
+    const callbacks = this.#listeners.get(key)!;
+    callbacks.add(callback);
     return () => {
-      this.#listeners.get(key)?.delete(cb);
+      callbacks.delete(callback);
+      if (callbacks.size === 0) {
+        this.#listeners.delete(key);
+      }
     };
   }
 
-  /** Get the full current config (shallow copy). */
-  getAll(): T {
-    return { ...this.#current };
-  }
+  // ─── Private ──────────────────────────────────────────────────────────────
 
-  /** Whether a key has been overridden from its default. */
-  isModified<K extends keyof T>(key: K): boolean {
-    return this.#current[key] !== this.#defaults[key];
-  }
-
-  // ─── Private helpers ──────────────────────────────────────────────────────
-
-  #notify<K extends keyof T>(key: K, value: unknown): void {
-    const listeners = this.#listeners.get(key);
-    if (listeners) {
-      for (const cb of listeners) {
+  #notifyListeners(key: string, value: unknown): void {
+    const callbacks = this.#listeners.get(key);
+    if (callbacks) {
+      for (const cb of callbacks) {
         cb(value);
       }
     }
   }
-
-  #persist(): void {
-    if (!this.#storageKey) return;
-    try {
-      localStorage.setItem(this.#storageKey, JSON.stringify(this.#current));
-    } catch {
-      // Storage unavailable — silently ignore
-    }
-  }
-
-  #loadFromStorage(): Partial<T> {
-    try {
-      const raw = localStorage.getItem(this.#storageKey!);
-      if (raw !== null) return JSON.parse(raw) as Partial<T>;
-    } catch {
-      // Corrupt or unavailable storage — fall back to defaults
-    }
-    return {};
-  }
 }
 
 /**
- * Create a ConfigManager instance.
+ * Factory function: create a ConfigManager pre-loaded with defaults.
+ * If storageKey is provided, persists changes to localStorage (browser only).
  */
-export function createConfig<T extends Record<string, unknown>>(
-  defaults: T,
+export function createConfig(
+  defaults: Record<string, unknown>,
   storageKey?: string,
-): ConfigManager<T> {
-  return new ConfigManager(defaults, storageKey);
+): ConfigManager {
+  const manager = new ConfigManager({ defaults });
+  if (storageKey && typeof globalThis.localStorage !== 'undefined') {
+    // Persist on every change
+    const persist = () => {
+      try {
+        globalThis.localStorage.setItem(storageKey, JSON.stringify(manager.toObject()));
+      } catch {
+        // ignore storage errors
+      }
+    };
+    // Wrap set/delete/merge/reset to persist after each call
+    const origSet = manager.set.bind(manager);
+    manager.set = (key: string, value: unknown) => { origSet(key, value); persist(); };
+    const origDelete = manager.delete.bind(manager);
+    manager.delete = (key: string) => { const r = origDelete(key); persist(); return r; };
+    const origMerge = manager.merge.bind(manager);
+    manager.merge = (obj: Record<string, unknown>) => { origMerge(obj); persist(); };
+    const origReset = manager.reset.bind(manager);
+    manager.reset = () => { origReset(); persist(); };
+    persist();
+  }
+  return manager;
 }

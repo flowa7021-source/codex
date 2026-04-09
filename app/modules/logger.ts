@@ -1,175 +1,240 @@
 // @ts-check
-// ─── Structured Logger ───────────────────────────────────────────────────────
-// Provides levelled, contextual logging with history tracking and child loggers.
+// ─── Logger ───────────────────────────────────────────────────────────────────
+// Structured logger with levels, transports, child loggers, and memory capture.
 
-/**
- * Log levels in ascending severity order.
- */
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-/**
- * A log entry.
- */
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'silent';
+
 export interface LogEntry {
   level: LogLevel;
   message: string;
   timestamp: number;
-  context?: string;
-  data?: unknown;
+  context?: Record<string, unknown>;
+  error?: Error;
 }
 
-/**
- * Logger configuration.
- */
-export interface LoggerConfig {
-  /** Minimum level to emit (default: 'info'). */
+export type Transport = (entry: LogEntry) => void;
+
+export interface LoggerOptions {
   level?: LogLevel;
-  /** Context prefix for messages. */
-  context?: string;
-  /** Max entries to keep in history (default: 100). */
-  maxHistory?: number;
-  /** Custom log handler called for every emitted entry. */
-  onLog?: (entry: LogEntry) => void;
+  prefix?: string;
+  transports?: Transport[];
+  silent?: boolean;
 }
 
-// ─── Level ordering ──────────────────────────────────────────────────────────
+// ─── Level ordering ───────────────────────────────────────────────────────────
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
   debug: 0,
   info: 1,
   warn: 2,
   error: 3,
+  silent: 4,
 };
 
-// ─── Logger class ────────────────────────────────────────────────────────────
+// ─── Default console transport ────────────────────────────────────────────────
 
-/**
- * A logger instance.
- */
+function defaultConsoleTransport(entry: LogEntry): void {
+  const msg = entry.message;
+  switch (entry.level) {
+    case 'debug':
+      console.debug(msg, ...(entry.context !== undefined ? [entry.context] : []));
+      break;
+    case 'info':
+      console.info(msg, ...(entry.context !== undefined ? [entry.context] : []));
+      break;
+    case 'warn':
+      console.warn(msg, ...(entry.context !== undefined ? [entry.context] : []));
+      break;
+    case 'error':
+      console.error(
+        msg,
+        ...(entry.error !== undefined ? [entry.error] : []),
+        ...(entry.context !== undefined ? [entry.context] : []),
+      );
+      break;
+  }
+}
+
+// ─── Logger ───────────────────────────────────────────────────────────────────
+
 export class Logger {
-  readonly config: LoggerConfig;
-  #history: LogEntry[] = [];
+  #level: LogLevel;
+  #prefix: string;
+  #transports: Transport[];
+  #silent: boolean;
+  #memoryStore: LogEntry[] | null;
+  #parentContext: Record<string, unknown>;
 
-  constructor(config: LoggerConfig = {}) {
-    this.config = {
-      level: 'info',
-      maxHistory: 100,
-      ...config,
-    };
-  }
+  constructor(options?: LoggerOptions) {
+    this.#silent = options?.silent ?? false;
+    this.#level = this.#silent ? 'silent' : (options?.level ?? 'info');
+    this.#prefix = options?.prefix ?? '';
+    this.#parentContext = {};
+    this.#memoryStore = null;
 
-  // ─── Private helpers ─────────────────────────────────────────────────────
-
-  #emit(level: LogLevel, message: string, data?: unknown): void {
-    const minLevel = this.config.level ?? 'info';
-    if (LEVEL_ORDER[level] < LEVEL_ORDER[minLevel]) return;
-
-    const entry: LogEntry = {
-      level,
-      message,
-      timestamp: Date.now(),
-    };
-
-    if (this.config.context !== undefined) {
-      entry.context = this.config.context;
-    }
-
-    if (data !== undefined) {
-      entry.data = data;
-    }
-
-    // Append to history, dropping the oldest entry when full.
-    const maxHistory = this.config.maxHistory ?? 100;
-    if (this.#history.length >= maxHistory) {
-      this.#history.shift();
-    }
-    this.#history.push(entry);
-
-    // Invoke custom handler if provided.
-    if (typeof this.config.onLog === 'function') {
-      this.config.onLog(entry);
-    }
-
-    // Write to console.
-    const prefix = this.config.context ? `[${this.config.context}]` : '';
-    const label = prefix ? `${prefix} ${message}` : message;
-
-    if (data !== undefined) {
-      console[level](label, data);
+    if (options?.transports !== undefined) {
+      this.#transports = [...options.transports];
     } else {
-      console[level](label);
+      this.#transports = [defaultConsoleTransport];
     }
   }
 
-  // ─── Public logging API ──────────────────────────────────────────────────
+  // ─── Private factory for child / memory loggers ───────────────────────────
 
-  debug(message: string, data?: unknown): void {
-    this.#emit('debug', message, data);
+  static #fromParts(
+    level: LogLevel,
+    prefix: string,
+    silent: boolean,
+    transports: Transport[],
+    memoryStore: LogEntry[] | null,
+    parentContext: Record<string, unknown>,
+  ): Logger {
+    const logger = new Logger();
+    logger.#level = level;
+    logger.#prefix = prefix;
+    logger.#silent = silent;
+    logger.#transports = transports;
+    logger.#memoryStore = memoryStore;
+    logger.#parentContext = parentContext;
+    return logger;
   }
 
-  info(message: string, data?: unknown): void {
-    this.#emit('info', message, data);
+  // ─── Internal helpers ─────────────────────────────────────────────────────
+
+  #shouldLog(level: LogLevel): boolean {
+    if (this.#silent) return false;
+    return LEVEL_ORDER[level] >= LEVEL_ORDER[this.#level];
   }
 
-  warn(message: string, data?: unknown): void {
-    this.#emit('warn', message, data);
+  #formatMessage(message: string): string {
+    return this.#prefix ? `${this.#prefix} ${message}` : message;
   }
 
-  error(message: string, data?: unknown): void {
-    this.#emit('error', message, data);
+  #mergeContext(context?: Record<string, unknown>): Record<string, unknown> | undefined {
+    const merged = { ...this.#parentContext, ...(context ?? {}) };
+    return Object.keys(merged).length > 0 ? merged : undefined;
   }
 
-  // ─── History ─────────────────────────────────────────────────────────────
-
-  /** Get all logged entries (up to maxHistory). */
-  getHistory(): LogEntry[] {
-    return this.#history.slice();
+  #emit(entry: LogEntry): void {
+    if (this.#memoryStore !== null) {
+      this.#memoryStore.push(entry);
+    }
+    for (const transport of this.#transports) {
+      transport(entry);
+    }
   }
 
-  /** Clear the log history. */
-  clearHistory(): void {
-    this.#history = [];
-  }
+  // ─── Public API ───────────────────────────────────────────────────────────
 
-  // ─── Child logger ─────────────────────────────────────────────────────────
-
-  /**
-   * Create a child logger with additional context.
-   * Inherits parent config; the context is appended with a '.' separator.
-   */
-  child(context: string): Logger {
-    const parentContext = this.config.context;
-    const childContext = parentContext ? `${parentContext}.${context}` : context;
-    return new Logger({
-      ...this.config,
-      context: childContext,
+  debug(message: string, context?: Record<string, unknown>): void {
+    if (!this.#shouldLog('debug')) return;
+    this.#emit({
+      level: 'debug',
+      message: this.#formatMessage(message),
+      timestamp: Date.now(),
+      context: this.#mergeContext(context),
     });
   }
+
+  info(message: string, context?: Record<string, unknown>): void {
+    if (!this.#shouldLog('info')) return;
+    this.#emit({
+      level: 'info',
+      message: this.#formatMessage(message),
+      timestamp: Date.now(),
+      context: this.#mergeContext(context),
+    });
+  }
+
+  warn(message: string, context?: Record<string, unknown>): void {
+    if (!this.#shouldLog('warn')) return;
+    this.#emit({
+      level: 'warn',
+      message: this.#formatMessage(message),
+      timestamp: Date.now(),
+      context: this.#mergeContext(context),
+    });
+  }
+
+  error(message: string, error?: Error, context?: Record<string, unknown>): void {
+    if (!this.#shouldLog('error')) return;
+    this.#emit({
+      level: 'error',
+      message: this.#formatMessage(message),
+      timestamp: Date.now(),
+      context: this.#mergeContext(context),
+      error,
+    });
+  }
+
+  /** Change minimum log level. */
+  setLevel(level: LogLevel): void {
+    this.#level = level;
+    this.#silent = level === 'silent';
+  }
+
+  /** Add a transport. */
+  addTransport(transport: Transport): void {
+    this.#transports.push(transport);
+  }
+
+  /** Create a child logger with additional context merged in. */
+  child(context: Record<string, unknown>): Logger {
+    return Logger.#fromParts(
+      this.#level,
+      this.#prefix,
+      this.#silent,
+      this.#transports,
+      this.#memoryStore,
+      { ...this.#parentContext, ...context },
+    );
+  }
+
+  /** Get all entries captured by the memory transport (if enabled). */
+  getEntries(): LogEntry[] {
+    return this.#memoryStore !== null ? [...this.#memoryStore] : [];
+  }
+
+  // ─── Internal: attach memory store (used by createMemoryLogger) ───────────
+
+  /** @internal */
+  _attachMemoryStore(store: LogEntry[]): void {
+    this.#memoryStore = store;
+  }
 }
 
-// ─── Global default logger ───────────────────────────────────────────────────
+// ─── createMemoryLogger ───────────────────────────────────────────────────────
 
-/** Default global logger instance. */
+/** Create a logger that captures entries in memory (useful for tests). */
+export function createMemoryLogger(options?: LoggerOptions): Logger {
+  const memoryStore: LogEntry[] = [];
+  const logger = new Logger({ ...options, transports: options?.transports ?? [] });
+  logger._attachMemoryStore(memoryStore);
+  return logger;
+}
+
+
+/** Default module-level logger instance. */
 export const logger = new Logger();
 
-// ─── Convenience functions ───────────────────────────────────────────────────
-
-/** Log a debug message using the global logger. */
-export function debug(message: string, data?: unknown): void {
-  logger.debug(message, data);
+/** Convenience function: log at debug level on the default logger. */
+export function debug(message: string, context?: Record<string, unknown>): void {
+  logger.debug(message, context);
 }
 
-/** Log an info message using the global logger. */
-export function info(message: string, data?: unknown): void {
-  logger.info(message, data);
+/** Convenience function: log at info level on the default logger. */
+export function info(message: string, context?: Record<string, unknown>): void {
+  logger.info(message, context);
 }
 
-/** Log a warn message using the global logger. */
-export function warn(message: string, data?: unknown): void {
-  logger.warn(message, data);
+/** Convenience function: log at warn level on the default logger. */
+export function warn(message: string, context?: Record<string, unknown>): void {
+  logger.warn(message, context);
 }
 
-/** Log an error message using the global logger. */
-export function error(message: string, data?: unknown): void {
-  logger.error(message, data);
+/** Convenience function: log at error level on the default logger. */
+export function error(message: string, err?: Error, context?: Record<string, unknown>): void {
+  logger.error(message, err, context);
 }
