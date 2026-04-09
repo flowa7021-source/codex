@@ -58,6 +58,7 @@ export function dirname(path: string): string {
 /** Get filename from path. */
 export function basename(path: string, ext?: string): string {
   const norm = normalize(path);
+  if (norm === '/') return '/';
   const parts = norm.split('/');
   let base = parts[parts.length - 1];
   if (base === '') base = parts[parts.length - 2] ?? '';

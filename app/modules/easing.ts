@@ -105,18 +105,24 @@ const BACK_DEFAULT_OVERSHOOT = 1.70158;
 
 /** Ease in back — overshoots at the end. */
 export function easeInBack(t: number, overshoot = BACK_DEFAULT_OVERSHOOT): number {
+  if (t === 0) return 0;
+  if (t === 1) return 1;
   const c3 = overshoot + 1;
   return c3 * t * t * t - overshoot * t * t;
 }
 
 /** Ease out back — overshoots at the start. */
 export function easeOutBack(t: number, overshoot = BACK_DEFAULT_OVERSHOOT): number {
+  if (t === 0) return 0;
+  if (t === 1) return 1;
   const c3 = overshoot + 1;
   return 1 + c3 * Math.pow(t - 1, 3) + overshoot * Math.pow(t - 1, 2);
 }
 
 /** Ease in-out back. */
 export function easeInOutBack(t: number, overshoot = BACK_DEFAULT_OVERSHOOT): number {
+  if (t === 0) return 0;
+  if (t === 1) return 1;
   const c2 = overshoot * 1.525;
   return t < 0.5
     ? (Math.pow(2 * t, 2) * ((c2 + 1) * 2 * t - c2)) / 2

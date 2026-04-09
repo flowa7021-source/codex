@@ -38,9 +38,9 @@ function subsequenceMatch(pattern: string, str: string): number[] | null {
  * Score a set of matched indices against the original `str`.
  *
  * Factors:
- *  - Consecutive run bonus: each run of consecutive indices contributes a bonus
- *  - Word-start bonus: match at position 0 or after a non-alphanumeric char
- *  - Coverage: matched / total length
+ *  - Consecutive runs: longer unbroken runs score higher
+ *  - Word-start bonus: first matched char is at a word boundary
+ *  - Coverage: (pattern length / str length) — shorter str relative to pattern is better
  *
  * Returns a value in [0, 1].
  */
@@ -50,36 +50,28 @@ function scoreIndices(indices: number[], str: string): number {
   const matchCount = indices.length;
   const strLen = str.length;
 
-  // Coverage factor
-  const coverage = matchCount / strLen;
+  // Coverage: ratio of matched characters to total string length.
+  // Capped at 1 (when pattern is at least as long as the string).
+  const coverage = Math.min(1, matchCount / strLen);
 
-  // Consecutive runs bonus
-  let consecutiveBonus = 0;
-  let run = 1;
+  // Consecutive runs: count characters that continue a run (excluding the run-start).
+  // Normalise against (matchCount - 1) which is the max possible consecutive pairs.
+  let consecutivePairs = 0;
   for (let i = 1; i < indices.length; i++) {
     if (indices[i] === indices[i - 1] + 1) {
-      run++;
-    } else {
-      if (run > 1) consecutiveBonus += run * run;
-      run = 1;
+      consecutivePairs++;
     }
   }
-  if (run > 1) consecutiveBonus += run * run;
-  // Normalise consecutive bonus against worst case (all matches consecutive)
-  const maxConsecutive = matchCount * matchCount;
-  const normConsecutive = maxConsecutive > 0 ? consecutiveBonus / maxConsecutive : 0;
+  const maxPairs = matchCount - 1;
+  const normConsecutive = maxPairs > 0 ? consecutivePairs / maxPairs : 1;
 
-  // Word-start bonus
-  let wordStartBonus = 0;
-  for (const idx of indices) {
-    if (idx === 0 || !/[a-zA-Z0-9]/.test(str[idx - 1])) {
-      wordStartBonus++;
-    }
-  }
-  const normWordStart = matchCount > 0 ? wordStartBonus / matchCount : 0;
+  // Word-start bonus: 1 if the first matched character is at a word boundary, else 0.
+  // Additional bonus if all matches are in a single consecutive run starting at index 0.
+  const firstIdx = indices[0];
+  const atWordStart = firstIdx === 0 || !/[a-zA-Z0-9]/.test(str[firstIdx - 1]) ? 1 : 0;
 
-  // Weighted combination
-  const score = coverage * 0.3 + normConsecutive * 0.5 + normWordStart * 0.2;
+  // Weighted combination: consecutive is most important, word-start next, coverage as bonus
+  const score = normConsecutive * 0.45 + atWordStart * 0.25 + coverage * 0.30;
 
   // Clamp to [0, 1]
   return Math.min(1, Math.max(0, score));
