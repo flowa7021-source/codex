@@ -15,8 +15,14 @@ import {
   isPromise,
   isDate,
   isRegExp,
+  isError,
+  isIterable,
   isFinite,
+  isFiniteNumber,
   isInteger,
+  isNonEmptyString,
+  isNonEmptyArray,
+  assertType,
   assertDefined,
 } from '../../app/modules/type-guards.js';
 
@@ -379,6 +385,217 @@ describe('isInteger', () => {
 
   it('returns false for a string', () => {
     assert.equal(isInteger('1'), false);
+  });
+});
+
+// ─── isError ──────────────────────────────────────────────────────────────────
+
+describe('isError', () => {
+  it('returns true for a plain Error', () => {
+    assert.equal(isError(new Error('oops')), true);
+  });
+
+  it('returns true for a TypeError', () => {
+    assert.equal(isError(new TypeError('bad type')), true);
+  });
+
+  it('returns true for a RangeError', () => {
+    assert.equal(isError(new RangeError('range')), true);
+  });
+
+  it('returns false for a plain string', () => {
+    assert.equal(isError('error'), false);
+  });
+
+  it('returns false for null', () => {
+    assert.equal(isError(null), false);
+  });
+
+  it('returns false for a plain object with message field', () => {
+    assert.equal(isError({ message: 'err', stack: '' }), false);
+  });
+});
+
+// ─── isIterable ───────────────────────────────────────────────────────────────
+
+describe('isIterable', () => {
+  it('returns true for an array', () => {
+    assert.equal(isIterable([1, 2, 3]), true);
+  });
+
+  it('returns true for a string', () => {
+    assert.equal(isIterable('abc'), true);
+  });
+
+  it('returns true for a Map', () => {
+    assert.equal(isIterable(new Map()), true);
+  });
+
+  it('returns true for a Set', () => {
+    assert.equal(isIterable(new Set()), true);
+  });
+
+  it('returns true for a generator object', () => {
+    function* gen() { yield 1; }
+    assert.equal(isIterable(gen()), true);
+  });
+
+  it('returns false for a plain object without Symbol.iterator', () => {
+    assert.equal(isIterable({}), false);
+  });
+
+  it('returns false for null', () => {
+    assert.equal(isIterable(null), false);
+  });
+
+  it('returns false for undefined', () => {
+    assert.equal(isIterable(undefined), false);
+  });
+
+  it('returns false for a number', () => {
+    assert.equal(isIterable(42), false);
+  });
+});
+
+// ─── isFiniteNumber ───────────────────────────────────────────────────────────
+
+describe('isFiniteNumber', () => {
+  it('returns true for a finite number', () => {
+    assert.equal(isFiniteNumber(42), true);
+  });
+
+  it('returns true for 0', () => {
+    assert.equal(isFiniteNumber(0), true);
+  });
+
+  it('returns true for a float', () => {
+    assert.equal(isFiniteNumber(3.14), true);
+  });
+
+  it('returns false for Infinity', () => {
+    assert.equal(isFiniteNumber(Infinity), false);
+  });
+
+  it('returns false for -Infinity', () => {
+    assert.equal(isFiniteNumber(-Infinity), false);
+  });
+
+  it('returns false for NaN', () => {
+    assert.equal(isFiniteNumber(NaN), false);
+  });
+
+  it('returns false for a string', () => {
+    assert.equal(isFiniteNumber('42'), false);
+  });
+
+  it('returns false for null', () => {
+    assert.equal(isFiniteNumber(null), false);
+  });
+});
+
+// ─── isNonEmptyString ─────────────────────────────────────────────────────────
+
+describe('isNonEmptyString', () => {
+  it('returns true for a non-empty string', () => {
+    assert.equal(isNonEmptyString('hello'), true);
+  });
+
+  it('returns true for a whitespace-only string', () => {
+    assert.equal(isNonEmptyString('  '), true);
+  });
+
+  it('returns false for an empty string', () => {
+    assert.equal(isNonEmptyString(''), false);
+  });
+
+  it('returns false for a number', () => {
+    assert.equal(isNonEmptyString(42), false);
+  });
+
+  it('returns false for null', () => {
+    assert.equal(isNonEmptyString(null), false);
+  });
+
+  it('returns false for undefined', () => {
+    assert.equal(isNonEmptyString(undefined), false);
+  });
+
+  it('returns false for an array', () => {
+    assert.equal(isNonEmptyString(['a']), false);
+  });
+});
+
+// ─── isNonEmptyArray ──────────────────────────────────────────────────────────
+
+describe('isNonEmptyArray', () => {
+  it('returns true for a non-empty array', () => {
+    assert.equal(isNonEmptyArray([1, 2]), true);
+  });
+
+  it('returns true for a single-element array', () => {
+    assert.equal(isNonEmptyArray([null]), true);
+  });
+
+  it('returns false for an empty array', () => {
+    assert.equal(isNonEmptyArray([]), false);
+  });
+
+  it('returns false for null', () => {
+    assert.equal(isNonEmptyArray(null), false);
+  });
+
+  it('returns false for undefined', () => {
+    assert.equal(isNonEmptyArray(undefined), false);
+  });
+
+  it('returns false for a string', () => {
+    assert.equal(isNonEmptyArray('abc'), false);
+  });
+
+  it('returns false for an array-like object', () => {
+    assert.equal(isNonEmptyArray({ length: 1 }), false);
+  });
+});
+
+// ─── assertType ───────────────────────────────────────────────────────────────
+
+describe('assertType', () => {
+  it('does not throw when the guard passes', () => {
+    assert.doesNotThrow(() => assertType('hello', isString));
+  });
+
+  it('throws TypeError when the guard fails', () => {
+    assert.throws(() => assertType(42, isString), TypeError);
+  });
+
+  it('uses a custom message when provided', () => {
+    try {
+      assertType(null, isNumber, 'must be a number');
+      assert.fail('should have thrown');
+    } catch (err) {
+      assert.ok(err instanceof TypeError);
+      assert.match(err.message, /must be a number/);
+    }
+  });
+
+  it('throws with a default message when no custom message provided', () => {
+    try {
+      assertType(null, isBoolean);
+      assert.fail('should have thrown');
+    } catch (err) {
+      assert.ok(err instanceof TypeError);
+      assert.ok(err.message.length > 0);
+    }
+  });
+
+  it('works with isArray guard', () => {
+    assert.doesNotThrow(() => assertType([1, 2, 3], isArray));
+    assert.throws(() => assertType('not array', isArray), TypeError);
+  });
+
+  it('works with isNonEmptyString guard', () => {
+    assert.doesNotThrow(() => assertType('hello', isNonEmptyString));
+    assert.throws(() => assertType('', isNonEmptyString), TypeError);
   });
 });
 

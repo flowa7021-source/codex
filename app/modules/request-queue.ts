@@ -1,180 +1,243 @@
 // @ts-check
 // ─── Request Queue ────────────────────────────────────────────────────────────
-// Concurrency-limited async task queue with priority ordering.
-// Used to throttle outgoing HTTP requests and parallel OCR jobs so the browser
-// is never overwhelmed by too many simultaneous operations.
+// HTTP request queue with rate limiting, priority ordering, and deduplication.
 
-// ─── Internal types ──────────────────────────────────────────────────────────
+// ─── Public Types ─────────────────────────────────────────────────────────────
 
-interface QueueEntry<T> {
-  task: () => Promise<T>;
-  priority: number;
-  /** Insertion sequence — lower means earlier (FIFO tiebreaker). */
-  seq: number;
-  resolve: (value: T) => void;
-  reject: (reason?: unknown) => void;
+export interface RequestOptions {
+  /** Higher number = higher priority. Default 0. */
+  priority?: number;
+  /** Deduplicate by URL + method. Default true. */
+  dedupe?: boolean;
+  /** Request timeout in ms. Default none. */
+  timeout?: number;
+  /** Number of retries on failure. Default 0. */
+  retries?: number;
+}
+
+export interface QueuedRequest {
+  id: string;
+  url: string;
+  method: string;
+  options: RequestOptions;
+  status: 'pending' | 'running' | 'done' | 'failed';
+  createdAt: number;
+}
+
+export interface RequestQueueOptions {
+  /** Max concurrent requests. Default 4. */
+  concurrency?: number;
+  /** Max requests per second. Default none. */
+  rateLimit?: number;
+  /** Custom fetch function for testing. */
+  fetch?: (url: string, method: string) => Promise<unknown>;
+}
+
+// ─── Internal Types ───────────────────────────────────────────────────────────
+
+interface InternalEntry {
+  queued: QueuedRequest;
+  resolve: (value: unknown) => void;
+  reject: (reason: unknown) => void;
+  retriesLeft: number;
 }
 
 // ─── RequestQueue ─────────────────────────────────────────────────────────────
 
+let _nextId = 1;
+
+function generateId(): string {
+  return `rq-${_nextId++}`;
+}
+
 /**
- * A queue that limits the number of concurrently-running async operations.
- *
- * Tasks are dequeued in priority order (higher number = higher priority).
- * Equal-priority tasks run in FIFO order. Tasks added while the queue is
- * {@link pause paused} accumulate and run once {@link resume} is called.
+ * HTTP request queue with concurrency limiting, priority ordering, rate
+ * limiting, and optional URL+method deduplication.
  *
  * @example
- *   const q = new RequestQueue(2); // at most 2 concurrent tasks
- *   const result = await q.add(() => fetch('/api/page/1').then(r => r.json()));
- *   await q.drain(); // wait for all in-flight tasks
+ *   const q = new RequestQueue({ concurrency: 2 });
+ *   const data = await q.enqueue('/api/items', 'GET');
  */
 export class RequestQueue {
-  readonly concurrency: number;
+  #concurrency: number;
+  #rateLimit: number | undefined;
+  #fetchFn: (url: string, method: string) => Promise<unknown>;
 
+  #pending: InternalEntry[] = [];
   #running = 0;
-  #seq = 0;
   #paused = false;
-  /** Min-heap sorted so highest priority + lowest seq comes first. */
-  #pending: QueueEntry<unknown>[] = [];
-  /** Resolvers waiting on drain(). */
-  #drainWaiters: Array<() => void> = [];
 
-  constructor(concurrency = 4) {
-    if (concurrency < 1) throw new RangeError('RequestQueue concurrency must be >= 1');
-    this.concurrency = concurrency;
-  }
+  /** Timestamps of completed requests within the current second window. */
+  #completionTimes: number[] = [];
 
-  // ─── Public properties ────────────────────────────────────────────────────
+  /** Dedupe map: "<method>:<url>" -> existing promise. */
+  #dedupeMap = new Map<string, Promise<unknown>>();
 
-  /** Number of tasks waiting to start. */
-  get pendingCount(): number {
-    return this.#pending.length;
-  }
-
-  /** Number of tasks currently running. */
-  get runningCount(): number {
-    return this.#running;
-  }
-
-  /** Whether the queue is currently paused. */
-  get isPaused(): boolean {
-    return this.#paused;
+  constructor(options?: RequestQueueOptions) {
+    this.#concurrency = options?.concurrency ?? 4;
+    this.#rateLimit = options?.rateLimit;
+    this.#fetchFn = options?.fetch ?? ((url, method) => fetch(url, { method }));
   }
 
   // ─── Public API ───────────────────────────────────────────────────────────
 
   /**
-   * Add a task to the queue.
-   * Returns a promise that resolves/rejects with the task's result.
-   *
-   * @param task - Async function to run
-   * @param priority - Higher numbers run first (default 0); equal priority is FIFO
+   * Enqueue a request. Returns a promise resolving to the response.
    */
-  add<T>(task: () => Promise<T>, priority = 0): Promise<T> {
-    return new Promise<T>((resolve, reject) => {
-      const entry: QueueEntry<T> = {
-        task,
-        priority,
-        seq: this.#seq++,
-        resolve,
-        reject,
-      };
-      this.#enqueue(entry as unknown as QueueEntry<unknown>);
-      this.#tick();
+  enqueue<T>(url: string, method = 'GET', options: RequestOptions = {}): Promise<T> {
+    const priority = options.priority ?? 0;
+    const dedupe = options.dedupe !== false;
+    const retriesLeft = options.retries ?? 0;
+
+    // Deduplication: same URL+method shares one in-flight promise
+    if (dedupe) {
+      const key = `${method}:${url}`;
+      const existing = this.#dedupeMap.get(key);
+      if (existing) return existing as Promise<T>;
+    }
+
+    const id = generateId();
+    const queued: QueuedRequest = {
+      id,
+      url,
+      method,
+      options: { priority, dedupe, timeout: options.timeout, retries: options.retries },
+      status: 'pending',
+      createdAt: Date.now(),
+    };
+
+    let resolve!: (value: unknown) => void;
+    let reject!: (reason: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res as (value: unknown) => void;
+      reject = rej;
     });
+
+    const entry: InternalEntry = { queued, resolve, reject, retriesLeft };
+
+    // Insert in priority order (higher priority first, FIFO tiebreak)
+    let insertIdx = this.#pending.length;
+    for (let i = 0; i < this.#pending.length; i++) {
+      const existingPriority = this.#pending[i].queued.options.priority ?? 0;
+      if (priority > existingPriority) {
+        insertIdx = i;
+        break;
+      }
+    }
+    this.#pending.splice(insertIdx, 0, entry);
+
+    if (dedupe) {
+      const key = `${method}:${url}`;
+      this.#dedupeMap.set(key, promise);
+      promise.finally(() => {
+        if (this.#dedupeMap.get(key) === promise) {
+          this.#dedupeMap.delete(key);
+        }
+      });
+    }
+
+    this.#drain();
+    return promise;
   }
 
   /**
-   * Clear all pending (not yet started) tasks.
-   * Each cleared task's promise is rejected with a `DOMException` named
-   * `'AbortError'` (same convention as `AbortController`).
+   * Cancel a pending request by id. Returns true if found and cancelled.
    */
+  cancel(id: string): boolean {
+    const idx = this.#pending.findIndex(e => e.queued.id === id);
+    if (idx === -1) return false;
+    const [entry] = this.#pending.splice(idx, 1);
+    entry.queued.status = 'failed';
+    entry.reject(new Error(`Request ${id} was cancelled`));
+    return true;
+  }
+
+  /**
+   * Get all queued (pending) requests as snapshots.
+   */
+  getAll(): QueuedRequest[] {
+    return this.#pending.map(e => ({ ...e.queued }));
+  }
+
+  /** Number of pending requests. */
+  get pendingCount(): number {
+    return this.#pending.length;
+  }
+
+  /** Clear all pending requests (rejects their promises). */
   clearPending(): void {
-    const cleared = this.#pending.splice(0);
-    for (const entry of cleared) {
-      entry.reject(new DOMException('Task cleared from queue', 'AbortError'));
+    const entries = this.#pending.splice(0);
+    for (const entry of entries) {
+      entry.queued.status = 'failed';
+      entry.reject(new Error('Queue cleared'));
     }
   }
 
-  /**
-   * Pause processing. Currently-running tasks continue to completion.
-   * New tasks may still be `add`ed; they will start once `resume()` is called.
-   */
+  /** Pause processing. In-flight requests continue to completion. */
   pause(): void {
     this.#paused = true;
   }
 
-  /**
-   * Resume processing after a `pause()`.
-   */
+  /** Resume processing after pause(). */
   resume(): void {
     this.#paused = false;
-    this.#tick();
+    this.#drain();
   }
 
-  /**
-   * Returns a promise that resolves once all currently pending and running
-   * tasks have completed (i.e. `pendingCount + runningCount === 0`).
-   * If the queue is already empty, resolves immediately.
-   */
-  drain(): Promise<void> {
-    if (this.#running === 0 && this.#pending.length === 0) {
-      return Promise.resolve();
-    }
-    return new Promise<void>(resolve => {
-      this.#drainWaiters.push(resolve);
-    });
-  }
+  // ─── Private Helpers ─────────────────────────────────────────────────────
 
-  // ─── Internal helpers ─────────────────────────────────────────────────────
+  #drain(): void {
+    if (this.#paused) return;
 
-  /** Insert entry into the pending list maintaining priority order. */
-  #enqueue(entry: QueueEntry<unknown>): void {
-    // Binary-insert so the list stays sorted: highest priority first,
-    // then lowest seq (FIFO) for ties.
-    let lo = 0;
-    let hi = this.#pending.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      const m = this.#pending[mid];
-      if (
-        m.priority > entry.priority ||
-        (m.priority === entry.priority && m.seq < entry.seq)
-      ) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-    this.#pending.splice(lo, 0, entry);
-  }
-
-  /** Start as many tasks as concurrency and pause state allow. */
-  #tick(): void {
-    while (!this.#paused && this.#running < this.concurrency && this.#pending.length > 0) {
+    while (this.#pending.length > 0 && this.#running < this.#concurrency) {
+      if (!this.#checkRateLimit()) break;
       const entry = this.#pending.shift()!;
-      this.#running++;
-      entry.task().then(
-        (result) => {
-          entry.resolve(result);
-          this.#onTaskDone();
-        },
-        (err) => {
-          entry.reject(err);
-          this.#onTaskDone();
-        },
-      );
+      this.#execute(entry);
     }
   }
 
-  /** Called when a running task finishes (success or failure). */
-  #onTaskDone(): void {
-    this.#running--;
-    this.#tick();
-    if (this.#running === 0 && this.#pending.length === 0) {
-      const waiters = this.#drainWaiters.splice(0);
-      for (const resolve of waiters) resolve();
+  /** Returns true if within rate limit (or no rate limit configured). */
+  #checkRateLimit(): boolean {
+    if (!this.#rateLimit) return true;
+    const now = Date.now();
+    // Trim completions older than 1 second
+    this.#completionTimes = this.#completionTimes.filter(t => now - t < 1000);
+    return this.#completionTimes.length < this.#rateLimit;
+  }
+
+  async #execute(entry: InternalEntry): Promise<void> {
+    const { queued } = entry;
+    queued.status = 'running';
+    this.#running++;
+
+    try {
+      let fetchPromise = this.#fetchFn(queued.url, queued.method);
+
+      if (queued.options.timeout != null) {
+        const timeoutMs = queued.options.timeout;
+        const timeoutPromise = new Promise<never>((_, rej) =>
+          setTimeout(() => rej(new Error(`Request timed out after ${timeoutMs}ms`)), timeoutMs),
+        );
+        fetchPromise = Promise.race([fetchPromise, timeoutPromise]) as Promise<unknown>;
+      }
+
+      const result = await fetchPromise;
+      queued.status = 'done';
+      this.#completionTimes.push(Date.now());
+      entry.resolve(result);
+    } catch (err) {
+      if (entry.retriesLeft > 0) {
+        entry.retriesLeft--;
+        queued.status = 'pending';
+        // Re-insert at front of same-priority bucket for retry
+        this.#pending.unshift(entry);
+      } else {
+        queued.status = 'failed';
+        entry.reject(err);
+      }
+    } finally {
+      this.#running--;
+      this.#drain();
     }
   }
 }

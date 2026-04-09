@@ -26,6 +26,14 @@ import {
   daysInMonth,
   parseISODate,
   toISODate,
+  formatDate,
+  parseDateInput,
+  addTime,
+  diffTime,
+  isBetween,
+  dayOfYear,
+  weekOfYear,
+  relativeTime,
 } from '../../app/modules/date-utils.js';
 
 // ─── addDays ──────────────────────────────────────────────────────────────────
@@ -707,5 +715,306 @@ describe('toISODate', () => {
     assert.equal(parsed.getFullYear(), d.getFullYear());
     assert.equal(parsed.getMonth(), d.getMonth());
     assert.equal(parsed.getDate(), d.getDate());
+  });
+});
+
+// ─── formatDate ───────────────────────────────────────────────────────────────
+
+describe('formatDate', () => {
+  it('formats YYYY-MM-DD', () => {
+    const d = new Date(2024, 3, 8); // Apr 8, 2024
+    assert.equal(formatDate(d, 'YYYY-MM-DD'), '2024-04-08');
+  });
+
+  it('formats DD/MM/YYYY', () => {
+    const d = new Date(2024, 0, 5); // Jan 5, 2024
+    assert.equal(formatDate(d, 'DD/MM/YYYY'), '05/01/2024');
+  });
+
+  it('includes time tokens HH:mm:ss', () => {
+    const d = new Date(2024, 3, 8, 14, 5, 9); // 14:05:09
+    assert.equal(formatDate(d, 'HH:mm:ss'), '14:05:09');
+  });
+
+  it('handles midnight (00:00:00)', () => {
+    const d = new Date(2024, 3, 8, 0, 0, 0);
+    assert.equal(formatDate(d, 'HH:mm:ss'), '00:00:00');
+  });
+
+  it('replaces all tokens in a combined format', () => {
+    const d = new Date(2024, 11, 31, 23, 59, 59); // Dec 31, 2024 23:59:59
+    assert.equal(formatDate(d, 'YYYY-MM-DD HH:mm:ss'), '2024-12-31 23:59:59');
+  });
+});
+
+// ─── parseDateInput ───────────────────────────────────────────────────────────
+
+describe('parseDateInput', () => {
+  it('parses an ISO string to Date', () => {
+    const d = parseDateInput('2024-04-08T00:00:00.000Z');
+    assert.ok(d instanceof Date);
+    assert.equal(d.getUTCFullYear(), 2024);
+    assert.equal(d.getUTCMonth(), 3);
+    assert.equal(d.getUTCDate(), 8);
+  });
+
+  it('parses a numeric timestamp to Date', () => {
+    const ts = new Date(2024, 3, 8).getTime();
+    const d = parseDateInput(ts);
+    assert.ok(d instanceof Date);
+    assert.equal(d.getTime(), ts);
+  });
+
+  it('throws for an invalid string', () => {
+    assert.throws(() => parseDateInput('not-a-date'));
+  });
+});
+
+// ─── addTime ──────────────────────────────────────────────────────────────────
+
+describe('addTime', () => {
+  it('adds days', () => {
+    const d = new Date(2024, 0, 10); // Jan 10
+    const result = addTime(d, 5, 'days');
+    assert.equal(result.getDate(), 15);
+    assert.equal(result.getMonth(), 0);
+  });
+
+  it('adds hours', () => {
+    const d = new Date(2024, 0, 10, 8, 0, 0);
+    const result = addTime(d, 3, 'hours');
+    assert.equal(result.getHours(), 11);
+  });
+
+  it('adds minutes', () => {
+    const d = new Date(2024, 0, 10, 8, 45, 0);
+    const result = addTime(d, 20, 'minutes');
+    assert.equal(result.getHours(), 9);
+    assert.equal(result.getMinutes(), 5);
+  });
+
+  it('adds seconds', () => {
+    const d = new Date(2024, 0, 10, 0, 0, 30);
+    const result = addTime(d, 45, 'seconds');
+    assert.equal(result.getMinutes(), 1);
+    assert.equal(result.getSeconds(), 15);
+  });
+
+  it('adds months', () => {
+    const d = new Date(2024, 0, 15); // Jan 15
+    const result = addTime(d, 2, 'months');
+    assert.equal(result.getMonth(), 2); // Mar
+    assert.equal(result.getDate(), 15);
+  });
+
+  it('adds years', () => {
+    const d = new Date(2024, 5, 15); // Jun 15, 2024
+    const result = addTime(d, 2, 'years');
+    assert.equal(result.getFullYear(), 2026);
+    assert.equal(result.getMonth(), 5);
+  });
+
+  it('subtracts when amount is negative', () => {
+    const d = new Date(2024, 3, 10);
+    const result = addTime(d, -3, 'days');
+    assert.equal(result.getDate(), 7);
+  });
+
+  it('does not mutate the original date', () => {
+    const d = new Date(2024, 3, 10);
+    const original = d.getTime();
+    addTime(d, 5, 'days');
+    assert.equal(d.getTime(), original);
+  });
+});
+
+// ─── diffTime ─────────────────────────────────────────────────────────────────
+
+describe('diffTime', () => {
+  it('returns difference in days', () => {
+    const a = new Date(2024, 0, 11);
+    const b = new Date(2024, 0, 1);
+    assert.equal(diffTime(a, b, 'days'), 10);
+  });
+
+  it('returns negative difference when a is before b', () => {
+    const a = new Date(2024, 0, 1);
+    const b = new Date(2024, 0, 11);
+    assert.equal(diffTime(a, b, 'days'), -10);
+  });
+
+  it('returns difference in hours', () => {
+    const a = new Date(2024, 0, 1, 12, 0, 0);
+    const b = new Date(2024, 0, 1, 0, 0, 0);
+    assert.equal(diffTime(a, b, 'hours'), 12);
+  });
+
+  it('returns difference in minutes', () => {
+    const a = new Date(2024, 0, 1, 1, 30, 0);
+    const b = new Date(2024, 0, 1, 0, 0, 0);
+    assert.equal(diffTime(a, b, 'minutes'), 90);
+  });
+
+  it('returns difference in seconds', () => {
+    const a = new Date(2024, 0, 1, 0, 2, 0);
+    const b = new Date(2024, 0, 1, 0, 0, 0);
+    assert.equal(diffTime(a, b, 'seconds'), 120);
+  });
+
+  it('returns difference in months', () => {
+    const a = new Date(2024, 5, 1); // Jun 2024
+    const b = new Date(2024, 0, 1); // Jan 2024
+    assert.equal(diffTime(a, b, 'months'), 5);
+  });
+
+  it('returns difference in years', () => {
+    const a = new Date(2027, 0, 1);
+    const b = new Date(2024, 0, 1);
+    assert.equal(diffTime(a, b, 'years'), 3);
+  });
+
+  it('returns 0 when dates are equal', () => {
+    const d = new Date(2024, 3, 10);
+    assert.equal(diffTime(d, d, 'days'), 0);
+  });
+});
+
+// ─── isBetween ────────────────────────────────────────────────────────────────
+
+describe('isBetween', () => {
+  it('returns true when date is strictly between start and end', () => {
+    const start = new Date(2024, 0, 1);
+    const end   = new Date(2024, 0, 31);
+    const date  = new Date(2024, 0, 15);
+    assert.equal(isBetween(date, start, end), true);
+  });
+
+  it('returns true when date equals start (inclusive)', () => {
+    const d = new Date(2024, 0, 1);
+    assert.equal(isBetween(d, d, new Date(2024, 0, 31)), true);
+  });
+
+  it('returns true when date equals end (inclusive)', () => {
+    const end = new Date(2024, 0, 31);
+    assert.equal(isBetween(end, new Date(2024, 0, 1), end), true);
+  });
+
+  it('returns false when date is before start', () => {
+    const date  = new Date(2023, 11, 31);
+    const start = new Date(2024, 0, 1);
+    const end   = new Date(2024, 0, 31);
+    assert.equal(isBetween(date, start, end), false);
+  });
+
+  it('returns false when date is after end', () => {
+    const date  = new Date(2024, 1, 1);
+    const start = new Date(2024, 0, 1);
+    const end   = new Date(2024, 0, 31);
+    assert.equal(isBetween(date, start, end), false);
+  });
+});
+
+// ─── dayOfYear ────────────────────────────────────────────────────────────────
+
+describe('dayOfYear', () => {
+  it('returns 1 for January 1st', () => {
+    assert.equal(dayOfYear(new Date(2024, 0, 1)), 1);
+  });
+
+  it('returns 32 for February 1st', () => {
+    assert.equal(dayOfYear(new Date(2024, 1, 1)), 32);
+  });
+
+  it('returns 366 for December 31st in a leap year', () => {
+    assert.equal(dayOfYear(new Date(2024, 11, 31)), 366);
+  });
+
+  it('returns 365 for December 31st in a non-leap year', () => {
+    assert.equal(dayOfYear(new Date(2023, 11, 31)), 365);
+  });
+
+  it('returns a value between 1 and 366', () => {
+    const d = new Date(2024, 6, 15); // Jul 15
+    const doy = dayOfYear(d);
+    assert.ok(doy >= 1 && doy <= 366);
+  });
+});
+
+// ─── weekOfYear ───────────────────────────────────────────────────────────────
+
+describe('weekOfYear', () => {
+  it('returns 1 for Jan 1, 2024 (Monday — ISO week 1)', () => {
+    assert.equal(weekOfYear(new Date(2024, 0, 1)), 1);
+  });
+
+  it('returns a value between 1 and 53', () => {
+    const w = weekOfYear(new Date(2024, 6, 15));
+    assert.ok(w >= 1 && w <= 53, `Expected 1-53, got ${w}`);
+  });
+
+  it('returns 28 for Jul 8, 2024 (ISO week 28)', () => {
+    assert.equal(weekOfYear(new Date(2024, 6, 8)), 28);
+  });
+
+  it('returns a high week number for late December', () => {
+    const w = weekOfYear(new Date(2024, 11, 28));
+    assert.ok(w >= 52 && w <= 53);
+  });
+});
+
+// ─── relativeTime ─────────────────────────────────────────────────────────────
+
+describe('relativeTime', () => {
+  const now = new Date(2024, 3, 10, 12, 0, 0); // Apr 10, 2024 12:00:00
+
+  it('returns "just now" for dates within 45 seconds', () => {
+    const date = new Date(now.getTime() - 10_000); // 10s ago
+    assert.equal(relativeTime(date, now), 'just now');
+  });
+
+  it('returns "1 minute ago" for ~60s ago', () => {
+    const date = new Date(now.getTime() - 60_000);
+    assert.equal(relativeTime(date, now), '1 minute ago');
+  });
+
+  it('returns "X minutes ago" for several minutes ago', () => {
+    const date = new Date(now.getTime() - 10 * 60_000); // 10 min ago
+    assert.equal(relativeTime(date, now), '10 minutes ago');
+  });
+
+  it('returns "1 hour ago" for ~1 hour ago', () => {
+    const date = new Date(now.getTime() - 75 * 60_000); // 75 min ago
+    assert.equal(relativeTime(date, now), '1 hour ago');
+  });
+
+  it('returns "X hours ago" for several hours ago', () => {
+    const date = new Date(now.getTime() - 5 * 3_600_000); // 5h ago
+    assert.equal(relativeTime(date, now), '5 hours ago');
+  });
+
+  it('returns "1 day ago" for ~1 day ago', () => {
+    const date = new Date(now.getTime() - 30 * 3_600_000); // 30h ago
+    assert.equal(relativeTime(date, now), '1 day ago');
+  });
+
+  it('returns "X days ago" for several days ago', () => {
+    const date = new Date(now.getTime() - 5 * 86_400_000); // 5 days ago
+    assert.equal(relativeTime(date, now), '5 days ago');
+  });
+
+  it('returns "in X minutes" for future dates', () => {
+    const date = new Date(now.getTime() + 10 * 60_000); // 10 min from now
+    assert.equal(relativeTime(date, now), 'in 10 minutes');
+  });
+
+  it('returns "in X days" for future dates', () => {
+    const date = new Date(now.getTime() + 5 * 86_400_000); // 5 days from now
+    assert.equal(relativeTime(date, now), 'in 5 days');
+  });
+
+  it('uses the current date if now is not provided (smoke test)', () => {
+    const result = relativeTime(new Date());
+    assert.equal(typeof result, 'string');
+    assert.ok(result.length > 0);
   });
 });

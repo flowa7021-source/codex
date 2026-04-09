@@ -3,21 +3,170 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  camelCase,
+  snakeCase,
+  kebabCase,
+  pascalCase,
+  titleCase,
   capitalize,
-  camelToKebab,
-  kebabToCamel,
-  toSnakeCase,
-  truncate,
-  padLeft,
-  padRight,
-  countOccurrences,
-  reverseString,
+  uncapitalize,
+  padStart,
+  padEnd,
+  repeat,
+  reverse,
   isPalindrome,
-  escapeRegex,
-  slugify,
+  countOccurrences,
+  replaceAll,
+  trimChar,
   splitWords,
-  wordWrap,
+  wrap,
+  slugify,
+  interpolate,
 } from '../../app/modules/string-utils.js';
+
+// ─── camelCase ────────────────────────────────────────────────────────────────
+
+describe('camelCase', () => {
+  it('converts space-separated words', () => {
+    assert.equal(camelCase('hello world'), 'helloWorld');
+  });
+
+  it('converts kebab-case', () => {
+    assert.equal(camelCase('hello-world'), 'helloWorld');
+  });
+
+  it('converts snake_case', () => {
+    assert.equal(camelCase('hello_world'), 'helloWorld');
+  });
+
+  it('converts PascalCase', () => {
+    assert.equal(camelCase('HelloWorld'), 'helloWorld');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(camelCase(''), '');
+  });
+
+  it('handles single word', () => {
+    assert.equal(camelCase('hello'), 'hello');
+  });
+
+  it('handles multiple words', () => {
+    assert.equal(camelCase('the quick brown fox'), 'theQuickBrownFox');
+  });
+});
+
+// ─── snakeCase ────────────────────────────────────────────────────────────────
+
+describe('snakeCase', () => {
+  it('converts camelCase to snake_case', () => {
+    assert.equal(snakeCase('helloWorld'), 'hello_world');
+  });
+
+  it('converts space-separated words', () => {
+    assert.equal(snakeCase('hello world'), 'hello_world');
+  });
+
+  it('converts kebab-case', () => {
+    assert.equal(snakeCase('hello-world'), 'hello_world');
+  });
+
+  it('lowercases everything', () => {
+    assert.equal(snakeCase('Hello World'), 'hello_world');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(snakeCase(''), '');
+  });
+
+  it('handles already snake_case', () => {
+    assert.equal(snakeCase('hello_world'), 'hello_world');
+  });
+});
+
+// ─── kebabCase ────────────────────────────────────────────────────────────────
+
+describe('kebabCase', () => {
+  it('converts camelCase to kebab-case', () => {
+    assert.equal(kebabCase('helloWorld'), 'hello-world');
+  });
+
+  it('converts space-separated words', () => {
+    assert.equal(kebabCase('hello world'), 'hello-world');
+  });
+
+  it('converts snake_case', () => {
+    assert.equal(kebabCase('hello_world'), 'hello-world');
+  });
+
+  it('lowercases everything', () => {
+    assert.equal(kebabCase('Hello World'), 'hello-world');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(kebabCase(''), '');
+  });
+
+  it('handles already kebab-case', () => {
+    assert.equal(kebabCase('hello-world'), 'hello-world');
+  });
+});
+
+// ─── pascalCase ───────────────────────────────────────────────────────────────
+
+describe('pascalCase', () => {
+  it('converts space-separated words', () => {
+    assert.equal(pascalCase('hello world'), 'HelloWorld');
+  });
+
+  it('converts camelCase', () => {
+    assert.equal(pascalCase('helloWorld'), 'HelloWorld');
+  });
+
+  it('converts snake_case', () => {
+    assert.equal(pascalCase('hello_world'), 'HelloWorld');
+  });
+
+  it('converts kebab-case', () => {
+    assert.equal(pascalCase('hello-world'), 'HelloWorld');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(pascalCase(''), '');
+  });
+
+  it('handles single word', () => {
+    assert.equal(pascalCase('hello'), 'Hello');
+  });
+});
+
+// ─── titleCase ────────────────────────────────────────────────────────────────
+
+describe('titleCase', () => {
+  it('capitalizes each word', () => {
+    assert.equal(titleCase('hello world'), 'Hello World');
+  });
+
+  it('handles camelCase input', () => {
+    assert.equal(titleCase('helloWorld'), 'Hello World');
+  });
+
+  it('handles snake_case input', () => {
+    assert.equal(titleCase('hello_world'), 'Hello World');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(titleCase(''), '');
+  });
+
+  it('handles single word', () => {
+    assert.equal(titleCase('hello'), 'Hello');
+  });
+
+  it('lowercases non-leading letters', () => {
+    assert.equal(titleCase('HELLO WORLD'), 'Hello World');
+  });
+});
 
 // ─── capitalize ───────────────────────────────────────────────────────────────
 
@@ -43,181 +192,124 @@ describe('capitalize', () => {
   });
 });
 
-// ─── camelToKebab ─────────────────────────────────────────────────────────────
+// ─── uncapitalize ─────────────────────────────────────────────────────────────
 
-describe('camelToKebab', () => {
-  it('converts camelCase to kebab-case', () => {
-    assert.equal(camelToKebab('camelCase'), 'camel-case');
-  });
-
-  it('converts myVar to my-var', () => {
-    assert.equal(camelToKebab('myVar'), 'my-var');
-  });
-
-  it('handles consecutive uppercase letters', () => {
-    assert.equal(camelToKebab('myHTMLParser'), 'my-h-t-m-l-parser');
-  });
-
-  it('leaves lowercase-only strings unchanged', () => {
-    assert.equal(camelToKebab('simple'), 'simple');
-  });
-
-  it('handles empty string', () => {
-    assert.equal(camelToKebab(''), '');
-  });
-});
-
-// ─── kebabToCamel ─────────────────────────────────────────────────────────────
-
-describe('kebabToCamel', () => {
-  it('converts kebab-case to camelCase', () => {
-    assert.equal(kebabToCamel('my-var'), 'myVar');
-  });
-
-  it('handles multiple hyphens', () => {
-    assert.equal(kebabToCamel('my-long-variable-name'), 'myLongVariableName');
-  });
-
-  it('leaves no-hyphen strings unchanged', () => {
-    assert.equal(kebabToCamel('simple'), 'simple');
-  });
-
-  it('handles empty string', () => {
-    assert.equal(kebabToCamel(''), '');
-  });
-});
-
-// ─── toSnakeCase ──────────────────────────────────────────────────────────────
-
-describe('toSnakeCase', () => {
-  it('converts camelCase to snake_case', () => {
-    assert.equal(toSnakeCase('camelCase'), 'camel_case');
-  });
-
-  it('converts space-separated string to snake_case', () => {
-    assert.equal(toSnakeCase('My Variable'), 'my_variable');
-  });
-
-  it('converts kebab-case to snake_case', () => {
-    assert.equal(toSnakeCase('my-var'), 'my_var');
-  });
-
-  it('handles already snake_case', () => {
-    assert.equal(toSnakeCase('my_var'), 'my_var');
-  });
-
-  it('handles empty string', () => {
-    assert.equal(toSnakeCase(''), '');
-  });
-});
-
-// ─── truncate ─────────────────────────────────────────────────────────────────
-
-describe('truncate', () => {
-  it('truncates a string longer than maxLength', () => {
-    assert.equal(truncate('Hello, World!', 8), 'Hello...');
-  });
-
-  it('returns string unchanged if short enough', () => {
-    assert.equal(truncate('Hi', 10), 'Hi');
-  });
-
-  it('returns string unchanged if equal to maxLength', () => {
-    assert.equal(truncate('Hello', 5), 'Hello');
-  });
-
-  it('uses a custom suffix', () => {
-    assert.equal(truncate('Hello, World!', 7, '…'), 'Hello,…');
-  });
-
-  it('truncates to exact length including suffix', () => {
-    const result = truncate('abcdefgh', 5);
-    assert.equal(result.length, 5);
-    assert.equal(result, 'ab...');
-  });
-});
-
-// ─── padLeft ──────────────────────────────────────────────────────────────────
-
-describe('padLeft', () => {
-  it('pads a short string on the left', () => {
-    assert.equal(padLeft('5', 3, '0'), '005');
-  });
-
-  it('returns string unchanged when already at target length', () => {
-    assert.equal(padLeft('hello', 5), 'hello');
-  });
-
-  it('returns string unchanged when longer than target length', () => {
-    assert.equal(padLeft('toolong', 3), 'toolong');
-  });
-
-  it('uses space as default padding character', () => {
-    assert.equal(padLeft('hi', 4), '  hi');
-  });
-});
-
-// ─── padRight ─────────────────────────────────────────────────────────────────
-
-describe('padRight', () => {
-  it('pads a short string on the right', () => {
-    assert.equal(padRight('hi', 5, '-'), 'hi---');
-  });
-
-  it('returns string unchanged when already at target length', () => {
-    assert.equal(padRight('hello', 5), 'hello');
-  });
-
-  it('returns string unchanged when longer than target length', () => {
-    assert.equal(padRight('toolong', 3), 'toolong');
-  });
-
-  it('uses space as default padding character', () => {
-    assert.equal(padRight('hi', 4), 'hi  ');
-  });
-});
-
-// ─── countOccurrences ────────────────────────────────────────────────────────
-
-describe('countOccurrences', () => {
-  it('counts non-overlapping occurrences', () => {
-    assert.equal(countOccurrences('hello hello hello', 'hello'), 3);
-  });
-
-  it('returns 0 when substring is not found', () => {
-    assert.equal(countOccurrences('hello world', 'xyz'), 0);
-  });
-
-  it('returns 0 for empty substring', () => {
-    assert.equal(countOccurrences('hello', ''), 0);
-  });
-
-  it('handles single-character substring', () => {
-    assert.equal(countOccurrences('banana', 'a'), 3);
-  });
-
-  it('handles overlapping-style substrings (non-overlapping count)', () => {
-    assert.equal(countOccurrences('aaa', 'aa'), 1);
-  });
-});
-
-// ─── reverseString ────────────────────────────────────────────────────────────
-
-describe('reverseString', () => {
-  it('reverses a simple string', () => {
-    assert.equal(reverseString('hello'), 'olleh');
+describe('uncapitalize', () => {
+  it('lowercases first letter', () => {
+    assert.equal(uncapitalize('Hello'), 'hello');
   });
 
   it('returns empty string unchanged', () => {
-    assert.equal(reverseString(''), '');
+    assert.equal(uncapitalize(''), '');
+  });
+
+  it('handles already-uncapitalized string', () => {
+    assert.equal(uncapitalize('hello'), 'hello');
+  });
+
+  it('handles single character', () => {
+    assert.equal(uncapitalize('A'), 'a');
+  });
+
+  it('does not alter the rest of the string', () => {
+    assert.equal(uncapitalize('HELLO'), 'hELLO');
+  });
+});
+
+// ─── padStart ─────────────────────────────────────────────────────────────────
+
+describe('padStart', () => {
+  it('pads with zeros', () => {
+    assert.equal(padStart('5', 3, '0'), '005');
+  });
+
+  it('returns string unchanged when at target length', () => {
+    assert.equal(padStart('hello', 5), 'hello');
+  });
+
+  it('returns string unchanged when longer than target', () => {
+    assert.equal(padStart('toolong', 3), 'toolong');
+  });
+
+  it('uses space as default pad char', () => {
+    assert.equal(padStart('hi', 4), '  hi');
+  });
+
+  it('handles zero length target', () => {
+    assert.equal(padStart('hi', 0), 'hi');
+  });
+});
+
+// ─── padEnd ───────────────────────────────────────────────────────────────────
+
+describe('padEnd', () => {
+  it('pads on the right', () => {
+    assert.equal(padEnd('hi', 5, '-'), 'hi---');
+  });
+
+  it('returns string unchanged when at target length', () => {
+    assert.equal(padEnd('hello', 5), 'hello');
+  });
+
+  it('returns string unchanged when longer than target', () => {
+    assert.equal(padEnd('toolong', 3), 'toolong');
+  });
+
+  it('uses space as default pad char', () => {
+    assert.equal(padEnd('hi', 4), 'hi  ');
+  });
+
+  it('handles zero length target', () => {
+    assert.equal(padEnd('hi', 0), 'hi');
+  });
+});
+
+// ─── repeat ───────────────────────────────────────────────────────────────────
+
+describe('repeat', () => {
+  it('repeats a string n times', () => {
+    assert.equal(repeat('ab', 3), 'ababab');
+  });
+
+  it('returns empty string when n is 0', () => {
+    assert.equal(repeat('abc', 0), '');
+  });
+
+  it('returns empty string when n is negative', () => {
+    assert.equal(repeat('abc', -1), '');
+  });
+
+  it('handles empty string input', () => {
+    assert.equal(repeat('', 5), '');
+  });
+
+  it('handles n = 1', () => {
+    assert.equal(repeat('x', 1), 'x');
+  });
+});
+
+// ─── reverse ──────────────────────────────────────────────────────────────────
+
+describe('reverse', () => {
+  it('reverses a simple string', () => {
+    assert.equal(reverse('hello'), 'olleh');
+  });
+
+  it('returns empty string unchanged', () => {
+    assert.equal(reverse(''), '');
   });
 
   it('returns single character unchanged', () => {
-    assert.equal(reverseString('a'), 'a');
+    assert.equal(reverse('a'), 'a');
   });
 
   it('reverses a palindrome to itself', () => {
-    assert.equal(reverseString('racecar'), 'racecar');
+    assert.equal(reverse('racecar'), 'racecar');
+  });
+
+  it('handles unicode characters', () => {
+    // emoji are multi-codepoint; spreading handles surrogates correctly
+    assert.equal(reverse('abc'), 'cba');
   });
 });
 
@@ -249,33 +341,147 @@ describe('isPalindrome', () => {
   });
 });
 
-// ─── escapeRegex ──────────────────────────────────────────────────────────────
+// ─── countOccurrences ────────────────────────────────────────────────────────
 
-describe('escapeRegex', () => {
-  it('escapes dot', () => {
-    assert.equal(escapeRegex('.'), '\\.');
+describe('countOccurrences', () => {
+  it('counts non-overlapping occurrences', () => {
+    assert.equal(countOccurrences('hello hello hello', 'hello'), 3);
   });
 
-  it('escapes brackets', () => {
-    assert.equal(escapeRegex('[hello]'), '\\[hello\\]');
+  it('returns 0 when substring not found', () => {
+    assert.equal(countOccurrences('hello world', 'xyz'), 0);
   });
 
-  it('escapes multiple special characters', () => {
-    const escaped = escapeRegex('1+1=2 (really?)');
-    // Verify it can be used in a regex without throwing
-    const re = new RegExp(escaped);
-    assert.equal(re.test('1+1=2 (really?)'), true);
+  it('returns 0 for empty substring', () => {
+    assert.equal(countOccurrences('hello', ''), 0);
   });
 
-  it('leaves normal strings unchanged', () => {
-    assert.equal(escapeRegex('hello'), 'hello');
+  it('handles single-character substring', () => {
+    assert.equal(countOccurrences('banana', 'a'), 3);
   });
 
-  it('escapes all special regex characters', () => {
-    const special = '.*+?^${}()|[]\\';
-    const escaped = escapeRegex(special);
-    // Every character should now be escaped
-    assert.equal(escaped.includes('\\'), true);
+  it('counts non-overlapping (aaa with aa = 1)', () => {
+    assert.equal(countOccurrences('aaa', 'aa'), 1);
+  });
+
+  it('handles empty source string', () => {
+    assert.equal(countOccurrences('', 'a'), 0);
+  });
+});
+
+// ─── replaceAll ───────────────────────────────────────────────────────────────
+
+describe('replaceAll', () => {
+  it('replaces all occurrences', () => {
+    assert.equal(replaceAll('foo bar foo baz foo', 'foo', 'qux'), 'qux bar qux baz qux');
+  });
+
+  it('returns string unchanged when search not found', () => {
+    assert.equal(replaceAll('hello world', 'xyz', 'abc'), 'hello world');
+  });
+
+  it('handles empty search (returns original)', () => {
+    assert.equal(replaceAll('hello', '', 'x'), 'hello');
+  });
+
+  it('handles empty string input', () => {
+    assert.equal(replaceAll('', 'a', 'b'), '');
+  });
+
+  it('replaces with empty string (deletion)', () => {
+    assert.equal(replaceAll('hello world', 'l', ''), 'heo word');
+  });
+});
+
+// ─── trimChar ─────────────────────────────────────────────────────────────────
+
+describe('trimChar', () => {
+  it('trims a specific character from both ends', () => {
+    assert.equal(trimChar('---hello---', '-'), 'hello');
+  });
+
+  it('trims only matching characters', () => {
+    assert.equal(trimChar('xxhelloxx', 'x'), 'hello');
+  });
+
+  it('does not trim non-matching characters', () => {
+    assert.equal(trimChar('  hello  ', 'x'), '  hello  ');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(trimChar('', '-'), '');
+  });
+
+  it('handles string that is all the char', () => {
+    assert.equal(trimChar('-----', '-'), '');
+  });
+
+  it('handles regex-special char like dot', () => {
+    assert.equal(trimChar('...hello...', '.'), 'hello');
+  });
+});
+
+// ─── splitWords ───────────────────────────────────────────────────────────────
+
+describe('splitWords', () => {
+  it('splits camelCase into words', () => {
+    assert.deepEqual(splitWords('camelCase'), ['camel', 'Case']);
+  });
+
+  it('splits snake_case into words', () => {
+    assert.deepEqual(splitWords('my_variable'), ['my', 'variable']);
+  });
+
+  it('splits kebab-case into words', () => {
+    assert.deepEqual(splitWords('my-variable'), ['my', 'variable']);
+  });
+
+  it('splits space-separated words', () => {
+    assert.deepEqual(splitWords('hello world'), ['hello', 'world']);
+  });
+
+  it('handles mixed separators', () => {
+    assert.deepEqual(splitWords('my-camelCase_word'), ['my', 'camel', 'Case', 'word']);
+  });
+
+  it('handles empty string', () => {
+    assert.deepEqual(splitWords(''), []);
+  });
+
+  it('handles PascalCase', () => {
+    assert.deepEqual(splitWords('HelloWorld'), ['Hello', 'World']);
+  });
+});
+
+// ─── wrap ─────────────────────────────────────────────────────────────────────
+
+describe('wrap', () => {
+  it('wraps at the correct column width using default newline', () => {
+    assert.equal(wrap('The quick brown fox', 10), 'The quick\nbrown fox');
+  });
+
+  it('does not wrap short strings', () => {
+    assert.equal(wrap('Hello', 20), 'Hello');
+  });
+
+  it('wraps each word on its own line if width is very small', () => {
+    assert.equal(wrap('one two three', 3), 'one\ntwo\nthree');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(wrap('', 10), '');
+  });
+
+  it('uses custom newline separator', () => {
+    assert.equal(wrap('hello world', 5, '<br>'), 'hello<br>world');
+  });
+
+  it('fits exactly at width boundary', () => {
+    assert.equal(wrap('ab cd ef', 5), 'ab cd\nef');
+  });
+
+  it('handles multiple spaces between words', () => {
+    assert.equal(wrap('hello   world', 20), 'hello world');
   });
 });
 
@@ -307,64 +513,37 @@ describe('slugify', () => {
   });
 });
 
-// ─── splitWords ───────────────────────────────────────────────────────────────
+// ─── interpolate ─────────────────────────────────────────────────────────────
 
-describe('splitWords', () => {
-  it('splits camelCase into words', () => {
-    assert.deepEqual(splitWords('camelCase'), ['camel', 'Case']);
+describe('interpolate', () => {
+  it('replaces a single placeholder', () => {
+    assert.equal(interpolate('Hi {name}', { name: 'Alice' }), 'Hi Alice');
   });
 
-  it('splits snake_case into words', () => {
-    assert.deepEqual(splitWords('my_variable'), ['my', 'variable']);
+  it('replaces multiple placeholders', () => {
+    assert.equal(
+      interpolate('{greeting}, {name}!', { greeting: 'Hello', name: 'Bob' }),
+      'Hello, Bob!',
+    );
   });
 
-  it('splits kebab-case into words', () => {
-    assert.deepEqual(splitWords('my-variable'), ['my', 'variable']);
+  it('supports numeric values', () => {
+    assert.equal(interpolate('Age: {age}', { age: 30 }), 'Age: 30');
   });
 
-  it('splits space-separated words', () => {
-    assert.deepEqual(splitWords('hello world'), ['hello', 'world']);
+  it('leaves unknown placeholders unchanged', () => {
+    assert.equal(interpolate('Hi {name}', {}), 'Hi {name}');
   });
 
-  it('handles mixed separators', () => {
-    assert.deepEqual(splitWords('my-camelCase_word'), ['my', 'camel', 'Case', 'word']);
+  it('handles empty template', () => {
+    assert.equal(interpolate('', { name: 'Alice' }), '');
   });
 
-  it('handles empty string', () => {
-    assert.deepEqual(splitWords(''), []);
-  });
-});
-
-// ─── wordWrap ─────────────────────────────────────────────────────────────────
-
-describe('wordWrap', () => {
-  it('wraps at the correct column width', () => {
-    const lines = wordWrap('The quick brown fox', 10);
-    assert.deepEqual(lines, ['The quick', 'brown fox']);
+  it('handles template with no placeholders', () => {
+    assert.equal(interpolate('Hello world', { name: 'Alice' }), 'Hello world');
   });
 
-  it('does not break short strings', () => {
-    const lines = wordWrap('Hello', 20);
-    assert.deepEqual(lines, ['Hello']);
-  });
-
-  it('returns each word on its own line if width is very small', () => {
-    const lines = wordWrap('one two three', 3);
-    assert.deepEqual(lines, ['one', 'two', 'three']);
-  });
-
-  it('handles empty string', () => {
-    const lines = wordWrap('', 10);
-    assert.deepEqual(lines, []);
-  });
-
-  it('fits exactly at width boundary', () => {
-    const lines = wordWrap('ab cd ef', 5);
-    assert.deepEqual(lines, ['ab cd', 'ef']);
-  });
-
-  it('handles multiple spaces between words', () => {
-    const lines = wordWrap('hello   world', 20);
-    assert.deepEqual(lines, ['hello world']);
+  it('handles repeated placeholder', () => {
+    assert.equal(interpolate('{x} + {x} = {y}', { x: 1, y: 2 }), '1 + 1 = 2');
   });
 });

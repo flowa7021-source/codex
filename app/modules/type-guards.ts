@@ -69,14 +69,54 @@ export function isRegExp(value: unknown): value is RegExp {
   return value instanceof RegExp;
 }
 
+/** Whether value is an Error instance. */
+export function isError(value: unknown): value is Error {
+  return value instanceof Error;
+}
+
+/** Whether value is iterable (has Symbol.iterator). */
+export function isIterable(value: unknown): value is Iterable<unknown> {
+  return (
+    value !== null &&
+    value !== undefined &&
+    typeof (value as Record<symbol, unknown>)[Symbol.iterator] === 'function'
+  );
+}
+
 /** Whether value is a finite number. */
 export function isFinite(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** Whether value is a finite number (alias for isFinite). */
+export function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
 /** Whether value is an integer. */
 export function isInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value);
+}
+
+/** Whether value is a non-empty string. */
+export function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+/** Whether value is a non-empty array. */
+export function isNonEmptyArray(value: unknown): value is unknown[] {
+  return Array.isArray(value) && value.length > 0;
+}
+
+/** Assert that value passes the given type guard; throw TypeError otherwise. */
+export function assertType<T>(
+  value: unknown,
+  guard: (v: unknown) => v is T,
+  message?: string,
+): asserts value is T {
+  if (!guard(value)) {
+    throw new TypeError(message ?? 'assertType failed: value did not match the expected type');
+  }
 }
 
 /** Assert that value is not null/undefined, throw if it is. */

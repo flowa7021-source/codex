@@ -1,66 +1,83 @@
 // @ts-check
 // ─── String Utilities ────────────────────────────────────────────────────────
-// General-purpose string manipulation helpers.
+// Comprehensive string manipulation helpers.
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
-/** Capitalize the first letter of a string. */
+/** Split a string into words (handles camelCase, PascalCase, snake_case, kebab-case, spaces). */
+export function splitWords(str: string): string[] {
+  // Insert space before uppercase letters following lowercase (camelCase)
+  const withSpaces = str
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+
+  return withSpaces
+    .split(/[-_\s]+/)
+    .map((w) => w.trim())
+    .filter((w) => w.length > 0);
+}
+
+/** Convert a string to camelCase. 'hello world' → 'helloWorld' */
+export function camelCase(str: string): string {
+  const words = splitWords(str);
+  if (words.length === 0) return '';
+  return words[0].toLowerCase() + words.slice(1).map((w) => capitalize(w.toLowerCase())).join('');
+}
+
+/** Convert a string to snake_case. 'helloWorld' → 'hello_world' */
+export function snakeCase(str: string): string {
+  return splitWords(str).map((w) => w.toLowerCase()).join('_');
+}
+
+/** Convert a string to kebab-case. 'helloWorld' → 'hello-world' */
+export function kebabCase(str: string): string {
+  return splitWords(str).map((w) => w.toLowerCase()).join('-');
+}
+
+/** Convert a string to PascalCase. 'hello world' → 'HelloWorld' */
+export function pascalCase(str: string): string {
+  return splitWords(str).map((w) => capitalize(w.toLowerCase())).join('');
+}
+
+/** Convert a string to Title Case. 'hello world' → 'Hello World' */
+export function titleCase(str: string): string {
+  return splitWords(str).map((w) => capitalize(w.toLowerCase())).join(' ');
+}
+
+/** Capitalize the first letter of a string. 'hello' → 'Hello' */
 export function capitalize(str: string): string {
   if (!str) return str;
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-/** Convert camelCase to kebab-case. */
-export function camelToKebab(str: string): string {
-  return str.replace(/([A-Z])/g, (match) => `-${match.toLowerCase()}`);
+/** Uncapitalize the first letter of a string. 'Hello' → 'hello' */
+export function uncapitalize(str: string): string {
+  if (!str) return str;
+  return str.charAt(0).toLowerCase() + str.slice(1);
 }
 
-/** Convert kebab-case to camelCase. */
-export function kebabToCamel(str: string): string {
-  return str.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase());
-}
-
-/** Convert a string to snake_case. */
-export function toSnakeCase(str: string): string {
-  return splitWords(str)
-    .map((w) => w.toLowerCase())
-    .join('_');
-}
-
-/** Truncate a string to maxLength, appending suffix if truncated. */
-export function truncate(str: string, maxLength: number, suffix = '...'): string {
-  if (str.length <= maxLength) return str;
-  return str.slice(0, maxLength - suffix.length) + suffix;
-}
-
-/** Pad a string to the left with a character. */
-export function padLeft(str: string, length: number, char = ' '): string {
-  if (str.length >= length) return str;
+/** Pad the start of a string to reach `len`, using `char` (default space). */
+export function padStart(str: string, len: number, char = ' '): string {
   const pad = char.charAt(0) || ' ';
-  return pad.repeat(length - str.length) + str;
+  if (str.length >= len) return str;
+  return pad.repeat(len - str.length) + str;
 }
 
-/** Pad a string to the right with a character. */
-export function padRight(str: string, length: number, char = ' '): string {
-  if (str.length >= length) return str;
+/** Pad the end of a string to reach `len`, using `char` (default space). */
+export function padEnd(str: string, len: number, char = ' '): string {
   const pad = char.charAt(0) || ' ';
-  return str + pad.repeat(length - str.length);
+  if (str.length >= len) return str;
+  return str + pad.repeat(len - str.length);
 }
 
-/** Count occurrences of a substring in a string. */
-export function countOccurrences(str: string, substring: string): number {
-  if (!substring) return 0;
-  let count = 0;
-  let pos = 0;
-  while ((pos = str.indexOf(substring, pos)) !== -1) {
-    count++;
-    pos += substring.length;
-  }
-  return count;
+/** Repeat a string `n` times. */
+export function repeat(str: string, n: number): string {
+  if (n <= 0) return '';
+  return str.repeat(n);
 }
 
-/** Reverse a string. */
-export function reverseString(str: string): string {
+/** Reverse a string (unicode-aware). */
+export function reverse(str: string): string {
   return [...str].reverse().join('');
 }
 
@@ -70,41 +87,37 @@ export function isPalindrome(str: string): boolean {
   return cleaned === [...cleaned].reverse().join('');
 }
 
-/** Escape regex special characters in a string. */
-export function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Count non-overlapping occurrences of `sub` in `str`. */
+export function countOccurrences(str: string, sub: string): number {
+  if (!sub) return 0;
+  let count = 0;
+  let pos = 0;
+  while ((pos = str.indexOf(sub, pos)) !== -1) {
+    count++;
+    pos += sub.length;
+  }
+  return count;
 }
 
-/** Generate a simple slug from a string (lowercase, hyphens). */
-export function slugify(str: string): string {
-  return str
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/[\s]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
+/** Replace all occurrences of `search` with `replacement` (no regex). */
+export function replaceAll(str: string, search: string, replacement: string): string {
+  if (!search) return str;
+  return str.split(search).join(replacement);
 }
 
-/** Split a string into words (handles camelCase, snake_case, kebab-case). */
-export function splitWords(str: string): string[] {
-  // Insert space before uppercase letters (camelCase)
-  const withSpaces = str
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
-
-  // Split on underscores, hyphens, and spaces
-  return withSpaces
-    .split(/[-_\s]+/)
-    .map((w) => w.trim())
-    .filter((w) => w.length > 0);
+/** Trim a specific character from both ends of a string. */
+export function trimChar(str: string, char: string): string {
+  if (!char) return str;
+  const c = char.charAt(0);
+  const escaped = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return str.replace(new RegExp(`^${escaped}+|${escaped}+$`, 'g'), '');
 }
 
-/** Wrap text at a given column width, preserving words. */
-export function wordWrap(str: string, width: number): string[] {
-  if (width <= 0) return [str];
-
+/** Word-wrap a string at `width` characters. Uses `newline` as line separator (default '\n'). */
+export function wrap(str: string, width: number, newline = '\n'): string {
+  if (width <= 0) return str;
   const words = str.split(/\s+/).filter((w) => w.length > 0);
+  if (words.length === 0) return '';
   const lines: string[] = [];
   let current = '';
 
@@ -120,6 +133,23 @@ export function wordWrap(str: string, width: number): string[] {
   }
 
   if (current) lines.push(current);
+  return lines.join(newline);
+}
 
-  return lines;
+/** Generate a URL-safe slug from a string. 'Hello World!' → 'hello-world' */
+export function slugify(str: string): string {
+  return str
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/[\s]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/** Interpolate a template string. 'Hi {name}' + {name: 'Alice'} → 'Hi Alice' */
+export function interpolate(template: string, vars: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (_match, key: string) => {
+    return key in vars ? String(vars[key]) : _match;
+  });
 }

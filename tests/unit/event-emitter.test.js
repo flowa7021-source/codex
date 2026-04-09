@@ -335,6 +335,80 @@ describe('eventNames()', () => {
   });
 });
 
+// ─── listeners() ─────────────────────────────────────────────────────────────
+
+describe('listeners()', () => {
+  it('returns empty array for unknown event', () => {
+    const emitter = new EventEmitter();
+    assert.deepEqual(emitter.listeners('missing'), []);
+  });
+
+  it('returns the registered listener functions', () => {
+    const emitter = new EventEmitter();
+    const fn1 = () => {};
+    const fn2 = () => {};
+    emitter.on('ev', fn1);
+    emitter.on('ev', fn2);
+    const list = emitter.listeners('ev');
+    assert.equal(list.length, 2);
+    assert.ok(list.includes(fn1));
+    assert.ok(list.includes(fn2));
+  });
+
+  it('returns the original (unwrapped) function for once() listeners', () => {
+    const emitter = new EventEmitter();
+    const original = () => {};
+    emitter.once('tick', original);
+    const list = emitter.listeners('tick');
+    assert.equal(list.length, 1);
+    assert.equal(list[0], original);
+  });
+
+  it('returns a copy — mutating it does not affect the emitter', () => {
+    const emitter = new EventEmitter();
+    emitter.on('ev', () => {});
+    const list = emitter.listeners('ev');
+    list.length = 0;
+    assert.equal(emitter.listenerCount('ev'), 1);
+  });
+});
+
+// ─── setMaxListeners() / getMaxListeners() ────────────────────────────────────
+
+describe('setMaxListeners() / getMaxListeners()', () => {
+  it('default max listeners is 10', () => {
+    const emitter = new EventEmitter();
+    assert.equal(emitter.getMaxListeners(), 10);
+  });
+
+  it('setMaxListeners updates the limit', () => {
+    const emitter = new EventEmitter();
+    emitter.setMaxListeners(20);
+    assert.equal(emitter.getMaxListeners(), 20);
+  });
+
+  it('setMaxListeners returns this for chaining', () => {
+    const emitter = new EventEmitter();
+    const result = emitter.setMaxListeners(5);
+    assert.ok(result instanceof EventEmitter);
+  });
+
+  it('setting limit to 0 disables the warning (unlimited)', () => {
+    const emitter = new EventEmitter();
+    emitter.setMaxListeners(0);
+    // Should not warn; add more than 10 listeners without console.warn being called
+    const warned = [];
+    const originalWarn = console.warn;
+    console.warn = (...args) => warned.push(args);
+    try {
+      for (let i = 0; i < 15; i++) emitter.on('ev', () => {});
+    } finally {
+      console.warn = originalWarn;
+    }
+    assert.equal(warned.length, 0);
+  });
+});
+
 // ─── createEventEmitter() ────────────────────────────────────────────────────
 
 describe('createEventEmitter()', () => {

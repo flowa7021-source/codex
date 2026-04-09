@@ -180,3 +180,141 @@ export function formatDateISO(date: Date): string {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+/** Format a date using a simple format string: YYYY, MM, DD, HH, mm, ss */
+export function formatDate(date: Date, format: string): string {
+  const year = String(date.getFullYear());
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return format
+    .replace('YYYY', year)
+    .replace('MM', month)
+    .replace('DD', day)
+    .replace('HH', hours)
+    .replace('mm', minutes)
+    .replace('ss', seconds);
+}
+
+/** Parse a date from ISO string or numeric timestamp. */
+export function parseDateInput(input: string | number): Date {
+  if (typeof input === 'number') return new Date(input);
+  const d = new Date(input);
+  if (isNaN(d.getTime())) throw new RangeError(`Invalid date: ${input}`);
+  return d;
+}
+
+/** Add an amount of time to a date. Returns a new Date. */
+export function addTime(
+  date: Date,
+  amount: number,
+  unit: 'days' | 'hours' | 'minutes' | 'seconds' | 'months' | 'years',
+): Date {
+  const result = new Date(date.getTime());
+  switch (unit) {
+    case 'seconds':
+      result.setSeconds(result.getSeconds() + amount);
+      break;
+    case 'minutes':
+      result.setMinutes(result.getMinutes() + amount);
+      break;
+    case 'hours':
+      result.setHours(result.getHours() + amount);
+      break;
+    case 'days':
+      result.setDate(result.getDate() + amount);
+      break;
+    case 'months': {
+      const day = result.getDate();
+      result.setMonth(result.getMonth() + amount);
+      if (result.getDate() !== day) result.setDate(0);
+      break;
+    }
+    case 'years': {
+      const day = result.getDate();
+      result.setFullYear(result.getFullYear() + amount);
+      if (result.getDate() !== day) result.setDate(0);
+      break;
+    }
+  }
+  return result;
+}
+
+/** Get the difference between two dates in the specified unit (truncated). */
+export function diffTime(
+  a: Date,
+  b: Date,
+  unit: 'days' | 'hours' | 'minutes' | 'seconds' | 'months' | 'years',
+): number {
+  switch (unit) {
+    case 'seconds':  return Math.trunc((a.getTime() - b.getTime()) / 1_000);
+    case 'minutes':  return Math.trunc((a.getTime() - b.getTime()) / 60_000);
+    case 'hours':    return Math.trunc((a.getTime() - b.getTime()) / 3_600_000);
+    case 'days':     return Math.trunc((a.getTime() - b.getTime()) / 86_400_000);
+    case 'months':
+      return (a.getFullYear() - b.getFullYear()) * 12 + (a.getMonth() - b.getMonth());
+    case 'years':
+      return a.getFullYear() - b.getFullYear();
+  }
+}
+
+/** Check if a date is between two others (inclusive). */
+export function isBetween(date: Date, start: Date, end: Date): boolean {
+  const t = date.getTime();
+  return t >= start.getTime() && t <= end.getTime();
+}
+
+/** Get the day of the year (1-366). */
+export function dayOfYear(date: Date): number {
+  const start = new Date(date.getFullYear(), 0, 0);
+  const diff = date.getTime() - start.getTime();
+  return Math.floor(diff / 86_400_000);
+}
+
+/** Get the ISO week of the year (1-53). */
+export function weekOfYear(date: Date): number {
+  return getWeekNumber(date);
+}
+
+/** Relative time string: '2 hours ago', 'in 3 days', 'just now'. */
+export function relativeTime(date: Date, now: Date = new Date()): string {
+  const diffMs = date.getTime() - now.getTime();
+  const absDiffMs = Math.abs(diffMs);
+
+  const seconds = Math.round(absDiffMs / 1_000);
+  const minutes = Math.round(absDiffMs / 60_000);
+  const hours   = Math.round(absDiffMs / 3_600_000);
+  const days    = Math.round(absDiffMs / 86_400_000);
+  const months  = Math.round(absDiffMs / (30 * 86_400_000));
+  const years   = Math.round(absDiffMs / (365 * 86_400_000));
+
+  let label: string;
+  if (seconds < 45) {
+    label = 'just now';
+    return label;
+  } else if (seconds < 90) {
+    label = '1 minute';
+  } else if (minutes < 45) {
+    label = `${minutes} minutes`;
+  } else if (minutes < 90) {
+    label = '1 hour';
+  } else if (hours < 22) {
+    label = `${hours} hours`;
+  } else if (hours < 36) {
+    label = '1 day';
+  } else if (days < 26) {
+    label = `${days} days`;
+  } else if (days < 45) {
+    label = '1 month';
+  } else if (days < 345) {
+    label = `${months} months`;
+  } else if (days < 545) {
+    label = '1 year';
+  } else {
+    label = `${years} years`;
+  }
+
+  return diffMs < 0 ? `${label} ago` : `in ${label}`;
+}

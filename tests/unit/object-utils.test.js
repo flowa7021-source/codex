@@ -17,6 +17,16 @@ import {
   getPath,
   setPath,
   deletePath,
+  hasPath,
+  merge,
+  deepFreeze,
+  deepCopy,
+  mapValues,
+  filterValues,
+  fromEntries,
+  invert,
+  flatten,
+  unflatten,
   isPlainObject,
   typeOf,
 } from '../../app/modules/object-utils.js';
@@ -450,6 +460,311 @@ describe('deletePath', () => {
     const obj = { a: 1 };
     assert.doesNotThrow(() => deletePath(obj, 'x.y.z'));
     assert.deepEqual(obj, { a: 1 });
+  });
+
+  it('returns true when a key is deleted', () => {
+    const obj = { a: 1, b: 2 };
+    assert.equal(deletePath(obj, 'a'), true);
+  });
+
+  it('returns false when the path does not exist', () => {
+    const obj = { a: 1 };
+    assert.equal(deletePath(obj, 'x.y'), false);
+  });
+});
+
+// ─── hasPath ─────────────────────────────────────────────────────────────────
+
+describe('hasPath', () => {
+  it('returns true for an existing top-level key', () => {
+    assert.equal(hasPath({ a: 1 }, 'a'), true);
+  });
+
+  it('returns true for an existing nested key', () => {
+    assert.equal(hasPath({ a: { b: { c: 42 } } }, 'a.b.c'), true);
+  });
+
+  it('returns false for a missing key', () => {
+    assert.equal(hasPath({ a: 1 }, 'b'), false);
+  });
+
+  it('returns false for a missing nested key', () => {
+    assert.equal(hasPath({ a: { b: 1 } }, 'a.c'), false);
+  });
+
+  it('returns false for null input', () => {
+    assert.equal(hasPath(null, 'a'), false);
+  });
+
+  it('returns false when traversing through a non-object', () => {
+    assert.equal(hasPath({ a: 42 }, 'a.b'), false);
+  });
+
+  it('returns true for a key with undefined value', () => {
+    assert.equal(hasPath({ a: undefined }, 'a'), true);
+  });
+});
+
+// ─── merge ────────────────────────────────────────────────────────────────────
+
+describe('merge', () => {
+  it('merges source properties into target', () => {
+    const target = { a: 1 };
+    const result = merge(target, { b: 2 });
+    assert.deepEqual(result, { a: 1, b: 2 });
+  });
+
+  it('overwrites existing keys', () => {
+    const target = { a: 1, b: 2 };
+    merge(target, { b: 99, c: 3 });
+    assert.deepEqual(target, { a: 1, b: 99, c: 3 });
+  });
+
+  it('mutates and returns the target', () => {
+    const target = { a: 1 };
+    const result = merge(target, { b: 2 });
+    assert.strictEqual(result, target);
+  });
+
+  it('merges multiple sources left to right', () => {
+    const target = { a: 1 };
+    merge(target, { b: 2 }, { c: 3 }, { b: 99 });
+    assert.deepEqual(target, { a: 1, b: 99, c: 3 });
+  });
+
+  it('returns target unchanged when no sources given', () => {
+    const target = { a: 1 };
+    merge(target);
+    assert.deepEqual(target, { a: 1 });
+  });
+});
+
+// ─── deepFreeze ───────────────────────────────────────────────────────────────
+
+describe('deepFreeze', () => {
+  it('freezes the top-level object', () => {
+    const obj = deepFreeze({ a: 1 });
+    assert.equal(Object.isFrozen(obj), true);
+  });
+
+  it('freezes nested objects', () => {
+    const obj = deepFreeze({ a: { b: { c: 1 } } });
+    assert.equal(Object.isFrozen(obj.a), true);
+    assert.equal(Object.isFrozen(obj.a.b), true);
+  });
+
+  it('returns the same object reference', () => {
+    const obj = { a: 1 };
+    const result = deepFreeze(obj);
+    assert.strictEqual(result, obj);
+  });
+
+  it('prevents mutation of nested property (in strict mode the assignment throws)', () => {
+    const obj = deepFreeze({ a: { b: 42 } });
+    assert.throws(() => {
+      'use strict';
+      (obj.a).b = 99;
+    });
+  });
+});
+
+// ─── deepCopy ─────────────────────────────────────────────────────────────────
+
+describe('deepCopy', () => {
+  it('returns a deeply equal but distinct object', () => {
+    const original = { a: { b: 1 } };
+    const copy = deepCopy(original);
+    assert.deepEqual(copy, original);
+    assert.notStrictEqual(copy, original);
+  });
+
+  it('mutations on the copy do not affect the original', () => {
+    const original = { a: { b: 1 } };
+    const copy = deepCopy(original);
+    copy.a.b = 99;
+    assert.equal(original.a.b, 1);
+  });
+
+  it('copies arrays correctly', () => {
+    const original = [1, [2, 3], { a: 4 }];
+    const copy = deepCopy(original);
+    assert.deepEqual(copy, original);
+    copy[1][0] = 99;
+    assert.equal(original[1][0], 2);
+  });
+
+  it('copies primitive values', () => {
+    assert.equal(deepCopy(42), 42);
+    assert.equal(deepCopy('hello'), 'hello');
+    assert.equal(deepCopy(true), true);
+  });
+});
+
+// ─── mapValues ────────────────────────────────────────────────────────────────
+
+describe('mapValues', () => {
+  it('maps values with a transform function', () => {
+    const obj = { a: 1, b: 2, c: 3 };
+    const result = mapValues(obj, (v) => v * 2);
+    assert.deepEqual(result, { a: 2, b: 4, c: 6 });
+  });
+
+  it('passes both value and key to the function', () => {
+    const obj = { x: 1, y: 2 };
+    const result = mapValues(obj, (v, k) => `${k}:${v}`);
+    assert.deepEqual(result, { x: 'x:1', y: 'y:2' });
+  });
+
+  it('returns empty object for empty input', () => {
+    assert.deepEqual(mapValues({}, (v) => v), {});
+  });
+
+  it('does not mutate the original object', () => {
+    const obj = { a: 1 };
+    mapValues(obj, (v) => v + 10);
+    assert.deepEqual(obj, { a: 1 });
+  });
+});
+
+// ─── filterValues ─────────────────────────────────────────────────────────────
+
+describe('filterValues', () => {
+  it('keeps only values passing the predicate', () => {
+    const obj = { a: 1, b: 2, c: 3, d: 4 };
+    const result = filterValues(obj, (v) => v % 2 === 0);
+    assert.deepEqual(result, { b: 2, d: 4 });
+  });
+
+  it('passes both value and key to predicate', () => {
+    const obj = { keep: 1, skip: 2, keep2: 3 };
+    const result = filterValues(obj, (_v, k) => k.startsWith('keep'));
+    assert.deepEqual(result, { keep: 1, keep2: 3 });
+  });
+
+  it('returns empty object when no values match', () => {
+    const obj = { a: 1, b: 2 };
+    const result = filterValues(obj, (v) => v > 100);
+    assert.deepEqual(result, {});
+  });
+
+  it('returns full object when all values match', () => {
+    const obj = { a: 1, b: 2 };
+    const result = filterValues(obj, () => true);
+    assert.deepEqual(result, { a: 1, b: 2 });
+  });
+
+  it('does not mutate the original', () => {
+    const obj = { a: 1, b: 2 };
+    filterValues(obj, (v) => v > 1);
+    assert.deepEqual(obj, { a: 1, b: 2 });
+  });
+});
+
+// ─── fromEntries ──────────────────────────────────────────────────────────────
+
+describe('fromEntries', () => {
+  it('creates an object from [key, value] pairs', () => {
+    const result = fromEntries([['a', 1], ['b', 2]]);
+    assert.deepEqual(result, { a: 1, b: 2 });
+  });
+
+  it('returns empty object for empty array', () => {
+    assert.deepEqual(fromEntries([]), {});
+  });
+
+  it('last duplicate key wins', () => {
+    const result = fromEntries([['a', 1], ['a', 99]]);
+    assert.deepEqual(result, { a: 99 });
+  });
+
+  it('round-trips with Object.entries', () => {
+    const original = { x: 'hello', y: 'world' };
+    const result = fromEntries(Object.entries(original));
+    assert.deepEqual(result, original);
+  });
+});
+
+// ─── invert ───────────────────────────────────────────────────────────────────
+
+describe('invert', () => {
+  it('swaps keys and values', () => {
+    const obj = { a: 'x', b: 'y', c: 'z' };
+    assert.deepEqual(invert(obj), { x: 'a', y: 'b', z: 'c' });
+  });
+
+  it('returns empty object for empty input', () => {
+    assert.deepEqual(invert({}), {});
+  });
+
+  it('last duplicate value becomes the only key', () => {
+    const result = invert({ a: 'dup', b: 'dup' });
+    assert.equal(result['dup'], 'b');
+  });
+
+  it('does not mutate the original', () => {
+    const obj = { a: 'x' };
+    invert(obj);
+    assert.deepEqual(obj, { a: 'x' });
+  });
+});
+
+// ─── flatten (object) ─────────────────────────────────────────────────────────
+
+describe('flatten', () => {
+  it('flattens nested object to dot-separated keys', () => {
+    const result = flatten({ a: { b: 1 }, c: 2 }, '', '.');
+    assert.deepEqual(result, { 'a.b': 1, c: 2 });
+  });
+
+  it('defaults separator to dot', () => {
+    const result = flatten({ a: { b: 1 } });
+    assert.deepEqual(result, { 'a.b': 1 });
+  });
+
+  it('handles deeply nested objects', () => {
+    const result = flatten({ a: { b: { c: 42 } } });
+    assert.deepEqual(result, { 'a.b.c': 42 });
+  });
+
+  it('uses a custom separator', () => {
+    const result = flatten({ a: { b: 1 } }, '', '_');
+    assert.deepEqual(result, { 'a_b': 1 });
+  });
+
+  it('returns empty object for empty input', () => {
+    assert.deepEqual(flatten({}), {});
+  });
+
+  it('does not include intermediate keys, only leaf values', () => {
+    const result = flatten({ a: { b: 1, c: 2 }, d: 3 });
+    assert.deepEqual(result, { 'a.b': 1, 'a.c': 2, d: 3 });
+  });
+});
+
+// ─── unflatten (object) ───────────────────────────────────────────────────────
+
+describe('unflatten', () => {
+  it('unflattens dot-separated keys to nested object', () => {
+    const result = unflatten({ 'a.b': 1, c: 2 });
+    assert.deepEqual(result, { a: { b: 1 }, c: 2 });
+  });
+
+  it('handles deeply nested paths', () => {
+    assert.deepEqual(unflatten({ 'a.b.c': 42 }), { a: { b: { c: 42 } } });
+  });
+
+  it('handles custom separator', () => {
+    assert.deepEqual(unflatten({ 'a_b': 1 }, '_'), { a: { b: 1 } });
+  });
+
+  it('returns empty object for empty input', () => {
+    assert.deepEqual(unflatten({}), {});
+  });
+
+  it('round-trips with flatten', () => {
+    const original = { a: { b: { c: 1 }, d: 2 }, e: 3 };
+    const result = unflatten(flatten(original));
+    assert.deepEqual(result, original);
   });
 });
 
