@@ -1,193 +1,196 @@
 // @ts-check
 // ─── Color Utilities ─────────────────────────────────────────────────────────
-// Color manipulation helpers: hex ↔ RGB ↔ HSL, lighten/darken, mix, contrast.
+// Color manipulation helpers — no browser APIs.
 
-// ─── Hex ↔ RGB ───────────────────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-/**
- * Parse a hex color string to RGB components.
- * Accepts 3-char (#rgb) and 6-char (#rrggbb) forms.
- * Returns null for invalid input.
- */
-export function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  if (typeof hex !== 'string') return null;
-  const clean = hex.startsWith('#') ? hex.slice(1) : hex;
-  if (clean.length === 3) {
-    const r = parseInt(clean[0] + clean[0], 16);
-    const g = parseInt(clean[1] + clean[1], 16);
-    const b = parseInt(clean[2] + clean[2], 16);
-    if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+export interface RGB { r: number; g: number; b: number; }
+export interface HSL { h: number; s: number; l: number; }
+export interface RGBA extends RGB { a: number; }
+
+// ─── Public API ──────────────────────────────────────────────────────────────
+
+/** Parse hex color string to RGB. Supports #RGB and #RRGGBB. */
+export function hexToRgb(hex: string): RGB {
+  const cleaned = hex.startsWith('#') ? hex.slice(1) : hex;
+  if (cleaned.length === 3) {
+    const r = parseInt(cleaned[0] + cleaned[0], 16);
+    const g = parseInt(cleaned[1] + cleaned[1], 16);
+    const b = parseInt(cleaned[2] + cleaned[2], 16);
     return { r, g, b };
   }
-  if (clean.length === 6) {
-    const r = parseInt(clean.slice(0, 2), 16);
-    const g = parseInt(clean.slice(2, 4), 16);
-    const b = parseInt(clean.slice(4, 6), 16);
-    if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
-    return { r, g, b };
-  }
-  return null;
+  const r = parseInt(cleaned.slice(0, 2), 16);
+  const g = parseInt(cleaned.slice(2, 4), 16);
+  const b = parseInt(cleaned.slice(4, 6), 16);
+  return { r, g, b };
 }
 
-/**
- * Convert RGB components to a hex color string (e.g. '#ff0000').
- */
-export function rgbToHex(r: number, g: number, b: number): string {
+/** Convert RGB to hex string (#rrggbb). */
+export function rgbToHex(rgb: RGB): string {
   const toHex = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, '0');
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  return `#${toHex(rgb.r)}${toHex(rgb.g)}${toHex(rgb.b)}`;
 }
 
-// ─── RGB ↔ HSL ────────────────────────────────────────────────────────────────
-
-/**
- * Convert RGB to HSL.
- * @returns `{ h: 0–360, s: 0–100, l: 0–100 }`
- */
-export function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: number } {
-  const rn = r / 255;
-  const gn = g / 255;
-  const bn = b / 255;
-  const max = Math.max(rn, gn, bn);
-  const min = Math.min(rn, gn, bn);
-  const delta = max - min;
+/** Convert RGB to HSL. */
+export function rgbToHsl(rgb: RGB): HSL {
+  const r = rgb.r / 255;
+  const g = rgb.g / 255;
+  const b = rgb.b / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
   const l = (max + min) / 2;
 
-  let h = 0;
-  let s = 0;
-
-  if (delta !== 0) {
-    s = delta / (1 - Math.abs(2 * l - 1));
-    if (max === rn) {
-      h = ((gn - bn) / delta) % 6;
-    } else if (max === gn) {
-      h = (bn - rn) / delta + 2;
-    } else {
-      h = (rn - gn) / delta + 4;
-    }
-    h = h * 60;
-    if (h < 0) h += 360;
+  if (max === min) {
+    return { h: 0, s: 0, l: l * 100 };
   }
 
-  return {
-    h: Math.round(h),
-    s: Math.round(s * 100),
-    l: Math.round(l * 100),
-  };
+  const d = max - min;
+  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+  let h: number;
+  if (max === r) {
+    h = (g - b) / d + (g < b ? 6 : 0);
+  } else if (max === g) {
+    h = (b - r) / d + 2;
+  } else {
+    h = (r - g) / d + 4;
+  }
+  h /= 6;
+
+  return { h: h * 360, s: s * 100, l: l * 100 };
 }
 
-/**
- * Helper: hue → channel value used by hslToRgb.
- */
-function hue2rgb(p: number, q: number, t: number): number {
-  let tt = t;
-  if (tt < 0) tt += 1;
-  if (tt > 1) tt -= 1;
-  if (tt < 1 / 6) return p + (q - p) * 6 * tt;
-  if (tt < 1 / 2) return q;
-  if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
-  return p;
-}
+/** Convert HSL to RGB. */
+export function hslToRgb(hsl: HSL): RGB {
+  const h = hsl.h / 360;
+  const s = hsl.s / 100;
+  const l = hsl.l / 100;
 
-/**
- * Convert HSL to RGB.
- * @param h - Hue 0–360
- * @param s - Saturation 0–100
- * @param l - Lightness 0–100
- */
-export function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
-  const sn = s / 100;
-  const ln = l / 100;
-  if (sn === 0) {
-    const v = Math.round(ln * 255);
+  if (s === 0) {
+    const v = Math.round(l * 255);
     return { r: v, g: v, b: v };
   }
-  const q = ln < 0.5 ? ln * (1 + sn) : ln + sn - ln * sn;
-  const p = 2 * ln - q;
-  const hn = h / 360;
+
+  const hue2rgb = (p: number, q: number, t: number): number => {
+    let tt = t;
+    if (tt < 0) tt += 1;
+    if (tt > 1) tt -= 1;
+    if (tt < 1 / 6) return p + (q - p) * 6 * tt;
+    if (tt < 1 / 2) return q;
+    if (tt < 2 / 3) return p + (q - p) * (2 / 3 - tt) * 6;
+    return p;
+  };
+
+  const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+  const p = 2 * l - q;
+
   return {
-    r: Math.round(hue2rgb(p, q, hn + 1 / 3) * 255),
-    g: Math.round(hue2rgb(p, q, hn) * 255),
-    b: Math.round(hue2rgb(p, q, hn - 1 / 3) * 255),
+    r: Math.round(hue2rgb(p, q, h + 1 / 3) * 255),
+    g: Math.round(hue2rgb(p, q, h) * 255),
+    b: Math.round(hue2rgb(p, q, h - 1 / 3) * 255),
   };
 }
 
-// ─── Lighten / Darken ────────────────────────────────────────────────────────
-
-/**
- * Lighten a hex color by a percentage (0–100).
- * Works via HSL: increases the L component.
- */
-export function lighten(hex: string, amount: number): string {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return hex;
-  const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
-  const newL = Math.min(100, hsl.l + amount);
-  const result = hslToRgb(hsl.h, hsl.s, newL);
-  return rgbToHex(result.r, result.g, result.b);
-}
-
-/**
- * Darken a hex color by a percentage (0–100).
- * Works via HSL: decreases the L component.
- */
-export function darken(hex: string, amount: number): string {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return hex;
-  const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
-  const newL = Math.max(0, hsl.l - amount);
-  const result = hslToRgb(hsl.h, hsl.s, newL);
-  return rgbToHex(result.r, result.g, result.b);
-}
-
-// ─── Mix ─────────────────────────────────────────────────────────────────────
-
-/**
- * Mix two hex colors by a ratio (0 = all color1, 1 = all color2).
- */
-export function mixColors(hex1: string, hex2: string, ratio: number): string {
-  const c1 = hexToRgb(hex1);
-  const c2 = hexToRgb(hex2);
-  if (!c1 || !c2) return hex1;
-  const r = Math.round(c1.r + (c2.r - c1.r) * ratio);
-  const g = Math.round(c1.g + (c2.g - c1.g) * ratio);
-  const b = Math.round(c1.b + (c2.b - c1.b) * ratio);
-  return rgbToHex(r, g, b);
-}
-
-// ─── Luminance & Contrast ────────────────────────────────────────────────────
-
-/**
- * Get the relative luminance of a hex color (WCAG 2.x sRGB linearization).
- * Returns a value in [0, 1].
- */
-export function getLuminance(hex: string): number {
-  const rgb = hexToRgb(hex);
-  if (!rgb) return 0;
-  const linearize = (c: number): number => {
-    const sRGB = c / 255;
-    return sRGB <= 0.03928 ? sRGB / 12.92 : Math.pow((sRGB + 0.055) / 1.055, 2.4);
+/** Mix two colors by a factor t (0=color1, 1=color2). */
+export function mixColors(c1: RGB, c2: RGB, t: number): RGB {
+  const clampedT = Math.max(0, Math.min(1, t));
+  return {
+    r: Math.round(c1.r + (c2.r - c1.r) * clampedT),
+    g: Math.round(c1.g + (c2.g - c1.g) * clampedT),
+    b: Math.round(c1.b + (c2.b - c1.b) * clampedT),
   };
-  return 0.2126 * linearize(rgb.r) + 0.7152 * linearize(rgb.g) + 0.0722 * linearize(rgb.b);
 }
 
-/**
- * Compute WCAG 2.x contrast ratio between two hex colors.
- * Returns a value in [1, 21].
- */
-export function getContrastRatio(hex1: string, hex2: string): number {
-  const l1 = getLuminance(hex1);
-  const l2 = getLuminance(hex2);
+/** Lighten a color by percentage (0-100). */
+export function lighten(color: RGB, amount: number): RGB {
+  const hsl = rgbToHsl(color);
+  hsl.l = Math.min(100, hsl.l + amount);
+  return hslToRgb(hsl);
+}
+
+/** Darken a color by percentage (0-100). */
+export function darken(color: RGB, amount: number): RGB {
+  const hsl = rgbToHsl(color);
+  hsl.l = Math.max(0, hsl.l - amount);
+  return hslToRgb(hsl);
+}
+
+/** Calculate relative luminance (for WCAG contrast). */
+export function luminance(color: RGB): number {
+  const toLinear = (c: number): number => {
+    const s = c / 255;
+    return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * toLinear(color.r) + 0.7152 * toLinear(color.g) + 0.0722 * toLinear(color.b);
+}
+
+/** Calculate WCAG contrast ratio between two colors. */
+export function contrastRatio(c1: RGB, c2: RGB): number {
+  const l1 = luminance(c1);
+  const l2 = luminance(c2);
   const lighter = Math.max(l1, l2);
   const darker = Math.min(l1, l2);
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-/**
- * Determine whether text on a given background should be black or white.
- * Returns '#000000' or '#ffffff' whichever has the higher contrast ratio.
- */
-export function getReadableTextColor(backgroundHex: string): '#000000' | '#ffffff' {
-  const contrastBlack = getContrastRatio(backgroundHex, '#000000');
-  const contrastWhite = getContrastRatio(backgroundHex, '#ffffff');
-  return contrastBlack >= contrastWhite ? '#000000' : '#ffffff';
+/** Check if contrast meets WCAG AA (ratio >= 4.5 for normal text). */
+export function meetsWCAGAA(c1: RGB, c2: RGB): boolean {
+  return contrastRatio(c1, c2) >= 4.5;
+}
+
+/** Invert a color. */
+export function invertColor(color: RGB): RGB {
+  return {
+    r: 255 - color.r,
+    g: 255 - color.g,
+    b: 255 - color.b,
+  };
+}
+
+/** Convert RGBA to CSS rgba() string. */
+export function toRgbString(color: RGB | RGBA): string {
+  const a = 'a' in color ? (color as RGBA).a : undefined;
+  if (a !== undefined) {
+    return `rgba(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)}, ${a})`;
+  }
+  return `rgb(${Math.round(color.r)}, ${Math.round(color.g)}, ${Math.round(color.b)})`;
+}
+
+/** Parse any CSS color string (hex, rgb(), hsl()) to RGB. Returns null if invalid. */
+export function parseCssColor(css: string): RGB | null {
+  const trimmed = css.trim();
+
+  // Hex colors
+  if (trimmed.startsWith('#')) {
+    const cleaned = trimmed.slice(1);
+    if (cleaned.length === 3 && /^[0-9a-fA-F]{3}$/.test(cleaned)) {
+      return hexToRgb(trimmed);
+    }
+    if (cleaned.length === 6 && /^[0-9a-fA-F]{6}$/.test(cleaned)) {
+      return hexToRgb(trimmed);
+    }
+    return null;
+  }
+
+  // rgb() or rgba()
+  const rgbMatch = trimmed.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*[\d.]+)?\s*\)$/);
+  if (rgbMatch) {
+    return {
+      r: parseInt(rgbMatch[1], 10),
+      g: parseInt(rgbMatch[2], 10),
+      b: parseInt(rgbMatch[3], 10),
+    };
+  }
+
+  // hsl() or hsla()
+  const hslMatch = trimmed.match(/^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%(?:\s*,\s*[\d.]+)?\s*\)$/);
+  if (hslMatch) {
+    return hslToRgb({
+      h: parseFloat(hslMatch[1]),
+      s: parseFloat(hslMatch[2]),
+      l: parseFloat(hslMatch[3]),
+    });
+  }
+
+  return null;
 }
