@@ -1,17 +1,20 @@
-// ─── Unit Tests: Logger ─────────────────────────────────────────────────────
-import { describe, it, beforeEach, afterEach, mock } from 'node:test';
+// ─── Unit Tests: Logger ───────────────────────────────────────────────────────
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  setLogLevel,
-  addLogSink,
-  createLogger,
-  log,
-} from '../../app/modules/logger.js';
+  Logger,
+  logger,
+  debug,
+  info,
+  warn,
+  error,
+} from '../../app/modules/logger.ts';
 
-// Capture console output for assertions
-let captured = { debug: [], info: [], warn: [], error: [] };
-const origConsole = {
+// ─── Console mock setup ──────────────────────────────────────────────────────
+
+const calls = { debug: [], info: [], warn: [], error: [] };
+const orig = {
   debug: console.debug,
   info: console.info,
   warn: console.warn,
@@ -19,160 +22,335 @@ const origConsole = {
 };
 
 beforeEach(() => {
-  captured = { debug: [], info: [], warn: [], error: [] };
-  console.debug = (...args) => captured.debug.push(args);
-  console.info = (...args) => captured.info.push(args);
-  console.warn = (...args) => captured.warn.push(args);
-  console.error = (...args) => captured.error.push(args);
-  // Reset to default level
-  setLogLevel('info');
+  for (const level of Object.keys(calls)) {
+    calls[level] = [];
+    console[level] = (...args) => calls[level].push(args);
+  }
 });
 
 afterEach(() => {
-  console.debug = origConsole.debug;
-  console.info = origConsole.info;
-  console.warn = origConsole.warn;
-  console.error = origConsole.error;
+  for (const level of Object.keys(orig)) console[level] = orig[level];
 });
 
-describe('log – level methods', () => {
-  it('log.info outputs to console.info', () => {
-    log.info('test', 'hello');
-    assert.equal(captured.info.length, 1);
-    assert.equal(captured.info[0][0], '[test]');
-    assert.equal(captured.info[0][1], 'hello');
+// ─── Constructor & defaults ──────────────────────────────────────────────────
+
+describe('new Logger() – defaults', () => {
+  it('creates a logger with default config', () => {
+    const log = new Logger();
+    assert.equal(log.config.level, 'info');
+    assert.equal(log.config.maxHistory, 100);
+    assert.equal(log.config.context, undefined);
+    assert.equal(log.config.onLog, undefined);
   });
 
-  it('log.warn outputs to console.warn', () => {
-    log.warn('mod', 'warning msg');
-    assert.equal(captured.warn.length, 1);
-    assert.equal(captured.warn[0][0], '[mod]');
-    assert.equal(captured.warn[0][1], 'warning msg');
+  it('merges provided config with defaults', () => {
+    const log = new Logger({ level: 'debug', context: 'test' });
+    assert.equal(log.config.level, 'debug');
+    assert.equal(log.config.context, 'test');
+    assert.equal(log.config.maxHistory, 100);
   });
 
-  it('log.error outputs to console.error', () => {
-    log.error('mod', 'error msg');
-    assert.equal(captured.error.length, 1);
-    assert.equal(captured.error[0][0], '[mod]');
-    assert.equal(captured.error[0][1], 'error msg');
-  });
-
-  it('log.debug is suppressed at default info level', () => {
-    log.debug('mod', 'debug msg');
-    assert.equal(captured.debug.length, 0);
+  it('starts with an empty history', () => {
+    const log = new Logger();
+    assert.deepEqual(log.getHistory(), []);
   });
 });
 
-describe('setLogLevel', () => {
-  it('setting level to debug enables debug output', () => {
-    setLogLevel('debug');
-    log.debug('mod', 'visible');
-    assert.equal(captured.debug.length, 1);
+// ─── info() ──────────────────────────────────────────────────────────────────
+
+describe('info()', () => {
+  it('logs a message to console.info', () => {
+    const log = new Logger();
+    log.info('hello');
+    assert.equal(calls.info.length, 1);
+    assert.ok(calls.info[0][0].includes('hello'));
   });
 
-  it('setting level to warn suppresses info', () => {
-    setLogLevel('warn');
-    log.info('mod', 'suppressed');
-    assert.equal(captured.info.length, 0);
+  it('includes data in console output when provided', () => {
+    const log = new Logger();
+    log.info('msg', { key: 'value' });
+    assert.equal(calls.info.length, 1);
+    assert.deepEqual(calls.info[0][1], { key: 'value' });
   });
 
-  it('setting level to error suppresses warn', () => {
-    setLogLevel('error');
-    log.warn('mod', 'suppressed');
-    assert.equal(captured.warn.length, 0);
+  it('does not append data arg when data is undefined', () => {
+    const log = new Logger();
+    log.info('msg');
+    assert.equal(calls.info[0].length, 1);
   });
 
-  it('ignores invalid level', () => {
-    setLogLevel('info');
-    setLogLevel('invalid-level');
-    // info should still work
-    log.info('mod', 'still works');
-    assert.equal(captured.info.length, 1);
-  });
-});
-
-describe('createLogger', () => {
-  it('returns object with debug, info, warn, error methods', () => {
-    const logger = createLogger('ocr');
-    assert.equal(typeof logger.debug, 'function');
-    assert.equal(typeof logger.info, 'function');
-    assert.equal(typeof logger.warn, 'function');
-    assert.equal(typeof logger.error, 'function');
+  it('adds entry to history', () => {
+    const log = new Logger();
+    log.info('hello');
+    const history = log.getHistory();
+    assert.equal(history.length, 1);
+    assert.equal(history[0].level, 'info');
+    assert.equal(history[0].message, 'hello');
   });
 
-  it('tagged logger prefixes output with [tag]', () => {
-    const logger = createLogger('render');
-    logger.info('page loaded');
-    assert.equal(captured.info[0][0], '[render]');
-    assert.equal(captured.info[0][1], 'page loaded');
-  });
-
-  it('tagged logger passes data argument', () => {
-    const logger = createLogger('pdf');
-    logger.warn('issue', { page: 5 });
-    assert.equal(captured.warn[0][0], '[pdf]');
-    assert.equal(captured.warn[0][1], 'issue');
-    assert.deepEqual(captured.warn[0][2], { page: 5 });
-  });
-
-  it('tagged logger respects log level', () => {
-    setLogLevel('error');
-    const logger = createLogger('mod');
-    logger.info('suppressed');
-    logger.warn('suppressed');
-    logger.error('visible');
-    assert.equal(captured.info.length, 0);
-    assert.equal(captured.warn.length, 0);
-    assert.equal(captured.error.length, 1);
+  it('sets a timestamp on the entry', () => {
+    const before = Date.now();
+    const log = new Logger();
+    log.info('ts test');
+    const after = Date.now();
+    const { timestamp } = log.getHistory()[0];
+    assert.ok(timestamp >= before && timestamp <= after);
   });
 });
 
-describe('addLogSink', () => {
-  it('sink receives log entries', () => {
-    const entries = [];
-    const unsub = addLogSink((entry) => entries.push(entry));
-    log.info('test', 'hello');
-    assert.equal(entries.length, 1);
-    assert.equal(entries[0].level, 'info');
-    assert.equal(entries[0].tag, 'test');
-    assert.equal(entries[0].msg, 'hello');
-    assert.ok(entries[0].ts); // ISO timestamp
-    unsub();
+// ─── debug() ─────────────────────────────────────────────────────────────────
+
+describe('debug()', () => {
+  it('is suppressed at default level (info)', () => {
+    const log = new Logger(); // default level: 'info'
+    log.debug('should not appear');
+    assert.equal(calls.debug.length, 0);
   });
 
-  it('sink receives data payload', () => {
-    const entries = [];
-    const unsub = addLogSink((entry) => entries.push(entry));
-    log.warn('mod', 'msg', { count: 3 });
-    assert.deepEqual(entries[0].data, { count: 3 });
-    unsub();
+  it('is suppressed when level is warn', () => {
+    const log = new Logger({ level: 'warn' });
+    log.debug('quiet');
+    assert.equal(calls.debug.length, 0);
   });
 
-  it('unsubscribe removes sink', () => {
-    const entries = [];
-    const unsub = addLogSink((entry) => entries.push(entry));
-    log.info('x', 'a');
-    unsub();
-    log.info('x', 'b');
-    assert.equal(entries.length, 1);
+  it('is emitted when level is debug', () => {
+    const log = new Logger({ level: 'debug' });
+    log.debug('verbose');
+    assert.equal(calls.debug.length, 1);
   });
 
-  it('sink errors do not crash logger', () => {
-    const unsub = addLogSink(() => { throw new Error('boom'); });
-    // Should not throw
-    log.info('mod', 'test');
-    assert.equal(captured.info.length, 1);
-    unsub();
+  it('does not add to history when suppressed', () => {
+    const log = new Logger(); // level: 'info'
+    log.debug('hidden');
+    assert.equal(log.getHistory().length, 0);
+  });
+});
+
+// ─── warn() ──────────────────────────────────────────────────────────────────
+
+describe('warn()', () => {
+  it('is emitted at default level (info)', () => {
+    const log = new Logger();
+    log.warn('careful');
+    assert.equal(calls.warn.length, 1);
   });
 
-  it('multiple sinks all receive entries', () => {
-    const e1 = [], e2 = [];
-    const u1 = addLogSink((entry) => e1.push(entry));
-    const u2 = addLogSink((entry) => e2.push(entry));
-    log.error('mod', 'err');
-    assert.equal(e1.length, 1);
-    assert.equal(e2.length, 1);
-    u1();
-    u2();
+  it('is suppressed when level is error', () => {
+    const log = new Logger({ level: 'error' });
+    log.warn('ignored');
+    assert.equal(calls.warn.length, 0);
+  });
+
+  it('records warn entry in history', () => {
+    const log = new Logger();
+    log.warn('careful');
+    assert.equal(log.getHistory()[0].level, 'warn');
+  });
+});
+
+// ─── error() ─────────────────────────────────────────────────────────────────
+
+describe('error()', () => {
+  it('is always emitted regardless of configured level', () => {
+    for (const level of ['debug', 'info', 'warn', 'error']) {
+      calls.error = [];
+      const log = new Logger({ level });
+      log.error('boom');
+      assert.equal(calls.error.length, 1, `level=${level} should emit error`);
+    }
+  });
+
+  it('records error entry in history', () => {
+    const log = new Logger();
+    log.error('boom');
+    assert.equal(log.getHistory()[0].level, 'error');
+  });
+});
+
+// ─── getHistory() ─────────────────────────────────────────────────────────────
+
+describe('getHistory()', () => {
+  it('returns a copy of the history array', () => {
+    const log = new Logger();
+    log.info('a');
+    const h1 = log.getHistory();
+    const h2 = log.getHistory();
+    assert.notEqual(h1, h2); // different array references
+    assert.deepEqual(h1, h2);
+  });
+
+  it('accumulates multiple entries in order', () => {
+    const log = new Logger();
+    log.info('first');
+    log.warn('second');
+    log.error('third');
+    const history = log.getHistory();
+    assert.equal(history.length, 3);
+    assert.equal(history[0].message, 'first');
+    assert.equal(history[1].message, 'second');
+    assert.equal(history[2].message, 'third');
+  });
+
+  it('stores data in history entry', () => {
+    const log = new Logger();
+    log.info('with data', 42);
+    assert.equal(log.getHistory()[0].data, 42);
+  });
+
+  it('does not set data key when data is undefined', () => {
+    const log = new Logger();
+    log.info('no data');
+    assert.equal(Object.prototype.hasOwnProperty.call(log.getHistory()[0], 'data'), false);
+  });
+
+  it('caps history at maxHistory and drops oldest', () => {
+    const log = new Logger({ maxHistory: 3 });
+    log.info('a');
+    log.info('b');
+    log.info('c');
+    log.info('d'); // should drop 'a'
+    const history = log.getHistory();
+    assert.equal(history.length, 3);
+    assert.equal(history[0].message, 'b');
+    assert.equal(history[2].message, 'd');
+  });
+});
+
+// ─── clearHistory() ──────────────────────────────────────────────────────────
+
+describe('clearHistory()', () => {
+  it('empties the history', () => {
+    const log = new Logger();
+    log.info('a');
+    log.info('b');
+    log.clearHistory();
+    assert.deepEqual(log.getHistory(), []);
+  });
+
+  it('allows new entries after clearing', () => {
+    const log = new Logger();
+    log.info('old');
+    log.clearHistory();
+    log.info('new');
+    assert.equal(log.getHistory().length, 1);
+    assert.equal(log.getHistory()[0].message, 'new');
+  });
+});
+
+// ─── child() ─────────────────────────────────────────────────────────────────
+
+describe('child()', () => {
+  it('creates a new Logger instance', () => {
+    const log = new Logger();
+    const child = log.child('sub');
+    assert.ok(child instanceof Logger);
+    assert.notEqual(child, log);
+  });
+
+  it('sets context on child when parent has no context', () => {
+    const log = new Logger();
+    const child = log.child('module');
+    assert.equal(child.config.context, 'module');
+  });
+
+  it('prefixes parent context with dot separator', () => {
+    const log = new Logger({ context: 'app' });
+    const child = log.child('module');
+    assert.equal(child.config.context, 'app.module');
+  });
+
+  it('includes context in console output', () => {
+    const log = new Logger({ context: 'app' });
+    log.info('test message');
+    assert.ok(calls.info[0][0].includes('[app]'));
+  });
+
+  it('inherits parent log level', () => {
+    const log = new Logger({ level: 'warn' });
+    const child = log.child('sub');
+    assert.equal(child.config.level, 'warn');
+  });
+
+  it('does not share history with parent', () => {
+    const log = new Logger();
+    const child = log.child('sub');
+    log.info('parent msg');
+    child.info('child msg');
+    assert.equal(log.getHistory().length, 1);
+    assert.equal(child.getHistory().length, 1);
+    assert.equal(log.getHistory()[0].message, 'parent msg');
+    assert.equal(child.getHistory()[0].message, 'child msg');
+  });
+});
+
+// ─── onLog callback ───────────────────────────────────────────────────────────
+
+describe('onLog callback', () => {
+  it('is called for each emitted log entry', () => {
+    const logged = [];
+    const log = new Logger({ onLog: (entry) => logged.push(entry) });
+    log.info('one');
+    log.warn('two');
+    assert.equal(logged.length, 2);
+    assert.equal(logged[0].message, 'one');
+    assert.equal(logged[1].message, 'two');
+  });
+
+  it('receives the full entry object', () => {
+    let received = null;
+    const log = new Logger({ onLog: (entry) => { received = entry; } });
+    log.error('oops', { detail: true });
+    assert.equal(received.level, 'error');
+    assert.equal(received.message, 'oops');
+    assert.deepEqual(received.data, { detail: true });
+    assert.equal(typeof received.timestamp, 'number');
+  });
+
+  it('is not called for suppressed levels', () => {
+    const logged = [];
+    const log = new Logger({ level: 'info', onLog: (entry) => logged.push(entry) });
+    log.debug('silent');
+    assert.equal(logged.length, 0);
+  });
+
+  it('receives context when set', () => {
+    let received = null;
+    const log = new Logger({ context: 'ctx', onLog: (entry) => { received = entry; } });
+    log.info('hi');
+    assert.equal(received.context, 'ctx');
+  });
+});
+
+// ─── Global logger & convenience functions ───────────────────────────────────
+
+describe('global logger and convenience functions', () => {
+  it('logger is a Logger instance', () => {
+    assert.ok(logger instanceof Logger);
+  });
+
+  it('debug() is a function', () => {
+    assert.equal(typeof debug, 'function');
+  });
+
+  it('info() is a function', () => {
+    assert.equal(typeof info, 'function');
+  });
+
+  it('warn() is a function', () => {
+    assert.equal(typeof warn, 'function');
+  });
+
+  it('error() is a function', () => {
+    assert.equal(typeof error, 'function');
+  });
+
+  it('convenience warn() writes to console.warn', () => {
+    warn('global warn');
+    assert.equal(calls.warn.length, 1);
+  });
+
+  it('convenience error() writes to console.error', () => {
+    error('global error');
+    assert.equal(calls.error.length, 1);
   });
 });
