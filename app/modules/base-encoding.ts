@@ -274,3 +274,136 @@ export function decodeBase(str: string, alphabet: string): number {
 
   return value;
 }
+
+// ─── Numeric base conversion (2–36) ──────────────────────────────────────────
+
+const NUMERIC_DIGITS = '0123456789abcdefghijklmnopqrstuvwxyz';
+
+/**
+ * Convert a non-negative integer `n` to its string representation in `base`.
+ * Supports bases 2–36; digits above 9 use lower-case letters.
+ */
+export function toBase(n: number, base: number): string {
+  if (!Number.isInteger(base) || base < 2 || base > 36) {
+    throw new RangeError(`toBase: base must be an integer between 2 and 36, got ${base}`);
+  }
+  if (!Number.isInteger(n) || n < 0) {
+    throw new RangeError(`toBase: n must be a non-negative integer, got ${n}`);
+  }
+  if (n === 0) return '0';
+
+  let result = '';
+  let remaining = n;
+  while (remaining > 0) {
+    result = NUMERIC_DIGITS[remaining % base] + result;
+    remaining = Math.floor(remaining / base);
+  }
+  return result;
+}
+
+/**
+ * Parse a string `s` in the given `base` (2–36) and return the decimal integer.
+ */
+export function fromBase(s: string, base: number): number {
+  if (!Number.isInteger(base) || base < 2 || base > 36) {
+    throw new RangeError(`fromBase: base must be an integer between 2 and 36, got ${base}`);
+  }
+  const lower = s.toLowerCase();
+  let result = 0;
+  for (const ch of lower) {
+    const digit = NUMERIC_DIGITS.indexOf(ch);
+    if (digit < 0 || digit >= base) {
+      throw new RangeError(`fromBase: invalid digit '${ch}' for base ${base}`);
+    }
+    result = result * base + digit;
+  }
+  return result;
+}
+
+/** Convert a non-negative integer to its binary (base-2) string. */
+export function toBinary(n: number): string {
+  return toBase(n, 2);
+}
+
+/** Parse a binary string and return the corresponding integer. */
+export function fromBinary(s: string): number {
+  return fromBase(s, 2);
+}
+
+/** Convert a non-negative integer to its octal (base-8) string. */
+export function toOctal(n: number): string {
+  return toBase(n, 8);
+}
+
+/** Parse an octal string and return the corresponding integer. */
+export function fromOctal(s: string): number {
+  return fromBase(s, 8);
+}
+
+/** Convert a non-negative integer to its hexadecimal (base-16) lower-case string. */
+export function toHex(n: number): string {
+  return toBase(n, 16);
+}
+
+/** Parse a hexadecimal string (case-insensitive) and return the integer. */
+export function fromHex(s: string): number {
+  return fromBase(s, 16);
+}
+
+// ─── Varint encoding ─────────────────────────────────────────────────────────
+
+/**
+ * Encode a non-negative integer as a variable-length integer (varint) using
+ * little-endian 7-bits-per-byte encoding (Protocol Buffer style).
+ */
+export function encodeVarint(n: number): Uint8Array {
+  if (!Number.isInteger(n) || n < 0) {
+    throw new RangeError(`encodeVarint: n must be a non-negative integer, got ${n}`);
+  }
+  const bytes: number[] = [];
+  let remaining = n;
+  do {
+    let byte = remaining & 0x7f;
+    remaining >>>= 7;
+    if (remaining > 0) byte |= 0x80;
+    bytes.push(byte);
+  } while (remaining > 0);
+  return new Uint8Array(bytes);
+}
+
+/**
+ * Decode a varint from a `Uint8Array`.
+ * Returns the decoded value and the number of bytes consumed.
+ */
+export function decodeVarint(bytes: Uint8Array): { value: number; bytesRead: number } {
+  let value = 0;
+  let shift = 0;
+  let bytesRead = 0;
+
+  for (const byte of bytes) {
+    bytesRead++;
+    value |= (byte & 0x7f) << shift;
+    shift += 7;
+    if ((byte & 0x80) === 0) break;
+    if (shift >= 35) {
+      throw new RangeError('decodeVarint: varint is too wide for a 32-bit integer');
+    }
+  }
+
+  return { value: value >>> 0, bytesRead };
+}
+
+// ─── Zigzag encoding ─────────────────────────────────────────────────────────
+
+/**
+ * Map a signed integer to a non-negative integer using zigzag encoding:
+ * 0 → 0, -1 → 1, 1 → 2, -2 → 3, 2 → 4, …
+ */
+export function zigzagEncode(n: number): number {
+  return (n << 1) ^ (n >> 31);
+}
+
+/** Reverse the zigzag mapping: recover a signed integer from an unsigned one. */
+export function zigzagDecode(n: number): number {
+  return (n >>> 1) ^ -(n & 1);
+}

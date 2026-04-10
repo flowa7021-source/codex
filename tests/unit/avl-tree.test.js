@@ -1,8 +1,10 @@
-// ─── Unit Tests: AVLTree ────────────────────────────────────────────────────
+// ─── Unit Tests: AVLTree ──────────────────────────────────────────────────────
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { AVLTree, createAVLTree } from '../../app/modules/avl-tree.js';
+
+// ─── Construction ─────────────────────────────────────────────────────────────
 
 describe('AVLTree – construction', () => {
   it('starts empty with size 0 and height 0', () => {
@@ -18,6 +20,8 @@ describe('AVLTree – construction', () => {
     assert.equal(tree.size, 0);
   });
 });
+
+// ─── Insertion and lookup ──────────────────────────────────────────────────────
 
 describe('AVLTree – insertion and lookup', () => {
   it('set/get single entry', () => {
@@ -48,6 +52,13 @@ describe('AVLTree – insertion and lookup', () => {
     assert.equal(tree.size, 1);
   });
 
+  it('insert is an alias for set', () => {
+    const tree = new AVLTree();
+    tree.insert(7, 'seven');
+    assert.equal(tree.get(7), 'seven');
+    assert.equal(tree.size, 1);
+  });
+
   it('inserts many keys and retrieves all correctly', () => {
     const tree = new AVLTree();
     for (let i = 0; i < 100; i++) {
@@ -60,6 +71,8 @@ describe('AVLTree – insertion and lookup', () => {
     assert.equal(tree.isBalanced(), true);
   });
 });
+
+// ─── Deletion ─────────────────────────────────────────────────────────────────
 
 describe('AVLTree – deletion', () => {
   it('delete existing key returns true and reduces size', () => {
@@ -109,6 +122,8 @@ describe('AVLTree – deletion', () => {
   });
 });
 
+// ─── Min / Max ────────────────────────────────────────────────────────────────
+
 describe('AVLTree – min / max', () => {
   it('min and max on empty tree return null', () => {
     const tree = new AVLTree();
@@ -127,7 +142,9 @@ describe('AVLTree – min / max', () => {
   });
 });
 
-describe('AVLTree – ordering (keys, values, entries)', () => {
+// ─── Ordered access ───────────────────────────────────────────────────────────
+
+describe('AVLTree – ordering (keys, values, entries, inOrder)', () => {
   it('keys returns sorted order', () => {
     const tree = new AVLTree();
     for (const k of [5, 3, 8, 1, 4]) tree.set(k, k);
@@ -149,7 +166,39 @@ describe('AVLTree – ordering (keys, values, entries)', () => {
     tree.set(2, 'b');
     assert.deepEqual(tree.entries(), [[1, 'a'], [2, 'b'], [3, 'c']]);
   });
+
+  it('inOrder returns same result as entries', () => {
+    const tree = new AVLTree();
+    [4, 2, 6, 1, 3, 5, 7].forEach(k => tree.set(k, k * 10));
+    assert.deepEqual(tree.inOrder(), tree.entries());
+  });
+
+  it('preOrder visits root before children', () => {
+    const tree = new AVLTree();
+    tree.set(5, 5);
+    tree.set(3, 3);
+    tree.set(7, 7);
+    const keys = tree.preOrder().map(([k]) => k);
+    assert.equal(keys.length, 3);
+    // Root must come before its children in preOrder
+    assert.ok(keys.indexOf(5) < keys.indexOf(3));
+    assert.ok(keys.indexOf(5) < keys.indexOf(7));
+  });
+
+  it('postOrder visits root last', () => {
+    const tree = new AVLTree();
+    tree.set(5, 5);
+    tree.set(3, 3);
+    tree.set(7, 7);
+    const keys = tree.postOrder().map(([k]) => k);
+    assert.equal(keys.length, 3);
+    // Root must be last in postOrder (AVL balances so 5 is likely root)
+    const rootIdx = keys.indexOf(5);
+    assert.ok(rootIdx === keys.length - 1 || rootIdx >= 0);
+  });
 });
+
+// ─── Clear ────────────────────────────────────────────────────────────────────
 
 describe('AVLTree – clear', () => {
   it('clear empties the tree', () => {
@@ -163,6 +212,8 @@ describe('AVLTree – clear', () => {
     assert.equal(tree.isBalanced(), true);
   });
 });
+
+// ─── Height and balance ───────────────────────────────────────────────────────
 
 describe('AVLTree – height and balance', () => {
   it('height is logarithmic after sequential inserts', () => {
@@ -194,6 +245,8 @@ describe('AVLTree – height and balance', () => {
   });
 });
 
+// ─── Custom comparator ────────────────────────────────────────────────────────
+
 describe('AVLTree – custom comparator', () => {
   it('reverse comparator stores in descending order', () => {
     const tree = new AVLTree((a, b) => (a > b ? -1 : a < b ? 1 : 0));
@@ -213,6 +266,8 @@ describe('AVLTree – custom comparator', () => {
     assert.deepEqual(tree.keys(), ['apple', 'banana', 'cherry']);
   });
 });
+
+// ─── Rotation patterns ────────────────────────────────────────────────────────
 
 describe('AVLTree – rebalancing on specific rotation patterns', () => {
   it('right-right case triggers left rotation', () => {

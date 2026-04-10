@@ -8,90 +8,87 @@
 export type CircuitState = 'closed' | 'open' | 'half-open';
 
 export interface CircuitBreakerOptions {
-  /** Number of failures before opening. Default 5. */
-  failureThreshold?: number;
-  /** Number of successes in half-open before closing. Default 2. */
+  /** Number of consecutive failures before opening the circuit. */
+  failureThreshold: number;
+  /** Number of consecutive successes in half-open before closing. Default 1. */
   successThreshold?: number;
-  /**
-   * How long (ms) to stay open before attempting half-open. Default 10000.
-   * Alias: `resetTimeoutMs` is also accepted for backward compatibility.
-   */
-  timeout?: number;
-  /** @deprecated Use `timeout` instead. */
-  resetTimeoutMs?: number;
+  /** How long (ms) to stay open before moving to half-open. */
+  timeout: number;
+  /** Called whenever the circuit changes state. */
+  onStateChange?: (state: CircuitState) => void;
 }
 
-// ─── CircuitBreakerError ──────────────────────────────────────────────────────
+// ─── CircuitBreaker ───────────────────────────────────────────────────────────
 
 /**
- * Thrown when `execute()` is called while the circuit is open.
+ * Circuit breaker wrapping an async function.
+ * Tracks failures; opens after `failureThreshold` consecutive failures.
+ * After `timeout` ms, transitions to half-open (probe mode).
+ * Closes again after `successThreshold` consecutive successes in half-open.
+ *
+ * @example
+ *   const cb = new CircuitBreaker(fetchUser, { failureThreshold: 3, timeout: 5000 });
+ *   const user = await cb.execute(userId);
  */
-export class CircuitBreakerError extends Error {
-  constructor(message: string = 'Circuit is open') {
-    super(message);
-    this.name = 'CircuitBreakerError';
-  }
-}
+export class CircuitBreaker<T> {
+  #fn: (...args: unknown[]) => Promise<T>;
+  #failureThreshold: number;
+  #successThreshold: number;
+  #timeout: number;
+  #onStateChange: ((state: CircuitState) => void) | undefined;
 
-// ─── Implementation ──────────────────────────────────────────────────────────
+  #state: CircuitState;
+  #failureCount: number;
+  #successCount: number;
+  #openedAt: number;
+  #clockOffset: number;
 
-const DEFAULT_FAILURE_THRESHOLD = 5;
-const DEFAULT_RESET_TIMEOUT_MS = 10_000;
-const DEFAULT_SUCCESS_THRESHOLD = 2;
+  constructor(
+    fn: (...args: unknown[]) => Promise<T>,
+    options: CircuitBreakerOptions,
+  ) {
+    this.#fn = fn;
+    this.#failureThreshold = options.failureThreshold;
+    this.#successThreshold = options.successThreshold ?? 1;
+    this.#timeout = options.timeout;
+    this.#onStateChange = options.onStateChange;
 
-export class CircuitBreaker {
-  readonly #failureThreshold: number;
-  readonly #resetTimeoutMs: number;
-  readonly #successThreshold: number;
-
-  #state: CircuitState = 'closed';
-  #failureCount = 0;
-  #successCount = 0;
-  #openedAt = 0;
-  /** Internal clock offset in ms — advanced via advance() for testing. */
-  #clockOffset = 0;
-
-  constructor(options: CircuitBreakerOptions = {}) {
-    this.#failureThreshold = options.failureThreshold ?? DEFAULT_FAILURE_THRESHOLD;
-    this.#successThreshold = options.successThreshold ?? DEFAULT_SUCCESS_THRESHOLD;
-    // Support both `timeout` (new API) and `resetTimeoutMs` (legacy API)
-    this.#resetTimeoutMs =
-      options.timeout ?? options.resetTimeoutMs ?? DEFAULT_RESET_TIMEOUT_MS;
+    this.#state = 'closed';
+    this.#failureCount = 0;
+    this.#successCount = 0;
+    this.#openedAt = 0;
+    this.#clockOffset = 0;
   }
 
-  /** Returns the current internal time (Date.now + any advance offset). */
-  #now(): number {
-    return Date.now() + this.#clockOffset;
-  }
+  // ─── Public Accessors ─────────────────────────────────────────────────────
 
+  /** Current circuit state (may transition to half-open on read). */
   get state(): CircuitState {
     this.#maybeTransitionToHalfOpen();
     return this.#state;
   }
 
+  /** Number of consecutive failures recorded. */
   get failureCount(): number {
     return this.#failureCount;
   }
 
-  get successCount(): number {
-    return this.#successCount;
-  }
+  // ─── Public Methods ───────────────────────────────────────────────────────
 
   /**
-   * Execute a function through the circuit breaker.
-   * Throws `CircuitBreakerError` if circuit is open.
-   * On failure, increments failure count; may open circuit.
-   * On success, increments success count; may close circuit from half-open.
+   * Execute the wrapped function with the given arguments.
+   * Throws `CircuitOpenError` immediately if the circuit is open.
+   * Records the outcome (success or failure) and updates state accordingly.
    */
-  async execute<T>(fn: () => Promise<T>): Promise<T> {
+  async execute(...args: unknown[]): Promise<T> {
     this.#maybeTransitionToHalfOpen();
 
     if (this.#state === 'open') {
-      throw new CircuitBreakerError();
+      throw new CircuitOpenError();
     }
 
     try {
-      const result = await fn();
+      const result = await this.#fn(...args);
       this.#onSuccess();
       return result;
     } catch (err) {
@@ -100,26 +97,26 @@ export class CircuitBreaker {
     }
   }
 
-  /** Force the circuit open (trip). */
-  trip(): void {
-    this.#state = 'open';
-    this.#openedAt = this.#now();
-    this.#successCount = 0;
-  }
-
-  /** Manually reset to closed state and clear all counters. */
+  /** Manually close the circuit and reset all counters. */
   reset(): void {
-    this.#state = 'closed';
+    this.#transition('closed');
     this.#failureCount = 0;
     this.#successCount = 0;
     this.#openedAt = 0;
     this.#clockOffset = 0;
   }
 
+  /** Manually open the circuit (trip). */
+  trip(): void {
+    this.#failureCount = this.#failureThreshold;
+    this.#successCount = 0;
+    this.#openedAt = this.#now();
+    this.#transition('open');
+  }
+
   /**
    * Advance the internal clock by `ms` milliseconds.
-   * This allows deterministic testing of the timeout behaviour without
-   * patching `Date.now`.
+   * Allows deterministic testing of timeout behavior.
    */
   advance(ms: number): void {
     if (ms < 0) throw new RangeError('ms must be >= 0');
@@ -128,13 +125,24 @@ export class CircuitBreaker {
 
   // ─── Private ─────────────────────────────────────────────────────────────
 
+  #now(): number {
+    return Date.now() + this.#clockOffset;
+  }
+
+  #transition(next: CircuitState): void {
+    if (this.#state !== next) {
+      this.#state = next;
+      this.#onStateChange?.(next);
+    }
+  }
+
   #maybeTransitionToHalfOpen(): void {
     if (
       this.#state === 'open' &&
-      this.#now() - this.#openedAt >= this.#resetTimeoutMs
+      this.#now() - this.#openedAt >= this.#timeout
     ) {
-      this.#state = 'half-open';
       this.#successCount = 0;
+      this.#transition('half-open');
     }
   }
 
@@ -142,12 +150,12 @@ export class CircuitBreaker {
     if (this.#state === 'half-open') {
       this.#successCount += 1;
       if (this.#successCount >= this.#successThreshold) {
-        this.#state = 'closed';
         this.#failureCount = 0;
         this.#successCount = 0;
+        this.#transition('closed');
       }
     } else {
-      // In closed state, reset failure count on success
+      // Closed: reset failure streak on success
       this.#failureCount = 0;
     }
   }
@@ -155,15 +163,37 @@ export class CircuitBreaker {
   #onFailure(): void {
     if (this.#state === 'half-open') {
       // Any failure in half-open immediately reopens
-      this.#state = 'open';
-      this.#openedAt = this.#now();
       this.#successCount = 0;
+      this.#openedAt = this.#now();
+      this.#transition('open');
     } else {
       this.#failureCount += 1;
       if (this.#failureCount >= this.#failureThreshold) {
-        this.#state = 'open';
         this.#openedAt = this.#now();
+        this.#transition('open');
       }
     }
   }
+}
+
+// ─── CircuitOpenError ─────────────────────────────────────────────────────────
+
+/**
+ * Thrown by `CircuitBreaker.execute()` when the circuit is open.
+ */
+export class CircuitOpenError extends Error {
+  constructor(message: string = 'Circuit is open') {
+    super(message);
+    this.name = 'CircuitOpenError';
+  }
+}
+
+// ─── Factory Function ─────────────────────────────────────────────────────────
+
+/** Create a new {@link CircuitBreaker}. */
+export function createCircuitBreaker<T>(
+  fn: (...args: unknown[]) => Promise<T>,
+  options: CircuitBreakerOptions,
+): CircuitBreaker<T> {
+  return new CircuitBreaker(fn, options);
 }

@@ -1,161 +1,194 @@
-// @ts-check
-// ─── Skip List ──────────────────────────────────────────────────────────────
+// ─── Skip List ───────────────────────────────────────────────────────────────
 // Probabilistic sorted map with O(log n) expected search, insert, and delete.
+// Configurable maximum level count and level-promotion probability.
 
-// ─── Internal node ──────────────────────────────────────────────────────────
-
-/** Maximum number of levels in the skip list. */
-const MAX_LEVEL = 32;
-
-/** Probability factor for level promotion (1/4 gives good balance). */
-const P = 0.25;
+// ─── Internal Node ───────────────────────────────────────────────────────────
 
 interface SkipNode<K, V> {
   key: K;
   value: V;
+  /** forward[i] is the next node pointer at level i. */
   forward: Array<SkipNode<K, V> | null>;
 }
 
-function createNode<K, V>(
-  key: K,
-  value: V,
-  level: number,
-): SkipNode<K, V> {
-  return { key, value, forward: new Array<SkipNode<K, V> | null>(level + 1).fill(null) };
+function makeNode<K, V>(key: K, value: V, level: number): SkipNode<K, V> {
+  return {
+    key,
+    value,
+    forward: new Array<SkipNode<K, V> | null>(level + 1).fill(null),
+  };
 }
 
-// ─── Random level generator ─────────────────────────────────────────────────
-
-function randomLevel(): number {
-  let lvl = 0;
-  while (lvl < MAX_LEVEL - 1 && Math.random() < P) {
-    lvl++;
-  }
-  return lvl;
-}
-
-// ─── Default comparator ─────────────────────────────────────────────────────
+// ─── Default Comparator ──────────────────────────────────────────────────────
 
 function defaultCompare<K>(a: K, b: K): number {
-  if (a < b) return -1;
-  if (a > b) return 1;
-  return 0;
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
-// ─── Class ──────────────────────────────────────────────────────────────────
+// ─── SkipList ────────────────────────────────────────────────────────────────
 
 /**
- * A skip list implementing a sorted map from keys to values.
- * Keys are ordered by the supplied comparator (defaults to `<` / `>`).
+ * Ordered map backed by a skip list.
+ *
+ * Keys are maintained in the order defined by `compareFn` (defaults to `< / >`).
+ * All mutating operations and lookups run in O(log n) expected time.
+ *
+ * @example
+ *   const sl = new SkipList<number, string>();
+ *   sl.set(3, 'c');
+ *   sl.set(1, 'a');
+ *   sl.keys(); // [1, 3]
+ *   sl.range(1, 2); // [[1, 'a']]
  */
 export class SkipList<K, V> {
-  private readonly _compare: (a: K, b: K) => number;
-  private _head: SkipNode<K, V>;
-  private _level: number;
-  private _size: number;
+  #maxLevel: number;
+  #probability: number;
+  #compare: (a: K, b: K) => number;
+  #head: SkipNode<K, V>;
+  #level: number;   // current highest occupied level (0-based)
+  #size: number;
 
-  constructor(compare?: (a: K, b: K) => number) {
-    this._compare = compare ?? defaultCompare;
-    // Sentinel head node — key/value are never read.
-    this._head = createNode<K, V>(undefined as unknown as K, undefined as unknown as V, MAX_LEVEL - 1);
-    this._level = 0;
-    this._size = 0;
+  constructor(
+    compareFn?: (a: K, b: K) => number,
+    maxLevel?: number,
+    probability?: number,
+  ) {
+    this.#maxLevel = maxLevel ?? 16;
+    this.#probability = probability ?? 0.5;
+    this.#compare = compareFn ?? defaultCompare;
+    // Sentinel head — its key/value are never exposed.
+    this.#head = makeNode<K, V>(
+      undefined as unknown as K,
+      undefined as unknown as V,
+      this.#maxLevel - 1,
+    );
+    this.#level = 0;
+    this.#size = 0;
   }
 
-  /** Number of key-value pairs in the skip list. */
+  /** Number of key-value pairs in the list. */
   get size(): number {
-    return this._size;
+    return this.#size;
+  }
+
+  // ─── Private helpers ────────────────────────────────────────────────────
+
+  /** Random level for a new node (geometric distribution). */
+  #randomLevel(): number {
+    let lvl = 0;
+    while (lvl < this.#maxLevel - 1 && Math.random() < this.#probability) {
+      lvl++;
+    }
+    return lvl;
   }
 
   /**
-   * Insert or update a key-value pair.
+   * Fill `update[i]` with the rightmost node at level i whose forward
+   * pointer at i points past `key` (or is null).  Also returns the
+   * candidate node at level 0 for the key.
    */
-  set(key: K, value: V): void {
-    const update: Array<SkipNode<K, V>> = new Array(MAX_LEVEL);
-    let current = this._head;
-
-    for (let i = this._level; i >= 0; i--) {
-      while (current.forward[i] !== null && this._compare(current.forward[i]!.key, key) < 0) {
+  #buildUpdate(key: K, update: Array<SkipNode<K, V>>): SkipNode<K, V> | null {
+    let current: SkipNode<K, V> = this.#head;
+    for (let i = this.#level; i >= 0; i--) {
+      while (
+        current.forward[i] !== null &&
+        this.#compare(current.forward[i]!.key, key) < 0
+      ) {
         current = current.forward[i]!;
       }
       update[i] = current;
     }
+    return current.forward[0];
+  }
 
-    const candidate = current.forward[0];
-    if (candidate !== null && this._compare(candidate.key, key) === 0) {
-      // Key already exists — update value.
+  // ─── Public API ─────────────────────────────────────────────────────────
+
+  /**
+   * Insert or update the value for `key`.
+   */
+  set(key: K, value: V): void {
+    const update: Array<SkipNode<K, V>> = new Array(this.#maxLevel);
+    const candidate = this.#buildUpdate(key, update);
+
+    if (candidate !== null && this.#compare(candidate.key, key) === 0) {
+      // Key already exists — update in place.
       candidate.value = value;
       return;
     }
 
-    const newLevel = randomLevel();
-    if (newLevel > this._level) {
-      for (let i = this._level + 1; i <= newLevel; i++) {
-        update[i] = this._head;
+    const newLevel = this.#randomLevel();
+    if (newLevel > this.#level) {
+      for (let i = this.#level + 1; i <= newLevel; i++) {
+        update[i] = this.#head;
       }
-      this._level = newLevel;
+      this.#level = newLevel;
     }
 
-    const node = createNode(key, value, newLevel);
+    const node = makeNode(key, value, newLevel);
     for (let i = 0; i <= newLevel; i++) {
       node.forward[i] = update[i].forward[i];
       update[i].forward[i] = node;
     }
-    this._size++;
+    this.#size++;
   }
 
   /**
-   * Retrieve the value associated with `key`, or `undefined` if absent.
+   * Retrieve the value for `key`, or `undefined` if absent.
    */
   get(key: K): V | undefined {
-    const node = this._findNode(key);
-    return node ? node.value : undefined;
-  }
-
-  /**
-   * Returns `true` if the skip list contains `key`.
-   */
-  has(key: K): boolean {
-    return this._findNode(key) !== null;
-  }
-
-  /**
-   * Remove the entry for `key`. Returns `true` if the key was present.
-   */
-  delete(key: K): boolean {
-    const update: Array<SkipNode<K, V>> = new Array(MAX_LEVEL);
-    let current = this._head;
-
-    for (let i = this._level; i >= 0; i--) {
-      while (current.forward[i] !== null && this._compare(current.forward[i]!.key, key) < 0) {
+    let current: SkipNode<K, V> = this.#head;
+    for (let i = this.#level; i >= 0; i--) {
+      while (
+        current.forward[i] !== null &&
+        this.#compare(current.forward[i]!.key, key) < 0
+      ) {
         current = current.forward[i]!;
       }
-      update[i] = current;
     }
+    const candidate = current.forward[0];
+    if (candidate !== null && this.#compare(candidate.key, key) === 0) {
+      return candidate.value;
+    }
+    return undefined;
+  }
 
-    const target = current.forward[0];
-    if (target === null || this._compare(target.key, key) !== 0) {
+  /**
+   * Returns `true` if `key` is present in the list.
+   */
+  has(key: K): boolean {
+    return this.get(key) !== undefined;
+  }
+
+  /**
+   * Remove the entry for `key`.
+   * Returns `true` if the key was present, `false` otherwise.
+   */
+  delete(key: K): boolean {
+    const update: Array<SkipNode<K, V>> = new Array(this.#maxLevel);
+    const target = this.#buildUpdate(key, update);
+
+    if (target === null || this.#compare(target.key, key) !== 0) {
       return false;
     }
 
-    for (let i = 0; i <= this._level; i++) {
+    for (let i = 0; i <= this.#level; i++) {
       if (update[i].forward[i] !== target) break;
       update[i].forward[i] = target.forward[i];
     }
 
-    // Lower the level if we removed the tallest node.
-    while (this._level > 0 && this._head.forward[this._level] === null) {
-      this._level--;
+    // Shrink the effective level if the tallest node was removed.
+    while (this.#level > 0 && this.#head.forward[this.#level] === null) {
+      this.#level--;
     }
 
-    this._size--;
+    this.#size--;
     return true;
   }
 
   /** Return all keys in sorted order. */
   keys(): K[] {
     const result: K[] = [];
-    let node = this._head.forward[0];
+    let node = this.#head.forward[0];
     while (node !== null) {
       result.push(node.key);
       node = node.forward[0];
@@ -166,7 +199,7 @@ export class SkipList<K, V> {
   /** Return all values in key-sorted order. */
   values(): V[] {
     const result: V[] = [];
-    let node = this._head.forward[0];
+    let node = this.#head.forward[0];
     while (node !== null) {
       result.push(node.value);
       node = node.forward[0];
@@ -174,10 +207,10 @@ export class SkipList<K, V> {
     return result;
   }
 
-  /** Return all entries as [key, value] pairs in sorted order. */
+  /** Return all [key, value] entries in sorted key order. */
   entries(): [K, V][] {
     const result: [K, V][] = [];
-    let node = this._head.forward[0];
+    let node = this.#head.forward[0];
     while (node !== null) {
       result.push([node.key, node.value]);
       node = node.forward[0];
@@ -185,71 +218,40 @@ export class SkipList<K, V> {
     return result;
   }
 
-  /** Return the entry with the smallest key, or null if empty. */
-  min(): [K, V] | null {
-    const first = this._head.forward[0];
-    return first ? [first.key, first.value] : null;
-  }
-
-  /** Return the entry with the largest key, or null if empty. */
-  max(): [K, V] | null {
-    let current = this._head;
-    for (let i = this._level; i >= 0; i--) {
-      while (current.forward[i] !== null) {
-        current = current.forward[i]!;
-      }
-    }
-    return current === this._head ? null : [current.key, current.value];
-  }
-
   /**
-   * Return all entries whose keys satisfy `low <= key <= high` (inclusive).
+   * Return all entries whose keys satisfy `lo <= key <= hi` (inclusive).
    */
-  range(low: K, high: K): [K, V][] {
+  range(lo: K, hi: K): [K, V][] {
     const result: [K, V][] = [];
-    let current = this._head;
-
-    // Descend to the first node with key >= low.
-    for (let i = this._level; i >= 0; i--) {
-      while (current.forward[i] !== null && this._compare(current.forward[i]!.key, low) < 0) {
+    // Descend to the first node with key >= lo.
+    let current: SkipNode<K, V> = this.#head;
+    for (let i = this.#level; i >= 0; i--) {
+      while (
+        current.forward[i] !== null &&
+        this.#compare(current.forward[i]!.key, lo) < 0
+      ) {
         current = current.forward[i]!;
       }
     }
-
-    // Walk forward at level 0 while key <= high.
+    // Walk forward at level 0 collecting keys <= hi.
     let node = current.forward[0];
-    while (node !== null && this._compare(node.key, high) <= 0) {
+    while (node !== null && this.#compare(node.key, hi) <= 0) {
       result.push([node.key, node.value]);
       node = node.forward[0];
     }
-
     return result;
-  }
-
-  // ─── Internal helpers ───────────────────────────────────────────────────
-
-  private _findNode(key: K): SkipNode<K, V> | null {
-    let current = this._head;
-    for (let i = this._level; i >= 0; i--) {
-      while (current.forward[i] !== null && this._compare(current.forward[i]!.key, key) < 0) {
-        current = current.forward[i]!;
-      }
-    }
-    const candidate = current.forward[0];
-    if (candidate !== null && this._compare(candidate.key, key) === 0) {
-      return candidate;
-    }
-    return null;
   }
 }
 
-// ─── Factory ────────────────────────────────────────────────────────────────
+// ─── Factory ─────────────────────────────────────────────────────────────────
 
 /**
- * Create a new empty SkipList.
+ * Create a new empty `SkipList`.
+ *
+ * @param compareFn  Optional key comparator.  Defaults to natural `< / >` order.
  */
 export function createSkipList<K, V>(
-  compare?: (a: K, b: K) => number,
+  compareFn?: (a: K, b: K) => number,
 ): SkipList<K, V> {
-  return new SkipList(compare);
+  return new SkipList<K, V>(compareFn);
 }

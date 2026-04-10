@@ -11,6 +11,18 @@ import {
   base85Decode,
   encodeBase,
   decodeBase,
+  toBase,
+  fromBase,
+  toBinary,
+  fromBinary,
+  toOctal,
+  fromOctal,
+  toHex,
+  fromHex,
+  encodeVarint,
+  decodeVarint,
+  zigzagEncode,
+  zigzagDecode,
 } from '../../app/modules/base-encoding.js';
 
 // ─── base32Encode ─────────────────────────────────────────────────────────────
@@ -316,5 +328,275 @@ describe('decodeBase', () => {
 
   it('throws for alphabet shorter than 2', () => {
     assert.throws(() => decodeBase('a', 'a'), /Alphabet/);
+  });
+});
+
+// ─── toBase ───────────────────────────────────────────────────────────────────
+
+describe('toBase', () => {
+  it('returns "0" for n=0 in any base', () => {
+    assert.equal(toBase(0, 2), '0');
+    assert.equal(toBase(0, 16), '0');
+    assert.equal(toBase(0, 36), '0');
+  });
+
+  it('converts to binary (base 2)', () => {
+    assert.equal(toBase(1, 2), '1');
+    assert.equal(toBase(5, 2), '101');
+    assert.equal(toBase(255, 2), '11111111');
+  });
+
+  it('converts to octal (base 8)', () => {
+    assert.equal(toBase(8, 8), '10');
+    assert.equal(toBase(255, 8), '377');
+    assert.equal(toBase(511, 8), '777');
+  });
+
+  it('converts to hexadecimal (base 16)', () => {
+    assert.equal(toBase(255, 16), 'ff');
+    assert.equal(toBase(256, 16), '100');
+    assert.equal(toBase(4096, 16), '1000');
+  });
+
+  it('converts to base 36', () => {
+    assert.equal(toBase(35, 36), 'z');
+    assert.equal(toBase(36, 36), '10');
+  });
+
+  it('throws RangeError for base < 2', () => {
+    assert.throws(() => toBase(5, 1), /RangeError|base must be/);
+  });
+
+  it('throws RangeError for base > 36', () => {
+    assert.throws(() => toBase(5, 37), /RangeError|base must be/);
+  });
+
+  it('throws RangeError for negative n', () => {
+    assert.throws(() => toBase(-1, 10), /RangeError|non-negative/);
+  });
+
+  it('throws RangeError for non-integer n', () => {
+    assert.throws(() => toBase(1.5, 10), /RangeError|non-negative/);
+  });
+});
+
+// ─── fromBase ─────────────────────────────────────────────────────────────────
+
+describe('fromBase', () => {
+  it('parses "0" as 0 in any base', () => {
+    assert.equal(fromBase('0', 2), 0);
+    assert.equal(fromBase('0', 16), 0);
+  });
+
+  it('parses binary strings', () => {
+    assert.equal(fromBase('101', 2), 5);
+    assert.equal(fromBase('11111111', 2), 255);
+  });
+
+  it('parses octal strings', () => {
+    assert.equal(fromBase('10', 8), 8);
+    assert.equal(fromBase('377', 8), 255);
+  });
+
+  it('parses hexadecimal strings (case-insensitive)', () => {
+    assert.equal(fromBase('ff', 16), 255);
+    assert.equal(fromBase('FF', 16), 255);
+    assert.equal(fromBase('100', 16), 256);
+  });
+
+  it('roundtrips with toBase for many values and bases', () => {
+    for (const base of [2, 8, 10, 16, 36]) {
+      for (const n of [0, 1, 7, 42, 255, 1000]) {
+        assert.equal(fromBase(toBase(n, base), base), n, `failed for n=${n} base=${base}`);
+      }
+    }
+  });
+
+  it('throws RangeError for invalid digit', () => {
+    assert.throws(() => fromBase('2', 2), /RangeError|invalid digit/);
+    assert.throws(() => fromBase('g', 16), /RangeError|invalid digit/);
+  });
+
+  it('throws RangeError for base out of range', () => {
+    assert.throws(() => fromBase('10', 1), /RangeError|base must be/);
+    assert.throws(() => fromBase('10', 37), /RangeError|base must be/);
+  });
+});
+
+// ─── toBinary / fromBinary ────────────────────────────────────────────────────
+
+describe('toBinary / fromBinary', () => {
+  it('converts 0 to "0"', () => {
+    assert.equal(toBinary(0), '0');
+  });
+
+  it('converts small integers to binary', () => {
+    assert.equal(toBinary(1), '1');
+    assert.equal(toBinary(10), '1010');
+    assert.equal(toBinary(255), '11111111');
+  });
+
+  it('roundtrips with fromBinary', () => {
+    for (const n of [0, 1, 2, 15, 64, 127, 255]) {
+      assert.equal(fromBinary(toBinary(n)), n, `failed for n=${n}`);
+    }
+  });
+});
+
+// ─── toOctal / fromOctal ──────────────────────────────────────────────────────
+
+describe('toOctal / fromOctal', () => {
+  it('converts 0 to "0"', () => {
+    assert.equal(toOctal(0), '0');
+  });
+
+  it('converts small integers to octal', () => {
+    assert.equal(toOctal(7), '7');
+    assert.equal(toOctal(8), '10');
+    assert.equal(toOctal(64), '100');
+  });
+
+  it('roundtrips with fromOctal', () => {
+    for (const n of [0, 1, 7, 8, 63, 64, 511, 512]) {
+      assert.equal(fromOctal(toOctal(n)), n, `failed for n=${n}`);
+    }
+  });
+});
+
+// ─── toHex / fromHex ──────────────────────────────────────────────────────────
+
+describe('toHex / fromHex', () => {
+  it('converts 0 to "0"', () => {
+    assert.equal(toHex(0), '0');
+  });
+
+  it('converts integers to lower-case hex', () => {
+    assert.equal(toHex(15), 'f');
+    assert.equal(toHex(16), '10');
+    assert.equal(toHex(255), 'ff');
+    assert.equal(toHex(256), '100');
+  });
+
+  it('fromHex is case-insensitive', () => {
+    assert.equal(fromHex('FF'), 255);
+    assert.equal(fromHex('ff'), 255);
+    assert.equal(fromHex('Ab'), 171);
+  });
+
+  it('roundtrips with fromHex', () => {
+    for (const n of [0, 1, 10, 15, 16, 255, 256, 65535]) {
+      assert.equal(fromHex(toHex(n)), n, `failed for n=${n}`);
+    }
+  });
+});
+
+// ─── encodeVarint / decodeVarint ──────────────────────────────────────────────
+
+describe('encodeVarint / decodeVarint', () => {
+  it('encodes 0 as a single zero byte', () => {
+    const result = encodeVarint(0);
+    assert.deepEqual(result, new Uint8Array([0]));
+  });
+
+  it('encodes values 0–127 in a single byte', () => {
+    for (const n of [0, 1, 63, 127]) {
+      const bytes = encodeVarint(n);
+      assert.equal(bytes.length, 1, `n=${n} should fit in 1 byte`);
+    }
+  });
+
+  it('encodes 128 in two bytes', () => {
+    const bytes = encodeVarint(128);
+    assert.equal(bytes.length, 2);
+    assert.equal(bytes[0] & 0x80, 0x80, 'continuation bit set on first byte');
+    assert.equal(bytes[1] & 0x80, 0, 'no continuation bit on last byte');
+  });
+
+  it('decodes single-byte varint', () => {
+    const { value, bytesRead } = decodeVarint(new Uint8Array([42]));
+    assert.equal(value, 42);
+    assert.equal(bytesRead, 1);
+  });
+
+  it('decodes multi-byte varint', () => {
+    const { value, bytesRead } = decodeVarint(new Uint8Array([0x80, 0x01]));
+    assert.equal(value, 128);
+    assert.equal(bytesRead, 2);
+  });
+
+  it('roundtrips for many values', () => {
+    for (const n of [0, 1, 127, 128, 255, 256, 16383, 16384, 2097151]) {
+      const { value } = decodeVarint(encodeVarint(n));
+      assert.equal(value, n, `failed for n=${n}`);
+    }
+  });
+
+  it('decodeVarint reports bytesRead correctly when extra bytes follow', () => {
+    // Encode 300, then append extra bytes
+    const varBytes = encodeVarint(300);
+    const extended = new Uint8Array([...varBytes, 0xff, 0xff]);
+    const { value, bytesRead } = decodeVarint(extended);
+    assert.equal(value, 300);
+    assert.equal(bytesRead, varBytes.length);
+  });
+
+  it('throws RangeError for negative input', () => {
+    assert.throws(() => encodeVarint(-1), /RangeError|non-negative/);
+  });
+
+  it('throws RangeError for non-integer input', () => {
+    assert.throws(() => encodeVarint(1.5), /RangeError|non-negative/);
+  });
+});
+
+// ─── zigzagEncode / zigzagDecode ─────────────────────────────────────────────
+
+describe('zigzagEncode / zigzagDecode', () => {
+  it('encodes 0 → 0', () => {
+    assert.equal(zigzagEncode(0), 0);
+  });
+
+  it('encodes -1 → 1', () => {
+    assert.equal(zigzagEncode(-1), 1);
+  });
+
+  it('encodes 1 → 2', () => {
+    assert.equal(zigzagEncode(1), 2);
+  });
+
+  it('encodes -2 → 3', () => {
+    assert.equal(zigzagEncode(-2), 3);
+  });
+
+  it('encodes 2 → 4', () => {
+    assert.equal(zigzagEncode(2), 4);
+  });
+
+  it('produces non-negative results for small signed integers', () => {
+    for (const n of [-100, -50, -1, 0, 1, 50, 100]) {
+      assert.ok(zigzagEncode(n) >= 0, `zigzagEncode(${n}) should be non-negative`);
+    }
+  });
+
+  it('decodes 0 → 0', () => {
+    assert.equal(zigzagDecode(0), 0);
+  });
+
+  it('decodes 1 → -1', () => {
+    assert.equal(zigzagDecode(1), -1);
+  });
+
+  it('decodes 2 → 1', () => {
+    assert.equal(zigzagDecode(2), 1);
+  });
+
+  it('decodes 3 → -2', () => {
+    assert.equal(zigzagDecode(3), -2);
+  });
+
+  it('roundtrips for many signed values', () => {
+    for (const n of [-1000, -255, -128, -1, 0, 1, 127, 255, 1000]) {
+      assert.equal(zigzagDecode(zigzagEncode(n)), n, `failed for n=${n}`);
+    }
   });
 });
