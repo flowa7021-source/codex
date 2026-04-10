@@ -26,7 +26,7 @@ const FIELD_RANGES: [number, number][] = [
   [0, 23], // hour
   [1, 31], // dayOfMonth
   [1, 12], // month
-  [0, 6],  // dayOfWeek (0=Sun, 6=Sat)
+  [0, 7],  // dayOfWeek (0=Sun, 6=Sat; 7 is alias for Sunday)
 ];
 
 const MONTH_NAMES: Record<string, number> = {
@@ -52,11 +52,13 @@ function normaliseNames(token: string, fieldIndex: number): string {
     });
   }
   if (fieldIndex === 4) {
-    return token.replace(/[a-z]+/gi, m => {
-      // Handle "7" alias for Sunday
+    // Replace named weekdays with numbers, then replace "7" (Sunday alias) with "0"
+    const withNames = token.replace(/[a-z]+/gi, m => {
       const n = DOW_NAMES[m.toLowerCase()];
       return n !== undefined ? String(n) : m;
     });
+    // Replace standalone 7 (Sunday alias) with 0, e.g. "7" or "5-7" or "7,1"
+    return withNames.replace(/\b7\b/g, '0');
   }
   return token;
 }

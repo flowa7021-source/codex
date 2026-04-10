@@ -288,3 +288,64 @@ describe('Rope chained operations', () => {
     assert.equal(rejoined.toString(), text);
   });
 });
+
+// ─── concat with string ─────────────────────────────────────────────────────
+
+describe('Rope.concat (string overload)', () => {
+  it('accepts a plain string as argument', () => {
+    const r = new Rope('hello');
+    const result = r.concat(' world');
+    assert.equal(result.toString(), 'hello world');
+    assert.equal(result.length, 11);
+  });
+
+  it('concatenating with an empty string returns equivalent rope', () => {
+    const r = new Rope('abc');
+    assert.equal(r.concat('').toString(), 'abc');
+  });
+
+  it('does not mutate the original rope when concating string', () => {
+    const r = new Rope('foo');
+    r.concat('bar');
+    assert.equal(r.toString(), 'foo');
+  });
+});
+
+// ─── rebalance ──────────────────────────────────────────────────────────────
+
+describe('Rope.rebalance', () => {
+  it('rebalanced rope has same content', () => {
+    const original = 'hello world';
+    const r = new Rope(original);
+    const rb = r.rebalance();
+    assert.equal(rb.toString(), original);
+    assert.equal(rb.length, original.length);
+  });
+
+  it('rebalanced rope supports all operations correctly', () => {
+    // Build a highly unbalanced rope via many small inserts
+    let r = new Rope('');
+    for (let i = 0; i < 20; i++) {
+      r = r.insert(r.length, 'x');
+    }
+    const rb = r.rebalance();
+    assert.equal(rb.toString(), 'x'.repeat(20));
+    assert.equal(rb.charAt(0), 'x');
+    assert.equal(rb.substring(5, 10), 'xxxxx');
+  });
+
+  it('rebalance of empty rope returns empty rope', () => {
+    const r = new Rope();
+    const rb = r.rebalance();
+    assert.equal(rb.toString(), '');
+    assert.equal(rb.length, 0);
+  });
+
+  it('rebalance returns a new Rope instance', () => {
+    const r = new Rope('test');
+    const rb = r.rebalance();
+    assert.ok(rb instanceof Rope);
+    // original unchanged
+    assert.equal(r.toString(), 'test');
+  });
+});

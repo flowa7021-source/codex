@@ -129,8 +129,9 @@ export class Rope {
 
   // ── structural ops ────────────────────────────────────────────────────
 
-  concat(other: Rope): Rope {
-    return new Rope(concatNodes(this.root, other.root));
+  concat(other: Rope | string): Rope {
+    const otherRope = typeof other === 'string' ? new Rope(other) : other;
+    return new Rope(concatNodes(this.root, otherRope.root));
   }
 
   split(index: number): [Rope, Rope] {
@@ -168,6 +169,13 @@ export class Rope {
     const [left] = splitNode(this.root, s);
     const [, right] = splitNode(this.root, e);
     return new Rope(concatNodes(left, right));
+  }
+
+  // ── rebalance ─────────────────────────────────────────────────────────
+
+  /** Rebuild the rope as a balanced tree. */
+  rebalance(): Rope {
+    return new Rope(buildBalanced(this.toString()));
   }
 
   // ── search ─────────────────────────────────────────────────────────────
