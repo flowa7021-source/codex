@@ -141,55 +141,62 @@ export function bwt(text: string): { transformed: string; index: number } {
 /**
  * Invert the Burrows-Wheeler Transform.
  *
- * Reconstructs the original string (including sentinel) from the last column
- * and the row index, then strips the sentinel.
+ * Uses the standard "T-mapping" algorithm:
+ *   1. Sort the last column (L) to obtain the first column (F).
+ *   2. Build a `next[]` array: next[i] is the row in the sorted table whose
+ *      last-column character is L[i] and has the same occurrence rank as the
+ *      i-th occurrence of L[i] in L.  Equivalently, next[i] is the position
+ *      in F of the character that immediately follows the character in L at row
+ *      i when reading the original circular rotation.
+ *   3. Walk the chain: start at `index`, output F[row], advance row = next[row],
+ *      stopping after n steps.
+ *   4. Strip the appended sentinel '\0'.
  */
 export function ibwt(transformed: string, index: number): string {
   const n = transformed.length;
   if (n === 0) return '';
 
-  // Build first column by sorting last column
+  // Step 1: first column = sorted last column
   const firstCol = transformed.split('').sort();
 
-  // For each character occurrence in lastCol, find which occurrence in firstCol
-  // it maps to. This gives the "next" permutation.
-  const next = new Array<number>(n);
-  // Count occurrences seen so far in firstCol for each char
-  const firstColCount = new Map<string, number>();
-  // Map each (char, occurrenceIndex) → position in firstCol
-  const firstColIndex = new Map<string, number[]>();
+  // Step 2: build next[] (the "LF-mapping")
+  //
+  // For each position i in L (= transformed), rank = how many times L[i] has
+  // appeared in L[0..i-1].  The corresponding position in F is the rank-th
+  // occurrence of that character in F.
+  //
+  // Pre-compute: for each char, the list of F-positions in order.
+  const firstColPositions = new Map<string, number[]>();
   for (let i = 0; i < n; i++) {
     const ch = firstCol[i];
-    const list = firstColIndex.get(ch);
-    if (list) {
-      list.push(i);
-    } else {
-      firstColIndex.set(ch, [i]);
-    }
+    const arr = firstColPositions.get(ch);
+    if (arr) arr.push(i);
+    else firstColPositions.set(ch, [i]);
   }
 
-  // For each position i in lastCol, find the k-th occurrence of lastCol[i] in
-  // firstCol, where k is the 0-based occurrence rank of lastCol[i] up to i.
-  const lastColCount = new Map<string, number>();
+  const next = new Array<number>(n);
+  const rankCounter = new Map<string, number>();
   for (let i = 0; i < n; i++) {
     const ch = transformed[i];
-    const rank = lastColCount.get(ch) ?? 0;
-    lastColCount.set(ch, rank + 1);
-    const positions = firstColIndex.get(ch)!;
-    next[i] = positions[rank];
-    firstColCount.set(ch, (firstColCount.get(ch) ?? 0) + 1);
+    const rank = rankCounter.get(ch) ?? 0;
+    rankCounter.set(ch, rank + 1);
+    next[i] = firstColPositions.get(ch)![rank];
   }
 
-  // Walk the next[] chain starting from `index` to reconstruct
+  // Step 3: walk the LF-chain to reconstruct (prepend last-column chars)
+  //
+  // Starting at the row that holds the original string (row = index), we read
+  // L[row] = transformed[row] and prepend it, then advance via LF to the next
+  // row.  After n iterations the accumulated string equals `text + '\0'`.
   let result = '';
   let row = index;
   for (let i = 0; i < n; i++) {
-    result = firstCol[row] + result;
+    result = transformed[row] + result;
     row = next[row];
   }
 
-  // Strip the sentinel '\0' (it is always at the end of the original + sentinel)
-  return result.endsWith('\0') ? result.slice(0, -1) : result;
+  // Step 4: remove the sentinel '\0'
+  return result.replace('\0', '');
 }
 
 // ─── Move-to-Front Encoding ───────────────────────────────────────────────────
