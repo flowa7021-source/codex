@@ -3,77 +3,71 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  createToken,
   DIContainer,
   createContainer,
 } from '../../app/modules/di-container.js';
 
-// ─── createToken ──────────────────────────────────────────────────────────────
-
-describe('createToken', () => {
-  it('returns an object with a symbol id', () => {
-    const token = createToken('myService');
-    assert.equal(typeof token.id, 'symbol');
-  });
-
-  it('each call produces a unique token even for the same string', () => {
-    const t1 = createToken('svc');
-    const t2 = createToken('svc');
-    assert.notEqual(t1.id, t2.id);
-  });
-
-  it('symbol description matches the provided id string', () => {
-    const token = createToken('logger');
-    assert.equal(token.id.description, 'logger');
-  });
-});
-
 // ─── register / resolve (singleton) ──────────────────────────────────────────
 
-describe('DIContainer – singleton scope', () => {
+describe('DIContainer – register singleton', () => {
   it('resolve returns the value produced by the factory', () => {
     const c = new DIContainer();
-    const token = createToken('num');
-    c.register(token, () => 42);
-    assert.equal(c.resolve(token), 42);
+    c.register('num', () => 42, true);
+    assert.equal(c.resolve('num'), 42);
   });
 
-  it('singleton scope returns the same instance on every resolve', () => {
+  it('singleton returns the same instance on every resolve', () => {
     const c = new DIContainer();
-    const token = createToken('obj');
-    c.register(token, () => ({ value: Math.random() }), 'singleton');
-    const a = c.resolve(token);
-    const b = c.resolve(token);
+    c.register('obj', () => ({ value: Math.random() }), true);
+    const a = c.resolve('obj');
+    const b = c.resolve('obj');
     assert.strictEqual(a, b);
-  });
-
-  it('default scope is singleton', () => {
-    const c = new DIContainer();
-    const token = createToken('def');
-    c.register(token, () => ({ id: Math.random() }));
-    assert.strictEqual(c.resolve(token), c.resolve(token));
   });
 
   it('factory receives the container as its argument', () => {
     const c = new DIContainer();
-    const tokenA = createToken('a');
-    const tokenB = createToken('b');
-    c.register(tokenA, () => 10);
-    c.register(tokenB, (container) => container.resolve(tokenA) * 2);
-    assert.equal(c.resolve(tokenB), 20);
+    c.register('a', () => 10, true);
+    c.register('b', (container) => container.resolve('a') * 2, true);
+    assert.equal(c.resolve('b'), 20);
+  });
+
+  it('factory is called exactly once for singletons', () => {
+    const c = new DIContainer();
+    let calls = 0;
+    c.register('once', () => { calls++; return 'value'; }, true);
+    c.resolve('once');
+    c.resolve('once');
+    c.resolve('once');
+    assert.equal(calls, 1);
   });
 });
 
 // ─── register / resolve (transient) ──────────────────────────────────────────
 
-describe('DIContainer – transient scope', () => {
-  it('transient scope returns a new instance on each resolve', () => {
+describe('DIContainer – register transient', () => {
+  it('transient returns a new instance on each resolve', () => {
     const c = new DIContainer();
-    const token = createToken('transient');
-    c.register(token, () => ({ id: Math.random() }), 'transient');
-    const a = c.resolve(token);
-    const b = c.resolve(token);
+    c.register('rand', () => ({ id: Math.random() }), false);
+    const a = c.resolve('rand');
+    const b = c.resolve('rand');
     assert.notStrictEqual(a, b);
+  });
+
+  it('default registration (no third arg) is transient', () => {
+    const c = new DIContainer();
+    c.register('t', () => ({ id: Math.random() }));
+    const a = c.resolve('t');
+    const b = c.resolve('t');
+    assert.notStrictEqual(a, b);
+  });
+
+  it('transient factory is called on every resolve', () => {
+    const c = new DIContainer();
+    let calls = 0;
+    c.register('calls', () => ++calls);
+    assert.equal(c.resolve('calls'), 1);
+    assert.equal(c.resolve('calls'), 2);
+    assert.equal(c.resolve('calls'), 3);
   });
 });
 
@@ -82,19 +76,28 @@ describe('DIContainer – transient scope', () => {
 describe('DIContainer – registerValue', () => {
   it('resolves to the exact value that was registered', () => {
     const c = new DIContainer();
-    const token = createToken('val');
     const obj = { x: 1 };
-    c.registerValue(token, obj);
-    assert.strictEqual(c.resolve(token), obj);
+    c.registerValue('val', obj);
+    assert.strictEqual(c.resolve('val'), obj);
   });
 
   it('registerValue returns the same reference on every resolve', () => {
     const c = new DIContainer();
-    const token = createToken('val2');
     const arr = [1, 2, 3];
-    c.registerValue(token, arr);
-    assert.strictEqual(c.resolve(token), arr);
-    assert.strictEqual(c.resolve(token), arr);
+    c.registerValue('arr', arr);
+    assert.strictEqual(c.resolve('arr'), c.resolve('arr'));
+  });
+
+  it('registerValue works with primitive values', () => {
+    const c = new DIContainer();
+    c.registerValue('pi', 3.14);
+    assert.equal(c.resolve('pi'), 3.14);
+  });
+
+  it('registerValue works with null', () => {
+    const c = new DIContainer();
+    c.registerValue('nothing', null);
+    assert.equal(c.resolve('nothing'), null);
   });
 });
 
@@ -103,80 +106,130 @@ describe('DIContainer – registerValue', () => {
 describe('DIContainer – has', () => {
   it('returns true for a registered token', () => {
     const c = new DIContainer();
-    const token = createToken('present');
-    c.register(token, () => 1);
-    assert.equal(c.has(token), true);
+    c.register('present', () => 1);
+    assert.equal(c.has('present'), true);
   });
 
   it('returns false for an unregistered token', () => {
     const c = new DIContainer();
-    const token = createToken('absent');
-    assert.equal(c.has(token), false);
+    assert.equal(c.has('absent'), false);
+  });
+
+  it('returns true for a value registered with registerValue', () => {
+    const c = new DIContainer();
+    c.registerValue('v', 42);
+    assert.equal(c.has('v'), true);
   });
 });
 
-// ─── error on unknown token ───────────────────────────────────────────────────
+// ─── resolve throws on unknown token ─────────────────────────────────────────
 
 describe('DIContainer – resolve unknown token', () => {
   it('throws when a token is not registered', () => {
     const c = new DIContainer();
-    const token = createToken('ghost');
-    assert.throws(() => c.resolve(token), /no registration found/i);
+    assert.throws(() => c.resolve('ghost'), /no registration found/i);
+  });
+
+  it('error message includes the token name', () => {
+    const c = new DIContainer();
+    assert.throws(() => c.resolve('my-token'), /my-token/);
   });
 });
 
-// ─── parent / child containers ────────────────────────────────────────────────
+// ─── unregister ──────────────────────────────────────────────────────────────
 
-describe('DIContainer – parent lookup', () => {
+describe('DIContainer – unregister', () => {
+  it('unregister removes the registration', () => {
+    const c = new DIContainer();
+    c.register('svc', () => 1);
+    c.unregister('svc');
+    assert.equal(c.has('svc'), false);
+  });
+
+  it('resolve throws after unregister', () => {
+    const c = new DIContainer();
+    c.register('svc', () => 1);
+    c.unregister('svc');
+    assert.throws(() => c.resolve('svc'), /no registration found/i);
+  });
+
+  it('unregister on unknown token is a no-op', () => {
+    const c = new DIContainer();
+    assert.doesNotThrow(() => c.unregister('nonexistent'));
+  });
+
+  it('unregister does not affect other tokens', () => {
+    const c = new DIContainer();
+    c.register('a', () => 1);
+    c.register('b', () => 2);
+    c.unregister('a');
+    assert.equal(c.has('b'), true);
+    assert.equal(c.resolve('b'), 2);
+  });
+});
+
+// ─── child container ─────────────────────────────────────────────────────────
+
+describe('DIContainer – child', () => {
+  it('child() returns a new DIContainer instance', () => {
+    const c = new DIContainer();
+    const kid = c.child();
+    assert.ok(kid instanceof DIContainer);
+    assert.notStrictEqual(kid, c);
+  });
+
   it('child resolves tokens registered in the parent', () => {
     const parent = new DIContainer();
-    const token = createToken('shared');
-    parent.register(token, () => 'from-parent');
-    const child = new DIContainer(parent);
-    assert.equal(child.resolve(token), 'from-parent');
+    parent.register('shared', () => 'from-parent', true);
+    const child = parent.child();
+    assert.equal(child.resolve('shared'), 'from-parent');
   });
 
   it('child registration shadows the parent', () => {
     const parent = new DIContainer();
-    const token = createToken('shadow');
-    parent.register(token, () => 'parent-value');
-    const child = new DIContainer(parent);
-    child.register(token, () => 'child-value');
-    assert.equal(child.resolve(token), 'child-value');
-    assert.equal(parent.resolve(token), 'parent-value');
+    parent.register('svc', () => 'parent-value', true);
+    const child = parent.child();
+    child.register('svc', () => 'child-value', true);
+    assert.equal(child.resolve('svc'), 'child-value');
+    assert.equal(parent.resolve('svc'), 'parent-value');
   });
 
   it('has returns true when token is registered in an ancestor', () => {
     const parent = new DIContainer();
-    const token = createToken('ancestor');
-    parent.register(token, () => 1);
-    const child = new DIContainer(parent);
-    assert.equal(child.has(token), true);
-  });
-});
-
-// ─── createScope ─────────────────────────────────────────────────────────────
-
-describe('DIContainer – createScope / scoped lifetime', () => {
-  it('createScope returns a new child DIContainer', () => {
-    const c = new DIContainer();
-    const scope = c.createScope();
-    assert.ok(scope instanceof DIContainer);
-    assert.notStrictEqual(scope, c);
+    parent.register('ancestor', () => 1);
+    const child = parent.child();
+    assert.equal(child.has('ancestor'), true);
   });
 
-  it('scoped singleton is cached per scope, not shared across scopes', () => {
-    const c = new DIContainer();
-    const token = createToken('scoped');
-    c.register(token, () => ({ id: Math.random() }), 'scoped');
+  it('has returns false for token not in child or parent', () => {
+    const parent = new DIContainer();
+    const child = parent.child();
+    assert.equal(child.has('ghost'), false);
+  });
 
-    const scopeA = c.createScope();
-    const scopeB = c.createScope();
+  it('registrations added to child do not affect parent', () => {
+    const parent = new DIContainer();
+    const child = parent.child();
+    child.register('kidOnly', () => 42);
+    assert.equal(parent.has('kidOnly'), false);
+  });
 
-    // Within the same scope the instance is stable.
-    assert.strictEqual(scopeA.resolve(token), scopeA.resolve(token));
-    // Across scopes the instances differ.
-    assert.notStrictEqual(scopeA.resolve(token), scopeB.resolve(token));
+  it('multi-level ancestry: grandchild resolves grandparent token', () => {
+    const gp = new DIContainer();
+    gp.register('gp-token', () => 'gp-value', true);
+    const parent = gp.child();
+    const child = parent.child();
+    assert.equal(child.resolve('gp-token'), 'gp-value');
+  });
+
+  it('unregister in child does not affect parent', () => {
+    const parent = new DIContainer();
+    parent.register('shared', () => 'value', true);
+    const child = parent.child();
+    child.unregister('shared');
+    // child falls back to parent after local unregister
+    assert.equal(child.resolve('shared'), 'value');
+    assert.equal(parent.has('shared'), true);
   });
 });
 
@@ -188,11 +241,22 @@ describe('createContainer', () => {
     assert.ok(c instanceof DIContainer);
   });
 
-  it('accepts a parent container', () => {
-    const parent = createContainer();
-    const token = createToken('p');
-    parent.register(token, () => 99);
-    const child = createContainer(parent);
-    assert.equal(child.resolve(token), 99);
+  it('returned container is initially empty', () => {
+    const c = createContainer();
+    assert.equal(c.has('anything'), false);
+  });
+
+  it('two calls produce independent containers', () => {
+    const c1 = createContainer();
+    const c2 = createContainer();
+    c1.register('svc', () => 'c1');
+    assert.equal(c2.has('svc'), false);
+  });
+
+  it('child() on created container works correctly', () => {
+    const c = createContainer();
+    c.register('svc', () => 'hello', true);
+    const kid = c.child();
+    assert.equal(kid.resolve('svc'), 'hello');
   });
 });

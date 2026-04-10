@@ -34,7 +34,7 @@ function reconstructPath<T>(cameFrom: Map<T, T>, end: T): T[] {
  * If `end` is provided the search stops early once that vertex is settled.
  *
  * @example
- *   const results = dijkstra(graph, 'A', 'C');
+ *   const results = dijkstra(graph, 'A');
  *   results.get('C'); // { distance: 5, path: ['A', 'B', 'C'] }
  */
 export function dijkstra<T>(
@@ -46,18 +46,14 @@ export function dijkstra<T>(
   const cameFrom = new Map<T, T>();
   const settled = new Set<T>();
 
-  // Initialise all known vertices to Infinity
   for (const v of graph.vertices()) {
     dist.set(v, Infinity);
   }
   dist.set(start, 0);
 
-  // Simple min-priority queue backed by a sorted array.
-  // For large graphs a binary heap would be faster, but correctness is identical.
   const pq: Array<{ v: T; d: number }> = [{ v: start, d: 0 }];
 
   while (pq.length > 0) {
-    // Pop minimum
     let minIdx = 0;
     for (let i = 1; i < pq.length; i++) {
       if (pq[i].d < pq[minIdx].d) minIdx = i;
@@ -68,7 +64,7 @@ export function dijkstra<T>(
     if (settled.has(v)) continue;
     settled.add(v);
 
-    if (end !== undefined && v === end) break; // early exit
+    if (end !== undefined && v === end) break;
 
     for (const { to, weight } of graph.neighbors(v)) {
       if (settled.has(to)) continue;
@@ -81,7 +77,6 @@ export function dijkstra<T>(
     }
   }
 
-  // Build result map for all reachable vertices
   const result = new Map<T, PathResult<T>>();
   for (const [v, d] of dist) {
     if (d !== Infinity) {
@@ -115,19 +110,20 @@ export function bellmanFord<T>(
   const allEdges = graph.edges();
   const n = verts.length;
 
-  // Relax all edges n-1 times
   for (let i = 0; i < n - 1; i++) {
+    let updated = false;
     for (const { from, to, weight } of allEdges) {
       const dFrom = dist.get(from) ?? Infinity;
       if (dFrom === Infinity) continue;
       const candidate = dFrom + weight;
       if (candidate < (dist.get(to) ?? Infinity)) {
         dist.set(to, candidate);
+        updated = true;
       }
     }
+    if (!updated) break;
   }
 
-  // Check for negative cycles: if any edge can still be relaxed a cycle exists
   let hasNegativeCycle = false;
   for (const { from, to, weight } of allEdges) {
     const dFrom = dist.get(from) ?? Infinity;
@@ -146,13 +142,12 @@ export function bellmanFord<T>(
 /**
  * Floyd-Warshall all-pairs shortest paths.
  *
- * Returns a Map of Maps: `result.get(u).get(v)` is the shortest distance
+ * Returns a Map of Maps: `result.get(u)?.get(v)` is the shortest distance
  * from `u` to `v`, or `Infinity` if no path exists.
  */
 export function floydWarshall<T>(graph: Graph<T>): Map<T, Map<T, number>> {
   const verts = graph.vertices();
 
-  // Initialise distance matrix
   const dist = new Map<T, Map<T, number>>();
   for (const u of verts) {
     const row = new Map<T, number>();
@@ -162,16 +157,13 @@ export function floydWarshall<T>(graph: Graph<T>): Map<T, Map<T, number>> {
     dist.set(u, row);
   }
 
-  // Seed with direct edge weights
   for (const { from, to, weight } of graph.edges()) {
     const row = dist.get(from)!;
-    // Keep the minimum if there are parallel edges
     if (weight < (row.get(to) ?? Infinity)) {
       row.set(to, weight);
     }
   }
 
-  // Relax via intermediate vertices
   for (const k of verts) {
     const dk = dist.get(k)!;
     for (const u of verts) {
@@ -212,11 +204,8 @@ export function astar<T>(
 ): PathResult<T> | null {
   if (!graph.hasVertex(start) || !graph.hasVertex(end)) return null;
 
-  /** g-scores: cheapest known cost from start → node */
   const gScore = new Map<T, number>();
-  /** f-scores: g + heuristic */
   const fScore = new Map<T, number>();
-  /** Back-pointers for path reconstruction */
   const cameFrom = new Map<T, T>();
   const closed = new Set<T>();
 
@@ -226,7 +215,6 @@ export function astar<T>(
   const open = new Set<T>([start]);
 
   while (open.size > 0) {
-    // Pick the open node with the lowest f-score
     let current: T | null = null;
     let bestF = Infinity;
     for (const node of open) {
@@ -263,5 +251,5 @@ export function astar<T>(
     }
   }
 
-  return null; // end unreachable
+  return null;
 }

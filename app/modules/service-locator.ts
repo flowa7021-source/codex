@@ -1,105 +1,121 @@
 // @ts-check
 // ─── Service Locator ─────────────────────────────────────────────────────────
-// A string-keyed service locator supporting singleton and transient factories.
-
-// ─── ServiceEntry ─────────────────────────────────────────────────────────────
-
-interface ServiceEntry<T> {
-  factory: () => T;
-  singleton: boolean;
-  cache: T | undefined;
-  hasCache: boolean;
-}
+// A string-keyed service registry and a composable middleware chain.
 
 // ─── ServiceLocator ───────────────────────────────────────────────────────────
 
+/**
+ * A simple service locator that stores services by name.
+ *
+ * @example
+ *   const locator = createServiceLocator();
+ *   locator.register('logger', new Logger());
+ *   const logger = locator.get('logger');
+ */
 export class ServiceLocator {
-  #services: Map<string, ServiceEntry<unknown>> = new Map();
+  #services: Map<string, unknown>;
 
-  /**
-   * Register a factory for a service key.
-   * @param singleton when true (default false) the first resolved instance is cached.
-   */
-  register<T>(key: string, factory: () => T, singleton: boolean = false): void {
-    this.#services.set(key, {
-      factory: factory as () => unknown,
-      singleton,
-      cache: undefined,
-      hasCache: false,
-    });
-  }
-
-  /** Register an already-constructed instance (always behaves as a singleton). */
-  registerInstance<T>(key: string, instance: T): void {
-    this.#services.set(key, {
-      factory: () => instance,
-      singleton: true,
-      cache: instance,
-      hasCache: true,
-    });
+  constructor() {
+    this.#services = new Map();
   }
 
   /**
-   * Retrieve a service by key.
-   * Throws if the key has not been registered.
+   * Register a service instance under a name.
+   * Overwrites any previously registered service with the same name.
    */
-  get<T>(key: string): T {
-    const entry = this.#services.get(key) as ServiceEntry<T> | undefined;
-    if (entry === undefined) {
-      throw new Error(`ServiceLocator: service "${key}" is not registered`);
-    }
-
-    if (entry.singleton) {
-      if (!entry.hasCache) {
-        entry.cache = entry.factory();
-        entry.hasCache = true;
-      }
-      return entry.cache as T;
-    }
-
-    return entry.factory();
-  }
-
-  /** Return true if the key has been registered. */
-  has(key: string): boolean {
-    return this.#services.has(key);
+  register<T>(name: string, service: T): void {
+    this.#services.set(name, service);
   }
 
   /**
-   * Clear the singleton cache for a specific key, or for all keys when
-   * called without arguments.  Non-singleton entries are unaffected.
-   * Passing an unknown key is a no-op.
+   * Retrieve a service by name.
+   * @throws {Error} if no service is registered under that name.
    */
-  reset(key?: string): void {
-    if (key !== undefined) {
-      const entry = this.#services.get(key);
-      if (entry !== undefined) {
-        entry.cache = undefined;
-        entry.hasCache = false;
-      }
-      return;
+  get<T>(name: string): T {
+    if (!this.#services.has(name)) {
+      throw new Error(`ServiceLocator: service "${name}" is not registered`);
     }
-    // Reset all caches.
-    for (const entry of this.#services.values()) {
-      entry.cache = undefined;
-      entry.hasCache = false;
-    }
+    return this.#services.get(name) as T;
   }
 
-  /** Return all registered service keys. */
-  keys(): string[] {
+  /** Return true if a service is registered under the given name. */
+  has(name: string): boolean {
+    return this.#services.has(name);
+  }
+
+  /**
+   * Remove a service registration by name.
+   * No-op if the name is not registered.
+   */
+  unregister(name: string): void {
+    this.#services.delete(name);
+  }
+
+  /** Return a sorted list of all registered service names. */
+  list(): string[] {
     return Array.from(this.#services.keys());
   }
 }
 
-// ─── GlobalServiceLocator ─────────────────────────────────────────────────────
+// ─── Middleware ───────────────────────────────────────────────────────────────
 
-/** Module-level singleton instance for global service location. */
-export const GlobalServiceLocator: ServiceLocator = new ServiceLocator();
+/** A middleware function that processes a context and optionally calls next. */
+type MiddlewareFn<T> = (ctx: T, next: () => Promise<void>) => Promise<void>;
 
-// ─── createServiceLocator ─────────────────────────────────────────────────────
+/**
+ * A composable middleware chain.
+ * Middleware functions are executed in the order they were added via `use()`.
+ *
+ * @example
+ *   const mw = createMiddleware();
+ *   mw.use(async (ctx, next) => { console.log('before'); await next(); console.log('after'); });
+ *   await mw.execute({ req: ... });
+ */
+export class Middleware<T> {
+  #fns: Array<MiddlewareFn<T>>;
 
-/** Factory function that creates a new ServiceLocator. */
+  constructor() {
+    this.#fns = [];
+  }
+
+  /** Add a middleware function to the chain. */
+  use(fn: MiddlewareFn<T>): void {
+    this.#fns.push(fn);
+  }
+
+  /**
+   * Execute the middleware chain for a given context.
+   * Each middleware receives `next` which advances to the next middleware.
+   * If a middleware does not call `next`, the chain stops there.
+   */
+  execute(ctx: T): Promise<void> {
+    const fns = this.#fns;
+    let index = -1;
+
+    const dispatch = (i: number): Promise<void> => {
+      if (i <= index) {
+        return Promise.reject(new Error('next() called multiple times'));
+      }
+      index = i;
+      if (i >= fns.length) {
+        return Promise.resolve();
+      }
+      const fn = fns[i];
+      return fn(ctx, () => dispatch(i + 1));
+    };
+
+    return dispatch(0);
+  }
+}
+
+// ─── Factories ────────────────────────────────────────────────────────────────
+
+/** Create a new empty ServiceLocator. */
 export function createServiceLocator(): ServiceLocator {
   return new ServiceLocator();
+}
+
+/** Create a new empty Middleware chain. */
+export function createMiddleware<T>(): Middleware<T> {
+  return new Middleware<T>();
 }

@@ -1,138 +1,124 @@
 // @ts-check
 // ─── Dependency Injection Container ──────────────────────────────────────────
-// A typed DI container supporting singleton, transient, and scoped lifetimes.
+// A string-token based DI container supporting singleton and transient
+// registrations, value registration, and child containers.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/** A typed token used to register and resolve dependencies. */
-export interface Token<T> {
-  id: symbol;
-  type?: T;
+/** A factory function that receives the container and produces a service. */
+export type ServiceFactory<T> = (container: DIContainer) => T;
+
+/** Internal registration record. */
+interface Registration {
+  factory: ServiceFactory<unknown>;
+  singleton: boolean;
+  instance: unknown;
+  hasInstance: boolean;
 }
 
-/** Lifetime scope for a registered dependency. */
-export type LifetimeScope = 'singleton' | 'transient' | 'scoped';
-
-interface Registration<T> {
-  factory: (container: DIContainer) => T;
-  scope: LifetimeScope;
-}
-
-// ─── createToken ──────────────────────────────────────────────────────────────
+// ─── DIContainer ─────────────────────────────────────────────────────────────
 
 /**
- * Create a typed token from a string identifier.
- * Each call produces a unique token even if the same string is used.
+ * A simple dependency injection container backed by string tokens.
+ *
+ * @example
+ *   const container = createContainer();
+ *   container.register('db', () => new Database(), true);
+ *   container.registerValue('config', { host: 'localhost' });
+ *   const db = container.resolve('db');
  */
-export function createToken<T>(id: string): Token<T> {
-  return { id: Symbol(id) };
-}
-
-// ─── DIContainer ──────────────────────────────────────────────────────────────
-
 export class DIContainer {
-  #parent: DIContainer | undefined;
-  #registrations: Map<symbol, Registration<unknown>> = new Map();
-  #singletons: Map<symbol, unknown> = new Map();
+  #registrations: Map<string, Registration>;
+  #parent: DIContainer | null;
 
-  constructor(parent?: DIContainer) {
+  constructor(parent: DIContainer | null = null) {
+    this.#registrations = new Map();
     this.#parent = parent;
   }
 
   /**
-   * Register a factory function for a token.
-   * @param scope defaults to 'singleton'
+   * Register a factory for a string token.
+   * @param token - Unique string identifier for the service.
+   * @param factory - Function that creates the service, receives the container.
+   * @param singleton - If true, the instance is cached after the first resolve.
    */
-  register<T>(
-    token: Token<T>,
-    factory: (container: DIContainer) => T,
-    scope: LifetimeScope = 'singleton',
-  ): void {
-    this.#registrations.set(token.id, { factory, scope } as Registration<unknown>);
-  }
-
-  /** Register a pre-constructed value as a singleton. */
-  registerValue<T>(token: Token<T>, value: T): void {
-    this.#registrations.set(token.id, {
-      factory: () => value,
-      scope: 'singleton',
-    } as Registration<unknown>);
-    // Pre-populate the singleton cache so the value is returned directly.
-    this.#singletons.set(token.id, value);
-  }
-
-  /** Walk up the container hierarchy to find the closest registration. */
-  #findRegistration<T>(tokenId: symbol): Registration<T> | undefined {
-    const local = this.#registrations.get(tokenId) as Registration<T> | undefined;
-    if (local !== undefined) return local;
-    return this.#parent?.#findRegistration<T>(tokenId);
+  register<T>(token: string, factory: ServiceFactory<T>, singleton = false): void {
+    this.#registrations.set(token, {
+      factory: factory as ServiceFactory<unknown>,
+      singleton,
+      instance: undefined,
+      hasInstance: false,
+    });
   }
 
   /**
-   * Resolve a token to its value.
-   * - singleton: cached on the container that owns the registration.
-   * - scoped: cached on the resolving container (child scope gets its own instance).
-   * - transient: new instance on every call.
-   * Throws if no registration is found in this container or any ancestor.
+   * Register a pre-existing value directly under a token.
+   * The value is stored as a singleton (returned as-is on every resolve).
    */
-  resolve<T>(token: Token<T>): T {
-    const reg = this.#findRegistration<T>(token.id);
-
-    if (reg === undefined) {
-      throw new Error(`DIContainer: no registration found for token "${String(token.id)}"`);
-    }
-
-    if (reg.scope === 'transient') {
-      return reg.factory(this);
-    }
-
-    if (reg.scope === 'scoped') {
-      // Each scope caches its own instance.
-      if (this.#singletons.has(token.id)) {
-        return this.#singletons.get(token.id) as T;
-      }
-      const instance = reg.factory(this);
-      this.#singletons.set(token.id, instance);
-      return instance;
-    }
-
-    // singleton: cache on the container that owns the registration.
-    const owner = this.#findOwner(token.id) ?? this;
-    if (owner.#singletons.has(token.id)) {
-      return owner.#singletons.get(token.id) as T;
-    }
-    const instance = reg.factory(this);
-    owner.#singletons.set(token.id, instance);
-    return instance;
+  registerValue<T>(token: string, value: T): void {
+    this.#registrations.set(token, {
+      factory: () => value,
+      singleton: true,
+      instance: value,
+      hasInstance: true,
+    });
   }
 
-  /** Return the container (self or ancestor) that holds the registration for tokenId. */
-  #findOwner(tokenId: symbol): DIContainer | undefined {
-    if (this.#registrations.has(tokenId)) return this;
-    return this.#parent?.#findOwner(tokenId);
+  /**
+   * Resolve a service by token.
+   * Singletons are cached after first creation.
+   * Looks in own registrations first, then walks up to the parent.
+   * @throws {Error} if the token is not registered in this container or any ancestor.
+   */
+  resolve<T>(token: string): T {
+    const reg = this.#registrations.get(token);
+
+    if (reg !== undefined) {
+      if (reg.singleton) {
+        if (!reg.hasInstance) {
+          reg.instance = reg.factory(this);
+          reg.hasInstance = true;
+        }
+        return reg.instance as T;
+      }
+      return reg.factory(this) as T;
+    }
+
+    if (this.#parent !== null) {
+      return this.#parent.resolve<T>(token);
+    }
+
+    throw new Error(`DIContainer: no registration found for token "${token}"`);
   }
 
   /**
    * Check whether a token is registered in this container or any ancestor.
    */
-  has(token: Token<unknown>): boolean {
-    if (this.#registrations.has(token.id)) return true;
-    return this.#parent?.has(token) ?? false;
+  has(token: string): boolean {
+    if (this.#registrations.has(token)) return true;
+    return this.#parent !== null && this.#parent.has(token);
   }
 
   /**
-   * Create a child container for scoped lifetime resolution.
-   * Scoped registrations resolved on the child are cached on the child,
-   * while singleton registrations stay cached on the parent.
+   * Remove a registration from this container only.
+   * Does not affect ancestor containers or their singleton caches.
    */
-  createScope(): DIContainer {
+  unregister(token: string): void {
+    this.#registrations.delete(token);
+  }
+
+  /**
+   * Create a child container that inherits all registrations from this container.
+   * Registrations added to the child do not affect the parent.
+   */
+  child(): DIContainer {
     return new DIContainer(this);
   }
 }
 
-// ─── createContainer ──────────────────────────────────────────────────────────
+// ─── Factory ──────────────────────────────────────────────────────────────────
 
-/** Factory function that creates a new DIContainer. */
-export function createContainer(parent?: DIContainer): DIContainer {
-  return new DIContainer(parent);
+/** Create a new empty DIContainer. */
+export function createContainer(): DIContainer {
+  return new DIContainer();
 }

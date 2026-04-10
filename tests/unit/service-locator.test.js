@@ -1,173 +1,136 @@
-// ─── Unit Tests: ServiceLocator ───────────────────────────────────────────────
+// ─── Unit Tests: ServiceLocator & Middleware ───────────────────────────────────
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
   ServiceLocator,
-  GlobalServiceLocator,
+  Middleware,
   createServiceLocator,
+  createMiddleware,
 } from '../../app/modules/service-locator.js';
 
-// ─── register / get (transient) ───────────────────────────────────────────────
+// ─── ServiceLocator – register / get ─────────────────────────────────────────
 
-describe('ServiceLocator – register / get (transient)', () => {
-  it('get returns the value produced by the factory', () => {
+describe('ServiceLocator – register / get', () => {
+  it('get returns the registered service', () => {
     const sl = new ServiceLocator();
-    sl.register('answer', () => 42);
-    assert.equal(sl.get('answer'), 42);
+    const svc = { value: 42 };
+    sl.register('myService', svc);
+    assert.strictEqual(sl.get('myService'), svc);
   });
 
-  it('transient factory is called on each get', () => {
+  it('register with a string value', () => {
     const sl = new ServiceLocator();
-    let calls = 0;
-    sl.register('counter', () => ++calls, false);
-    assert.equal(sl.get('counter'), 1);
-    assert.equal(sl.get('counter'), 2);
-    assert.equal(sl.get('counter'), 3);
+    sl.register('greeting', 'hello');
+    assert.equal(sl.get('greeting'), 'hello');
   });
 
-  it('different transient calls return distinct object instances', () => {
+  it('register with a number value', () => {
     const sl = new ServiceLocator();
-    sl.register('obj', () => ({ id: Math.random() }), false);
-    const a = sl.get('obj');
-    const b = sl.get('obj');
-    assert.notStrictEqual(a, b);
-  });
-});
-
-// ─── register / get (singleton) ───────────────────────────────────────────────
-
-describe('ServiceLocator – register / get (singleton)', () => {
-  it('singleton always returns the same instance', () => {
-    const sl = new ServiceLocator();
-    sl.register('svc', () => ({ id: Math.random() }), true);
-    const a = sl.get('svc');
-    const b = sl.get('svc');
-    assert.strictEqual(a, b);
+    sl.register('pi', 3.14);
+    assert.equal(sl.get('pi'), 3.14);
   });
 
-  it('singleton factory is called exactly once', () => {
+  it('register overwrites a previous registration', () => {
     const sl = new ServiceLocator();
-    let calls = 0;
-    sl.register('once', () => { calls++; return 'value'; }, true);
-    sl.get('once');
-    sl.get('once');
-    sl.get('once');
-    assert.equal(calls, 1);
+    sl.register('svc', 'first');
+    sl.register('svc', 'second');
+    assert.equal(sl.get('svc'), 'second');
+  });
+
+  it('multiple distinct services coexist', () => {
+    const sl = new ServiceLocator();
+    sl.register('a', 1);
+    sl.register('b', 2);
+    assert.equal(sl.get('a'), 1);
+    assert.equal(sl.get('b'), 2);
   });
 });
 
-// ─── registerInstance ─────────────────────────────────────────────────────────
+// ─── ServiceLocator – get throws on unknown name ──────────────────────────────
 
-describe('ServiceLocator – registerInstance', () => {
-  it('resolves to the exact instance registered', () => {
+describe('ServiceLocator – get unknown name', () => {
+  it('throws when the name has not been registered', () => {
     const sl = new ServiceLocator();
-    const obj = { tag: 'instance' };
-    sl.registerInstance('myObj', obj);
-    assert.strictEqual(sl.get('myObj'), obj);
+    assert.throws(() => sl.get('ghost'), /not registered/i);
   });
 
-  it('registerInstance always returns the same reference', () => {
+  it('error message includes the service name', () => {
     const sl = new ServiceLocator();
-    const arr = [1, 2, 3];
-    sl.registerInstance('arr', arr);
-    assert.strictEqual(sl.get('arr'), sl.get('arr'));
+    assert.throws(() => sl.get('my-service'), /my-service/);
   });
 });
 
-// ─── has ─────────────────────────────────────────────────────────────────────
+// ─── ServiceLocator – has ─────────────────────────────────────────────────────
 
 describe('ServiceLocator – has', () => {
-  it('returns true for a registered key', () => {
+  it('returns true for a registered name', () => {
     const sl = new ServiceLocator();
-    sl.register('exists', () => 1);
+    sl.register('exists', 1);
     assert.equal(sl.has('exists'), true);
   });
 
-  it('returns false for an unknown key', () => {
+  it('returns false for an unknown name', () => {
     const sl = new ServiceLocator();
     assert.equal(sl.has('missing'), false);
   });
 });
 
-// ─── get throws on unknown key ────────────────────────────────────────────────
+// ─── ServiceLocator – unregister ──────────────────────────────────────────────
 
-describe('ServiceLocator – get unknown key', () => {
-  it('throws when the key has not been registered', () => {
+describe('ServiceLocator – unregister', () => {
+  it('unregister removes the service', () => {
     const sl = new ServiceLocator();
-    assert.throws(() => sl.get('ghost'), /service "ghost" is not registered/i);
+    sl.register('svc', 42);
+    sl.unregister('svc');
+    assert.equal(sl.has('svc'), false);
+  });
+
+  it('get throws after unregister', () => {
+    const sl = new ServiceLocator();
+    sl.register('svc', 42);
+    sl.unregister('svc');
+    assert.throws(() => sl.get('svc'), /not registered/i);
+  });
+
+  it('unregister on unknown name is a no-op', () => {
+    const sl = new ServiceLocator();
+    assert.doesNotThrow(() => sl.unregister('nonexistent'));
+  });
+
+  it('unregister does not affect other services', () => {
+    const sl = new ServiceLocator();
+    sl.register('a', 1);
+    sl.register('b', 2);
+    sl.unregister('a');
+    assert.equal(sl.has('b'), true);
+    assert.equal(sl.get('b'), 2);
   });
 });
 
-// ─── reset ────────────────────────────────────────────────────────────────────
+// ─── ServiceLocator – list ────────────────────────────────────────────────────
 
-describe('ServiceLocator – reset', () => {
-  it('reset(key) clears singleton cache so a new instance is produced', () => {
+describe('ServiceLocator – list', () => {
+  it('returns all registered names', () => {
     const sl = new ServiceLocator();
-    sl.register('cached', () => ({ id: Math.random() }), true);
-    const first = sl.get('cached');
-    sl.reset('cached');
-    const second = sl.get('cached');
-    assert.notStrictEqual(first, second);
-  });
-
-  it('reset() with no argument clears all singleton caches', () => {
-    const sl = new ServiceLocator();
-    sl.register('a', () => ({ id: Math.random() }), true);
-    sl.register('b', () => ({ id: Math.random() }), true);
-    const a1 = sl.get('a');
-    const b1 = sl.get('b');
-    sl.reset();
-    const a2 = sl.get('a');
-    const b2 = sl.get('b');
-    assert.notStrictEqual(a1, a2);
-    assert.notStrictEqual(b1, b2);
-  });
-
-  it('reset(key) for unknown key is a no-op', () => {
-    const sl = new ServiceLocator();
-    assert.doesNotThrow(() => sl.reset('nonexistent'));
-  });
-
-  it('reset does not remove the registration, only the cache', () => {
-    const sl = new ServiceLocator();
-    sl.register('persists', () => 'hello', true);
-    sl.get('persists');
-    sl.reset('persists');
-    assert.equal(sl.has('persists'), true);
-    assert.equal(sl.get('persists'), 'hello');
-  });
-});
-
-// ─── keys ─────────────────────────────────────────────────────────────────────
-
-describe('ServiceLocator – keys', () => {
-  it('returns all registered keys', () => {
-    const sl = new ServiceLocator();
-    sl.register('x', () => 1);
-    sl.register('y', () => 2);
-    sl.registerInstance('z', 3);
-    const keys = sl.keys().sort();
-    assert.deepEqual(keys, ['x', 'y', 'z']);
+    sl.register('x', 1);
+    sl.register('y', 2);
+    sl.register('z', 3);
+    const names = sl.list().sort();
+    assert.deepEqual(names, ['x', 'y', 'z']);
   });
 
   it('returns empty array when nothing is registered', () => {
     const sl = new ServiceLocator();
-    assert.deepEqual(sl.keys(), []);
-  });
-});
-
-// ─── GlobalServiceLocator ─────────────────────────────────────────────────────
-
-describe('GlobalServiceLocator', () => {
-  it('is an instance of ServiceLocator', () => {
-    assert.ok(GlobalServiceLocator instanceof ServiceLocator);
+    assert.deepEqual(sl.list(), []);
   });
 
-  it('is the same reference on repeated imports (module singleton)', async () => {
-    // Re-import to confirm the exported value is stable.
-    const mod = await import('../../app/modules/service-locator.js');
-    assert.strictEqual(mod.GlobalServiceLocator, GlobalServiceLocator);
+  it('list reflects unregister', () => {
+    const sl = new ServiceLocator();
+    sl.register('a', 1);
+    sl.register('b', 2);
+    sl.unregister('a');
+    assert.deepEqual(sl.list(), ['b']);
   });
 });
 
@@ -183,8 +146,107 @@ describe('createServiceLocator', () => {
     const sl1 = createServiceLocator();
     const sl2 = createServiceLocator();
     assert.notStrictEqual(sl1, sl2);
+    sl1.register('key', 'val');
+    assert.equal(sl2.has('key'), false);
+  });
+});
 
-    sl1.register('shared-key', () => 'from-sl1');
-    assert.equal(sl2.has('shared-key'), false);
+// ─── Middleware – use / execute ───────────────────────────────────────────────
+
+describe('Middleware – basic chain', () => {
+  it('executes a single middleware', async () => {
+    const mw = new Middleware();
+    let ran = false;
+    mw.use(async (_ctx, next) => { ran = true; await next(); });
+    await mw.execute({});
+    assert.equal(ran, true);
+  });
+
+  it('execute resolves when no middleware is added', async () => {
+    const mw = new Middleware();
+    await assert.doesNotReject(() => mw.execute({}));
+  });
+
+  it('middleware runs in the order use() was called', async () => {
+    const mw = new Middleware();
+    const order = [];
+    mw.use(async (ctx, next) => { order.push(1); await next(); });
+    mw.use(async (ctx, next) => { order.push(2); await next(); });
+    mw.use(async (ctx, next) => { order.push(3); await next(); });
+    await mw.execute({});
+    assert.deepEqual(order, [1, 2, 3]);
+  });
+
+  it('middleware receives the context object', async () => {
+    const mw = new Middleware();
+    let received = null;
+    mw.use(async (ctx, next) => { received = ctx; await next(); });
+    const ctx = { foo: 'bar' };
+    await mw.execute(ctx);
+    assert.strictEqual(received, ctx);
+  });
+
+  it('middleware can mutate the context', async () => {
+    const mw = new Middleware();
+    mw.use(async (ctx, next) => { ctx.a = 1; await next(); });
+    mw.use(async (ctx, next) => { ctx.b = 2; await next(); });
+    const ctx = {};
+    await mw.execute(ctx);
+    assert.equal(ctx.a, 1);
+    assert.equal(ctx.b, 2);
+  });
+
+  it('wrapping pattern: before and after next()', async () => {
+    const mw = new Middleware();
+    const log = [];
+    mw.use(async (ctx, next) => { log.push('before-1'); await next(); log.push('after-1'); });
+    mw.use(async (ctx, next) => { log.push('before-2'); await next(); log.push('after-2'); });
+    await mw.execute({});
+    assert.deepEqual(log, ['before-1', 'before-2', 'after-2', 'after-1']);
+  });
+
+  it('middleware that does not call next() stops the chain', async () => {
+    const mw = new Middleware();
+    let secondRan = false;
+    mw.use(async (_ctx, _next) => { /* do not call next */ });
+    mw.use(async (_ctx, next) => { secondRan = true; await next(); });
+    await mw.execute({});
+    assert.equal(secondRan, false);
+  });
+});
+
+// ─── Middleware – typed context ────────────────────────────────────────────────
+
+describe('Middleware – typed context', () => {
+  it('works with a typed context object', async () => {
+    const mw = new Middleware();
+    mw.use(async (ctx, next) => { ctx.count += 1; await next(); });
+    mw.use(async (ctx, next) => { ctx.count += 10; await next(); });
+    const ctx = { count: 0 };
+    await mw.execute(ctx);
+    assert.equal(ctx.count, 11);
+  });
+});
+
+// ─── createMiddleware factory ─────────────────────────────────────────────────
+
+describe('createMiddleware', () => {
+  it('returns a Middleware instance', () => {
+    const mw = createMiddleware();
+    assert.ok(mw instanceof Middleware);
+  });
+
+  it('each call returns a distinct, independent instance', () => {
+    const mw1 = createMiddleware();
+    const mw2 = createMiddleware();
+    assert.notStrictEqual(mw1, mw2);
+  });
+
+  it('created middleware executes its chain', async () => {
+    const mw = createMiddleware();
+    let ran = false;
+    mw.use(async (_ctx, next) => { ran = true; await next(); });
+    await mw.execute({});
+    assert.equal(ran, true);
   });
 });

@@ -1,128 +1,123 @@
 // @ts-check
 // ─── Feature Flags ────────────────────────────────────────────────────────────
-// Class-based feature flag system with subscription support.
+// Feature flag system with rollout percentages, allow lists, and conditions.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type FlagValue = boolean | string | number;
-
-export interface FeatureFlag {
-  key: string;
-  value: FlagValue;
-  description?: string;
+export interface FlagConfig {
+  name: string;
   enabled: boolean;
+  rolloutPercent?: number;
+  allowList?: string[];
+  conditions?: Record<string, unknown>;
 }
 
-export interface FeatureFlagsOptions {
-  defaults?: Record<string, FlagValue>;
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Deterministic hash of a string — returns a non-negative integer in [0, 99].
+ * Used for rollout bucket assignment.
+ */
+function hashToBucket(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0; // keep as unsigned 32-bit int
+  }
+  return hash % 100;
 }
 
 // ─── FeatureFlags ─────────────────────────────────────────────────────────────
 
 export class FeatureFlags {
-  #flags: Map<string, FeatureFlag> = new Map();
-  #subscribers: Map<string, Set<(value: FlagValue | undefined, enabled: boolean) => void>> = new Map();
+  #flags: Map<string, FlagConfig> = new Map();
 
-  constructor(options?: FeatureFlagsOptions) {
-    if (options?.defaults) {
-      for (const [key, value] of Object.entries(options.defaults)) {
-        this.set(key, value, true);
+  constructor(flags?: FlagConfig[]) {
+    if (flags) {
+      for (const flag of flags) {
+        this.register(flag);
       }
     }
   }
 
-  /** Define/update a flag. */
-  set(key: string, value: FlagValue, enabled = true): void {
-    const existing = this.#flags.get(key);
-    this.#flags.set(key, {
-      key,
-      value,
-      description: existing?.description,
-      enabled,
-    });
-    this.#notify(key);
+  /** Register (or replace) a feature flag. */
+  register(flag: FlagConfig): void {
+    this.#flags.set(flag.name, { ...flag });
   }
 
-  /** Get flag value (returns undefined if not set). */
-  get(key: string): FlagValue | undefined {
-    return this.#flags.get(key)?.value;
-  }
+  /**
+   * Check whether a flag is enabled for the given context.
+   *
+   * Evaluation order:
+   * 1. Flag must exist and have `enabled: true` — otherwise false.
+   * 2. `allowList` — if present, userId must be in the list.
+   * 3. `rolloutPercent` — if present, deterministic hash of userId must be < percent.
+   * 4. `conditions` — if present, all key-value pairs must match context.
+   */
+  isEnabled(name: string, context?: { userId?: string; [key: string]: unknown }): boolean {
+    const flag = this.#flags.get(name);
+    if (!flag || !flag.enabled) return false;
 
-  /** Check if flag is enabled and truthy. */
-  isEnabled(key: string): boolean {
-    const flag = this.#flags.get(key);
-    if (!flag) return false;
-    return flag.enabled && Boolean(flag.value);
-  }
+    const userId = context?.userId;
 
-  /** Get all flags. */
-  getAll(): FeatureFlag[] {
-    return Array.from(this.#flags.values());
-  }
+    // allowList check
+    if (flag.allowList !== undefined) {
+      if (!userId || !flag.allowList.includes(userId)) return false;
+    }
 
-  /** Enable a flag (keeps existing value). */
-  enable(key: string): void {
-    const flag = this.#flags.get(key);
-    if (!flag) return;
-    flag.enabled = true;
-    this.#notify(key);
-  }
+    // rolloutPercent check (requires userId)
+    if (flag.rolloutPercent !== undefined) {
+      if (!userId) return false;
+      const bucket = hashToBucket(`${name}:${userId}`);
+      if (bucket >= flag.rolloutPercent) return false;
+    }
 
-  /** Disable a flag (keeps existing value). */
-  disable(key: string): void {
-    const flag = this.#flags.get(key);
-    if (!flag) return;
-    flag.enabled = false;
-    this.#notify(key);
-  }
-
-  /** Remove a flag. */
-  remove(key: string): void {
-    this.#flags.delete(key);
-    this.#notify(key);
-  }
-
-  /** Load flags from a plain object. */
-  load(flags: Record<string, FlagValue | { value: FlagValue; enabled: boolean }>): void {
-    for (const [key, entry] of Object.entries(flags)) {
-      if (
-        entry !== null &&
-        typeof entry === 'object' &&
-        'value' in (entry as object) &&
-        'enabled' in (entry as object)
-      ) {
-        const typed = entry as { value: FlagValue; enabled: boolean };
-        this.set(key, typed.value, typed.enabled);
-      } else {
-        this.set(key, entry as FlagValue, true);
+    // conditions check
+    if (flag.conditions !== undefined && context !== undefined) {
+      for (const [key, expected] of Object.entries(flag.conditions)) {
+        if (context[key] !== expected) return false;
       }
+    } else if (flag.conditions !== undefined && context === undefined) {
+      // conditions exist but no context provided — cannot satisfy them
+      return false;
     }
+
+    return true;
   }
 
-  /** Subscribe to flag changes. Returns unsubscribe fn. */
-  subscribe(
-    key: string,
-    callback: (value: FlagValue | undefined, enabled: boolean) => void,
-  ): () => void {
-    let listeners = this.#subscribers.get(key);
-    if (!listeners) {
-      listeners = new Set();
-      this.#subscribers.set(key, listeners);
-    }
-    listeners.add(callback);
-    return () => {
-      listeners!.delete(callback);
-    };
+  /** Enable an existing flag (no-op if not registered). */
+  enable(name: string): void {
+    const flag = this.#flags.get(name);
+    if (!flag) return;
+    this.#flags.set(name, { ...flag, enabled: true });
   }
 
-  #notify(key: string): void {
-    const listeners = this.#subscribers.get(key);
-    if (!listeners || listeners.size === 0) return;
-    const flag = this.#flags.get(key);
-    const value = flag?.value;
-    const enabled = flag?.enabled ?? false;
-    for (const cb of listeners) {
-      cb(value, enabled);
-    }
+  /** Disable an existing flag (no-op if not registered). */
+  disable(name: string): void {
+    const flag = this.#flags.get(name);
+    if (!flag) return;
+    this.#flags.set(name, { ...flag, enabled: false });
   }
+
+  /** Update the rollout percentage for a flag (no-op if not registered). */
+  setRollout(name: string, percent: number): void {
+    const flag = this.#flags.get(name);
+    if (!flag) return;
+    this.#flags.set(name, { ...flag, rolloutPercent: percent });
+  }
+
+  /** Return a copy of all registered flag configs. */
+  list(): FlagConfig[] {
+    return Array.from(this.#flags.values()).map((f) => ({ ...f }));
+  }
+
+  /** Return a copy of the named flag config, or undefined if not found. */
+  getFlag(name: string): FlagConfig | undefined {
+    const flag = this.#flags.get(name);
+    return flag ? { ...flag } : undefined;
+  }
+}
+
+/** Factory function that creates a new FeatureFlags instance. */
+export function createFeatureFlags(flags?: FlagConfig[]): FeatureFlags {
+  return new FeatureFlags(flags);
 }
