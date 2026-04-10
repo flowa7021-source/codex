@@ -104,3 +104,123 @@ export class MemoryPool {
 export function createMemoryPool(options: MemoryPoolOptions): MemoryPool {
   return new MemoryPool(options);
 }
+
+// ─── ObjectPool ──────────────────────────────────────────────────────────────
+
+export interface PoolOptions<T> {
+  /** Factory to create a new object. */
+  create: () => T;
+  /** Reset object for reuse (called when releasing back to pool). */
+  reset?: (obj: T) => void;
+  /** Initial pool size. */
+  initialSize?: number;
+  /** Max pool size (excess objects are discarded). */
+  maxSize?: number;
+}
+
+export class ObjectPool<T> {
+  #create: () => T;
+  #reset: ((obj: T) => void) | undefined;
+  #maxSize: number;
+  #pool: T[] = [];
+  #created: number = 0;
+  #inUse: number = 0;
+
+  constructor(options: PoolOptions<T>) {
+    this.#create = options.create;
+    this.#reset = options.reset;
+    this.#maxSize = options.maxSize ?? Infinity;
+
+    const initialSize = options.initialSize ?? 0;
+    for (let i = 0; i < initialSize; i++) {
+      this.#pool.push(this.#create());
+      this.#created++;
+    }
+  }
+
+  /** Acquire an object from the pool (creates new if empty). */
+  acquire(): T {
+    let obj: T;
+    if (this.#pool.length > 0) {
+      obj = this.#pool.pop() as T;
+    } else {
+      obj = this.#create();
+      this.#created++;
+    }
+    this.#inUse++;
+    return obj;
+  }
+
+  /** Release an object back to the pool. */
+  release(obj: T): void {
+    if (this.#inUse > 0) {
+      this.#inUse--;
+    }
+    if (this.#pool.length < this.#maxSize) {
+      if (this.#reset) {
+        this.#reset(obj);
+      }
+      this.#pool.push(obj);
+    }
+    // Discard excess objects silently
+  }
+
+  /** Current number of available objects in pool. */
+  get available(): number {
+    return this.#pool.length;
+  }
+
+  /** Total objects ever created. */
+  get created(): number {
+    return this.#created;
+  }
+
+  /** Total objects currently acquired (in use). */
+  get inUse(): number {
+    return this.#inUse;
+  }
+
+  /** Drain and discard all pooled objects. */
+  drain(): void {
+    this.#pool.length = 0;
+  }
+}
+
+// ─── TypedArrayPool ──────────────────────────────────────────────────────────
+
+type TypedArrayConstructor =
+  | Float32ArrayConstructor
+  | Uint8ArrayConstructor
+  | Int32ArrayConstructor;
+
+type TypedArrayInstance = Float32Array | Uint8Array | Int32Array;
+
+/** Typed array pool for reusing Float32Array/Uint8Array/Int32Array etc. */
+export class TypedArrayPool {
+  #ArrayType: TypedArrayConstructor;
+  #size: number;
+  #pool: TypedArrayInstance[] = [];
+
+  constructor(
+    ArrayType: Float32ArrayConstructor | Uint8ArrayConstructor | Int32ArrayConstructor,
+    size: number,
+  ) {
+    this.#ArrayType = ArrayType;
+    this.#size = size;
+  }
+
+  acquire(): Float32Array | Uint8Array | Int32Array {
+    if (this.#pool.length > 0) {
+      return this.#pool.pop() as TypedArrayInstance;
+    }
+    return new this.#ArrayType(this.#size);
+  }
+
+  release(arr: Float32Array | Uint8Array | Int32Array): void {
+    this.#pool.push(arr);
+  }
+
+  get available(): number {
+    return this.#pool.length;
+  }
+}
