@@ -34,17 +34,18 @@ export class BacktrackingSolver<S, C> {
   /** Return the first solution found, or `null` if none exists. */
   solve(): S | null {
     const { initial, choices, apply, isGoal, isValid } = this.config;
+    if (isValid && !isValid(initial)) return null;
     const stack: S[] = [initial];
 
     while (stack.length > 0) {
       const state = stack.pop()!;
 
-      if (isValid && !isValid(state)) continue;
       if (isGoal(state)) return state;
 
       const cs = choices(state);
       for (let i = cs.length - 1; i >= 0; i--) {
-        stack.push(apply(state, cs[i]));
+        const next = apply(state, cs[i]);
+        if (!isValid || isValid(next)) stack.push(next);
       }
     }
 
@@ -55,6 +56,7 @@ export class BacktrackingSolver<S, C> {
   solveAll(limit?: number): S[] {
     const { initial, choices, apply, isGoal, isValid } = this.config;
     const solutions: S[] = [];
+    if (isValid && !isValid(initial)) return solutions;
     const stack: S[] = [initial];
 
     while (stack.length > 0) {
@@ -62,7 +64,6 @@ export class BacktrackingSolver<S, C> {
 
       const state = stack.pop()!;
 
-      if (isValid && !isValid(state)) continue;
       if (isGoal(state)) {
         solutions.push(state);
         continue;
@@ -70,7 +71,8 @@ export class BacktrackingSolver<S, C> {
 
       const cs = choices(state);
       for (let i = cs.length - 1; i >= 0; i--) {
-        stack.push(apply(state, cs[i]));
+        const next = apply(state, cs[i]);
+        if (!isValid || isValid(next)) stack.push(next);
       }
     }
 
@@ -81,12 +83,12 @@ export class BacktrackingSolver<S, C> {
   count(): number {
     const { initial, choices, apply, isGoal, isValid } = this.config;
     let total = 0;
+    if (isValid && !isValid(initial)) return total;
     const stack: S[] = [initial];
 
     while (stack.length > 0) {
       const state = stack.pop()!;
 
-      if (isValid && !isValid(state)) continue;
       if (isGoal(state)) {
         total++;
         continue;
@@ -94,7 +96,8 @@ export class BacktrackingSolver<S, C> {
 
       const cs = choices(state);
       for (let i = cs.length - 1; i >= 0; i--) {
-        stack.push(apply(state, cs[i]));
+        const next = apply(state, cs[i]);
+        if (!isValid || isValid(next)) stack.push(next);
       }
     }
 
@@ -155,6 +158,43 @@ export function nQueens(n: number): number[][] {
 export function solveSudoku(board: number[][]): number[][] | null {
   // Deep-copy the board.
   type Board = number[][];
+
+  // Early check: reject boards with duplicate pre-filled digits.
+  function isInitiallyValid(b: Board): boolean {
+    for (let i = 0; i < 9; i++) {
+      const rowSeen = new Set<number>();
+      const colSeen = new Set<number>();
+      for (let j = 0; j < 9; j++) {
+        const rv = b[i][j];
+        if (rv !== 0) {
+          if (rowSeen.has(rv)) return false;
+          rowSeen.add(rv);
+        }
+        const cv = b[j][i];
+        if (cv !== 0) {
+          if (colSeen.has(cv)) return false;
+          colSeen.add(cv);
+        }
+      }
+    }
+    for (let br = 0; br < 9; br += 3) {
+      for (let bc = 0; bc < 9; bc += 3) {
+        const seen = new Set<number>();
+        for (let r = br; r < br + 3; r++) {
+          for (let c = bc; c < bc + 3; c++) {
+            const v = b[r][c];
+            if (v !== 0) {
+              if (seen.has(v)) return false;
+              seen.add(v);
+            }
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  if (!isInitiallyValid(board)) return null;
 
   function clone(b: Board): Board {
     return b.map(row => [...row]);
