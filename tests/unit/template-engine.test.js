@@ -3,269 +3,444 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  renderTemplate,
-  compileTemplate,
-  escapeTemplateHTML,
-  validateTemplate,
-  extractVariables,
+  compile,
+  render,
+  escapeHtml,
+  unescapeHtml,
+  TemplateEngine,
+  createTemplateEngine,
 } from '../../app/modules/template-engine.js';
 
-// ─── escapeTemplateHTML ───────────────────────────────────────────────────────
+// ─── escapeHtml ───────────────────────────────────────────────────────────────
 
-describe('escapeTemplateHTML', () => {
-  it('escapes < and >', () => {
-    assert.equal(escapeTemplateHTML('<b>'), '&lt;b&gt;');
+describe('escapeHtml', () => {
+  it('escapes <', () => {
+    assert.equal(escapeHtml('<'), '&lt;');
+  });
+
+  it('escapes >', () => {
+    assert.equal(escapeHtml('>'), '&gt;');
   });
 
   it('escapes &', () => {
-    assert.equal(escapeTemplateHTML('a & b'), 'a &amp; b');
+    assert.equal(escapeHtml('&'), '&amp;');
   });
 
   it('escapes double quotes', () => {
-    assert.equal(escapeTemplateHTML('"hello"'), '&quot;hello&quot;');
+    assert.equal(escapeHtml('"'), '&quot;');
   });
 
   it('escapes single quotes', () => {
-    assert.equal(escapeTemplateHTML("it's"), 'it&#39;s');
+    assert.equal(escapeHtml("'"), '&#39;');
   });
 
-  it('leaves unescaped strings unchanged', () => {
-    assert.equal(escapeTemplateHTML('hello world'), 'hello world');
+  it('escapes all five characters in a mixed string', () => {
+    assert.equal(escapeHtml('<a href="x&y">it\'s</a>'), '&lt;a href=&quot;x&amp;y&quot;&gt;it&#39;s&lt;/a&gt;');
+  });
+
+  it('leaves a clean string unchanged', () => {
+    assert.equal(escapeHtml('hello world'), 'hello world');
+  });
+
+  it('handles an empty string', () => {
+    assert.equal(escapeHtml(''), '');
   });
 });
 
-// ─── renderTemplate – basic variable substitution ────────────────────────────
+// ─── unescapeHtml ─────────────────────────────────────────────────────────────
 
-describe('renderTemplate – variable substitution', () => {
+describe('unescapeHtml', () => {
+  it('unescapes &amp; back to &', () => {
+    assert.equal(unescapeHtml('&amp;'), '&');
+  });
+
+  it('unescapes &lt; back to <', () => {
+    assert.equal(unescapeHtml('&lt;'), '<');
+  });
+
+  it('unescapes &gt; back to >', () => {
+    assert.equal(unescapeHtml('&gt;'), '>');
+  });
+
+  it('unescapes &quot; back to "', () => {
+    assert.equal(unescapeHtml('&quot;'), '"');
+  });
+
+  it('unescapes &#39; back to \'', () => {
+    assert.equal(unescapeHtml('&#39;'), "'");
+  });
+
+  it('round-trips escapeHtml → unescapeHtml', () => {
+    const original = '<script>alert("XSS & more")</script>';
+    assert.equal(unescapeHtml(escapeHtml(original)), original);
+  });
+
+  it('leaves clean strings unchanged', () => {
+    assert.equal(unescapeHtml('hello world'), 'hello world');
+  });
+
+  it('handles an empty string', () => {
+    assert.equal(unescapeHtml(''), '');
+  });
+});
+
+// ─── render – variable substitution ──────────────────────────────────────────
+
+describe('render – variable substitution', () => {
   it('substitutes a simple {{name}} variable', () => {
-    const result = renderTemplate('Hello, {{name}}!', { name: 'Alice' });
-    assert.equal(result, 'Hello, Alice!');
+    assert.equal(render('Hello, {{name}}!', { name: 'Alice' }), 'Hello, Alice!');
   });
 
   it('substitutes multiple variables', () => {
-    const result = renderTemplate('{{greeting}}, {{name}}!', { greeting: 'Hi', name: 'Bob' });
-    assert.equal(result, 'Hi, Bob!');
+    assert.equal(render('{{a}} and {{b}}', { a: 'foo', b: 'bar' }), 'foo and bar');
   });
 
-  it('leaves unknown variables as empty string', () => {
-    const result = renderTemplate('{{missing}}', {});
-    assert.equal(result, '');
+  it('substitutes a numeric value as a string', () => {
+    assert.equal(render('Count: {{n}}', { n: 42 }), 'Count: 42');
   });
 
-  it('substitutes numeric values', () => {
-    const result = renderTemplate('Count: {{count}}', { count: 42 });
-    assert.equal(result, 'Count: 42');
-  });
-});
-
-// ─── renderTemplate – HTML escaping ──────────────────────────────────────────
-
-describe('renderTemplate – HTML escaping', () => {
-  it('escapes < in variable by default', () => {
-    const result = renderTemplate('{{value}}', { value: '<script>' });
-    assert.equal(result, '&lt;script&gt;');
+  it('substitutes a boolean value as a string', () => {
+    assert.equal(render('Active: {{flag}}', { flag: true }), 'Active: true');
   });
 
-  it('escapes > in variable by default', () => {
-    const result = renderTemplate('{{value}}', { value: 'a > b' });
-    assert.equal(result, 'a &gt; b');
+  it('renders an empty string for a missing variable', () => {
+    assert.equal(render('{{missing}}', {}), '');
   });
 
-  it('escapes & in variable by default', () => {
-    const result = renderTemplate('{{value}}', { value: 'a & b' });
-    assert.equal(result, 'a &amp; b');
-  });
-});
-
-// ─── renderTemplate – unescaped triple braces ─────────────────────────────────
-
-describe('renderTemplate – unescaped {{{variable}}}', () => {
-  it('does not escape HTML with triple braces', () => {
-    const result = renderTemplate('{{{html}}}', { html: '<b>bold</b>' });
-    assert.equal(result, '<b>bold</b>');
+  it('renders an empty string for null value', () => {
+    assert.equal(render('{{x}}', { x: null }), '');
   });
 
-  it('renders raw value for triple-brace variable', () => {
-    const result = renderTemplate('Raw: {{{content}}}', { content: '<em>yes</em>' });
-    assert.equal(result, 'Raw: <em>yes</em>');
+  it('renders an empty string for undefined value', () => {
+    assert.equal(render('{{x}}', { x: undefined }), '');
+  });
+
+  it('HTML-escapes variable values by default', () => {
+    assert.equal(render('{{v}}', { v: '<b>bold</b>' }), '&lt;b&gt;bold&lt;/b&gt;');
+  });
+
+  it('supports dot-notation paths', () => {
+    assert.equal(render('{{user.name}}', { user: { name: 'Eve' } }), 'Eve');
+  });
+
+  it('returns empty string for a missing nested path', () => {
+    assert.equal(render('{{a.b.c}}', { a: {} }), '');
   });
 });
 
-// ─── renderTemplate – sections ────────────────────────────────────────────────
+// ─── render – HTML escaping control ──────────────────────────────────────────
 
-describe('renderTemplate – sections', () => {
-  it('renders {{#section}}...{{/section}} when truthy', () => {
-    const result = renderTemplate('{{#show}}Hello{{/show}}', { show: true });
-    assert.equal(result, 'Hello');
+describe('render – HTML escaping control', () => {
+  it('triple braces {{{name}}} bypass HTML escaping', () => {
+    assert.equal(render('{{{html}}}', { html: '<b>bold</b>' }), '<b>bold</b>');
   });
 
-  it('omits {{#section}} block when falsy', () => {
-    const result = renderTemplate('{{#show}}Hello{{/show}}', { show: false });
-    assert.equal(result, '');
+  it('triple braces render missing variable as empty string', () => {
+    assert.equal(render('{{{missing}}}', {}), '');
   });
 
-  it('iterates over array in section', () => {
-    const result = renderTemplate('{{#items}}[{{name}}]{{/items}}', {
-      items: [{ name: 'A' }, { name: 'B' }, { name: 'C' }],
-    });
-    assert.equal(result, '[A][B][C]');
+  it('escape:false option disables HTML escaping for {{}}', () => {
+    assert.equal(
+      render('{{v}}', { v: '<em>hi</em>' }, { escape: false }),
+      '<em>hi</em>',
+    );
   });
 
-  it('renders nothing for empty array', () => {
-    const result = renderTemplate('{{#items}}x{{/items}}', { items: [] });
-    assert.equal(result, '');
-  });
-});
-
-// ─── renderTemplate – inverted sections ──────────────────────────────────────
-
-describe('renderTemplate – inverted sections', () => {
-  it('renders {{^empty}} when value is falsy', () => {
-    const result = renderTemplate('{{^empty}}No items{{/empty}}', { empty: false });
-    assert.equal(result, 'No items');
+  it('escape:true (explicit) still escapes', () => {
+    assert.equal(
+      render('{{v}}', { v: '&' }, { escape: true }),
+      '&amp;',
+    );
   });
 
-  it('renders {{^empty}} when value is undefined', () => {
-    const result = renderTemplate('{{^missing}}fallback{{/missing}}', {});
-    assert.equal(result, 'fallback');
-  });
-
-  it('omits {{^section}} block when value is truthy', () => {
-    const result = renderTemplate('{{^show}}hidden{{/show}}', { show: true });
-    assert.equal(result, '');
-  });
-
-  it('renders {{^arr}} when array is empty', () => {
-    const result = renderTemplate('{{^list}}empty{{/list}}', { list: [] });
-    assert.equal(result, 'empty');
-  });
-
-  it('omits {{^arr}} when array is non-empty', () => {
-    const result = renderTemplate('{{^list}}empty{{/list}}', { list: [1] });
-    assert.equal(result, '');
+  it('triple-brace is raw even when escape:true is set', () => {
+    assert.equal(
+      render('{{{v}}}', { v: '<raw>' }, { escape: true }),
+      '<raw>',
+    );
   });
 });
 
-// ─── renderTemplate – comments ────────────────────────────────────────────────
+// ─── render – comments ────────────────────────────────────────────────────────
 
-describe('renderTemplate – comments', () => {
-  it('removes {{! comment }} from output', () => {
-    const result = renderTemplate('Hello{{! this is a comment }} World', {});
-    assert.equal(result, 'Hello World');
+describe('render – comments', () => {
+  it('strips a single-word comment {{! comment }}', () => {
+    assert.equal(render('A{{! comment }}B', {}), 'AB');
   });
 
-  it('removes multi-word comment', () => {
-    const result = renderTemplate('{{! ignore me }}text', {});
-    assert.equal(result, 'text');
+  it('strips a multi-word comment', () => {
+    assert.equal(render('{{! this is ignored }}text', {}), 'text');
   });
 
-  it('does not include comment content in output', () => {
-    const result = renderTemplate('A{{! secret }}B', {});
-    assert.equal(result, 'AB');
+  it('does not include comment content in the output', () => {
+    const out = render('start{{! secret stuff }}end', {});
+    assert.equal(out, 'startend');
+    assert.ok(!out.includes('secret'));
+  });
+
+  it('handles multiple comments in one template', () => {
+    assert.equal(render('{{! a }}X{{! b }}Y', {}), 'XY');
   });
 });
 
-// ─── compileTemplate ─────────────────────────────────────────────────────────
+// ─── render – #if conditionals ────────────────────────────────────────────────
 
-describe('compileTemplate', () => {
+describe('render – #if conditionals', () => {
+  it('renders block content when condition is truthy', () => {
+    assert.equal(render('{{#if show}}yes{{/if}}', { show: true }), 'yes');
+  });
+
+  it('omits block content when condition is falsy (false)', () => {
+    assert.equal(render('{{#if show}}yes{{/if}}', { show: false }), '');
+  });
+
+  it('omits block content when condition is undefined', () => {
+    assert.equal(render('{{#if missing}}yes{{/if}}', {}), '');
+  });
+
+  it('omits block content when condition is null', () => {
+    assert.equal(render('{{#if x}}yes{{/if}}', { x: null }), '');
+  });
+
+  it('omits block content when condition is 0', () => {
+    assert.equal(render('{{#if x}}yes{{/if}}', { x: 0 }), '');
+  });
+
+  it('renders block content when condition is a non-empty string', () => {
+    assert.equal(render('{{#if x}}yes{{/if}}', { x: 'hello' }), 'yes');
+  });
+
+  it('renders block content when condition is a non-zero number', () => {
+    assert.equal(render('{{#if x}}yes{{/if}}', { x: 1 }), 'yes');
+  });
+
+  it('renders surrounding text outside the block correctly', () => {
+    assert.equal(render('before{{#if x}}mid{{/if}}after', { x: true }), 'beforemidafter');
+  });
+
+  it('evaluates variables inside an if block', () => {
+    assert.equal(render('{{#if ok}}Hello {{name}}{{/if}}', { ok: true, name: 'World' }), 'Hello World');
+  });
+});
+
+// ─── render – #each iteration ─────────────────────────────────────────────────
+
+describe('render – #each iteration', () => {
+  it('iterates over an array using default {{item}}', () => {
+    const out = render('{{#each names}}[{{item}}]{{/each}}', { names: ['Alice', 'Bob'] });
+    assert.equal(out, '[Alice][Bob]');
+  });
+
+  it('provides {{index}} (zero-based)', () => {
+    const out = render('{{#each arr}}{{index}}{{/each}}', { arr: ['a', 'b', 'c'] });
+    assert.equal(out, '012');
+  });
+
+  it('provides {{@first}} as true for the first element only', () => {
+    const out = render('{{#each arr}}{{@first}}|{{/each}}', { arr: [1, 2, 3] });
+    assert.equal(out, 'true|false|false|');
+  });
+
+  it('provides {{@last}} as true for the last element only', () => {
+    const out = render('{{#each arr}}{{@last}}|{{/each}}', { arr: [1, 2, 3] });
+    assert.equal(out, 'false|false|true|');
+  });
+
+  it('renders nothing for an empty array', () => {
+    assert.equal(render('{{#each items}}x{{/each}}', { items: [] }), '');
+  });
+
+  it('supports named iteration variable: {{#each arr as el}}', () => {
+    const out = render('{{#each arr as el}}({{el}}){{/each}}', { arr: [10, 20] });
+    assert.equal(out, '(10)(20)');
+  });
+
+  it('named variable is accessible alongside index, @first, @last', () => {
+    const out = render(
+      '{{#each arr as n}}{{n}}-{{index}}-{{@first}}-{{@last}}|{{/each}}',
+      { arr: ['x', 'y'] },
+    );
+    assert.equal(out, 'x-0-true-false|y-1-false-true|');
+  });
+
+  it('renders nothing when the key is not an array', () => {
+    assert.equal(render('{{#each notArr}}x{{/each}}', { notArr: 'string' }), '');
+  });
+
+  it('renders nothing when the key is missing', () => {
+    assert.equal(render('{{#each missing}}x{{/each}}', {}), '');
+  });
+
+  it('handles a single-element array correctly for @first and @last', () => {
+    const out = render('{{#each arr}}{{@first}}-{{@last}}{{/each}}', { arr: ['only'] });
+    assert.equal(out, 'true-true');
+  });
+});
+
+// ─── compile ──────────────────────────────────────────────────────────────────
+
+describe('compile', () => {
   it('returns a function', () => {
-    const fn = compileTemplate('Hello {{name}}');
-    assert.equal(typeof fn, 'function');
+    assert.equal(typeof compile('Hello {{name}}'), 'function');
   });
 
-  it('compiled function produces same result as renderTemplate', () => {
-    const template = 'Hello, {{name}}!';
-    const ctx = { name: 'World' };
-    const compiled = compileTemplate(template);
-    assert.equal(compiled(ctx), renderTemplate(template, ctx));
+  it('calling the compiled function renders the template', () => {
+    const fn = compile('Hi, {{name}}!');
+    assert.equal(fn({ name: 'Carol' }), 'Hi, Carol!');
   });
 
-  it('compiled function can be reused with different contexts', () => {
-    const fn = compileTemplate('Hi {{name}}');
-    assert.equal(fn({ name: 'Alice' }), 'Hi Alice');
-    assert.equal(fn({ name: 'Bob' }), 'Hi Bob');
+  it('compiled function is reusable with different data', () => {
+    const fn = compile('{{x}} + {{y}}');
+    assert.equal(fn({ x: 1, y: 2 }), '1 + 2');
+    assert.equal(fn({ x: 'a', y: 'b' }), 'a + b');
   });
 
-  it('compiled function handles sections', () => {
-    const fn = compileTemplate('{{#show}}yes{{/show}}');
-    assert.equal(fn({ show: true }), 'yes');
-    assert.equal(fn({ show: false }), '');
-  });
-});
-
-// ─── validateTemplate ────────────────────────────────────────────────────────
-
-describe('validateTemplate', () => {
-  it('returns valid:true for a simple valid template', () => {
-    const result = validateTemplate('Hello {{name}}');
-    assert.equal(result.valid, true);
-    assert.deepEqual(result.errors, []);
+  it('compile respects custom delimiters', () => {
+    const fn = compile('Hello, [[name]]!', { delimiters: ['[[', ']]'] });
+    assert.equal(fn({ name: 'World' }), 'Hello, World!');
   });
 
-  it('returns valid:true for a template with a closed section', () => {
-    const result = validateTemplate('{{#items}}{{name}}{{/items}}');
-    assert.equal(result.valid, true);
+  it('compile respects escape:false option', () => {
+    const fn = compile('{{v}}', { escape: false });
+    assert.equal(fn({ v: '<raw>' }), '<raw>');
   });
 
-  it('detects an unclosed section tag', () => {
-    const result = validateTemplate('{{#items}}no closing tag');
-    assert.equal(result.valid, false);
-    assert.ok(result.errors.length > 0, 'should have errors');
-  });
-
-  it('detects unclosed tag in errors array', () => {
-    const result = validateTemplate('{{#section}}content');
-    assert.ok(result.errors.some((e) => e.includes('section')), `errors: ${result.errors}`);
-  });
-
-  it('returns valid:true for empty template', () => {
-    const result = validateTemplate('');
-    assert.equal(result.valid, true);
-  });
-
-  it('validates a template with comments', () => {
-    const result = validateTemplate('{{! comment }}{{name}}');
-    assert.equal(result.valid, true);
+  it('matches the result of calling render() with the same args', () => {
+    const tmpl = '{{greeting}}, {{name}}!';
+    const data = { greeting: 'Hello', name: 'World' };
+    assert.equal(compile(tmpl)(data), render(tmpl, data));
   });
 });
 
-// ─── extractVariables ────────────────────────────────────────────────────────
+// ─── TemplateEngine ───────────────────────────────────────────────────────────
 
-describe('extractVariables', () => {
-  it('returns empty array for template with no variables', () => {
-    assert.deepEqual(extractVariables('Hello World'), []);
+describe('TemplateEngine', () => {
+  it('can be constructed without options', () => {
+    const engine = new TemplateEngine();
+    assert.equal(engine.render('{{x}}', { x: 'ok' }), 'ok');
   });
 
-  it('extracts a single variable', () => {
-    const vars = extractVariables('{{name}}');
-    assert.ok(vars.includes('name'), `vars: ${vars}`);
+  it('respects escape:false constructor option', () => {
+    const engine = new TemplateEngine({ escape: false });
+    assert.equal(engine.render('{{x}}', { x: '<b>' }), '<b>');
   });
 
-  it('extracts multiple variables', () => {
-    const vars = extractVariables('{{first}} {{last}}');
-    assert.ok(vars.includes('first'), `vars: ${vars}`);
-    assert.ok(vars.includes('last'), `vars: ${vars}`);
+  it('HTML-escapes by default', () => {
+    const engine = new TemplateEngine();
+    assert.equal(engine.render('{{x}}', { x: '<b>' }), '&lt;b&gt;');
   });
 
-  it('extracts unescaped triple-brace variables', () => {
-    const vars = extractVariables('{{{html}}}');
-    assert.ok(vars.includes('html'), `vars: ${vars}`);
+  it('registerPartial makes a partial available with {{> name}}', () => {
+    const engine = new TemplateEngine();
+    engine.registerPartial('greeting', 'Hello, {{name}}!');
+    assert.equal(engine.render('{{> greeting}}', { name: 'Bob' }), 'Hello, Bob!');
   });
 
-  it('does not include section tag names as plain variables', () => {
-    const vars = extractVariables('{{#items}}{{name}}{{/items}}');
-    assert.ok(!vars.includes('items'), `section tag should not be a variable: ${vars}`);
-    assert.ok(vars.includes('name'), `inner variable should be extracted: ${vars}`);
+  it('renders nothing when a partial name is not registered', () => {
+    const engine = new TemplateEngine();
+    assert.equal(engine.render('{{> unknown}}', {}), '');
   });
 
-  it('does not include comment content as variables', () => {
-    const vars = extractVariables('{{! secret }}{{name}}');
-    assert.ok(!vars.includes('secret'), `comment should not appear in variables: ${vars}`);
-    assert.ok(vars.includes('name'), `vars: ${vars}`);
+  it('partials registered after compile() are still available at render time', () => {
+    const engine = new TemplateEngine();
+    const fn = engine.compile('{{> late}}');
+    engine.registerPartial('late', 'late-value');
+    assert.equal(fn({}), 'late-value');
   });
 
-  it('returns unique variable names', () => {
-    const vars = extractVariables('{{name}} {{name}} {{name}}');
-    assert.equal(vars.filter((v) => v === 'name').length, 1);
+  it('compile() returns a reusable function', () => {
+    const engine = new TemplateEngine();
+    const fn = engine.compile('{{a}}-{{b}}');
+    assert.equal(fn({ a: '1', b: '2' }), '1-2');
+    assert.equal(fn({ a: 'x', b: 'y' }), 'x-y');
+  });
+
+  it('compile() applies the engine escape setting', () => {
+    const engine = new TemplateEngine({ escape: false });
+    const fn = engine.compile('{{html}}');
+    assert.equal(fn({ html: '<b>' }), '<b>');
+  });
+
+  it('respects custom delimiters set in constructor', () => {
+    const engine = new TemplateEngine({ delimiters: ['<%', '%>'] });
+    assert.equal(engine.render('Hello, <%name%>!', { name: 'World' }), 'Hello, World!');
+  });
+
+  it('#if works inside engine.render()', () => {
+    const engine = new TemplateEngine();
+    assert.equal(engine.render('{{#if ok}}yes{{/if}}', { ok: true }), 'yes');
+    assert.equal(engine.render('{{#if ok}}yes{{/if}}', { ok: false }), '');
+  });
+
+  it('#each works inside engine.render()', () => {
+    const engine = new TemplateEngine();
+    const out = engine.render('{{#each arr}}{{item}}{{/each}}', { arr: [1, 2, 3] });
+    assert.equal(out, '123');
+  });
+});
+
+// ─── createTemplateEngine ─────────────────────────────────────────────────────
+
+describe('createTemplateEngine', () => {
+  it('returns a TemplateEngine instance', () => {
+    const engine = createTemplateEngine();
+    assert.ok(engine instanceof TemplateEngine);
+  });
+
+  it('created engine renders templates correctly', () => {
+    const engine = createTemplateEngine();
+    assert.equal(engine.render('{{msg}}', { msg: 'hello' }), 'hello');
+  });
+
+  it('passes options through to the engine', () => {
+    const engine = createTemplateEngine({ escape: false });
+    assert.equal(engine.render('{{x}}', { x: '<raw>' }), '<raw>');
+  });
+
+  it('supports partial registration on the created engine', () => {
+    const engine = createTemplateEngine();
+    engine.registerPartial('footer', '-- {{author}}');
+    assert.equal(engine.render('Body. {{> footer}}', { author: 'Me' }), 'Body. -- Me');
+  });
+});
+
+// ─── Edge cases & integration ─────────────────────────────────────────────────
+
+describe('edge cases and integration', () => {
+  it('renders a template with no tags as-is', () => {
+    assert.equal(render('Hello, World!', {}), 'Hello, World!');
+  });
+
+  it('renders an empty template as empty string', () => {
+    assert.equal(render('', {}), '');
+  });
+
+  it('#each and #if can be nested', () => {
+    const tmpl = '{{#each items}}{{#if item}}{{item}}{{/if}}{{/each}}';
+    const out = render(tmpl, { items: [0, 1, 2, 0, 3] });
+    assert.equal(out, '123');
+  });
+
+  it('comment is stripped but surrounding text is preserved', () => {
+    assert.equal(render('A{{! drop }}B{{name}}C', { name: 'X' }), 'ABXC');
+  });
+
+  it('multiple triple-brace vars in one template', () => {
+    assert.equal(
+      render('{{{a}}} and {{{b}}}', { a: '<i>a</i>', b: '<i>b</i>' }),
+      '<i>a</i> and <i>b</i>',
+    );
+  });
+
+  it('@first and @last are both true for a single-item array', () => {
+    const out = render('{{#each arr as v}}{{@first}},{{@last}}{{/each}}', { arr: ['x'] });
+    assert.equal(out, 'true,true');
+  });
+
+  it('engine partials can reference outer data', () => {
+    const engine = createTemplateEngine();
+    engine.registerPartial('name-tag', '{{lastName}}, {{firstName}}');
+    const out = engine.render('{{> name-tag}}', { firstName: 'John', lastName: 'Doe' });
+    assert.equal(out, 'Doe, John');
   });
 });

@@ -1,199 +1,316 @@
+// ─── Sparse Matrix ────────────────────────────────────────────────────────────
 // @ts-check
-// ─── Sparse Matrix (CSR Format) ──────────────────────────────────────────────
-// Implements a sparse matrix using Compressed Sparse Row (CSR) storage.
-// Non-zero values are stored in a flat array alongside column indices and row
-// pointer offsets, giving O(1) row iteration and compact memory usage.
+// Dictionary of Keys (DOK) backed sparse matrix.
+// Supports standard linear-algebra operations: add, scale, multiply, transpose.
+
+// ─── Internal bound check ─────────────────────────────────────────────────────
+
+/** @throws {RangeError} when (row, col) is outside the matrix dimensions. */
+function checkBounds(row: number, col: number, rows: number, cols: number): void {
+  if (row < 0 || row >= rows || col < 0 || col >= cols) {
+    throw new RangeError(
+      `Index (${row}, ${col}) is out of bounds for matrix of size ${rows}×${cols}`,
+    );
+  }
+}
+
+// ─── SparseMatrix ─────────────────────────────────────────────────────────────
 
 /**
- * Sparse matrix stored in Compressed Sparse Row (CSR) format.
+ * Sparse matrix backed by a Map-of-Maps (Dictionary of Keys format).
+ * Row and column indices are 0-based.
  *
- * Internal arrays:
- *   _values  – non-zero values in row-major order
- *   _colIdx  – column index for each value in _values
- *   _rowPtr  – rowPtr[r] is the first index in _values that belongs to row r;
- *              rowPtr[rows] == nnz (sentinel)
+ * @example
+ *   const m = new SparseMatrix(3, 4);
+ *   m.set(0, 2, 7);
+ *   console.log(m.get(0, 2)); // 7
+ *   console.log(m.nnz);      // 1
  */
 export class SparseMatrix {
   readonly #rows: number;
   readonly #cols: number;
-  #values: number[];
-  #colIdx: number[];
-  #rowPtr: number[];
+  /** DOK storage: outer key = row, inner key = col, value = non-zero number. */
+  #data: Map<number, Map<number, number>>;
 
   constructor(rows: number, cols: number) {
-    if (rows < 0 || cols < 0) throw new RangeError('Dimensions must be non-negative');
+    if (rows < 0 || cols < 0) {
+      throw new RangeError(`Matrix dimensions must be non-negative, got ${rows}×${cols}`);
+    }
     this.#rows = rows;
     this.#cols = cols;
-    this.#values = [];
-    this.#colIdx = [];
-    // rowPtr has length rows+1, all zeros (no entries yet)
-    this.#rowPtr = new Array(rows + 1).fill(0);
+    this.#data = new Map();
   }
 
   // ── Dimension accessors ────────────────────────────────────────────────────
 
+  /** Number of rows. */
   get rows(): number { return this.#rows; }
+
+  /** Number of columns. */
   get cols(): number { return this.#cols; }
+
   /** Number of stored non-zero elements. */
-  get nnz(): number { return this.#values.length; }
+  get nnz(): number {
+    let n = 0;
+    for (const rowMap of this.#data.values()) n += rowMap.size;
+    return n;
+  }
 
   // ── Element access ─────────────────────────────────────────────────────────
 
-  /** Get element at (r, c). Returns 0 for entries not stored. */
-  get(r: number, c: number): number {
-    this.#checkBounds(r, c);
-    const start = this.#rowPtr[r];
-    const end   = this.#rowPtr[r + 1];
-    for (let i = start; i < end; i++) {
-      if (this.#colIdx[i] === c) return this.#values[i];
-    }
-    return 0;
+  /**
+   * Return the value at (row, col). Returns 0 for absent entries.
+   * @throws {RangeError} if indices are out of bounds
+   */
+  get(row: number, col: number): number {
+    checkBounds(row, col, this.#rows, this.#cols);
+    return this.#data.get(row)?.get(col) ?? 0;
   }
 
-  /** Set element at (r, c). Setting to 0 removes the entry. */
-  set(r: number, c: number, value: number): void {
-    this.#checkBounds(r, c);
-    const start = this.#rowPtr[r];
-    const end   = this.#rowPtr[r + 1];
-
-    // Find existing position in this row (columns are kept sorted)
-    let pos = start;
-    while (pos < end && this.#colIdx[pos] < c) pos++;
-
-    const exists = pos < end && this.#colIdx[pos] === c;
-
-    if (exists) {
-      if (value === 0) {
-        // Remove this entry
-        this.#values.splice(pos, 1);
-        this.#colIdx.splice(pos, 1);
-        for (let i = r + 1; i <= this.#rows; i++) this.#rowPtr[i]--;
-      } else {
-        this.#values[pos] = value;
+  /**
+   * Set the value at (row, col). Passing 0 removes the stored entry.
+   * @throws {RangeError} if indices are out of bounds
+   */
+  set(row: number, col: number, value: number): void {
+    checkBounds(row, col, this.#rows, this.#cols);
+    if (value === 0) {
+      const rowMap = this.#data.get(row);
+      if (rowMap !== undefined) {
+        rowMap.delete(col);
+        if (rowMap.size === 0) this.#data.delete(row);
       }
-    } else if (value !== 0) {
-      // Insert new entry at `pos`
-      this.#values.splice(pos, 0, value);
-      this.#colIdx.splice(pos, 0, c);
-      for (let i = r + 1; i <= this.#rows; i++) this.#rowPtr[i]++;
+      return;
     }
+    let rowMap = this.#data.get(row);
+    if (rowMap === undefined) {
+      rowMap = new Map();
+      this.#data.set(row, rowMap);
+    }
+    rowMap.set(col, value);
   }
 
   // ── Matrix operations ──────────────────────────────────────────────────────
 
-  /** Add two sparse matrices element-wise. Returns a new SparseMatrix. */
+  /**
+   * Add two matrices element-wise and return a new SparseMatrix.
+   * @throws {RangeError} if dimensions do not match
+   */
   add(other: SparseMatrix): SparseMatrix {
-    if (other.#rows !== this.#rows || other.#cols !== this.#cols) {
-      throw new Error('Matrix dimensions must match for addition');
+    if (this.#rows !== other.#rows || this.#cols !== other.#cols) {
+      throw new RangeError(
+        `Cannot add matrices of size ${this.#rows}×${this.#cols} and ${other.#rows}×${other.#cols}`,
+      );
     }
     const result = new SparseMatrix(this.#rows, this.#cols);
-    for (let r = 0; r < this.#rows; r++) {
-      const aStart = this.#rowPtr[r],  aEnd = this.#rowPtr[r + 1];
-      const bStart = other.#rowPtr[r], bEnd = other.#rowPtr[r + 1];
-      let ai = aStart, bi = bStart;
-      while (ai < aEnd || bi < bEnd) {
-        const ac = ai < aEnd ? this.#colIdx[ai]  : Infinity;
-        const bc = bi < bEnd ? other.#colIdx[bi] : Infinity;
-        if (ac < bc) {
-          result.set(r, ac, this.#values[ai++]);
-        } else if (bc < ac) {
-          result.set(r, bc, other.#values[bi++]);
-        } else {
-          const sum = this.#values[ai++] + other.#values[bi++];
-          if (sum !== 0) result.set(r, ac, sum);
-        }
+    for (const [r, rowMap] of this.#data) {
+      for (const [c, v] of rowMap) result.set(r, c, v);
+    }
+    for (const [r, rowMap] of other.#data) {
+      for (const [c, v] of rowMap) {
+        result.set(r, c, result.get(r, c) + v);
       }
     }
     return result;
   }
 
-  /** Multiply this matrix by `other`. Returns a new SparseMatrix. */
+  /**
+   * Multiply every element by a scalar and return a new SparseMatrix.
+   * A scalar of 0 returns an all-zero matrix (nnz === 0).
+   */
+  scale(scalar: number): SparseMatrix {
+    const result = new SparseMatrix(this.#rows, this.#cols);
+    if (scalar === 0) return result;
+    for (const [r, rowMap] of this.#data) {
+      for (const [c, v] of rowMap) result.set(r, c, v * scalar);
+    }
+    return result;
+  }
+
+  /**
+   * Sparse matrix multiplication: this × other.
+   * @throws {RangeError} if inner dimensions do not match
+   */
   multiply(other: SparseMatrix): SparseMatrix {
     if (this.#cols !== other.#rows) {
-      throw new Error(`Incompatible dimensions for multiplication: (${this.#rows}×${this.#cols}) × (${other.#rows}×${other.#cols})`);
+      throw new RangeError(
+        `Cannot multiply ${this.#rows}×${this.#cols} by ${other.#rows}×${other.#cols}: ` +
+        `inner dimensions must match`,
+      );
     }
     const result = new SparseMatrix(this.#rows, other.#cols);
-    for (let r = 0; r < this.#rows; r++) {
-      // Accumulate into a dense row buffer for simplicity
-      const acc = new Array<number>(other.#cols).fill(0);
-      const aStart = this.#rowPtr[r], aEnd = this.#rowPtr[r + 1];
-      for (let ai = aStart; ai < aEnd; ai++) {
-        const k  = this.#colIdx[ai];
-        const av = this.#values[ai];
-        const bStart = other.#rowPtr[k], bEnd = other.#rowPtr[k + 1];
-        for (let bi = bStart; bi < bEnd; bi++) {
-          acc[other.#colIdx[bi]] += av * other.#values[bi];
+    for (const [r, rowMap] of this.#data) {
+      for (const [k, aVal] of rowMap) {
+        const otherRow = other.#data.get(k);
+        if (otherRow === undefined) continue;
+        for (const [c, bVal] of otherRow) {
+          result.set(r, c, result.get(r, c) + aVal * bVal);
         }
       }
-      for (let c = 0; c < other.#cols; c++) {
-        if (acc[c] !== 0) result.set(r, c, acc[c]);
-      }
     }
     return result;
   }
 
-  /** Multiply matrix by a dense column vector. Returns a dense vector. */
-  multiplyVector(v: number[]): number[] {
-    if (v.length !== this.#cols) {
-      throw new Error(`Vector length ${v.length} does not match matrix cols ${this.#cols}`);
-    }
-    const result = new Array<number>(this.#rows).fill(0);
-    for (let r = 0; r < this.#rows; r++) {
-      const start = this.#rowPtr[r], end = this.#rowPtr[r + 1];
-      for (let i = start; i < end; i++) {
-        result[r] += this.#values[i] * v[this.#colIdx[i]];
-      }
-    }
-    return result;
-  }
-
-  /** Return the transpose as a new SparseMatrix. */
+  /** Return the transpose of this matrix as a new SparseMatrix. */
   transpose(): SparseMatrix {
-    const T = new SparseMatrix(this.#cols, this.#rows);
-    // Collect entries per transposed row (= original column)
-    for (let r = 0; r < this.#rows; r++) {
-      const start = this.#rowPtr[r], end = this.#rowPtr[r + 1];
-      for (let i = start; i < end; i++) {
-        T.set(this.#colIdx[i], r, this.#values[i]);
-      }
+    const result = new SparseMatrix(this.#cols, this.#rows);
+    for (const [r, rowMap] of this.#data) {
+      for (const [c, v] of rowMap) result.set(c, r, v);
     }
-    return T;
+    return result;
   }
 
-  // ── Conversion ─────────────────────────────────────────────────────────────
+  // ── Dense conversion ───────────────────────────────────────────────────────
 
-  /** Convert to a dense 2-D array. */
+  /** Convert to a dense 2-D array (rows × cols); absent entries become 0. */
   toDense(): number[][] {
     const dense: number[][] = Array.from({ length: this.#rows }, () =>
       new Array<number>(this.#cols).fill(0),
     );
-    for (let r = 0; r < this.#rows; r++) {
-      const start = this.#rowPtr[r], end = this.#rowPtr[r + 1];
-      for (let i = start; i < end; i++) {
-        dense[r][this.#colIdx[i]] = this.#values[i];
-      }
+    for (const [r, rowMap] of this.#data) {
+      for (const [c, v] of rowMap) dense[r][c] = v;
     }
     return dense;
   }
 
-  /** Build a SparseMatrix from a dense 2-D array. */
-  static fromDense(data: number[][]): SparseMatrix {
-    const rows = data.length;
-    const cols = rows === 0 ? 0 : data[0].length;
-    const m = new SparseMatrix(rows, cols);
+  /**
+   * Build a SparseMatrix from a dense 2-D array.
+   * Zero values are not stored.
+   * @throws {RangeError} if rows have inconsistent lengths
+   */
+  static fromDense(matrix: number[][]): SparseMatrix {
+    const rows = matrix.length;
+    const cols = rows === 0 ? 0 : matrix[0].length;
+    const result = new SparseMatrix(rows, cols);
     for (let r = 0; r < rows; r++) {
+      if (matrix[r].length !== cols) {
+        throw new RangeError(`Row ${r} has length ${matrix[r].length}, expected ${cols}`);
+      }
       for (let c = 0; c < cols; c++) {
-        if (data[r][c] !== 0) m.set(r, c, data[r][c]);
+        if (matrix[r][c] !== 0) result.set(r, c, matrix[r][c]);
       }
     }
-    return m;
+    return result;
   }
 
-  // ── Internal helpers ───────────────────────────────────────────────────────
+  // ── Iteration ──────────────────────────────────────────────────────────────
 
-  #checkBounds(r: number, c: number): void {
-    if (r < 0 || r >= this.#rows || c < 0 || c >= this.#cols) {
-      throw new RangeError(`Index (${r}, ${c}) out of bounds for ${this.#rows}×${this.#cols} matrix`);
+  /**
+   * Return all stored non-zero entries sorted by row then by column.
+   */
+  entries(): Array<{ row: number; col: number; value: number }> {
+    const out: Array<{ row: number; col: number; value: number }> = [];
+    const sortedRows = [...this.#data.keys()].sort((a, b) => a - b);
+    for (const r of sortedRows) {
+      const rowMap = this.#data.get(r)!;
+      const sortedCols = [...rowMap.keys()].sort((a, b) => a - b);
+      for (const c of sortedCols) {
+        out.push({ row: r, col: c, value: rowMap.get(c)! });
+      }
     }
+    return out;
   }
+
+  // ── Norms ──────────────────────────────────────────────────────────────────
+
+  /** Frobenius norm: sqrt of the sum of squares of all stored elements. */
+  frobeniusNorm(): number {
+    let sumSq = 0;
+    for (const rowMap of this.#data.values()) {
+      for (const v of rowMap.values()) sumSq += v * v;
+    }
+    return Math.sqrt(sumSq);
+  }
+
+  // ── Row / column helpers ───────────────────────────────────────────────────
+
+  /**
+   * Return a snapshot Map from column index to value for the given row.
+   * @throws {RangeError} if row is out of bounds
+   */
+  getRow(row: number): Map<number, number> {
+    if (row < 0 || row >= this.#rows) {
+      throw new RangeError(`Row ${row} is out of bounds for ${this.#rows} rows`);
+    }
+    const rowMap = this.#data.get(row);
+    return rowMap !== undefined ? new Map(rowMap) : new Map();
+  }
+
+  /**
+   * Return a snapshot Map from row index to value for the given column.
+   * @throws {RangeError} if col is out of bounds
+   */
+  getCol(col: number): Map<number, number> {
+    if (col < 0 || col >= this.#cols) {
+      throw new RangeError(`Col ${col} is out of bounds for ${this.#cols} cols`);
+    }
+    const result: Map<number, number> = new Map();
+    for (const [r, rowMap] of this.#data) {
+      const v = rowMap.get(col);
+      if (v !== undefined) result.set(r, v);
+    }
+    return result;
+  }
+
+  /**
+   * Sum of all values in the given row.
+   * @throws {RangeError} if row is out of bounds
+   */
+  rowSum(row: number): number {
+    if (row < 0 || row >= this.#rows) {
+      throw new RangeError(`Row ${row} is out of bounds for ${this.#rows} rows`);
+    }
+    let sum = 0;
+    const rowMap = this.#data.get(row);
+    if (rowMap !== undefined) for (const v of rowMap.values()) sum += v;
+    return sum;
+  }
+
+  /**
+   * Sum of all values in the given column.
+   * @throws {RangeError} if col is out of bounds
+   */
+  colSum(col: number): number {
+    if (col < 0 || col >= this.#cols) {
+      throw new RangeError(`Col ${col} is out of bounds for ${this.#cols} cols`);
+    }
+    let sum = 0;
+    for (const rowMap of this.#data.values()) sum += rowMap.get(col) ?? 0;
+    return sum;
+  }
+}
+
+// ─── Factory functions ─────────────────────────────────────────────────────────
+
+/**
+ * Create an empty SparseMatrix with the given dimensions.
+ *
+ * @param rows - Number of rows (non-negative)
+ * @param cols - Number of columns (non-negative)
+ */
+export function createSparseMatrix(rows: number, cols: number): SparseMatrix {
+  return new SparseMatrix(rows, cols);
+}
+
+/**
+ * Create a square diagonal matrix from the given values array.
+ * Entry [i][i] = values[i]; all off-diagonal entries are 0.
+ *
+ * @param values - Diagonal entries; result is values.length × values.length
+ */
+export function sparseDiagonal(values: number[]): SparseMatrix {
+  const n = values.length;
+  const m = new SparseMatrix(n, n);
+  for (let i = 0; i < n; i++) {
+    if (values[i] !== 0) m.set(i, i, values[i]);
+  }
+  return m;
+}
+
+/**
+ * Create an n×n identity matrix.
+ *
+ * @param n - Matrix dimension (non-negative)
+ */
+export function sparseIdentity(n: number): SparseMatrix {
+  return sparseDiagonal(new Array<number>(n).fill(1));
 }

@@ -1,25 +1,21 @@
 // @ts-check
 // ─── Template Engine ──────────────────────────────────────────────────────────
-// A Mustache-inspired template engine supporting variable interpolation,
-// raw output, truthy/falsy sections, array iteration, partials, and comments.
+// A lightweight Mustache-inspired template engine with variable substitution,
+// triple-brace raw output, #if conditionals, #each iteration (named variable,
+// index, @first, @last), partials, and HTML escaping on by default.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/** @deprecated Use Record<string, unknown> directly. */
-export interface TemplateContext {
-  [key: string]: unknown;
-}
-
 export interface TemplateOptions {
-  /** Delimiters, default ['{{', '}}'] */
+  /** Opening and closing delimiters. Default: ['{{', '}}'] */
   delimiters?: [string, string];
-  /** Escape HTML in interpolations, default true */
-  escapeHtml?: boolean;
+  /** HTML-escape interpolated values. Default: true */
+  escape?: boolean;
 }
 
 // ─── HTML Escaping ────────────────────────────────────────────────────────────
 
-const _HTML_ESCAPE_MAP: Record<string, string> = {
+const HTML_ESCAPE_MAP: Record<string, string> = {
   '&': '&amp;',
   '<': '&lt;',
   '>': '&gt;',
@@ -27,345 +23,337 @@ const _HTML_ESCAPE_MAP: Record<string, string> = {
   "'": '&#39;',
 };
 
-/** Escape HTML characters in a string. */
-export function escapeTemplateHTML(str: string): string {
-  return str.replace(/[&<>"']/g, (ch) => _HTML_ESCAPE_MAP[ch] ?? ch);
+const HTML_UNESCAPE_MAP: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+};
+
+/** Escape HTML special characters: & < > " ' → entities */
+export function escapeHtml(str: string): string {
+  return str.replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch] ?? ch);
 }
 
-// ─── Token types ──────────────────────────────────────────────────────────────
-
-const _TOKEN = {
-  TEXT: 'text',
-  VAR: 'var',
-  RAW: 'raw',
-  SECTION_OPEN: 'section_open',
-  SECTION_CLOSE: 'section_close',
-  INVERTED_OPEN: 'inverted_open',
-  PARTIAL: 'partial',
-  COMMENT: 'comment',
-} as const;
-
-type _TokenType = (typeof _TOKEN)[keyof typeof _TOKEN];
-
-interface _Token {
-  type: _TokenType;
-  value: string;
+/** Unescape HTML entities back to their original characters. */
+export function unescapeHtml(str: string): string {
+  return str.replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => HTML_UNESCAPE_MAP[entity] ?? entity);
 }
 
-// ─── Lexer ────────────────────────────────────────────────────────────────────
+// ─── Internal Helpers ─────────────────────────────────────────────────────────
 
-function _tokenize(source: string, open: string, close: string): _Token[] {
-  const tokens: _Token[] = [];
+/**
+ * Resolve a dot-notation key against a data context.
+ * Returns undefined when any segment along the path is missing.
+ */
+function resolvePath(data: Record<string, unknown>, key: string): unknown {
+  const path = key.trim();
+  // Support dot-access for @first, @last, etc. — stored verbatim in data
+  if (Object.prototype.hasOwnProperty.call(data, path)) {
+    return data[path];
+  }
+  const parts = path.split('.');
+  if (parts.length === 1) {
+    return data[path];
+  }
+  let current: unknown = data;
+  for (const part of parts) {
+    if (current === null || current === undefined || typeof current !== 'object') {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
+}
+
+/** Stringify a resolved value; null/undefined → empty string. */
+function toStr(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value);
+}
+
+/** Normalise options, filling in defaults. */
+function normalizeOptions(options?: TemplateOptions): { open: string; close: string; doEscape: boolean } {
+  const [open, close] = options?.delimiters ?? ['{{', '}}'];
+  return {
+    open,
+    close,
+    doEscape: options?.escape !== false,
+  };
+}
+
+// ─── Block-end finder ─────────────────────────────────────────────────────────
+
+/**
+ * From `searchFrom`, scan `template` for the matching closing tag
+ * (e.g. `{{/if}}`) that balances the already-open block `blockName`.
+ *
+ * Returns the index at which the closing tag starts, or -1 if not found.
+ */
+function findBlockEnd(
+  template: string,
+  searchFrom: number,
+  open: string,
+  close: string,
+  blockName: string,
+): number {
+  const openTag = `${open}#${blockName}`;   // e.g. {{#if
+  const closeTag = `${open}/${blockName}${close}`; // e.g. {{/if}}
+
+  let depth = 1;
+  let pos = searchFrom;
+
+  while (pos < template.length) {
+    const nextOpen  = template.indexOf(openTag,  pos);
+    const nextClose = template.indexOf(closeTag, pos);
+
+    if (nextClose === -1) return -1;
+
+    if (nextOpen !== -1 && nextOpen < nextClose) {
+      // Another opening of the same block — deepen nesting
+      depth++;
+      pos = nextOpen + openTag.length;
+    } else {
+      depth--;
+      if (depth === 0) return nextClose;
+      pos = nextClose + closeTag.length;
+    }
+  }
+
+  return -1;
+}
+
+// ─── Core Processor ───────────────────────────────────────────────────────────
+
+type ProcOpts = {
+  open: string;
+  close: string;
+  doEscape: boolean;
+  partials: Map<string, string>;
+};
+
+/**
+ * Recursively process a template against a data context.
+ * This is the single central function used by all public APIs.
+ */
+function processTemplate(
+  template: string,
+  data: Record<string, unknown>,
+  opts: ProcOpts,
+): string {
+  const { open, close, doEscape, partials } = opts;
+  const isDefault = open === '{{' && close === '}}';
+
+  const chunks: string[] = [];
   let pos = 0;
-  const useTriple = open === '{{' && close === '}}';
 
-  while (pos < source.length) {
-    if (useTriple) {
-      const tripleIdx = source.indexOf('{{{', pos);
-      const normalIdx = source.indexOf(open, pos);
+  while (pos < template.length) {
+    // Locate the next opening delimiter
+    const tagStart = template.indexOf(open, pos);
 
-      if (tripleIdx !== -1 && (normalIdx === -1 || tripleIdx <= normalIdx)) {
-        if (tripleIdx > pos) {
-          tokens.push({ type: _TOKEN.TEXT, value: source.slice(pos, tripleIdx) });
-        }
-        const end = source.indexOf('}}}', tripleIdx + 3);
-        if (end === -1) {
-          tokens.push({ type: _TOKEN.TEXT, value: source.slice(tripleIdx) });
-          pos = source.length;
-          continue;
-        }
-        const inner = source.slice(tripleIdx + 3, end).trim();
-        tokens.push({ type: _TOKEN.RAW, value: inner });
-        pos = end + 3;
+    if (tagStart === -1) {
+      // No more tags — append remainder as-is
+      chunks.push(template.slice(pos));
+      break;
+    }
+
+    // Append literal text before the tag
+    chunks.push(template.slice(pos, tagStart));
+
+    // ── Triple-brace raw output: {{{name}}} ───────────────────────────────
+    if (isDefault && template.startsWith('{{{', tagStart)) {
+      const tripleEnd = template.indexOf('}}}', tagStart + 3);
+      if (tripleEnd !== -1) {
+        const key = template.slice(tagStart + 3, tripleEnd).trim();
+        chunks.push(toStr(resolvePath(data, key)));
+        pos = tripleEnd + 3;
         continue;
       }
     }
 
-    const tagStart = source.indexOf(open, pos);
-    if (tagStart === -1) {
-      tokens.push({ type: _TOKEN.TEXT, value: source.slice(pos) });
-      break;
-    }
-
-    if (tagStart > pos) {
-      tokens.push({ type: _TOKEN.TEXT, value: source.slice(pos, tagStart) });
-    }
-
-    const tagEnd = source.indexOf(close, tagStart + open.length);
+    // Locate closing delimiter
+    const tagEnd = template.indexOf(close, tagStart + open.length);
     if (tagEnd === -1) {
-      tokens.push({ type: _TOKEN.TEXT, value: source.slice(tagStart) });
-      pos = source.length;
+      // Unclosed tag — treat rest of string as literal
+      chunks.push(template.slice(tagStart));
       break;
     }
 
-    const inner = source.slice(tagStart + open.length, tagEnd);
+    const inner = template.slice(tagStart + open.length, tagEnd).trim();
     pos = tagEnd + close.length;
 
-    const first = inner[0];
-
-    if (first === '!') {
-      tokens.push({ type: _TOKEN.COMMENT, value: inner.slice(1).trim() });
-    } else if (first === '#') {
-      tokens.push({ type: _TOKEN.SECTION_OPEN, value: inner.slice(1).trim() });
-    } else if (first === '/') {
-      tokens.push({ type: _TOKEN.SECTION_CLOSE, value: inner.slice(1).trim() });
-    } else if (first === '^') {
-      tokens.push({ type: _TOKEN.INVERTED_OPEN, value: inner.slice(1).trim() });
-    } else if (first === '>') {
-      tokens.push({ type: _TOKEN.PARTIAL, value: inner.slice(1).trim() });
-    } else if (first === '&') {
-      tokens.push({ type: _TOKEN.RAW, value: inner.slice(1).trim() });
-    } else {
-      tokens.push({ type: _TOKEN.VAR, value: inner.trim() });
+    // ── Comment: {{! … }} ────────────────────────────────────────────────
+    if (inner.startsWith('!')) {
+      continue; // swallow the comment
     }
-  }
 
-  return tokens;
-}
-
-// ─── AST ──────────────────────────────────────────────────────────────────────
-
-interface _TextNode { type: 'text'; value: string; }
-interface _VarNode  { type: 'var'; key: string; raw: boolean; }
-interface _SectionNode { type: 'section'; key: string; inverted: boolean; children: _AstNode[]; }
-interface _PartialNode { type: 'partial'; name: string; }
-interface _CommentNode { type: 'comment'; }
-type _AstNode = _TextNode | _VarNode | _SectionNode | _PartialNode | _CommentNode;
-
-function _parse(tokens: _Token[]): _AstNode[] {
-  const root: _AstNode[] = [];
-  const stack: { key: string; inverted: boolean; children: _AstNode[] }[] = [];
-
-  function current(): _AstNode[] {
-    return stack.length > 0 ? stack[stack.length - 1].children : root;
-  }
-
-  for (const token of tokens) {
-    switch (token.type) {
-      case _TOKEN.TEXT:
-        current().push({ type: 'text', value: token.value });
-        break;
-      case _TOKEN.VAR:
-        current().push({ type: 'var', key: token.value, raw: false });
-        break;
-      case _TOKEN.RAW:
-        current().push({ type: 'var', key: token.value, raw: true });
-        break;
-      case _TOKEN.SECTION_OPEN:
-        stack.push({ key: token.value, inverted: false, children: [] });
-        break;
-      case _TOKEN.INVERTED_OPEN:
-        stack.push({ key: token.value, inverted: true, children: [] });
-        break;
-      case _TOKEN.SECTION_CLOSE: {
-        const frame = stack.pop();
-        if (!frame) break;
-        current().push({ type: 'section', key: frame.key, inverted: frame.inverted, children: frame.children });
-        break;
+    // ── Partial: {{> name }} ─────────────────────────────────────────────
+    if (inner.startsWith('>')) {
+      const partialName = inner.slice(1).trim();
+      const partialSrc = partials.get(partialName);
+      if (partialSrc !== undefined) {
+        chunks.push(processTemplate(partialSrc, data, opts));
       }
-      case _TOKEN.PARTIAL:
-        current().push({ type: 'partial', name: token.value });
-        break;
-      case _TOKEN.COMMENT:
-        current().push({ type: 'comment' });
-        break;
+      continue;
     }
-  }
 
-  while (stack.length > 0) {
-    const frame = stack.pop()!;
-    current().push({ type: 'section', key: frame.key, inverted: frame.inverted, children: frame.children });
-  }
+    // ── Block open: {{#if …}} / {{#each …}} ──────────────────────────────
+    if (inner.startsWith('#')) {
+      const directive = inner.slice(1).trim(); // e.g. "if cond" or "each arr as item"
 
-  return root;
-}
+      // ── #if ────────────────────────────────────────────────────────────
+      if (directive.startsWith('if ')) {
+        const condKey = directive.slice(3).trim();
+        const blockEnd = findBlockEnd(template, pos, open, close, 'if');
+        const closeTag = `${open}/if${close}`;
 
-// ─── Renderer ─────────────────────────────────────────────────────────────────
+        if (blockEnd === -1) break;
 
-function _lookup(data: Record<string, unknown>, key: string): unknown {
-  if (key === '.') return data['.'] !== undefined ? data['.'] : data;
-  const parts = key.split('.');
-  let val: unknown = data;
-  for (const part of parts) {
-    if (val == null || typeof val !== 'object') return '';
-    val = (val as Record<string, unknown>)[part];
-  }
-  return val;
-}
+        const blockContent = template.slice(pos, blockEnd);
+        pos = blockEnd + closeTag.length;
 
-function _isFalsy(val: unknown): boolean {
-  if (val === false || val === null || val === undefined || val === '') return true;
-  if (Array.isArray(val) && val.length === 0) return true;
-  return false;
-}
-
-function _renderNodes(nodes: _AstNode[], data: Record<string, unknown>, escape: boolean): string {
-  let out = '';
-  for (const node of nodes) {
-    switch (node.type) {
-      case 'text':
-        out += node.value;
-        break;
-      case 'var': {
-        const raw = _lookup(data, node.key);
-        const str = raw == null ? '' : String(raw);
-        out += node.raw || !escape ? str : escapeTemplateHTML(str);
-        break;
+        if (resolvePath(data, condKey)) {
+          chunks.push(processTemplate(blockContent, data, opts));
+        }
+        continue;
       }
-      case 'section': {
-        const val = _lookup(data, node.key);
-        if (node.inverted) {
-          if (_isFalsy(val)) out += _renderNodes(node.children, data, escape);
-        } else if (!_isFalsy(val)) {
-          if (Array.isArray(val)) {
-            for (const item of val) {
-              const childData: Record<string, unknown> =
-                item !== null && typeof item === 'object'
-                  ? { ...data, ...(item as Record<string, unknown>), '.': item }
-                  : { ...data, '.': item };
-              out += _renderNodes(node.children, childData, escape);
-            }
-          } else {
-            const childData: Record<string, unknown> =
-              val !== null && typeof val === 'object'
-                ? { ...data, ...(val as Record<string, unknown>) }
-                : data;
-            out += _renderNodes(node.children, childData, escape);
+
+      // ── #each ──────────────────────────────────────────────────────────
+      if (directive.startsWith('each ')) {
+        const eachExpr = directive.slice(5).trim();
+        const blockEnd = findBlockEnd(template, pos, open, close, 'each');
+        const closeTag = `${open}/each${close}`;
+
+        if (blockEnd === -1) break;
+
+        const blockContent = template.slice(pos, blockEnd);
+        pos = blockEnd + closeTag.length;
+
+        // Parse: "arr" or "arr as item"
+        const asSplit = eachExpr.split(/\s+as\s+/);
+        const arrayKey  = asSplit[0].trim();
+        const itemAlias = asSplit.length >= 2 ? asSplit[1].trim() : 'item';
+
+        const collection = resolvePath(data, arrayKey);
+        if (Array.isArray(collection)) {
+          const last = collection.length - 1;
+          for (let i = 0; i < collection.length; i++) {
+            const iterData: Record<string, unknown> = {
+              ...data,
+              [itemAlias]: collection[i],
+              index: i,
+              '@first': i === 0,
+              '@last': i === last,
+            };
+            chunks.push(processTemplate(blockContent, iterData, opts));
           }
         }
-        break;
+        continue;
       }
-      case 'partial': {
-        const partial = _lookup(data, node.name);
-        if (typeof partial === 'function') {
-          out += String((partial as () => unknown)());
-        } else if (typeof partial === 'string') {
-          out += _renderString(partial, data, escape);
-        }
-        break;
-      }
-      case 'comment':
-        break;
+
+      // Unknown block directive — skip
+      continue;
     }
-  }
-  return out;
-}
 
-function _renderString(source: string, data: Record<string, unknown>, escape: boolean): string {
-  return _renderNodes(_parse(_tokenize(source, '{{', '}}')), data, escape);
-}
+    // ── Closing block tag ─────────────────────────────────────────────────
+    if (inner.startsWith('/')) {
+      // Orphaned close — ignore
+      continue;
+    }
 
-// ─── Template Class ───────────────────────────────────────────────────────────
-
-export class Template {
-  readonly #ast: _AstNode[];
-  readonly #escape: boolean;
-
-  constructor(source: string, options?: TemplateOptions) {
-    const [open, close] = options?.delimiters ?? ['{{', '}}'];
-    this.#escape = options?.escapeHtml ?? true;
-    this.#ast = _parse(_tokenize(source, open, close));
+    // ── Variable substitution: {{name}} ──────────────────────────────────
+    const value = toStr(resolvePath(data, inner));
+    chunks.push(doEscape ? escapeHtml(value) : value);
   }
 
-  /** Render the template with given data. */
-  render(data: Record<string, unknown>): string {
-    return _renderNodes(this.#ast, data, this.#escape);
-  }
+  return chunks.join('');
 }
 
-// ─── Functional API ───────────────────────────────────────────────────────────
+// ─── Public Functional API ────────────────────────────────────────────────────
 
 /**
  * Compile a template string into a reusable render function.
+ *
+ * @example
+ * const fn = compile('Hello, {{name}}!');
+ * fn({ name: 'World' }); // 'Hello, World!'
  */
 export function compile(
-  source: string,
+  template: string,
   options?: TemplateOptions,
 ): (data: Record<string, unknown>) => string {
-  const tmpl = new Template(source, options);
-  return (data) => tmpl.render(data);
+  const { open, close, doEscape } = normalizeOptions(options);
+  const partials = new Map<string, string>();
+  return (data: Record<string, unknown>) =>
+    processTemplate(template, data, { open, close, doEscape, partials });
 }
 
 /**
- * Render a template string once with the given data.
+ * Render a template string once against the supplied data.
+ *
+ * @example
+ * render('Hello, {{name}}!', { name: 'World' }); // 'Hello, World!'
  */
 export function render(
-  source: string,
+  template: string,
   data: Record<string, unknown>,
   options?: TemplateOptions,
 ): string {
-  return new Template(source, options).render(data);
+  return compile(template, options)(data);
 }
 
-// ─── Legacy API (kept for backwards compatibility) ────────────────────────────
+// ─── TemplateEngine Class ─────────────────────────────────────────────────────
 
 /**
- * Render a template string with context data.
- * @deprecated Use `render()` instead.
+ * Stateful template engine that retains registered partials and options across
+ * multiple render calls.
  */
-export function renderTemplate(template: string, context: TemplateContext): string {
-  return render(template, context);
+export class TemplateEngine {
+  #open: string;
+  #close: string;
+  #doEscape: boolean;
+  #partials: Map<string, string>;
+
+  constructor(options?: TemplateOptions) {
+    const { open, close, doEscape } = normalizeOptions(options);
+    this.#open = open;
+    this.#close = close;
+    this.#doEscape = doEscape;
+    this.#partials = new Map();
+  }
+
+  /** Register a named partial template for use with {{> name}}. */
+  registerPartial(name: string, template: string): void {
+    this.#partials.set(name, template);
+  }
+
+  /** Render `template` against `data` using the engine's settings. */
+  render(template: string, data: Record<string, unknown>): string {
+    return processTemplate(template, data, {
+      open: this.#open,
+      close: this.#close,
+      doEscape: this.#doEscape,
+      partials: this.#partials,
+    });
+  }
+
+  /**
+   * Compile `template` into a reusable function bound to this engine.
+   * Partials registered after compilation are still visible at render time.
+   */
+  compile(template: string): (data: Record<string, unknown>) => string {
+    return (data: Record<string, unknown>) => this.render(template, data);
+  }
 }
 
 /**
- * Compile a template to a reusable render function.
- * @deprecated Use `compile()` instead.
+ * Factory function — creates a new TemplateEngine with the given options.
+ *
+ * @example
+ * const engine = createTemplateEngine({ escape: false });
+ * engine.render('{{html}}', { html: '<b>bold</b>' }); // '<b>bold</b>'
  */
-export function compileTemplate(template: string): (context: TemplateContext) => string {
-  return compile(template);
-}
-
-// ─── validateTemplate ────────────────────────────────────────────────────────
-
-/** Check if a template has any syntax errors. */
-export function validateTemplate(template: string): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-  const openTags: string[] = [];
-
-  const tagRe = /\{\{([#^/])(\w+)\}\}/g;
-  let m: RegExpExecArray | null;
-  while ((m = tagRe.exec(template)) !== null) {
-    const type = m[1];
-    const name = m[2];
-    if (type === '#' || type === '^') {
-      openTags.push(name);
-    } else if (type === '/') {
-      const last = openTags.pop();
-      if (last !== name) {
-        errors.push(`Unexpected closing tag: {{/${name}}}`);
-      }
-    }
-  }
-
-  for (const unclosed of openTags) {
-    errors.push(`Unclosed tag: {{#${unclosed}}}`);
-  }
-
-  const stripped = template
-    .replace(/\{\{[#^/!]?\w*\}\}/g, '')
-    .replace(/\{\{\{[\w.]+\}\}\}/g, '');
-  const opens = (stripped.match(/\{\{/g) || []).length;
-  const closes = (stripped.match(/\}\}/g) || []).length;
-  if (opens !== closes) {
-    errors.push('Mismatched {{ }} braces in template');
-  }
-
-  return { valid: errors.length === 0, errors };
-}
-
-// ─── extractVariables ────────────────────────────────────────────────────────
-
-/** Extract variable names from a template (excludes section/inverted/comment tags). */
-export function extractVariables(template: string): string[] {
-  const vars = new Set<string>();
-
-  for (const m of template.matchAll(/\{\{\{(\w+)\}\}\}/g)) {
-    vars.add(m[1]);
-  }
-
-  for (const m of template.matchAll(/\{\{([^#/^!{][\w]*)\}\}/g)) {
-    vars.add(m[1]);
-  }
-
-  return [...vars];
+export function createTemplateEngine(options?: TemplateOptions): TemplateEngine {
+  return new TemplateEngine(options);
 }
