@@ -1,178 +1,469 @@
 // @ts-check
-// ─── Matrix Data Structure ────────────────────────────────────────────────────
-// A 2-D numeric matrix with standard arithmetic, transpose, trace, and common
-// static factory helpers.
+// ─── Dense Matrix Library ─────────────────────────────────────────────────────
+// Linear algebra module providing a dense Matrix class with arithmetic,
+// transforms, row/col operations, and common matrix properties.
+// Stored in row-major order as a flat Float64Array for cache efficiency.
 
-// ─── Matrix Class ─────────────────────────────────────────────────────────────
+// ─── Matrix ───────────────────────────────────────────────────────────────────
 
+/** Dense matrix stored in row-major order as a flat Float64Array. */
 export class Matrix {
-  /** Internal row-major storage. */
-  private _data: number[][];
-  private _rows: number;
-  private _cols: number;
+  #rows: number;
+  #cols: number;
+  #data: Float64Array;
 
-  constructor(data: number[][]) {
-    if (data.length === 0) throw new RangeError('Matrix must have at least one row');
+  /**
+   * Create a matrix with the given dimensions, optionally filled with `fill`.
+   * @param rows - Number of rows (must be a positive integer)
+   * @param cols - Number of columns (must be a positive integer)
+   * @param fill - Value to fill every element with (default 0)
+   */
+  constructor(rows: number, cols: number, fill: number = 0) {
+    if (!Number.isInteger(rows) || rows < 1) {
+      throw new RangeError(`Matrix: rows must be a positive integer, got ${rows}`);
+    }
+    if (!Number.isInteger(cols) || cols < 1) {
+      throw new RangeError(`Matrix: cols must be a positive integer, got ${cols}`);
+    }
+    this.#rows = rows;
+    this.#cols = cols;
+    this.#data = new Float64Array(rows * cols).fill(fill);
+  }
+
+  // ─── Static Factories ──────────────────────────────────────────────────────
+
+  /**
+   * Build a Matrix from a 2-D JavaScript array.
+   * All rows must have the same non-zero length.
+   */
+  static fromArray(data: number[][]): Matrix {
+    if (data.length === 0) {
+      throw new RangeError('Matrix.fromArray: data must have at least one row');
+    }
     const cols = data[0].length;
-    if (cols === 0) throw new RangeError('Matrix must have at least one column');
-    for (let r = 1; r < data.length; r++) {
+    if (cols === 0) {
+      throw new RangeError('Matrix.fromArray: rows must have at least one column');
+    }
+    const m = new Matrix(data.length, cols);
+    for (let r = 0; r < data.length; r++) {
       if (data[r].length !== cols) {
-        throw new RangeError('All rows must have the same number of columns');
+        throw new RangeError(
+          `Matrix.fromArray: row ${r} has ${data[r].length} elements, expected ${cols}`,
+        );
+      }
+      for (let c = 0; c < cols; c++) {
+        m.#data[r * cols + c] = data[r][c];
       }
     }
-    // Deep-copy so the caller cannot mutate our internals
-    this._data = data.map((row) => [...row]);
-    this._rows = data.length;
-    this._cols = cols;
+    return m;
   }
 
-  // ─── Dimension Getters ──────────────────────────────────────────────────────
+  /** Create an n×n identity matrix. */
+  static identity(n: number): Matrix {
+    const m = new Matrix(n, n, 0);
+    for (let i = 0; i < n; i++) {
+      m.#data[i * n + i] = 1;
+    }
+    return m;
+  }
 
+  /** Create a rows×cols matrix filled with zeros. */
+  static zeros(rows: number, cols: number): Matrix {
+    return new Matrix(rows, cols, 0);
+  }
+
+  /** Create a rows×cols matrix filled with ones. */
+  static ones(rows: number, cols: number): Matrix {
+    return new Matrix(rows, cols, 1);
+  }
+
+  /** Create a rows×cols matrix filled with uniform random values in [0, 1). */
+  static random(rows: number, cols: number): Matrix {
+    const m = new Matrix(rows, cols);
+    for (let i = 0; i < m.#data.length; i++) {
+      m.#data[i] = Math.random();
+    }
+    return m;
+  }
+
+  // ─── Accessors ─────────────────────────────────────────────────────────────
+
+  /** Number of rows. */
   get rows(): number {
-    return this._rows;
+    return this.#rows;
   }
 
+  /** Number of columns. */
   get cols(): number {
-    return this._cols;
-  }
-
-  // ─── Element Access ─────────────────────────────────────────────────────────
-
-  /** Return the value at row `r`, column `c` (0-indexed). */
-  get(r: number, c: number): number {
-    this._checkBounds(r, c);
-    return this._data[r][c];
-  }
-
-  /** Set the value at row `r`, column `c` (0-indexed). Mutates in place. */
-  set(r: number, c: number, v: number): void {
-    this._checkBounds(r, c);
-    this._data[r][c] = v;
-  }
-
-  // ─── Arithmetic ─────────────────────────────────────────────────────────────
-
-  /** Element-wise addition.  Both matrices must share the same dimensions. */
-  add(other: Matrix): Matrix {
-    this._checkSameDimensions(other);
-    return new Matrix(
-      this._data.map((row, r) => row.map((v, c) => v + other._data[r][c])),
-    );
-  }
-
-  /** Element-wise subtraction.  Both matrices must share the same dimensions. */
-  subtract(other: Matrix): Matrix {
-    this._checkSameDimensions(other);
-    return new Matrix(
-      this._data.map((row, r) => row.map((v, c) => v - other._data[r][c])),
-    );
-  }
-
-  /** Standard matrix multiplication.  `this.cols` must equal `other.rows`. */
-  multiply(other: Matrix): Matrix {
-    if (this._cols !== other._rows) {
-      throw new RangeError(
-        `Cannot multiply ${this._rows}×${this._cols} by ${other._rows}×${other._cols}`,
-      );
-    }
-    const result: number[][] = Array.from({ length: this._rows }, () =>
-      new Array(other._cols).fill(0),
-    );
-    for (let r = 0; r < this._rows; r++) {
-      for (let c = 0; c < other._cols; c++) {
-        let sum = 0;
-        for (let k = 0; k < this._cols; k++) {
-          sum += this._data[r][k] * other._data[k][c];
-        }
-        result[r][c] = sum;
-      }
-    }
-    return new Matrix(result);
-  }
-
-  /** Multiply every element by `scalar`. */
-  scale(scalar: number): Matrix {
-    return new Matrix(this._data.map((row) => row.map((v) => v * scalar)));
-  }
-
-  // ─── Structural Operations ──────────────────────────────────────────────────
-
-  /** Return the transpose (rows become columns). */
-  transpose(): Matrix {
-    const result: number[][] = Array.from({ length: this._cols }, (_, c) =>
-      Array.from({ length: this._rows }, (__, r) => this._data[r][c]),
-    );
-    return new Matrix(result);
+    return this.#cols;
   }
 
   /**
-   * Return the sum of the main diagonal.
-   * Only defined for square matrices.
+   * Return the element at (row, col).
+   * @param row - Zero-based row index
+   * @param col - Zero-based column index
+   */
+  get(row: number, col: number): number {
+    this.#checkBounds(row, col);
+    return this.#data[row * this.#cols + col];
+  }
+
+  /**
+   * Set the element at (row, col) to `value`.
+   * @param row   - Zero-based row index
+   * @param col   - Zero-based column index
+   * @param value - The new value
+   */
+  set(row: number, col: number, value: number): void {
+    this.#checkBounds(row, col);
+    this.#data[row * this.#cols + col] = value;
+  }
+
+  /** Return a deep copy of the matrix as a 2-D JavaScript array. */
+  toArray(): number[][] {
+    const result: number[][] = [];
+    for (let r = 0; r < this.#rows; r++) {
+      const row: number[] = [];
+      for (let c = 0; c < this.#cols; c++) {
+        row.push(this.#data[r * this.#cols + c]);
+      }
+      result.push(row);
+    }
+    return result;
+  }
+
+  // ─── Arithmetic ────────────────────────────────────────────────────────────
+
+  /**
+   * Element-wise addition.  Returns a new Matrix.
+   * Throws if dimensions do not match.
+   */
+  add(other: Matrix): Matrix {
+    this.#checkSameDims(other, 'add');
+    const result = new Matrix(this.#rows, this.#cols);
+    for (let i = 0; i < this.#data.length; i++) {
+      result.#data[i] = this.#data[i] + other.#data[i];
+    }
+    return result;
+  }
+
+  /**
+   * Element-wise subtraction.  Returns a new Matrix.
+   * Throws if dimensions do not match.
+   */
+  subtract(other: Matrix): Matrix {
+    this.#checkSameDims(other, 'subtract');
+    const result = new Matrix(this.#rows, this.#cols);
+    for (let i = 0; i < this.#data.length; i++) {
+      result.#data[i] = this.#data[i] - other.#data[i];
+    }
+    return result;
+  }
+
+  /**
+   * Matrix multiplication (this × other).  Returns a new Matrix.
+   * Requires this.cols === other.rows; throws otherwise.
+   */
+  multiply(other: Matrix): Matrix {
+    if (this.#cols !== other.#rows) {
+      throw new RangeError(
+        `Matrix.multiply: dimension mismatch — ` +
+          `(${this.#rows}×${this.#cols}) × (${other.#rows}×${other.#cols})`,
+      );
+    }
+    const result = new Matrix(this.#rows, other.#cols, 0);
+    for (let r = 0; r < this.#rows; r++) {
+      for (let k = 0; k < this.#cols; k++) {
+        const a = this.#data[r * this.#cols + k];
+        if (a === 0) continue;
+        for (let c = 0; c < other.#cols; c++) {
+          result.#data[r * other.#cols + c] += a * other.#data[k * other.#cols + c];
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Scalar (element-wise) multiplication.  Returns a new Matrix.
+   * @param scalar - The value to multiply every element by
+   */
+  scale(scalar: number): Matrix {
+    const result = new Matrix(this.#rows, this.#cols);
+    for (let i = 0; i < this.#data.length; i++) {
+      result.#data[i] = this.#data[i] * scalar;
+    }
+    return result;
+  }
+
+  /**
+   * Apply a binary function element-wise across this and `other`.
+   * Returns a new Matrix.  Throws if dimensions do not match.
+   * @param other - The right-hand operand
+   * @param fn    - Function called with (a, b) for each element pair
+   */
+  elementWise(other: Matrix, fn: (a: number, b: number) => number): Matrix {
+    this.#checkSameDims(other, 'elementWise');
+    const result = new Matrix(this.#rows, this.#cols);
+    for (let i = 0; i < this.#data.length; i++) {
+      result.#data[i] = fn(this.#data[i], other.#data[i]);
+    }
+    return result;
+  }
+
+  // ─── Transforms ────────────────────────────────────────────────────────────
+
+  /** Return the transpose of this matrix as a new Matrix. */
+  transpose(): Matrix {
+    const result = new Matrix(this.#cols, this.#rows);
+    for (let r = 0; r < this.#rows; r++) {
+      for (let c = 0; c < this.#cols; c++) {
+        result.#data[c * this.#rows + r] = this.#data[r * this.#cols + c];
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Apply a function to every element and return a new Matrix.
+   * @param fn - Called with (value, row, col) for each element
+   */
+  map(fn: (value: number, row: number, col: number) => number): Matrix {
+    const result = new Matrix(this.#rows, this.#cols);
+    for (let r = 0; r < this.#rows; r++) {
+      for (let c = 0; c < this.#cols; c++) {
+        result.#data[r * this.#cols + c] = fn(this.#data[r * this.#cols + c], r, c);
+      }
+    }
+    return result;
+  }
+
+  // ─── Properties ────────────────────────────────────────────────────────────
+
+  /**
+   * Sum of the main diagonal elements.
+   * Works for non-square matrices (uses min(rows, cols) diagonal elements).
    */
   trace(): number {
-    if (this._rows !== this._cols) {
-      throw new RangeError('trace() is only defined for square matrices');
-    }
+    const diag = Math.min(this.#rows, this.#cols);
     let sum = 0;
-    for (let i = 0; i < this._rows; i++) {
-      sum += this._data[i][i];
+    for (let i = 0; i < diag; i++) {
+      sum += this.#data[i * this.#cols + i];
     }
     return sum;
   }
 
-  // ─── Serialisation ──────────────────────────────────────────────────────────
+  /**
+   * Determinant via LU decomposition with partial pivoting.
+   * Throws for non-square matrices.
+   */
+  determinant(): number {
+    if (!this.isSquare()) {
+      throw new Error(
+        `Matrix.determinant: matrix must be square, got ${this.#rows}×${this.#cols}`,
+      );
+    }
+    const n = this.#rows;
+    if (n === 1) return this.#data[0];
+    if (n === 2) {
+      return this.#data[0] * this.#data[3] - this.#data[1] * this.#data[2];
+    }
 
-  /** Return a deep copy of the underlying 2-D array. */
-  toArray(): number[][] {
-    return this._data.map((row) => [...row]);
+    // Copy to a mutable JS array for in-place LU decomposition
+    const lu = Array.from(this.#data);
+    let sign = 1;
+
+    for (let col = 0; col < n; col++) {
+      // Partial pivoting: find the row with the largest absolute value in this column
+      let maxVal = Math.abs(lu[col * n + col]);
+      let maxRow = col;
+      for (let row = col + 1; row < n; row++) {
+        const v = Math.abs(lu[row * n + col]);
+        if (v > maxVal) {
+          maxVal = v;
+          maxRow = row;
+        }
+      }
+
+      if (maxRow !== col) {
+        // Swap rows col and maxRow
+        for (let k = 0; k < n; k++) {
+          const tmp = lu[col * n + k];
+          lu[col * n + k] = lu[maxRow * n + k];
+          lu[maxRow * n + k] = tmp;
+        }
+        sign = -sign;
+      }
+
+      if (lu[col * n + col] === 0) return 0;
+
+      for (let row = col + 1; row < n; row++) {
+        const factor = lu[row * n + col] / lu[col * n + col];
+        for (let k = col; k < n; k++) {
+          lu[row * n + k] -= factor * lu[col * n + k];
+        }
+      }
+    }
+
+    // Determinant is the product of diagonal elements × accumulated sign
+    let det = sign;
+    for (let i = 0; i < n; i++) {
+      det *= lu[i * n + i];
+    }
+    return det;
   }
 
-  // ─── Static Factories ───────────────────────────────────────────────────────
-
-  /** Create an n×n identity matrix. */
-  static identity(n: number): Matrix {
-    if (n < 1) throw new RangeError('n must be at least 1');
-    return new Matrix(
-      Array.from({ length: n }, (_, r) =>
-        Array.from({ length: n }, (__, c) => (r === c ? 1 : 0)),
-      ),
-    );
+  /** Frobenius norm: sqrt(Σ aᵢⱼ²). */
+  frobenius(): number {
+    let sum = 0;
+    for (let i = 0; i < this.#data.length; i++) {
+      sum += this.#data[i] * this.#data[i];
+    }
+    return Math.sqrt(sum);
   }
 
-  /** Create an r×c matrix filled with zeros. */
-  static zeros(r: number, c: number): Matrix {
-    if (r < 1 || c < 1) throw new RangeError('Dimensions must be at least 1');
-    return new Matrix(Array.from({ length: r }, () => new Array(c).fill(0)));
+  /** Return true if the matrix is square (rows === cols). */
+  isSquare(): boolean {
+    return this.#rows === this.#cols;
   }
 
-  /** Create an r×c matrix filled with ones. */
-  static ones(r: number, c: number): Matrix {
-    if (r < 1 || c < 1) throw new RangeError('Dimensions must be at least 1');
-    return new Matrix(Array.from({ length: r }, () => new Array(c).fill(1)));
+  /**
+   * Return true if A ≈ Aᵀ within the given epsilon.
+   * Non-square matrices are never symmetric.
+   * @param eps - Tolerance (default 1e-10)
+   */
+  isSymmetric(eps: number = 1e-10): boolean {
+    if (!this.isSquare()) return false;
+    for (let r = 0; r < this.#rows; r++) {
+      for (let c = r + 1; c < this.#cols; c++) {
+        if (Math.abs(this.#data[r * this.#cols + c] - this.#data[c * this.#cols + r]) > eps) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
-  // ─── Private Helpers ────────────────────────────────────────────────────────
+  // ─── Row / Column Operations ───────────────────────────────────────────────
 
-  private _checkBounds(r: number, c: number): void {
-    if (r < 0 || r >= this._rows || c < 0 || c >= this._cols) {
+  /**
+   * Return a copy of the given row as a plain number array.
+   * @param row - Zero-based row index
+   */
+  getRow(row: number): number[] {
+    if (row < 0 || row >= this.#rows) {
+      throw new RangeError(`Matrix.getRow: row ${row} out of bounds (0..${this.#rows - 1})`);
+    }
+    const result: number[] = [];
+    for (let c = 0; c < this.#cols; c++) {
+      result.push(this.#data[row * this.#cols + c]);
+    }
+    return result;
+  }
+
+  /**
+   * Return a copy of the given column as a plain number array.
+   * @param col - Zero-based column index
+   */
+  getCol(col: number): number[] {
+    if (col < 0 || col >= this.#cols) {
+      throw new RangeError(`Matrix.getCol: col ${col} out of bounds (0..${this.#cols - 1})`);
+    }
+    const result: number[] = [];
+    for (let r = 0; r < this.#rows; r++) {
+      result.push(this.#data[r * this.#cols + col]);
+    }
+    return result;
+  }
+
+  /**
+   * Replace all elements in the given row with `values`.
+   * @param row    - Zero-based row index
+   * @param values - Array of length cols
+   */
+  setRow(row: number, values: number[]): void {
+    if (row < 0 || row >= this.#rows) {
+      throw new RangeError(`Matrix.setRow: row ${row} out of bounds (0..${this.#rows - 1})`);
+    }
+    if (values.length !== this.#cols) {
       throw new RangeError(
-        `Index (${r}, ${c}) out of bounds for ${this._rows}×${this._cols} matrix`,
+        `Matrix.setRow: values length ${values.length} !== cols ${this.#cols}`,
+      );
+    }
+    for (let c = 0; c < this.#cols; c++) {
+      this.#data[row * this.#cols + c] = values[c];
+    }
+  }
+
+  /**
+   * Replace all elements in the given column with `values`.
+   * @param col    - Zero-based column index
+   * @param values - Array of length rows
+   */
+  setCol(col: number, values: number[]): void {
+    if (col < 0 || col >= this.#cols) {
+      throw new RangeError(`Matrix.setCol: col ${col} out of bounds (0..${this.#cols - 1})`);
+    }
+    if (values.length !== this.#rows) {
+      throw new RangeError(
+        `Matrix.setCol: values length ${values.length} !== rows ${this.#rows}`,
+      );
+    }
+    for (let r = 0; r < this.#rows; r++) {
+      this.#data[r * this.#cols + col] = values[r];
+    }
+  }
+
+  // ─── Comparison ────────────────────────────────────────────────────────────
+
+  /**
+   * Return true if this matrix equals `other` within the given epsilon.
+   * Matrices with different dimensions are never equal.
+   * @param other - Matrix to compare with
+   * @param eps   - Tolerance (default 1e-10)
+   */
+  equals(other: Matrix, eps: number = 1e-10): boolean {
+    if (this.#rows !== other.#rows || this.#cols !== other.#cols) return false;
+    for (let i = 0; i < this.#data.length; i++) {
+      if (Math.abs(this.#data[i] - other.#data[i]) > eps) return false;
+    }
+    return true;
+  }
+
+  // ─── Private Helpers ───────────────────────────────────────────────────────
+
+  #checkBounds(row: number, col: number): void {
+    if (row < 0 || row >= this.#rows || col < 0 || col >= this.#cols) {
+      throw new RangeError(
+        `Matrix: index (${row}, ${col}) out of bounds for ${this.#rows}×${this.#cols} matrix`,
       );
     }
   }
 
-  private _checkSameDimensions(other: Matrix): void {
-    if (this._rows !== other._rows || this._cols !== other._cols) {
+  #checkSameDims(other: Matrix, op: string): void {
+    if (this.#rows !== other.#rows || this.#cols !== other.#cols) {
       throw new RangeError(
-        `Dimension mismatch: ${this._rows}×${this._cols} vs ${other._rows}×${other._cols}`,
+        `Matrix.${op}: dimension mismatch — ` +
+          `(${this.#rows}×${this.#cols}) vs (${other.#rows}×${other.#cols})`,
       );
     }
   }
 }
 
-// ─── Factory Function ─────────────────────────────────────────────────────────
+// ─── Convenience Functions ────────────────────────────────────────────────────
 
-/** Convenience factory — equivalent to `new Matrix(data)`. */
-export function createMatrix(data: number[][]): Matrix {
-  return new Matrix(data);
+/**
+ * Create a new Matrix with the given dimensions and optional fill value.
+ * Equivalent to `new Matrix(rows, cols, fill)`.
+ */
+export function createMatrix(rows: number, cols: number, fill: number = 0): Matrix {
+  return new Matrix(rows, cols, fill);
+}
+
+/**
+ * Matrix multiplication: alias for `a.multiply(b)`.
+ * Returns a new Matrix representing a × b.
+ */
+export function matMul(a: Matrix, b: Matrix): Matrix {
+  return a.multiply(b);
 }

@@ -1,8 +1,20 @@
-// ─── Unit Tests: TextSearch ───────────────────────────────────────────────────
+// ─── Unit Tests: text-search ──────────────────────────────────────────────────
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { TextSearch } from '../../app/modules/text-search.js';
+import {
+  findAll,
+  kmpSearch,
+  rabinKarp,
+  fuzzyMatch,
+  levenshtein,
+  lcs,
+  longestCommonSubstring,
+  SearchIndex,
+  createSearchIndex,
+  highlight,
+  TextSearch,
+} from '../../app/modules/text-search.js';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -16,7 +28,526 @@ function makeDoc(id, overrides = {}) {
   };
 }
 
-// ─── add / size ───────────────────────────────────────────────────────────────
+// ─── findAll (Boyer-Moore-Horspool) ───────────────────────────────────────────
+
+describe('findAll', () => {
+  it('finds single occurrence', () => {
+    assert.deepEqual(findAll('hello world', 'world'), [6]);
+  });
+
+  it('finds multiple non-overlapping occurrences', () => {
+    assert.deepEqual(findAll('ababab', 'ab'), [0, 2, 4]);
+  });
+
+  it('finds pattern at the very start', () => {
+    assert.deepEqual(findAll('foobar', 'foo'), [0]);
+  });
+
+  it('finds pattern at the very end', () => {
+    assert.deepEqual(findAll('foobar', 'bar'), [3]);
+  });
+
+  it('returns empty array when pattern not found', () => {
+    assert.deepEqual(findAll('hello', 'xyz'), []);
+  });
+
+  it('is case sensitive', () => {
+    assert.deepEqual(findAll('Hello', 'hello'), []);
+    assert.deepEqual(findAll('Hello', 'Hello'), [0]);
+  });
+
+  it('empty pattern matches every position 0..n', () => {
+    const result = findAll('abc', '');
+    assert.deepEqual(result, [0, 1, 2, 3]);
+  });
+
+  it('empty text with empty pattern returns [0]', () => {
+    assert.deepEqual(findAll('', ''), [0]);
+  });
+
+  it('pattern longer than text returns empty array', () => {
+    assert.deepEqual(findAll('hi', 'hello'), []);
+  });
+
+  it('single character pattern', () => {
+    assert.deepEqual(findAll('banana', 'a'), [1, 3, 5]);
+  });
+
+  it('pattern equals text', () => {
+    assert.deepEqual(findAll('abc', 'abc'), [0]);
+  });
+});
+
+// ─── kmpSearch ───────────────────────────────────────────────────────────────
+
+describe('kmpSearch', () => {
+  it('returns index of first occurrence', () => {
+    assert.equal(kmpSearch('hello world', 'world'), 6);
+  });
+
+  it('returns -1 when not found', () => {
+    assert.equal(kmpSearch('hello', 'xyz'), -1);
+  });
+
+  it('returns first occurrence only when pattern repeats', () => {
+    assert.equal(kmpSearch('ababab', 'ab'), 0);
+  });
+
+  it('empty pattern returns 0', () => {
+    assert.equal(kmpSearch('hello', ''), 0);
+  });
+
+  it('pattern longer than text returns -1', () => {
+    assert.equal(kmpSearch('hi', 'hello'), -1);
+  });
+
+  it('finds pattern at start', () => {
+    assert.equal(kmpSearch('foobar', 'foo'), 0);
+  });
+
+  it('finds pattern at end', () => {
+    assert.equal(kmpSearch('foobar', 'bar'), 3);
+  });
+
+  it('is case sensitive', () => {
+    assert.equal(kmpSearch('Hello World', 'world'), -1);
+    assert.equal(kmpSearch('Hello World', 'World'), 6);
+  });
+
+  it('pattern with repeated prefix (KMP table edge case)', () => {
+    assert.equal(kmpSearch('aabaabaab', 'aab'), 0);
+  });
+
+  it('text equal to pattern', () => {
+    assert.equal(kmpSearch('abc', 'abc'), 0);
+  });
+});
+
+// ─── rabinKarp ───────────────────────────────────────────────────────────────
+
+describe('rabinKarp', () => {
+  it('finds all occurrences', () => {
+    assert.deepEqual(rabinKarp('ababab', 'ab'), [0, 2, 4]);
+  });
+
+  it('returns empty array when no match', () => {
+    assert.deepEqual(rabinKarp('hello', 'xyz'), []);
+  });
+
+  it('empty pattern returns all positions', () => {
+    const result = rabinKarp('abc', '');
+    assert.deepEqual(result, [0, 1, 2, 3]);
+  });
+
+  it('pattern longer than text returns empty', () => {
+    assert.deepEqual(rabinKarp('hi', 'hello'), []);
+  });
+
+  it('single character pattern', () => {
+    assert.deepEqual(rabinKarp('banana', 'a'), [1, 3, 5]);
+  });
+
+  it('pattern equals text', () => {
+    assert.deepEqual(rabinKarp('abc', 'abc'), [0]);
+  });
+
+  it('is case sensitive', () => {
+    assert.deepEqual(rabinKarp('Hello', 'hello'), []);
+  });
+
+  it('multiple occurrences in longer text', () => {
+    const result = rabinKarp('the cat sat on the mat with the cat', 'cat');
+    assert.deepEqual(result, [4, 32]);
+  });
+});
+
+// ─── fuzzyMatch ───────────────────────────────────────────────────────────────
+
+describe('fuzzyMatch', () => {
+  it('exact subsequence match returns true', () => {
+    assert.equal(fuzzyMatch('hello world', 'hlo'), true);
+  });
+
+  it('full string is a subsequence of itself', () => {
+    assert.equal(fuzzyMatch('abc', 'abc'), true);
+  });
+
+  it('non-match returns false', () => {
+    assert.equal(fuzzyMatch('hello', 'xyz'), false);
+  });
+
+  it('empty pattern always matches', () => {
+    assert.equal(fuzzyMatch('hello', ''), true);
+    assert.equal(fuzzyMatch('', ''), true);
+  });
+
+  it('non-empty pattern against empty text returns false', () => {
+    assert.equal(fuzzyMatch('', 'a'), false);
+  });
+
+  it('subsequence with skips', () => {
+    assert.equal(fuzzyMatch('subsequence', 'sub'), true);
+    assert.equal(fuzzyMatch('subsequence', 'sqe'), true);
+  });
+
+  it('characters in wrong order fails', () => {
+    assert.equal(fuzzyMatch('abc', 'cba'), false);
+  });
+
+  it('is case sensitive', () => {
+    assert.equal(fuzzyMatch('Hello', 'hello'), false);
+    assert.equal(fuzzyMatch('Hello', 'Hello'), true);
+  });
+});
+
+// ─── levenshtein ──────────────────────────────────────────────────────────────
+
+describe('levenshtein', () => {
+  it('same string has distance 0', () => {
+    assert.equal(levenshtein('abc', 'abc'), 0);
+  });
+
+  it('empty strings have distance 0', () => {
+    assert.equal(levenshtein('', ''), 0);
+  });
+
+  it('insert one character', () => {
+    assert.equal(levenshtein('cat', 'cats'), 1);
+  });
+
+  it('delete one character', () => {
+    assert.equal(levenshtein('cats', 'cat'), 1);
+  });
+
+  it('substitute one character', () => {
+    assert.equal(levenshtein('cat', 'bat'), 1);
+  });
+
+  it('completely different strings', () => {
+    assert.equal(levenshtein('abc', 'xyz'), 3);
+  });
+
+  it('empty a to non-empty b equals b length', () => {
+    assert.equal(levenshtein('', 'hello'), 5);
+  });
+
+  it('non-empty a to empty b equals a length', () => {
+    assert.equal(levenshtein('hello', ''), 5);
+  });
+
+  it('is symmetric', () => {
+    assert.equal(levenshtein('kitten', 'sitting'), levenshtein('sitting', 'kitten'));
+  });
+
+  it('kitten → sitting classic example', () => {
+    assert.equal(levenshtein('kitten', 'sitting'), 3);
+  });
+
+  it('sunday → saturday', () => {
+    assert.equal(levenshtein('saturday', 'sunday'), 3);
+  });
+});
+
+// ─── lcs ─────────────────────────────────────────────────────────────────────
+
+describe('lcs', () => {
+  it('identical strings return full length', () => {
+    assert.equal(lcs('abcd', 'abcd'), 4);
+  });
+
+  it('empty string returns 0', () => {
+    assert.equal(lcs('', 'abc'), 0);
+    assert.equal(lcs('abc', ''), 0);
+    assert.equal(lcs('', ''), 0);
+  });
+
+  it('no common characters returns 0', () => {
+    assert.equal(lcs('abc', 'xyz'), 0);
+  });
+
+  it('classic ABCBDAB / BDCAB example', () => {
+    assert.equal(lcs('ABCBDAB', 'BDCAB'), 4);
+  });
+
+  it('subsequence within longer string', () => {
+    assert.equal(lcs('abc', 'aXbYc'), 3);
+  });
+
+  it('is symmetric', () => {
+    assert.equal(lcs('abcde', 'ace'), lcs('ace', 'abcde'));
+  });
+
+  it('single common character', () => {
+    assert.equal(lcs('a', 'a'), 1);
+    assert.equal(lcs('a', 'b'), 0);
+  });
+});
+
+// ─── longestCommonSubstring ───────────────────────────────────────────────────
+
+describe('longestCommonSubstring', () => {
+  it('identical strings return full length', () => {
+    assert.equal(longestCommonSubstring('abcde', 'abcde'), 5);
+  });
+
+  it('no common substring returns 0', () => {
+    assert.equal(longestCommonSubstring('abc', 'xyz'), 0);
+  });
+
+  it('empty inputs return 0', () => {
+    assert.equal(longestCommonSubstring('', 'abc'), 0);
+    assert.equal(longestCommonSubstring('abc', ''), 0);
+    assert.equal(longestCommonSubstring('', ''), 0);
+  });
+
+  it('overlapping strings', () => {
+    assert.equal(longestCommonSubstring('abcde', 'cdefg'), 3); // 'cde'
+  });
+
+  it('substring at start', () => {
+    assert.equal(longestCommonSubstring('hello world', 'hello there'), 6); // 'hello '
+  });
+
+  it('single matching character', () => {
+    assert.equal(longestCommonSubstring('abc', 'xbz'), 1);
+  });
+
+  it('is symmetric', () => {
+    assert.equal(
+      longestCommonSubstring('abcdef', 'cdefgh'),
+      longestCommonSubstring('cdefgh', 'abcdef'),
+    );
+  });
+});
+
+// ─── SearchIndex ──────────────────────────────────────────────────────────────
+
+describe('SearchIndex – addDocument / documentCount', () => {
+  it('starts empty', () => {
+    const idx = new SearchIndex();
+    assert.equal(idx.documentCount, 0);
+  });
+
+  it('adds a document and increments count', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'hello world');
+    assert.equal(idx.documentCount, 1);
+  });
+
+  it('re-adding same id replaces previous document', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'foo bar');
+    idx.addDocument('a', 'baz qux');
+    assert.equal(idx.documentCount, 1);
+    assert.deepEqual(idx.search('foo'), []);
+    assert.deepEqual(idx.search('baz'), ['a']);
+  });
+
+  it('multiple documents are counted', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('1', 'alpha');
+    idx.addDocument('2', 'beta');
+    idx.addDocument('3', 'gamma');
+    assert.equal(idx.documentCount, 3);
+  });
+});
+
+describe('SearchIndex – search (AND)', () => {
+  it('finds doc containing all query terms', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'the quick brown fox');
+    idx.addDocument('b', 'the lazy dog');
+    const results = idx.search('the fox');
+    assert.deepEqual(results, ['a']);
+  });
+
+  it('returns empty for blank query', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'hello');
+    assert.deepEqual(idx.search(''), []);
+    assert.deepEqual(idx.search('   '), []);
+  });
+
+  it('returns empty when one term is missing', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'hello world');
+    assert.deepEqual(idx.search('hello xyz'), []);
+  });
+
+  it('AND semantics: both terms must be present', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('1', 'apple banana');
+    idx.addDocument('2', 'apple cherry');
+    idx.addDocument('3', 'banana cherry');
+    const results = idx.search('apple banana');
+    assert.deepEqual(results, ['1']);
+  });
+
+  it('is case-insensitive', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'Hello World');
+    assert.ok(idx.search('hello').includes('a'));
+    assert.ok(idx.search('WORLD').includes('a'));
+  });
+});
+
+describe('SearchIndex – searchAny (OR)', () => {
+  it('returns docs containing any query term', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('1', 'apple pie');
+    idx.addDocument('2', 'cherry cake');
+    idx.addDocument('3', 'lemon tart');
+    const results = idx.searchAny('apple cherry');
+    assert.ok(results.includes('1'));
+    assert.ok(results.includes('2'));
+    assert.ok(!results.includes('3'));
+  });
+
+  it('returns empty for blank query', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'hello');
+    assert.deepEqual(idx.searchAny(''), []);
+  });
+
+  it('OR returns more results than AND', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('1', 'alpha beta');
+    idx.addDocument('2', 'alpha gamma');
+    idx.addDocument('3', 'delta epsilon');
+    const andResults = idx.search('alpha gamma');
+    const orResults = idx.searchAny('alpha gamma');
+    assert.ok(orResults.length >= andResults.length);
+  });
+
+  it('is case-insensitive', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'Hello World');
+    assert.ok(idx.searchAny('HELLO').includes('a'));
+  });
+});
+
+describe('SearchIndex – removeDocument', () => {
+  it('removes document and decrements count', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'hello world');
+    idx.removeDocument('a');
+    assert.equal(idx.documentCount, 0);
+  });
+
+  it('removed document no longer appears in search', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'hello world');
+    idx.addDocument('b', 'hello there');
+    idx.removeDocument('a');
+    const results = idx.search('hello');
+    assert.ok(!results.includes('a'));
+    assert.ok(results.includes('b'));
+  });
+
+  it('removing non-existent id is a no-op', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('a', 'hello');
+    idx.removeDocument('nonexistent');
+    assert.equal(idx.documentCount, 1);
+  });
+});
+
+describe('SearchIndex – clear', () => {
+  it('empties the index', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('1', 'apple');
+    idx.addDocument('2', 'banana');
+    idx.clear();
+    assert.equal(idx.documentCount, 0);
+  });
+
+  it('search returns nothing after clear', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('1', 'hello');
+    idx.clear();
+    assert.deepEqual(idx.search('hello'), []);
+  });
+
+  it('can add documents after clear', () => {
+    const idx = new SearchIndex();
+    idx.addDocument('1', 'old content');
+    idx.clear();
+    idx.addDocument('2', 'new content');
+    assert.equal(idx.documentCount, 1);
+    assert.ok(idx.search('new').includes('2'));
+  });
+});
+
+// ─── createSearchIndex factory ────────────────────────────────────────────────
+
+describe('createSearchIndex', () => {
+  it('returns a SearchIndex instance', () => {
+    const idx = createSearchIndex();
+    assert.ok(idx instanceof SearchIndex);
+  });
+
+  it('produced instance works correctly', () => {
+    const idx = createSearchIndex();
+    idx.addDocument('doc1', 'hello world');
+    assert.equal(idx.documentCount, 1);
+    assert.ok(idx.search('hello').includes('doc1'));
+  });
+
+  it('each call returns a fresh index', () => {
+    const a = createSearchIndex();
+    const b = createSearchIndex();
+    a.addDocument('x', 'test');
+    assert.equal(b.documentCount, 0);
+  });
+});
+
+// ─── highlight ────────────────────────────────────────────────────────────────
+
+describe('highlight', () => {
+  it('wraps matches in <mark> by default', () => {
+    assert.equal(highlight('hello world', 'world'), 'hello <mark>world</mark>');
+  });
+
+  it('wraps all occurrences', () => {
+    assert.equal(
+      highlight('cat and cat', 'cat'),
+      '<mark>cat</mark> and <mark>cat</mark>',
+    );
+  });
+
+  it('uses custom tag when provided', () => {
+    assert.equal(highlight('hello', 'hello', 'strong'), '<strong>hello</strong>');
+  });
+
+  it('returns original text when pattern not found', () => {
+    assert.equal(highlight('hello world', 'xyz'), 'hello world');
+  });
+
+  it('returns original text for empty pattern', () => {
+    assert.equal(highlight('hello', ''), 'hello');
+  });
+
+  it('is case sensitive', () => {
+    assert.equal(highlight('Hello World', 'hello'), 'Hello World');
+    assert.equal(highlight('Hello World', 'Hello'), '<mark>Hello</mark> World');
+  });
+
+  it('handles pattern at start and end', () => {
+    assert.equal(highlight('xhellox', 'x'), '<mark>x</mark>hello<mark>x</mark>');
+  });
+
+  it('preserves text outside matches', () => {
+    const result = highlight('the quick brown fox', 'quick');
+    assert.ok(result.includes('the '));
+    assert.ok(result.includes(' brown fox'));
+  });
+
+  it('empty text returns empty string', () => {
+    assert.equal(highlight('', 'abc'), '');
+  });
+});
+
+// ─── TextSearch (legacy scoring engine – preserved tests) ─────────────────────
 
 describe('TextSearch – add / size', () => {
   it('starts empty', () => {
@@ -46,8 +577,6 @@ describe('TextSearch – add / size', () => {
     assert.equal(results[0].document.content, 'new');
   });
 });
-
-// ─── search – basic ───────────────────────────────────────────────────────────
 
 describe('TextSearch – search basic', () => {
   it('returns empty array for empty query', () => {
@@ -80,215 +609,6 @@ describe('TextSearch – search basic', () => {
   });
 });
 
-// ─── scoring: title matches score higher ──────────────────────────────────────
-
-describe('TextSearch – scoring', () => {
-  it('title match scores higher than content-only match', () => {
-    const ts = new TextSearch();
-    ts.add({ id: 'title-match', title: 'javascript tutorial', content: 'other stuff here' });
-    ts.add({ id: 'content-match', title: 'unrelated heading', content: 'learn javascript today' });
-    const results = ts.search('javascript');
-    assert.equal(results.length, 2);
-    assert.equal(results[0].id, 'title-match');
-  });
-
-  it('tag match scores higher than single content occurrence', () => {
-    const ts = new TextSearch();
-    ts.add({ id: 'tag-doc', content: 'some text', tags: ['keyword'] });
-    ts.add({ id: 'content-doc', content: 'keyword appears here once' });
-    const results = ts.search('keyword');
-    assert.equal(results.length, 2);
-    assert.equal(results[0].id, 'tag-doc');
-  });
-
-  it('more occurrences yield higher score', () => {
-    const ts = new TextSearch();
-    ts.add({ id: 'few', content: 'cat sat on mat' });
-    ts.add({ id: 'many', content: 'cat cat cat cat cat' });
-    const results = ts.search('cat');
-    assert.equal(results[0].id, 'many');
-  });
-
-  it('score is a positive integer', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'hello world' });
-    const [result] = ts.search('hello');
-    assert.ok(result.score > 0);
-  });
-});
-
-// ─── highlights ───────────────────────────────────────────────────────────────
-
-describe('TextSearch – highlights', () => {
-  it('highlights array is non-empty when match is found', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'The quick brown fox jumps over the lazy dog' });
-    const [result] = ts.search('fox');
-    assert.ok(result.highlights.length > 0);
-  });
-
-  it('each highlight snippet contains the matched term', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'I love apples and apples love me' });
-    const [result] = ts.search('apples');
-    for (const snippet of result.highlights) {
-      assert.ok(snippet.toLowerCase().includes('apples'));
-    }
-  });
-
-  it('returns at most 3 highlights', () => {
-    const ts = new TextSearch();
-    // 5 occurrences scattered far apart
-    const content = Array.from({ length: 5 }, (_, i) =>
-      'x'.repeat(100) + 'needle' + 'x'.repeat(100),
-    ).join(' ');
-    ts.add({ id: '1', content });
-    const [result] = ts.search('needle');
-    assert.ok(result.highlights.length <= 3);
-  });
-
-  it('highlight snippet is shorter than full content for long text', () => {
-    const ts = new TextSearch();
-    const content = 'a'.repeat(200) + ' keyword ' + 'b'.repeat(200);
-    ts.add({ id: '1', content });
-    const [result] = ts.search('keyword');
-    assert.ok(result.highlights[0].length < content.length);
-  });
-});
-
-// ─── remove ───────────────────────────────────────────────────────────────────
-
-describe('TextSearch – remove', () => {
-  it('removes document from index', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'hello world' });
-    ts.remove('1');
-    assert.equal(ts.size, 0);
-    assert.equal(ts.search('hello').length, 0);
-  });
-
-  it('removing non-existent id is a no-op', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'hello' });
-    ts.remove('999');
-    assert.equal(ts.size, 1);
-  });
-});
-
-// ─── update ───────────────────────────────────────────────────────────────────
-
-describe('TextSearch – update', () => {
-  it('replaces existing document content', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'old content here' });
-    ts.update({ id: '1', content: 'brand new content' });
-    assert.equal(ts.search('old').length, 0);
-    assert.equal(ts.search('brand').length, 1);
-  });
-
-  it('size does not increase after update', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'original' });
-    ts.update({ id: '1', content: 'updated' });
-    assert.equal(ts.size, 1);
-  });
-});
-
-// ─── wholeWord option ─────────────────────────────────────────────────────────
-
-describe('TextSearch – wholeWord option', () => {
-  it('whole-word search does not match substring', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'typescript is typed' });
-    const results = ts.search('type', { wholeWord: true });
-    assert.equal(results.length, 0);
-  });
-
-  it('whole-word search matches standalone word', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'I love cats and cat food' });
-    const results = ts.search('cat', { wholeWord: true });
-    assert.equal(results.length, 1);
-    assert.ok(results[0].score > 0);
-  });
-
-  it('without wholeWord, substring matches', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'typescript is great' });
-    assert.equal(ts.search('type').length, 1);
-  });
-});
-
-// ─── caseSensitive option ─────────────────────────────────────────────────────
-
-describe('TextSearch – caseSensitive option', () => {
-  it('case-insensitive by default', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'Hello World' });
-    assert.equal(ts.search('hello').length, 1);
-    assert.equal(ts.search('WORLD').length, 1);
-  });
-
-  it('case-sensitive misses when case differs', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'Hello World' });
-    assert.equal(ts.search('hello', { caseSensitive: true }).length, 0);
-    assert.equal(ts.search('Hello', { caseSensitive: true }).length, 1);
-  });
-
-  it('case-sensitive title search', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', title: 'TypeScript Guide', content: 'nothing here' });
-    assert.equal(ts.search('typescript', { caseSensitive: true }).length, 0);
-    assert.equal(ts.search('TypeScript', { caseSensitive: true }).length, 1);
-  });
-});
-
-// ─── limit option ─────────────────────────────────────────────────────────────
-
-describe('TextSearch – limit option', () => {
-  it('default limit is 20', () => {
-    const ts = new TextSearch();
-    for (let i = 0; i < 25; i++) {
-      ts.add({ id: String(i), content: 'common word appears here' });
-    }
-    assert.ok(ts.search('common').length <= 20);
-  });
-
-  it('respects custom limit', () => {
-    const ts = new TextSearch();
-    for (let i = 0; i < 10; i++) {
-      ts.add({ id: String(i), content: `target document ${i}` });
-    }
-    const results = ts.search('target', { limit: 3 });
-    assert.equal(results.length, 3);
-  });
-});
-
-// ─── minScore option ──────────────────────────────────────────────────────────
-
-describe('TextSearch – minScore option', () => {
-  it('filters out results below minScore', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'word appears once here' });
-    ts.add({ id: '2', content: 'word word word word word' });
-    // Score for id=1 is 1; score for id=2 is 5
-    const results = ts.search('word', { minScore: 3 });
-    assert.ok(results.every((r) => r.score >= 3));
-    assert.ok(results.some((r) => r.id === '2'));
-    assert.ok(!results.some((r) => r.id === '1'));
-  });
-
-  it('returns all results when minScore is 0', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'alpha' });
-    ts.add({ id: '2', content: 'alpha alpha' });
-    assert.equal(ts.search('alpha', { minScore: 0 }).length, 2);
-  });
-});
-
-// ─── clear ────────────────────────────────────────────────────────────────────
-
 describe('TextSearch – clear', () => {
   it('empties the index', () => {
     const ts = new TextSearch();
@@ -302,14 +622,5 @@ describe('TextSearch – clear', () => {
     ts.add({ id: '1', content: 'hello' });
     ts.clear();
     assert.equal(ts.search('hello').length, 0);
-  });
-
-  it('can add documents after clear', () => {
-    const ts = new TextSearch();
-    ts.add({ id: '1', content: 'first' });
-    ts.clear();
-    ts.add({ id: '2', content: 'second' });
-    assert.equal(ts.size, 1);
-    assert.equal(ts.search('second').length, 1);
   });
 });
