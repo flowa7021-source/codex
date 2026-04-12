@@ -1,334 +1,443 @@
-// ─── Unit Tests: pipeline ─────────────────────────────────────────────────────
+// ─── Unit Tests: Pipeline ─────────────────────────────────────────────────────
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-
 import {
-  pipeline,
   Pipeline,
-  asyncPipeline,
   AsyncPipeline,
-  compose,
-  pipeThrough,
+  pipeline,
+  asyncPipeline,
+  pipeValue,
 } from '../../app/modules/pipeline.js';
 
-// ─── pipeline() factory ───────────────────────────────────────────────────────
+// ─── Pipeline basic pipe() and execute() ─────────────────────────────────────
 
-describe('pipeline()', () => {
-  it('creates a Pipeline with the initial value', () => {
-    const p = pipeline(42);
-    assert.ok(p instanceof Pipeline);
-    assert.equal(p.value(), 42);
+describe('Pipeline – basic pipe() and execute()', () => {
+  it('execute() returns the input unchanged with no steps', () => {
+    const p = new Pipeline();
+    assert.equal(p.execute(42), 42);
   });
 
-  it('works with string values', () => {
-    const p = pipeline('hello');
-    assert.equal(p.value(), 'hello');
-  });
-
-  it('works with object values', () => {
-    const obj = { a: 1 };
-    const p = pipeline(obj);
-    assert.equal(p.value(), obj);
-  });
-});
-
-// ─── Pipeline.pipe() ──────────────────────────────────────────────────────────
-
-describe('Pipeline.pipe()', () => {
-  it('transforms the value with a function', () => {
-    const result = pipeline(5).pipe((n) => n * 2).value();
+  it('pipe() transforms value with a single function', () => {
+    const result = new Pipeline().pipe((n) => n * 2).execute(5);
     assert.equal(result, 10);
   });
 
-  it('returns a new Pipeline instance', () => {
-    const p1 = pipeline(1);
-    const p2 = p1.pipe((n) => n + 1);
+  it('execute() returns string input unchanged', () => {
+    const p = new Pipeline();
+    assert.equal(p.execute('hello'), 'hello');
+  });
+
+  it('pipe() can change the type of the value', () => {
+    const result = new Pipeline().pipe((n) => String(n)).execute(42);
+    assert.equal(result, '42');
+  });
+
+  it('run() is an alias for execute()', () => {
+    const p = new Pipeline().pipe((n) => n + 1);
+    assert.equal(p.run(9), p.execute(9));
+  });
+
+  it('run() returns the correct value', () => {
+    const result = new Pipeline().pipe((n) => n * 3).run(7);
+    assert.equal(result, 21);
+  });
+
+  it('pipe() returns a new Pipeline instance', () => {
+    const p1 = new Pipeline();
+    const p2 = p1.pipe((n) => n);
     assert.ok(p2 instanceof Pipeline);
     assert.notEqual(p1, p2);
   });
 
-  it('can change the type of the value', () => {
-    const result = pipeline(42).pipe((n) => String(n)).value();
-    assert.equal(result, '42');
+  it('original pipeline is unaffected when a derived one is created', () => {
+    const p1 = new Pipeline().pipe((n) => n + 1);
+    const p2 = p1.pipe((n) => n * 100);
+    assert.equal(p1.execute(5), 6);
+    assert.equal(p2.execute(5), 600);
   });
 });
 
-// ─── Pipeline.value() ─────────────────────────────────────────────────────────
+// ─── Pipeline multiple steps (composition) ───────────────────────────────────
 
-describe('Pipeline.value()', () => {
-  it('returns the current wrapped value', () => {
-    assert.equal(pipeline(99).value(), 99);
+describe('Pipeline – multiple steps', () => {
+  it('chains two pipe steps correctly', () => {
+    const result = new Pipeline()
+      .pipe((n) => n + 1)
+      .pipe((n) => n * 2)
+      .execute(3);
+    assert.equal(result, 8);
   });
 
-  it('returns the value after transforms', () => {
-    const p = pipeline(10).pipe((n) => n + 5).pipe((n) => n * 2);
-    assert.equal(p.value(), 30);
+  it('chains three pipe steps correctly', () => {
+    const result = new Pipeline()
+      .pipe((n) => n + 1)
+      .pipe((n) => n * 3)
+      .pipe((n) => n - 1)
+      .execute(1);
+    assert.equal(result, 5);
+  });
+
+  it('map() over array produces mapped results', () => {
+    const result = new Pipeline()
+      .map((n) => n * 2)
+      .execute([1, 2, 3]);
+    assert.deepEqual(result, [2, 4, 6]);
+  });
+
+  it('filter() removes items that fail the predicate', () => {
+    const result = new Pipeline()
+      .filter((n) => n > 2)
+      .execute([1, 2, 3, 4]);
+    assert.deepEqual(result, [3, 4]);
+  });
+
+  it('pipe after map transforms the whole array', () => {
+    const result = new Pipeline()
+      .map((n) => n * 2)
+      .pipe((arr) => arr.length)
+      .execute([1, 2, 3]);
+    assert.equal(result, 3);
+  });
+
+  it('map() wraps scalar in array and maps it', () => {
+    const result = new Pipeline()
+      .map((n) => n + 10)
+      .execute(5);
+    assert.deepEqual(result, [15]);
+  });
+
+  it('filter() passes scalar value through unchanged', () => {
+    const result = new Pipeline()
+      .filter(() => false)
+      .execute(42);
+    assert.equal(result, 42);
   });
 });
 
-// ─── Pipeline.when() ──────────────────────────────────────────────────────────
+// ─── Pipeline tap() ───────────────────────────────────────────────────────────
 
-describe('Pipeline.when()', () => {
-  it('applies transform when condition is true (boolean)', () => {
-    const result = pipeline(10).when(true, (n) => n * 2).value();
-    assert.equal(result, 20);
+describe('Pipeline – tap()', () => {
+  it('does not change the value', () => {
+    const result = new Pipeline().tap((_n) => 9999).execute(7);
+    assert.equal(result, 7);
   });
 
-  it('skips transform when condition is false (boolean)', () => {
-    const result = pipeline(10).when(false, (n) => n * 2).value();
-    assert.equal(result, 10);
-  });
-
-  it('applies transform when predicate returns true', () => {
-    const result = pipeline(10).when((n) => n > 5, (n) => n + 1).value();
-    assert.equal(result, 11);
-  });
-
-  it('skips transform when predicate returns false', () => {
-    const result = pipeline(10).when((n) => n > 100, (n) => n + 1).value();
-    assert.equal(result, 10);
-  });
-
-  it('predicate receives the current value', () => {
-    let seen;
-    pipeline(42).when((n) => { seen = n; return false; }, (n) => n);
-    assert.equal(seen, 42);
-  });
-});
-
-// ─── Pipeline.tap() ───────────────────────────────────────────────────────────
-
-describe('Pipeline.tap()', () => {
   it('calls the side-effect function', () => {
     let called = false;
-    pipeline(7).tap(() => { called = true; });
+    new Pipeline().tap(() => { called = true; }).execute(1);
     assert.ok(called);
-  });
-
-  it('does not change the value', () => {
-    const result = pipeline(7).tap((n) => n * 100).value();
-    assert.equal(result, 7);
   });
 
   it('passes the current value to the side-effect', () => {
     let seen;
-    pipeline(55).tap((n) => { seen = n; });
+    new Pipeline().tap((n) => { seen = n; }).execute(55);
     assert.equal(seen, 55);
   });
 
-  it('returns the same Pipeline type', () => {
-    const p = pipeline(1).tap(() => {});
+  it('returns Pipeline instance', () => {
+    const p = new Pipeline().tap(() => {});
     assert.ok(p instanceof Pipeline);
+  });
+
+  it('side effect sees the value after prior pipe steps', () => {
+    let seen;
+    new Pipeline()
+      .pipe((n) => n * 10)
+      .tap((n) => { seen = n; })
+      .execute(3);
+    assert.equal(seen, 30);
+  });
+
+  it('multiple taps all fire in order', () => {
+    const log = [];
+    new Pipeline()
+      .tap((n) => log.push(n))
+      .pipe((n) => n + 1)
+      .tap((n) => log.push(n))
+      .pipe((n) => n + 1)
+      .tap((n) => log.push(n))
+      .execute(0);
+    assert.deepEqual(log, [0, 1, 2]);
   });
 });
 
-// ─── Chaining ────────────────────────────────────────────────────────────────
+// ─── Pipeline catch() ────────────────────────────────────────────────────────
 
-describe('Pipeline chaining', () => {
-  it('chains multiple pipes and produces the correct result', () => {
-    const result = pipeline(1)
-      .pipe((n) => n + 1)   // 2
-      .pipe((n) => n * 3)   // 6
-      .pipe((n) => n - 1)   // 5
-      .value();
+describe('Pipeline – catch()', () => {
+  it('recovers from a thrown error', () => {
+    const result = new Pipeline()
+      .pipe(() => { throw new Error('boom'); })
+      .catch((err) => `caught: ${err.message}`)
+      .execute(1);
+    assert.equal(result, 'caught: boom');
+  });
+
+  it('passes through cleanly when no error is thrown', () => {
+    const result = new Pipeline()
+      .pipe((n) => n * 2)
+      .catch((err) => `error: ${err.message}`)
+      .execute(5);
+    assert.equal(result, 10);
+  });
+
+  it('error in second step is caught', () => {
+    const result = new Pipeline()
+      .pipe((n) => n + 1)
+      .pipe(() => { throw new Error('step2'); })
+      .catch((err) => err.message)
+      .execute(0);
+    assert.equal(result, 'step2');
+  });
+
+  it('throws when no catch and step throws', () => {
+    const p = new Pipeline().pipe(() => { throw new Error('uncaught'); });
+    assert.throws(() => p.execute(0), /uncaught/);
+  });
+
+  it('catch handler receives the Error object', () => {
+    let caughtErr;
+    new Pipeline()
+      .pipe(() => { throw new Error('test error'); })
+      .catch((err) => { caughtErr = err; return null; })
+      .execute(0);
+    assert.ok(caughtErr instanceof Error);
+    assert.equal(caughtErr.message, 'test error');
+  });
+});
+
+// ─── AsyncPipeline with async steps ──────────────────────────────────────────
+
+describe('AsyncPipeline – async steps', () => {
+  it('execute() with no steps returns input', async () => {
+    const result = await new AsyncPipeline().execute(42);
+    assert.equal(result, 42);
+  });
+
+  it('pipe() with an async function', async () => {
+    const result = await new AsyncPipeline()
+      .pipe(async (n) => n * 2)
+      .execute(5);
+    assert.equal(result, 10);
+  });
+
+  it('pipe() with a sync function', async () => {
+    const result = await new AsyncPipeline()
+      .pipe((n) => n + 10)
+      .execute(5);
+    assert.equal(result, 15);
+  });
+
+  it('run() is an alias for execute()', async () => {
+    const p = new AsyncPipeline().pipe(async (n) => n + 1);
+    assert.equal(await p.run(9), await p.execute(9));
+  });
+
+  it('map() resolves async mapper over array', async () => {
+    const result = await new AsyncPipeline()
+      .map(async (n) => n * 3)
+      .execute([1, 2, 3]);
+    assert.deepEqual(result, [3, 6, 9]);
+  });
+
+  it('filter() resolves async predicate over array', async () => {
+    const result = await new AsyncPipeline()
+      .filter(async (n) => n % 2 === 0)
+      .execute([1, 2, 3, 4]);
+    assert.deepEqual(result, [2, 4]);
+  });
+});
+
+// ─── AsyncPipeline multiple async steps ──────────────────────────────────────
+
+describe('AsyncPipeline – multiple async steps', () => {
+  it('chains two async pipe steps', async () => {
+    const result = await new AsyncPipeline()
+      .pipe(async (n) => n + 1)
+      .pipe(async (n) => n * 2)
+      .execute(3);
+    assert.equal(result, 8);
+  });
+
+  it('chains three async and sync steps', async () => {
+    const result = await new AsyncPipeline()
+      .pipe((n) => n + 1)
+      .pipe(async (n) => n * 3)
+      .pipe((n) => n - 1)
+      .execute(1);
     assert.equal(result, 5);
   });
 
-  it('chains pipe, when, and tap together', () => {
-    const log = [];
-    const result = pipeline(2)
-      .pipe((n) => n * 10)          // 20
-      .tap((n) => log.push(n))      // side effect: [20]
-      .when(true, (n) => n + 5)     // 25
-      .when(false, (n) => n * 100)  // skipped
-      .pipe((n) => n - 5)           // 20
-      .value();
-    assert.equal(result, 20);
-    assert.deepEqual(log, [20]);
+  it('tap() runs side effect and passes value through', async () => {
+    let seen;
+    const result = await new AsyncPipeline()
+      .tap(async (n) => { seen = n; })
+      .execute(99);
+    assert.equal(result, 99);
+    assert.equal(seen, 99);
   });
 
-  it('preserves intermediate values across chain steps', () => {
-    const steps = [];
-    pipeline(0)
-      .tap((n) => steps.push(n))
-      .pipe((n) => n + 1)
-      .tap((n) => steps.push(n))
-      .pipe((n) => n + 1)
-      .tap((n) => steps.push(n));
-    assert.deepEqual(steps, [0, 1, 2]);
+  it('tap() awaits the async side effect before proceeding', async () => {
+    const log = [];
+    await new AsyncPipeline()
+      .tap(async () => { log.push('tap'); })
+      .pipe((n) => { log.push('pipe'); return n; })
+      .execute(1);
+    assert.deepEqual(log, ['tap', 'pipe']);
+  });
+
+  it('filter() scalar passes through unchanged', async () => {
+    const result = await new AsyncPipeline()
+      .filter(async () => false)
+      .execute(42);
+    assert.equal(result, 42);
+  });
+
+  it('map() then pipe() chains correctly', async () => {
+    const result = await new AsyncPipeline()
+      .map(async (n) => n * 2)
+      .pipe((arr) => arr.reduce((a, b) => a + b, 0))
+      .execute([1, 2, 3]);
+    assert.equal(result, 12);
+  });
+});
+
+// ─── AsyncPipeline catch() ────────────────────────────────────────────────────
+
+describe('AsyncPipeline – catch()', () => {
+  it('recovers from async error', async () => {
+    const result = await new AsyncPipeline()
+      .pipe(async () => { throw new Error('async boom'); })
+      .catch(async (err) => `caught: ${err.message}`)
+      .execute(1);
+    assert.equal(result, 'caught: async boom');
+  });
+
+  it('passes through cleanly when no error occurs', async () => {
+    const result = await new AsyncPipeline()
+      .pipe(async (n) => n * 2)
+      .catch(async (err) => `error: ${err.message}`)
+      .execute(5);
+    assert.equal(result, 10);
+  });
+
+  it('catches error thrown in second step', async () => {
+    const result = await new AsyncPipeline()
+      .pipe(async (n) => n + 1)
+      .pipe(async () => { throw new Error('step2 async'); })
+      .catch((err) => err.message)
+      .execute(0);
+    assert.equal(result, 'step2 async');
+  });
+
+  it('rejects when no catch and step throws', async () => {
+    const p = new AsyncPipeline().pipe(async () => { throw new Error('no catch'); });
+    await assert.rejects(() => p.execute(0), /no catch/);
+  });
+
+  it('catch handler receives the Error object', async () => {
+    let caughtErr;
+    await new AsyncPipeline()
+      .pipe(async () => { throw new Error('async error obj'); })
+      .catch(async (err) => { caughtErr = err; return null; })
+      .execute(0);
+    assert.ok(caughtErr instanceof Error);
+    assert.equal(caughtErr.message, 'async error obj');
+  });
+});
+
+// ─── pipeline() factory ───────────────────────────────────────────────────────
+
+describe('pipeline() factory', () => {
+  it('returns a Pipeline instance', () => {
+    const p = pipeline();
+    assert.ok(p instanceof Pipeline);
+  });
+
+  it('pipeline can execute immediately', () => {
+    assert.equal(pipeline().execute(99), 99);
+  });
+
+  it('pipeline factory with pipe and execute', () => {
+    const result = pipeline().pipe((n) => n * 2).execute(6);
+    assert.equal(result, 12);
+  });
+
+  it('pipeline factory with multiple steps', () => {
+    const result = pipeline()
+      .pipe((s) => s.trim())
+      .pipe((s) => s.toUpperCase())
+      .execute('  hello  ');
+    assert.equal(result, 'HELLO');
+  });
+
+  it('pipeline factory produces independent pipelines', () => {
+    const p1 = pipeline().pipe((n) => n + 1);
+    const p2 = pipeline().pipe((n) => n * 2);
+    assert.equal(p1.execute(5), 6);
+    assert.equal(p2.execute(5), 10);
   });
 });
 
 // ─── asyncPipeline() factory ──────────────────────────────────────────────────
 
-describe('asyncPipeline()', () => {
-  it('creates an AsyncPipeline from a plain value', () => {
-    const p = asyncPipeline(10);
+describe('asyncPipeline() factory', () => {
+  it('returns an AsyncPipeline instance', () => {
+    const p = asyncPipeline();
     assert.ok(p instanceof AsyncPipeline);
   });
 
-  it('creates an AsyncPipeline from a Promise', () => {
-    const p = asyncPipeline(Promise.resolve(10));
-    assert.ok(p instanceof AsyncPipeline);
-  });
-});
-
-// ─── AsyncPipeline.pipe() ────────────────────────────────────────────────────
-
-describe('AsyncPipeline.pipe()', () => {
-  it('applies a synchronous transform', async () => {
-    const result = await asyncPipeline(5).pipe((n) => n * 2).resolve();
-    assert.equal(result, 10);
+  it('asyncPipeline can execute immediately', async () => {
+    assert.equal(await asyncPipeline().execute(77), 77);
   });
 
-  it('applies an async transform', async () => {
-    const result = await asyncPipeline(5)
-      .pipe(async (n) => n + 10)
-      .resolve();
+  it('asyncPipeline factory with async pipe', async () => {
+    const result = await asyncPipeline()
+      .pipe(async (n) => n + 5)
+      .execute(10);
     assert.equal(result, 15);
   });
 
-  it('chains multiple async transforms', async () => {
-    const result = await asyncPipeline(1)
-      .pipe(async (n) => n + 1)
-      .pipe(async (n) => n * 3)
-      .pipe(async (n) => n - 1)
-      .resolve();
-    assert.equal(result, 5);
-  });
-
-  it('can mix sync and async transforms', async () => {
-    const result = await asyncPipeline(2)
-      .pipe((n) => n * 5)
-      .pipe(async (n) => n + 1)
-      .resolve();
-    assert.equal(result, 11);
-  });
-});
-
-// ─── AsyncPipeline.resolve() ─────────────────────────────────────────────────
-
-describe('AsyncPipeline.resolve()', () => {
-  it('resolves to the final value', async () => {
-    const result = await asyncPipeline(100).resolve();
-    assert.equal(result, 100);
-  });
-
-  it('resolves a Promise-wrapped initial value', async () => {
-    const result = await asyncPipeline(Promise.resolve(42)).resolve();
-    assert.equal(result, 42);
-  });
-
-  it('resolves after multiple transforms', async () => {
-    const result = await asyncPipeline(3)
-      .pipe((n) => n * n)
+  it('asyncPipeline factory with multiple steps', async () => {
+    const result = await asyncPipeline()
+      .pipe(async (n) => n * 2)
       .pipe((n) => n + 1)
-      .resolve();
-    assert.equal(result, 10);
-  });
-});
-
-// ─── AsyncPipeline.when() ────────────────────────────────────────────────────
-
-describe('AsyncPipeline.when()', () => {
-  it('applies transform when boolean condition is true', async () => {
-    const result = await asyncPipeline(5).when(true, (n) => n * 2).resolve();
-    assert.equal(result, 10);
-  });
-
-  it('skips transform when boolean condition is false', async () => {
-    const result = await asyncPipeline(5).when(false, (n) => n * 2).resolve();
-    assert.equal(result, 5);
-  });
-
-  it('applies transform when async predicate resolves true', async () => {
-    const result = await asyncPipeline(5)
-      .when(async (n) => n > 3, (n) => n + 10)
-      .resolve();
-    assert.equal(result, 15);
-  });
-
-  it('skips transform when async predicate resolves false', async () => {
-    const result = await asyncPipeline(5)
-      .when(async (n) => n > 100, (n) => n + 10)
-      .resolve();
-    assert.equal(result, 5);
-  });
-});
-
-// ─── AsyncPipeline.tap() ─────────────────────────────────────────────────────
-
-describe('AsyncPipeline.tap()', () => {
-  it('calls the side-effect and does not change the value', async () => {
-    let called = false;
-    const result = await asyncPipeline(9)
-      .tap(async () => { called = true; })
-      .resolve();
+      .execute(4);
     assert.equal(result, 9);
-    assert.ok(called);
   });
 
-  it('awaits async side effects before continuing', async () => {
-    const log = [];
-    await asyncPipeline(1)
-      .tap(async () => { log.push('tap'); })
-      .pipe((n) => { log.push('pipe'); return n; })
-      .resolve();
-    assert.deepEqual(log, ['tap', 'pipe']);
+  it('asyncPipeline factory produces independent pipelines', async () => {
+    const p1 = asyncPipeline().pipe(async (n) => n + 1);
+    const p2 = asyncPipeline().pipe(async (n) => n * 2);
+    assert.equal(await p1.execute(5), 6);
+    assert.equal(await p2.execute(5), 10);
   });
 });
 
-// ─── compose() ───────────────────────────────────────────────────────────────
+// ─── pipeValue() ─────────────────────────────────────────────────────────────
 
-describe('compose()', () => {
-  it('composes two functions right to left', () => {
+describe('pipeValue()', () => {
+  it('returns value unchanged when no functions are provided', () => {
+    assert.equal(pipeValue(42), 42);
+  });
+
+  it('applies a single function', () => {
+    assert.equal(pipeValue(5, (n) => n * 10), 50);
+  });
+
+  it('pipes value left to right through two functions', () => {
     const addOne = (n) => n + 1;
     const double = (n) => n * 2;
-    // compose(double, addOne)(3) = double(addOne(3)) = double(4) = 8
-    const fn = compose(double, addOne);
-    assert.equal(fn(3), 8);
+    assert.equal(pipeValue(3, addOne, double), 8);
   });
 
-  it('composes three functions right to left', () => {
-    const addOne  = (n) => n + 1;
-    const double  = (n) => n * 2;
-    const square  = (n) => n * n;
-    // compose(addOne, double, square)(3) = addOne(double(square(3)))
-    //   = addOne(double(9)) = addOne(18) = 19
-    const fn = compose(addOne, double, square);
-    assert.equal(fn(3), 19);
-  });
-
-  it('returns identity-like behaviour with a single function', () => {
-    const triple = (n) => n * 3;
-    assert.equal(compose(triple)(4), 12);
-  });
-
-  it('applies functions in right-to-left order (not left-to-right)', () => {
-    const order = [];
-    const a = (n) => { order.push('a'); return n; };
-    const b = (n) => { order.push('b'); return n; };
-    const c = (n) => { order.push('c'); return n; };
-    compose(a, b, c)(0);
-    assert.deepEqual(order, ['c', 'b', 'a']);
-  });
-
-  it('works with string transforms', () => {
-    const trim  = (s) => s.trim();
-    const upper = (s) => s.toUpperCase();
-    const fn = compose(upper, trim);
-    assert.equal(fn('  hello  '), 'HELLO');
-  });
-});
-
-// ─── pipeThrough() ───────────────────────────────────────────────────────────
-
-describe('pipeThrough()', () => {
-  it('pipes value left to right through functions', () => {
-    const addOne = (n) => n + 1;
-    const double = (n) => n * 2;
-    // pipeThrough(3, addOne, double) = double(addOne(3)) = double(4) = 8
-    assert.equal(pipeThrough(3, addOne, double), 8);
+  it('pipes value left to right through three functions', () => {
+    const result = pipeValue(
+      '  hello world  ',
+      (s) => s.trim(),
+      (s) => s.toUpperCase(),
+      (s) => s.replace(' ', '_'),
+    );
+    assert.equal(result, 'HELLO_WORLD');
   });
 
   it('applies functions in left-to-right order', () => {
@@ -336,25 +445,17 @@ describe('pipeThrough()', () => {
     const a = (n) => { order.push('a'); return n; };
     const b = (n) => { order.push('b'); return n; };
     const c = (n) => { order.push('c'); return n; };
-    pipeThrough(0, a, b, c);
+    pipeValue(0, a, b, c);
     assert.deepEqual(order, ['a', 'b', 'c']);
   });
 
-  it('returns the value unchanged when no functions provided', () => {
-    assert.equal(pipeThrough(42), 42);
+  it('works with string transformations', () => {
+    const result = pipeValue('hello', (s) => s + ' world', (s) => s.length);
+    assert.equal(result, 11);
   });
 
-  it('works with a single function', () => {
-    assert.equal(pipeThrough(5, (n) => n * 10), 50);
-  });
-
-  it('chains three transforms correctly', () => {
-    const result = pipeThrough(
-      '  hello world  ',
-      (s) => s.trim(),
-      (s) => s.toUpperCase(),
-      (s) => s.replace(' ', '_'),
-    );
-    assert.equal(result, 'HELLO_WORLD');
+  it('works with object input', () => {
+    const result = pipeValue({ x: 1 }, (o) => ({ ...o, y: 2 }), (o) => o.x + o.y);
+    assert.equal(result, 3);
   });
 });

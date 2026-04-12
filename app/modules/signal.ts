@@ -1,43 +1,89 @@
 // @ts-check
-// ─── Signals ─────────────────────────────────────────────────────────────────
-// Fine-grained reactive primitives: signal, computed, effect, and batch.
+// ─── Reactive Signals ────────────────────────────────────────────────────────
+// Solid.js / Vue-ref style reactive primitives: signal, computed, effect,
+// batch, isSignal, fromPromise, combine.
 
 // ─── Internal tracking state ─────────────────────────────────────────────────
 
-/** Currently executing effect (for automatic dependency tracking). */
+/** Currently executing effect node (for automatic dependency tracking). */
 let currentEffect: EffectNode | null = null;
 
 /** Batch depth counter — when > 0, defer subscriber notifications. */
 let batchDepth = 0;
 
-/** Signals that changed during a batch run. */
+/** Signals that changed during a batch run, awaiting flush. */
 const pendingSignals = new Set<SignalNode<unknown>>();
 
-// ─── Internal node types ─────────────────────────────────────────────────────
+// ─── EffectNode ───────────────────────────────────────────────────────────────
 
-interface EffectNode {
-  run(): void;
-  cleanup(): void;
-  deps: Set<SignalNode<unknown>>;
+/** Internal node tracking a running effect or computed function. */
+class EffectNode {
+  #fn: () => void;
+  #deps = new Set<SignalNode<unknown>>();
+  #disposed = false;
+
+  constructor(fn: () => void) {
+    this.#fn = fn;
+  }
+
+  run(): void {
+    if (this.#disposed) return;
+    // Unsubscribe from all previous deps so we rebuild them fresh.
+    for (const dep of this.#deps) {
+      dep._removeEffect(this);
+    }
+    this.#deps.clear();
+
+    const prev = currentEffect;
+    currentEffect = this;
+    try {
+      this.#fn();
+    } finally {
+      currentEffect = prev;
+    }
+  }
+
+  /** Called by SignalNode.read() when this node is the current tracker. */
+  _addDep(node: SignalNode<unknown>): void {
+    this.#deps.add(node);
+  }
+
+  dispose(): void {
+    this.#disposed = true;
+    for (const dep of this.#deps) {
+      dep._removeEffect(this);
+    }
+    this.#deps.clear();
+  }
 }
 
+// ─── SignalNode ───────────────────────────────────────────────────────────────
+
+/** Internal reactive node that holds a value and notifies subscribers. */
 class SignalNode<T> {
   #value: T;
-  #subscribers = new Set<EffectNode>();
+  #effectSubscribers = new Set<EffectNode>();
+  #valueSubscribers = new Set<(value: T) => void>();
 
   constructor(initial: T) {
     this.#value = initial;
   }
 
+  /** Read value, registering dependency if inside an effect. */
   read(): T {
-    // Track dependency if inside an effect
-    if (currentEffect) {
-      this.#subscribers.add(currentEffect);
-      currentEffect.deps.add(this);
+    if (currentEffect !== null) {
+      this.#effectSubscribers.add(currentEffect);
+      currentEffect._addDep(this as unknown as SignalNode<unknown>);
     }
     return this.#value;
   }
 
+  /** Read value without registering any dependency. */
+  peek(): T {
+    return this.#value;
+  }
+
+  /** Write a new value, notifying subscribers (or deferring during batch). */
   write(value: T): void {
     if (Object.is(this.#value, value)) return;
     this.#value = value;
@@ -48,260 +94,157 @@ class SignalNode<T> {
     }
   }
 
-  notify(): void {
+  /** Flush deferred notification (called after batch ends). */
+  _flush(): void {
     this.#notify();
   }
 
   #notify(): void {
-    // Snapshot subscribers to handle mutations during iteration
-    for (const effect of [...this.#subscribers]) {
-      effect.run();
+    // Snapshot to handle mutations during iteration.
+    const effects = [...this.#effectSubscribers];
+    for (const e of effects) {
+      e.run();
+    }
+    const val = this.#value;
+    for (const fn of [...this.#valueSubscribers]) {
+      fn(val);
     }
   }
 
-  addSubscriber(e: EffectNode): void {
-    this.#subscribers.add(e);
+  /** Register a raw value subscriber. Returns unsubscribe. */
+  _addValueSubscriber(fn: (value: T) => void): () => void {
+    this.#valueSubscribers.add(fn);
+    fn(this.#value); // fire immediately
+    return () => {
+      this.#valueSubscribers.delete(fn);
+    };
   }
 
-  removeSubscriber(e: EffectNode): void {
-    this.#subscribers.delete(e);
+  _removeEffect(e: EffectNode): void {
+    this.#effectSubscribers.delete(e);
   }
 }
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
+/** A readable reactive signal. */
 export interface Signal<T> {
-  /** Get current value. */
   (): T;
-  /** Set new value. */
-  set(value: T): void;
-  /** Update value with a function. */
-  update(fn: (current: T) => T): void;
-  /** Subscribe to changes. Returns unsubscribe. */
   subscribe(fn: (value: T) => void): () => void;
-  /** Current value (same as calling signal()). */
-  readonly value: T;
+  /** Read value without registering a tracking dependency. */
+  peek(): T;
+}
+
+/** A writable reactive signal. */
+export interface WritableSignal<T> extends Signal<T> {
+  set(value: T): void;
+  update(fn: (current: T) => T): void;
 }
 
 // ─── signal() ────────────────────────────────────────────────────────────────
 
 /**
- * Create a reactive signal with an initial value.
+ * Create a writable reactive signal.
  *
  * @example
  *   const count = signal(0);
  *   count.set(1);
- *   console.log(count()); // 1
+ *   count.update(n => n + 1);
+ *   console.log(count()); // 2
  */
-export function signal<T>(initial: T): Signal<T> {
-  const node = new SignalNode(initial);
+export function signal<T>(initialValue: T): WritableSignal<T> {
+  const node = new SignalNode<T>(initialValue);
 
-  // The signal is callable — invoking it reads the current value
-  function read(): T {
+  const get = function (): T {
     return node.read();
-  }
+  };
 
-  read.set = (value: T): void => {
+  const writable = get as WritableSignal<T>;
+
+  writable.peek = () => node.peek();
+
+  writable.set = (value: T): void => {
     node.write(value);
   };
 
-  read.update = (fn: (current: T) => T): void => {
-    node.write(fn(node.read()));
+  writable.update = (fn: (current: T) => T): void => {
+    node.write(fn(node.peek()));
   };
 
-  read.subscribe = (fn: (value: T) => void): () => void => {
-    // Create a lightweight effect node for the subscriber
-    const effectNode: EffectNode = {
-      deps: new Set(),
-      run() {
-        fn(node.read());
-      },
-      cleanup() {
-        node.removeSubscriber(this);
-      },
-    };
-    node.addSubscriber(effectNode);
-    // Call immediately with current value
-    fn(node.read());
-    return () => {
-      node.removeSubscriber(effectNode);
-    };
-  };
+  writable.subscribe = (fn: (value: T) => void): (() => void) =>
+    node._addValueSubscriber(fn);
 
-  Object.defineProperty(read, 'value', {
-    get(): T {
-      return node.read();
-    },
-    enumerable: true,
-    configurable: true,
-  });
+  Object.defineProperty(writable, '__isSignal', { value: true });
 
-  return read as unknown as Signal<T>;
+  return writable;
 }
 
 // ─── computed() ──────────────────────────────────────────────────────────────
 
 /**
- * Create a computed (derived, read-only) signal from other signals.
- * Automatically re-evaluates when its dependencies change.
+ * Create a derived (read-only) signal whose value is automatically
+ * recomputed whenever its signal dependencies change.
  *
  * @example
- *   const a = signal(2);
- *   const b = signal(3);
- *   const sum = computed(() => a() + b());
- *   console.log(sum()); // 5
+ *   const a = signal(1);
+ *   const double = computed(() => a() * 2);
+ *   console.log(double()); // 2
  */
-export function computed<T>(fn: () => T): Omit<Signal<T>, 'set' | 'update'> {
-  // Computed is backed by a signal node
+export function computed<T>(fn: () => T): Signal<T> {
   const node = new SignalNode<T>(undefined as unknown as T);
 
-  // The effect node that re-evaluates fn and writes to node
-  let initialized = false;
-
-  const effectNode: EffectNode = {
-    deps: new Set(),
-    run() {
-      // Clear old deps
-      for (const dep of this.deps) {
-        dep.removeSubscriber(this);
-      }
-      this.deps.clear();
-
-      const prev = currentEffect;
-      currentEffect = this;
-      try {
-        const newValue = fn();
-        node.write(newValue);
-      } finally {
-        currentEffect = prev;
-      }
-    },
-    cleanup() {
-      for (const dep of this.deps) {
-        dep.removeSubscriber(this);
-      }
-      this.deps.clear();
-    },
-  };
-
-  // Patch deps tracking so SignalNode.read() also adds to effectNode.deps
-  // We override run to track deps by temporarily setting currentEffect
-  if (!initialized) {
-    initialized = true;
-    effectNode.run();
-  }
-
-  function read(): T {
-    return node.read();
-  }
-
-  read.subscribe = (callback: (value: T) => void): () => void => {
-    const subEffect: EffectNode = {
-      deps: new Set(),
-      run() {
-        callback(node.read());
-      },
-      cleanup() {
-        node.removeSubscriber(this);
-      },
-    };
-    node.addSubscriber(subEffect);
-    callback(node.read());
-    return () => {
-      node.removeSubscriber(subEffect);
-    };
-  };
-
-  Object.defineProperty(read, 'value', {
-    get(): T {
-      return node.read();
-    },
-    enumerable: true,
-    configurable: true,
+  const effectNode = new EffectNode(() => {
+    const newVal = fn();
+    node.write(newVal);
   });
 
-  return read as unknown as Omit<Signal<T>, 'set' | 'update'>;
+  // Evaluate immediately to seed value and capture deps.
+  effectNode.run();
+
+  const get = function (): T {
+    return node.read();
+  };
+
+  const readable = get as Signal<T>;
+  readable.peek = () => node.peek();
+  readable.subscribe = (cb: (value: T) => void): (() => void) =>
+    node._addValueSubscriber(cb);
+
+  Object.defineProperty(readable, '__isSignal', { value: true });
+
+  return readable;
 }
 
 // ─── effect() ────────────────────────────────────────────────────────────────
 
 /**
- * Run a side-effect whenever its signal dependencies change.
- * The effect runs immediately on creation.
- *
- * The function may return a cleanup function that is called before each re-run
- * and when the effect is disposed.
+ * Run `fn` immediately and re-run it whenever any signal it reads changes.
+ * Returns a cleanup / unsubscribe function.
  *
  * @example
- *   const name = signal('Alice');
- *   const stop = effect(() => {
- *     console.log('Hello', name());
- *   });
- *   name.set('Bob'); // logs 'Hello Bob'
- *   stop();          // disposes the effect
+ *   const count = signal(0);
+ *   const stop = effect(() => console.log(count()));
+ *   count.set(1); // logs 1
+ *   stop();       // no more logs
  */
-export function effect(fn: () => void | (() => void)): () => void {
-  let userCleanup: void | (() => void);
-
-  const effectNode: EffectNode = {
-    deps: new Set(),
-    run() {
-      // Call user cleanup from previous run
-      if (typeof userCleanup === 'function') {
-        userCleanup();
-        userCleanup = undefined;
-      }
-
-      // Clear stale deps
-      for (const dep of this.deps) {
-        dep.removeSubscriber(this);
-      }
-      this.deps.clear();
-
-      // Execute the effect with dependency tracking
-      const prev = currentEffect;
-      currentEffect = this;
-      try {
-        userCleanup = fn() as void | (() => void);
-      } finally {
-        currentEffect = prev;
-      }
-    },
-    cleanup() {
-      if (typeof userCleanup === 'function') {
-        userCleanup();
-        userCleanup = undefined;
-      }
-      for (const dep of this.deps) {
-        dep.removeSubscriber(this);
-      }
-      this.deps.clear();
-    },
-  };
-
-  // Run immediately to track initial dependencies
-  effectNode.run();
-
-  // Return dispose function
-  return () => {
-    effectNode.cleanup();
-  };
+export function effect(fn: () => void): () => void {
+  const node = new EffectNode(fn);
+  node.run();
+  return () => node.dispose();
 }
 
 // ─── batch() ─────────────────────────────────────────────────────────────────
 
 /**
- * Batch multiple signal updates so that subscribers are only notified once
- * after all updates complete.
+ * Group multiple signal writes so subscribers are notified only once after
+ * all writes complete.
  *
  * @example
- *   const x = signal(0);
- *   const y = signal(0);
  *   batch(() => {
- *     x.set(1);
- *     y.set(2);
+ *     firstName.set('Jane');
+ *     lastName.set('Doe');
  *   });
- *   // subscribers notified once, not twice
+ *   // derivations and effects run once
  */
 export function batch(fn: () => void): void {
   batchDepth++;
@@ -310,12 +253,75 @@ export function batch(fn: () => void): void {
   } finally {
     batchDepth--;
     if (batchDepth === 0) {
-      // Flush pending signals — snapshot to avoid re-entrancy issues
       const toFlush = [...pendingSignals];
       pendingSignals.clear();
-      for (const node of toFlush) {
-        node.notify();
+      for (const s of toFlush) {
+        s._flush();
       }
     }
   }
+}
+
+// ─── isSignal() ──────────────────────────────────────────────────────────────
+
+/**
+ * Returns `true` if `value` is a signal created by this module.
+ */
+export function isSignal(value: unknown): boolean {
+  return (
+    typeof value === 'function' &&
+    (value as { __isSignal?: boolean }).__isSignal === true
+  );
+}
+
+// ─── fromPromise() ───────────────────────────────────────────────────────────
+
+/**
+ * Wrap a Promise in a Signal. The signal starts with `initial` and updates
+ * when the promise resolves.
+ *
+ * @example
+ *   const data = fromPromise(fetchUser(), null);
+ *   effect(() => console.log(data())); // logs null, then the user
+ */
+export function fromPromise<T>(promise: Promise<T>, initial: T): Signal<T> {
+  const s = signal<T>(initial);
+  promise.then((value) => s.set(value)).catch(() => {
+    // Silently ignore rejections — state stays at the last value.
+  });
+
+  const readable = (function () {
+    return s();
+  }) as Signal<T>;
+  readable.peek = () => s.peek();
+  readable.subscribe = (fn: (value: T) => void): (() => void) =>
+    s.subscribe(fn);
+  Object.defineProperty(readable, '__isSignal', { value: true });
+  return readable;
+}
+
+// ─── combine() ───────────────────────────────────────────────────────────────
+
+/**
+ * Combine a record of signals into a single signal whose value is an object
+ * containing the current values of all input signals.
+ *
+ * @example
+ *   const x = signal(1);
+ *   const y = signal(2);
+ *   const pos = combine({ x, y });
+ *   console.log(pos()); // { x: 1, y: 2 }
+ */
+export function combine<T extends Record<string, Signal<unknown>>>(
+  signals: T,
+): Signal<{ [K in keyof T]: T[K] extends Signal<infer V> ? V : never }> {
+  type Combined = { [K in keyof T]: T[K] extends Signal<infer V> ? V : never };
+
+  return computed(() => {
+    const result = {} as Combined;
+    for (const key of Object.keys(signals) as Array<keyof T & string>) {
+      (result as Record<string, unknown>)[key] = signals[key]();
+    }
+    return result;
+  });
 }

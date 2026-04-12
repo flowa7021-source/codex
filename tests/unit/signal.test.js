@@ -7,11 +7,14 @@ import {
   computed,
   effect,
   batch,
+  isSignal,
+  fromPromise,
+  combine,
 } from '../../app/modules/signal.js';
 
-// ─── signal(): returns current value via call ─────────────────────────────────
+// ─── signal() basic ───────────────────────────────────────────────────────────
 
-describe('signal()', () => {
+describe('signal() basic', () => {
   it('returns initial value when called', () => {
     const s = signal(10);
     assert.equal(s(), 10);
@@ -22,61 +25,69 @@ describe('signal()', () => {
     assert.equal(s(), 'hello');
   });
 
+  it('works with boolean initial value', () => {
+    const s = signal(false);
+    assert.equal(s(), false);
+  });
+
+  it('works with null initial value', () => {
+    const s = signal(null);
+    assert.equal(s(), null);
+  });
+
   it('works with object initial value', () => {
     const s = signal({ a: 1 });
     assert.deepEqual(s(), { a: 1 });
   });
-});
 
-// ─── signal.set(): updates value, notifies subscribers ────────────────────────
-
-describe('signal.set()', () => {
-  it('updates the value', () => {
+  it('set() updates the value', () => {
     const s = signal(0);
     s.set(5);
     assert.equal(s(), 5);
   });
 
-  it('notifies subscribers when value changes', () => {
-    const s = signal(0);
-    const received = [];
-    s.subscribe((v) => received.push(v));
-    s.set(1);
-    s.set(2);
-    // First call is immediate (initial), then 1 and 2
-    assert.deepEqual(received, [0, 1, 2]);
-  });
-
-  it('does not notify subscribers when value is the same', () => {
+  it('set() does not notify when value is unchanged (===)', () => {
     const s = signal(42);
-    const received = [];
-    s.subscribe((v) => received.push(v));
-    s.set(42); // same value
-    // Only the initial subscription call
-    assert.deepEqual(received, [42]);
+    let callCount = 0;
+    const unsub = s.subscribe(() => { callCount++; });
+    callCount = 0; // reset after initial call
+    s.set(42);
+    assert.equal(callCount, 0);
+    unsub();
   });
-});
 
-// ─── signal.update(): applies function to current value ───────────────────────
-
-describe('signal.update()', () => {
-  it('applies the update function to current value', () => {
+  it('update() applies function to current value', () => {
     const s = signal(3);
     s.update((v) => v * 2);
     assert.equal(s(), 6);
   });
 
-  it('chains multiple updates correctly', () => {
+  it('update() chains correctly', () => {
     const s = signal(1);
     s.update((v) => v + 1);
     s.update((v) => v + 1);
     assert.equal(s(), 3);
   });
+
+  it('set() followed by () returns latest value', () => {
+    const s = signal(0);
+    s.set(7);
+    s.set(8);
+    assert.equal(s(), 8);
+  });
+
+  it('multiple independent signals do not interfere', () => {
+    const a = signal(1);
+    const b = signal(2);
+    a.set(10);
+    assert.equal(a(), 10);
+    assert.equal(b(), 2);
+  });
 });
 
-// ─── signal.subscribe(): called with new value on change ─────────────────────
+// ─── signal() subscribe ───────────────────────────────────────────────────────
 
-describe('signal.subscribe()', () => {
+describe('signal() subscribe', () => {
   it('calls callback immediately with current value', () => {
     const s = signal('init');
     let called;
@@ -84,7 +95,7 @@ describe('signal.subscribe()', () => {
     assert.equal(called, 'init');
   });
 
-  it('calls callback with each new value', () => {
+  it('receives each new value after set()', () => {
     const s = signal(0);
     const log = [];
     s.subscribe((v) => log.push(v));
@@ -92,12 +103,8 @@ describe('signal.subscribe()', () => {
     s.set(2);
     assert.deepEqual(log, [0, 1, 2]);
   });
-});
 
-// ─── unsubscribe: stops receiving updates ────────────────────────────────────
-
-describe('unsubscribe from signal', () => {
-  it('stops receiving updates after unsubscribe', () => {
+  it('unsubscribe stops receiving updates', () => {
     const s = signal(0);
     const log = [];
     const unsub = s.subscribe((v) => log.push(v));
@@ -113,24 +120,39 @@ describe('unsubscribe from signal', () => {
     unsub();
     assert.doesNotThrow(() => unsub());
   });
-});
 
-// ─── signal.value: getter works ──────────────────────────────────────────────
-
-describe('signal.value getter', () => {
-  it('returns the current value via .value', () => {
-    const s = signal(99);
-    assert.equal(s.value, 99);
+  it('multiple subscribers each receive updates', () => {
+    const s = signal(0);
+    const log1 = [];
+    const log2 = [];
+    s.subscribe((v) => log1.push(v));
+    s.subscribe((v) => log2.push(v));
+    s.set(5);
+    assert.deepEqual(log1, [0, 5]);
+    assert.deepEqual(log2, [0, 5]);
   });
 
-  it('reflects updates via .value', () => {
-    const s = signal(1);
-    s.set(2);
-    assert.equal(s.value, 2);
+  it('unsubscribing one does not affect the other', () => {
+    const s = signal(0);
+    const log1 = [];
+    const log2 = [];
+    const unsub1 = s.subscribe((v) => log1.push(v));
+    s.subscribe((v) => log2.push(v));
+    unsub1();
+    s.set(3);
+    assert.deepEqual(log1, [0]);
+    assert.deepEqual(log2, [0, 3]);
+  });
+
+  it('subscribe returns a function', () => {
+    const s = signal(0);
+    const unsub = s.subscribe(() => {});
+    assert.equal(typeof unsub, 'function');
+    unsub();
   });
 });
 
-// ─── computed(): derives value from signals ───────────────────────────────────
+// ─── computed() ──────────────────────────────────────────────────────────────
 
 describe('computed()', () => {
   it('derives initial value from signal', () => {
@@ -158,10 +180,13 @@ describe('computed()', () => {
     assert.equal(sum(), 30);
   });
 
-  it('has a .value getter', () => {
-    const s = signal(7);
-    const c = computed(() => s() + 1);
-    assert.equal(c.value, 8);
+  it('chain of computed signals updates correctly', () => {
+    const base = signal(2);
+    const doubled = computed(() => base() * 2);
+    const quadrupled = computed(() => doubled() * 2);
+    assert.equal(quadrupled(), 8);
+    base.set(3);
+    assert.equal(quadrupled(), 12);
   });
 
   it('can be subscribed to', () => {
@@ -175,16 +200,39 @@ describe('computed()', () => {
     s.set(3);
     assert.deepEqual(log, [0, 10, 20]);
   });
+
+  it('subscribe on computed fires immediately with current value', () => {
+    const s = signal(5);
+    const c = computed(() => s() + 1);
+    let received;
+    c.subscribe((v) => { received = v; });
+    assert.equal(received, 6);
+  });
+
+  it('computed does not have set() method', () => {
+    const c = computed(() => 42);
+    assert.equal(typeof (c).set, 'undefined');
+  });
+
+  it('computed does not have update() method', () => {
+    const c = computed(() => 42);
+    assert.equal(typeof (c).update, 'undefined');
+  });
+
+  it('is identified as a signal by isSignal()', () => {
+    const c = computed(() => 1);
+    assert.equal(isSignal(c), true);
+  });
 });
 
-// ─── effect(): runs immediately, re-runs on dependency change ─────────────────
+// ─── effect() ────────────────────────────────────────────────────────────────
 
 describe('effect()', () => {
   it('runs immediately on creation', () => {
     const s = signal(0);
     let runCount = 0;
     const stop = effect(() => {
-      s(); // track dependency
+      s(); // track
       runCount++;
     });
     assert.equal(runCount, 1);
@@ -203,7 +251,7 @@ describe('effect()', () => {
     assert.deepEqual(log, [0, 1, 2]);
   });
 
-  it('does not re-run after dispose', () => {
+  it('does not re-run after stop/dispose', () => {
     const s = signal(0);
     let count = 0;
     const stop = effect(() => {
@@ -215,44 +263,57 @@ describe('effect()', () => {
     assert.equal(count, 1);
   });
 
-  it('cleanup function is called before each re-run', () => {
-    const s = signal(0);
+  it('tracks multiple signals', () => {
+    const a = signal(1);
+    const b = signal(2);
     const log = [];
     const stop = effect(() => {
-      log.push('run:' + s());
-      return () => {
-        log.push('cleanup:' + s());
-      };
+      log.push(a() + b());
     });
-    s.set(1);
+    a.set(10);
+    b.set(20);
     stop();
-    // First run, then cleanup before second run, then cleanup on stop
-    assert.ok(log.includes('run:0'));
-    assert.ok(log.includes('cleanup:1'));
-    assert.ok(log.includes('run:1'));
+    assert.deepEqual(log, [3, 12, 30]);
   });
 
-  it('cleanup function is called on dispose', () => {
-    const s = signal(0);
-    let cleanupCount = 0;
-    const stop = effect(() => {
-      s(); // track
-      return () => { cleanupCount++; };
-    });
+  it('returns a cleanup function', () => {
+    const stop = effect(() => {});
+    assert.equal(typeof stop, 'function');
     stop();
-    assert.equal(cleanupCount, 1);
+  });
+
+  it('calling stop twice is safe', () => {
+    const stop = effect(() => {});
+    stop();
+    assert.doesNotThrow(() => stop());
+  });
+
+  it('effect does not run for signals it no longer reads after conditional', () => {
+    const flag = signal(true);
+    const a = signal(1);
+    const b = signal(100);
+    const log = [];
+    const stop = effect(() => {
+      log.push(flag() ? a() : b());
+    });
+    // Currently tracking flag + a
+    a.set(2);        // re-runs because tracking a
+    flag.set(false); // re-runs, now tracks flag + b instead
+    b.set(200);      // re-runs
+    a.set(3);        // should NOT re-run (a no longer tracked)
+    stop();
+    assert.deepEqual(log, [1, 2, 100, 200]);
   });
 });
 
-// ─── batch(): subscribers notified only once ─────────────────────────────────
+// ─── batch() ─────────────────────────────────────────────────────────────────
 
 describe('batch()', () => {
   it('defers notifications until batch completes', () => {
     const s = signal(0);
     const log = [];
-    s.subscribe((v) => log.push(v));
-    // Clear initial subscription call
-    log.length = 0;
+    const unsub = s.subscribe((v) => log.push(v));
+    log.length = 0; // clear initial
 
     batch(() => {
       s.set(1);
@@ -260,8 +321,8 @@ describe('batch()', () => {
       s.set(3);
     });
 
-    // Should be notified only once with the final value
     assert.deepEqual(log, [3]);
+    unsub();
   });
 
   it('works with multiple signals', () => {
@@ -269,8 +330,8 @@ describe('batch()', () => {
     const b = signal(0);
     const aLog = [];
     const bLog = [];
-    a.subscribe((v) => aLog.push(v));
-    b.subscribe((v) => bLog.push(v));
+    const u1 = a.subscribe((v) => aLog.push(v));
+    const u2 = b.subscribe((v) => bLog.push(v));
     aLog.length = 0;
     bLog.length = 0;
 
@@ -281,6 +342,7 @@ describe('batch()', () => {
 
     assert.deepEqual(aLog, [1]);
     assert.deepEqual(bLog, [2]);
+    u1(); u2();
   });
 
   it('effects inside batch only re-run once', () => {
@@ -290,7 +352,7 @@ describe('batch()', () => {
       s();
       runCount++;
     });
-    runCount = 0; // reset after initial run
+    runCount = 0;
 
     batch(() => {
       s.set(1);
@@ -299,5 +361,239 @@ describe('batch()', () => {
 
     assert.equal(runCount, 1);
     stop();
+  });
+
+  it('nested batch flushes only at outermost end', () => {
+    const s = signal(0);
+    const log = [];
+    const unsub = s.subscribe((v) => log.push(v));
+    log.length = 0;
+
+    batch(() => {
+      batch(() => {
+        s.set(10);
+      });
+      // Still inside outer batch — no notification yet
+      assert.deepEqual(log, []);
+      s.set(20);
+    });
+
+    assert.deepEqual(log, [20]);
+    unsub();
+  });
+
+  it('computed inside batch re-evaluates once', () => {
+    const s = signal(0);
+    let evalCount = 0;
+    const c = computed(() => {
+      evalCount++;
+      return s() * 2;
+    });
+    c(); // trigger initial eval
+    evalCount = 0;
+
+    batch(() => {
+      s.set(1);
+      s.set(2);
+    });
+
+    assert.equal(c(), 4);
+    assert.equal(evalCount, 1);
+  });
+});
+
+// ─── isSignal() ──────────────────────────────────────────────────────────────
+
+describe('isSignal()', () => {
+  it('returns true for a writable signal', () => {
+    const s = signal(0);
+    assert.equal(isSignal(s), true);
+  });
+
+  it('returns true for a computed signal', () => {
+    const c = computed(() => 42);
+    assert.equal(isSignal(c), true);
+  });
+
+  it('returns true for a fromPromise signal', () => {
+    const s = fromPromise(Promise.resolve(1), 0);
+    assert.equal(isSignal(s), true);
+  });
+
+  it('returns true for a combine signal', () => {
+    const x = signal(1);
+    const s = combine({ x });
+    assert.equal(isSignal(s), true);
+  });
+
+  it('returns false for a plain function', () => {
+    assert.equal(isSignal(() => 42), false);
+  });
+
+  it('returns false for a number', () => {
+    assert.equal(isSignal(42), false);
+  });
+
+  it('returns false for a plain object', () => {
+    assert.equal(isSignal({ __isSignal: true }), false);
+  });
+
+  it('returns false for null', () => {
+    assert.equal(isSignal(null), false);
+  });
+
+  it('returns false for undefined', () => {
+    assert.equal(isSignal(undefined), false);
+  });
+
+  it('returns false for a string', () => {
+    assert.equal(isSignal('signal'), false);
+  });
+});
+
+// ─── fromPromise() ───────────────────────────────────────────────────────────
+
+describe('fromPromise()', () => {
+  it('returns initial value synchronously', () => {
+    const s = fromPromise(Promise.resolve(99), 0);
+    assert.equal(s(), 0);
+  });
+
+  it('updates to resolved value after promise resolves', async () => {
+    const s = fromPromise(Promise.resolve(42), 0);
+    await Promise.resolve(); // flush microtasks
+    assert.equal(s(), 42);
+  });
+
+  it('notifies subscribers when promise resolves', async () => {
+    const log = [];
+    const s = fromPromise(Promise.resolve('done'), 'pending');
+    s.subscribe((v) => log.push(v));
+    await Promise.resolve();
+    assert.deepEqual(log, ['pending', 'done']);
+  });
+
+  it('stays at initial value if promise rejects', async () => {
+    const s = fromPromise(Promise.reject(new Error('fail')), 'default');
+    await Promise.resolve();
+    assert.equal(s(), 'default');
+  });
+
+  it('is identified as a signal by isSignal()', () => {
+    const s = fromPromise(Promise.resolve(1), 0);
+    assert.equal(isSignal(s), true);
+  });
+
+  it('peek() works on fromPromise signal', () => {
+    const s = fromPromise(Promise.resolve(5), 0);
+    assert.equal(s.peek(), 0);
+  });
+});
+
+// ─── combine() ───────────────────────────────────────────────────────────────
+
+describe('combine()', () => {
+  it('returns object with current signal values', () => {
+    const x = signal(1);
+    const y = signal(2);
+    const pos = combine({ x, y });
+    assert.deepEqual(pos(), { x: 1, y: 2 });
+  });
+
+  it('updates when any contained signal changes', () => {
+    const a = signal(10);
+    const b = signal(20);
+    const c = combine({ a, b });
+    a.set(100);
+    assert.deepEqual(c(), { a: 100, b: 20 });
+  });
+
+  it('combine of a single signal works', () => {
+    const n = signal(7);
+    const c = combine({ n });
+    assert.deepEqual(c(), { n: 7 });
+  });
+
+  it('combined signal is identified by isSignal()', () => {
+    const s = signal(1);
+    assert.equal(isSignal(combine({ s })), true);
+  });
+
+  it('subscribe on combined signal fires immediately', () => {
+    const x = signal(3);
+    const c = combine({ x });
+    let received;
+    c.subscribe((v) => { received = v; });
+    assert.deepEqual(received, { x: 3 });
+  });
+
+  it('subscribe on combined signal receives updates', () => {
+    const a = signal(1);
+    const b = signal(2);
+    const c = combine({ a, b });
+    const log = [];
+    const unsub = c.subscribe((v) => log.push({ ...v }));
+    a.set(10);
+    unsub();
+    assert.deepEqual(log, [{ a: 1, b: 2 }, { a: 10, b: 2 }]);
+  });
+
+  it('combines computed signals too', () => {
+    const x = signal(2);
+    const doubled = computed(() => x() * 2);
+    const c = combine({ x, doubled });
+    assert.deepEqual(c(), { x: 2, doubled: 4 });
+    x.set(5);
+    assert.deepEqual(c(), { x: 5, doubled: 10 });
+  });
+});
+
+// ─── peek() ──────────────────────────────────────────────────────────────────
+
+describe('peek()', () => {
+  it('returns current value without creating a dependency', () => {
+    const s = signal(99);
+    assert.equal(s.peek(), 99);
+  });
+
+  it('peek inside effect does not create a dependency', () => {
+    const s = signal(0);
+    const other = signal(0);
+    let runCount = 0;
+    const stop = effect(() => {
+      other(); // real dependency
+      s.peek(); // should NOT be a dependency
+      runCount++;
+    });
+    runCount = 0; // reset after first run
+    s.set(1);    // should NOT trigger re-run
+    assert.equal(runCount, 0);
+    other.set(1); // SHOULD trigger re-run
+    assert.equal(runCount, 1);
+    stop();
+  });
+
+  it('peek on computed returns value without side effects', () => {
+    const s = signal(5);
+    const c = computed(() => s() + 1);
+    assert.equal(c.peek(), 6);
+  });
+
+  it('peek returns updated value after set', () => {
+    const s = signal(10);
+    s.set(20);
+    assert.equal(s.peek(), 20);
+  });
+
+  it('peek inside computed does not create nested dependency', () => {
+    const a = signal(1);
+    const b = signal(100);
+    // c only depends on a; reads b via peek
+    const c = computed(() => a() + b.peek());
+    assert.equal(c(), 101);
+    b.set(200); // should NOT cause c to recompute
+    assert.equal(c(), 101);
+    a.set(2); // SHOULD cause recompute, b.peek() will now be 200
+    assert.equal(c(), 202);
   });
 });

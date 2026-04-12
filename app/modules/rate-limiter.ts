@@ -1,172 +1,370 @@
 // @ts-check
 // ─── Rate Limiter ─────────────────────────────────────────────────────────────
-// Sliding-window and leaky-bucket rate limiting patterns.
-// Unlike quota.ts (fixed windows), these use continuous-time algorithms.
+// Multiple rate limiting algorithms: Token Bucket, Sliding Window Counter,
+// Fixed Window Counter, and Leaky Bucket.
 
-// ─── SlidingWindowRateLimiter ─────────────────────────────────────────────────
+// ─── TokenBucket ──────────────────────────────────────────────────────────────
+
+export interface TokenBucketOptions {
+  capacity: number;
+  refillRate: number;
+  refillInterval?: number;
+}
 
 /**
- * Per-id rate limiter using a sliding-window log algorithm.
- * Each request timestamp is stored; old entries outside the window are pruned
- * before each check so the count reflects only the most recent `windowMs`.
+ * Token Bucket rate limiter.
+ * Tokens are added at `refillRate` per `refillInterval` ms (default 1000ms).
+ * Consume tokens for each request; returns false when insufficient tokens.
  *
  * @example
- *   const limiter = new SlidingWindowRateLimiter(10, 60_000);
- *   if (limiter.isAllowed('user:42')) { /* process request *\/ }
+ *   const bucket = new TokenBucket({ capacity: 10, refillRate: 1 });
+ *   if (bucket.consume()) { /* handle request *\/ }
  */
-export class SlidingWindowRateLimiter {
+export class TokenBucket {
+  #capacity: number;
+  #tokens: number;
+  #refillRate: number;
+  #refillInterval: number;
+  #lastRefill: number;
+
+  constructor(options: TokenBucketOptions) {
+    const { capacity, refillRate, refillInterval = 1000 } = options;
+    if (capacity <= 0) throw new RangeError('capacity must be > 0');
+    if (refillRate <= 0) throw new RangeError('refillRate must be > 0');
+    if (refillInterval <= 0) throw new RangeError('refillInterval must be > 0');
+
+    this.#capacity = capacity;
+    this.#tokens = capacity;
+    this.#refillRate = refillRate;
+    this.#refillInterval = refillInterval;
+    this.#lastRefill = Date.now();
+  }
+
+  /** Refill tokens based on elapsed time since last refill. */
+  #doRefill(): void {
+    const now = Date.now();
+    const elapsed = now - this.#lastRefill;
+    const intervals = Math.floor(elapsed / this.#refillInterval);
+    if (intervals > 0) {
+      this.#tokens = Math.min(this.#capacity, this.#tokens + intervals * this.#refillRate);
+      this.#lastRefill += intervals * this.#refillInterval;
+    }
+  }
+
+  /**
+   * Consume tokens. Returns true if the request is allowed, false otherwise.
+   * @param tokens - Number of tokens to consume (default 1).
+   */
+  consume(tokens = 1): boolean {
+    this.#doRefill();
+    if (this.#tokens >= tokens) {
+      this.#tokens -= tokens;
+      return true;
+    }
+    return false;
+  }
+
+  /** Alias for consume. */
+  tryConsume(tokens = 1): boolean {
+    return this.consume(tokens);
+  }
+
+  /** Returns the current token count (after applying any pending refill). */
+  getTokens(): number {
+    this.#doRefill();
+    return this.#tokens;
+  }
+
+  /** Refills bucket to capacity and resets the refill timer. */
+  reset(): void {
+    this.#tokens = this.#capacity;
+    this.#lastRefill = Date.now();
+  }
+
+  /** The maximum number of tokens this bucket can hold. */
+  get capacity(): number {
+    return this.#capacity;
+  }
+
+  // ─── Internal helpers for testing ───────────────────────────────────────────
+
+  /** @internal Rewind the internal refill clock by ms (simulates time passing). */
+  _advanceTime(ms: number): void {
+    this.#lastRefill -= ms;
+  }
+}
+
+// ─── SlidingWindowCounter ─────────────────────────────────────────────────────
+
+export interface SlidingWindowOptions {
+  limit: number;
+  windowMs: number;
+}
+
+interface TimestampEntry {
+  timestamps: number[];
+}
+
+/**
+ * Sliding Window Counter rate limiter.
+ * Tracks request timestamps per key within a rolling time window.
+ *
+ * @example
+ *   const counter = new SlidingWindowCounter({ limit: 5, windowMs: 1000 });
+ *   if (counter.hit('user:42')) { /* handle request *\/ }
+ */
+export class SlidingWindowCounter {
   #limit: number;
   #windowMs: number;
-  /** Map of id → sorted array of timestamps (ms). */
-  #log: Map<string, number[]>;
-  #offset: number;
+  #store: Map<string, TimestampEntry>;
 
-  constructor(limit: number, windowMs: number) {
+  constructor(options: SlidingWindowOptions) {
+    const { limit, windowMs } = options;
+    if (limit <= 0) throw new RangeError('limit must be > 0');
+    if (windowMs <= 0) throw new RangeError('windowMs must be > 0');
+
     this.#limit = limit;
     this.#windowMs = windowMs;
-    this.#log = new Map();
-    this.#offset = 0;
+    this.#store = new Map();
   }
 
-  /** Return the effective current time (real clock + any advance() offset). */
-  #currentTime(now?: number): number {
-    return (now ?? Date.now()) + this.#offset;
-  }
-
-  /** Prune timestamps outside the current window and return the live log. */
-  #prune(id: string, now: number): number[] {
-    const cutoff = now - this.#windowMs;
-    const timestamps = this.#log.get(id);
-    if (timestamps === undefined) {
-      const empty: number[] = [];
-      this.#log.set(id, empty);
-      return empty;
+  /** Prune timestamps older than the current window for a given key. */
+  #prune(key: string, now: number): TimestampEntry {
+    let entry = this.#store.get(key);
+    if (!entry) {
+      entry = { timestamps: [] };
+      this.#store.set(key, entry);
     }
-    // Remove entries older than the window (cutoff is exclusive)
-    let i = 0;
-    while (i < timestamps.length && timestamps[i] <= cutoff) i++;
-    if (i > 0) timestamps.splice(0, i);
-    return timestamps;
+    const cutoff = now - this.#windowMs;
+    entry.timestamps = entry.timestamps.filter(t => t > cutoff);
+    return entry;
   }
 
   /**
-   * Check whether a new request for `id` is allowed.
-   * If allowed, records the timestamp and returns `true`.
-   * Pass `now` (ms) to override the wall-clock (useful in deterministic tests).
+   * Record a hit for the given key. Returns true if the request is allowed.
+   * @param key - Identifier for the rate-limited entity (default 'default').
    */
-  isAllowed(id: string, now?: number): boolean {
-    const t = this.#currentTime(now);
-    const timestamps = this.#prune(id, t);
-    if (timestamps.length >= this.#limit) return false;
-    timestamps.push(t);
-    return true;
+  hit(key = 'default'): boolean {
+    const now = Date.now();
+    const entry = this.#prune(key, now);
+    if (entry.timestamps.length < this.#limit) {
+      entry.timestamps.push(now);
+      return true;
+    }
+    return false;
+  }
+
+  /** Returns the number of requests recorded in the current window. */
+  getCount(key = 'default'): number {
+    const now = Date.now();
+    const entry = this.#prune(key, now);
+    return entry.timestamps.length;
+  }
+
+  /** Clears all recorded hits for the given key. */
+  reset(key = 'default'): void {
+    this.#store.delete(key);
+  }
+
+  /** The maximum number of requests allowed per window. */
+  get limit(): number {
+    return this.#limit;
+  }
+
+  /** The window duration in milliseconds. */
+  get windowMs(): number {
+    return this.#windowMs;
+  }
+}
+
+// ─── FixedWindowCounter ───────────────────────────────────────────────────────
+
+export interface FixedWindowOptions {
+  limit: number;
+  windowMs: number;
+}
+
+interface WindowEntry {
+  count: number;
+  windowStart: number;
+}
+
+/**
+ * Fixed Window Counter rate limiter.
+ * Counts requests within a fixed time window that resets periodically.
+ *
+ * @example
+ *   const counter = new FixedWindowCounter({ limit: 100, windowMs: 60_000 });
+ *   if (counter.hit('ip:1.2.3.4')) { /* handle request *\/ }
+ */
+export class FixedWindowCounter {
+  #limit: number;
+  #windowMs: number;
+  #store: Map<string, WindowEntry>;
+
+  constructor(options: FixedWindowOptions) {
+    const { limit, windowMs } = options;
+    if (limit <= 0) throw new RangeError('limit must be > 0');
+    if (windowMs <= 0) throw new RangeError('windowMs must be > 0');
+
+    this.#limit = limit;
+    this.#windowMs = windowMs;
+    this.#store = new Map();
+  }
+
+  /** Get or create a window entry, resetting it if the window has expired. */
+  #getEntry(key: string, now: number): WindowEntry {
+    let entry = this.#store.get(key);
+    if (!entry || now - entry.windowStart >= this.#windowMs) {
+      entry = { count: 0, windowStart: now };
+      this.#store.set(key, entry);
+    }
+    return entry;
   }
 
   /**
-   * Return the number of additional requests allowed for `id`
-   * within the current window, without consuming a slot.
-   * Pass `now` (ms) to override the wall-clock.
+   * Record a hit for the given key. Returns true if the request is allowed.
+   * @param key - Identifier for the rate-limited entity (default 'default').
    */
-  remaining(id: string, now?: number): number {
-    const t = this.#currentTime(now);
-    const timestamps = this.#prune(id, t);
-    return Math.max(0, this.#limit - timestamps.length);
+  hit(key = 'default'): boolean {
+    const now = Date.now();
+    const entry = this.#getEntry(key, now);
+    if (entry.count < this.#limit) {
+      entry.count++;
+      return true;
+    }
+    return false;
   }
 
-  /**
-   * Advance the internal clock offset by `ms` milliseconds.
-   * Useful in tests to simulate time passing without mocking Date.now().
-   */
-  advance(ms: number): void {
-    this.#offset += ms;
+  /** Returns the number of requests in the current window. */
+  getCount(key = 'default'): number {
+    const now = Date.now();
+    const entry = this.#getEntry(key, now);
+    return entry.count;
+  }
+
+  /** Clears the counter for the given key. */
+  reset(key = 'default'): void {
+    this.#store.delete(key);
+  }
+
+  /** The maximum number of requests allowed per window. */
+  get limit(): number {
+    return this.#limit;
+  }
+
+  /** The window duration in milliseconds. */
+  get windowMs(): number {
+    return this.#windowMs;
   }
 }
 
 // ─── LeakyBucket ──────────────────────────────────────────────────────────────
 
+export interface LeakyBucketOptions {
+  capacity: number;
+  leakRate: number;
+}
+
 /**
- * Leaky-bucket rate limiter.
- * The bucket fills when `add()` is called and drains continuously at
- * `leakRatePerMs` tokens per millisecond. Calls to `add()` return false
- * (overflow) when the bucket is full and the amount would exceed capacity.
+ * Leaky Bucket rate limiter.
+ * Requests are queued in a bucket that drains at a fixed `leakRate` per second.
+ * New requests are rejected when the bucket is full.
  *
  * @example
- *   const bucket = new LeakyBucket(100, 0.1); // 100-token cap, leak 0.1/ms
- *   bucket.add(10);     // true
- *   bucket.advance(50); // drains 5 tokens
- *   bucket.level();     // 5
+ *   const bucket = new LeakyBucket({ capacity: 10, leakRate: 2 });
+ *   if (bucket.push()) { /* request accepted *\/ }
  */
 export class LeakyBucket {
   #capacity: number;
-  #leakRatePerMs: number;
-  #fill: number;
-  #lastLeakAt: number;
-  #offset: number;
+  #leakRate: number;
+  #size: number;
+  #lastLeak: number;
 
-  constructor(capacity: number, leakRatePerMs: number) {
+  constructor(options: LeakyBucketOptions) {
+    const { capacity, leakRate } = options;
+    if (capacity <= 0) throw new RangeError('capacity must be > 0');
+    if (leakRate <= 0) throw new RangeError('leakRate must be > 0');
+
     this.#capacity = capacity;
-    this.#leakRatePerMs = leakRatePerMs;
-    this.#fill = 0;
-    this.#lastLeakAt = Date.now();
-    this.#offset = 0;
+    this.#leakRate = leakRate;
+    this.#size = 0;
+    this.#lastLeak = Date.now();
   }
 
-  /** Return the effective current time. */
-  #now(): number {
-    return Date.now() + this.#offset;
-  }
-
-  /** Apply any pending leak since the last check. */
-  #applyLeak(): void {
-    const now = this.#now();
-    const elapsed = now - this.#lastLeakAt;
+  /** Drain the bucket based on elapsed time. */
+  #doLeak(): void {
+    const now = Date.now();
+    const elapsed = (now - this.#lastLeak) / 1000; // convert ms → seconds
     if (elapsed > 0) {
-      this.#fill = Math.max(0, this.#fill - elapsed * this.#leakRatePerMs);
-      this.#lastLeakAt = now;
+      const leaked = elapsed * this.#leakRate;
+      this.#size = Math.max(0, this.#size - leaked);
+      this.#lastLeak = now;
     }
   }
 
   /**
-   * Add `amount` tokens (default 1) to the bucket.
-   * Returns `false` if adding would exceed capacity (overflow); the tokens are
-   * NOT added in that case.
+   * Push a request into the bucket.
+   * Returns true if accepted, false if the bucket is full.
    */
-  add(amount: number = 1): boolean {
-    this.#applyLeak();
-    if (this.#fill + amount > this.#capacity) return false;
-    this.#fill += amount;
-    return true;
+  push(): boolean {
+    this.#doLeak();
+    if (this.#size < this.#capacity) {
+      this.#size++;
+      return true;
+    }
+    return false;
   }
 
-  /** Return the current fill level (after applying any pending leak). */
-  level(): number {
-    this.#applyLeak();
-    return this.#fill;
+  /** The current number of requests in the bucket (after draining). */
+  get size(): number {
+    this.#doLeak();
+    return this.#size;
   }
 
-  /**
-   * Advance the internal clock by `ms` milliseconds, simulating time passing.
-   * Useful in tests to trigger leaking without waiting for real time.
-   */
-  advance(ms: number): void {
-    this.#offset += ms;
+  /** The maximum capacity of the bucket. */
+  get capacity(): number {
+    return this.#capacity;
+  }
+
+  /** The leak rate in requests per second. */
+  get leakRate(): number {
+    return this.#leakRate;
+  }
+
+  /** Empties the bucket and resets the leak timer. */
+  reset(): void {
+    this.#size = 0;
+    this.#lastLeak = Date.now();
+  }
+
+  // ─── Internal helpers for testing ───────────────────────────────────────────
+
+  /** @internal Rewind the internal leak clock by ms (simulates time passing). */
+  _advanceTime(ms: number): void {
+    this.#lastLeak -= ms;
   }
 }
 
 // ─── Factory Functions ────────────────────────────────────────────────────────
 
-/** Create a new {@link SlidingWindowRateLimiter}. */
-export function createSlidingWindowLimiter(
-  limit: number,
-  windowMs: number,
-): SlidingWindowRateLimiter {
-  return new SlidingWindowRateLimiter(limit, windowMs);
+/**
+ * Create a TokenBucket with the given capacity and refill rate (tokens/second by default).
+ */
+export function createTokenBucket(capacity: number, refillRate: number): TokenBucket {
+  return new TokenBucket({ capacity, refillRate });
 }
 
-/** Create a new {@link LeakyBucket}. */
-export function createLeakyBucket(
-  capacity: number,
-  leakRatePerMs: number,
-): LeakyBucket {
-  return new LeakyBucket(capacity, leakRatePerMs);
+/**
+ * Create a SlidingWindowCounter with the given limit and window duration.
+ */
+export function createSlidingWindow(limit: number, windowMs: number): SlidingWindowCounter {
+  return new SlidingWindowCounter({ limit, windowMs });
+}
+
+/**
+ * Create a FixedWindowCounter with the given limit and window duration.
+ */
+export function createFixedWindow(limit: number, windowMs: number): FixedWindowCounter {
+  return new FixedWindowCounter({ limit, windowMs });
 }

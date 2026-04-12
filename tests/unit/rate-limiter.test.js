@@ -3,183 +3,454 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  SlidingWindowRateLimiter,
+  TokenBucket,
+  SlidingWindowCounter,
+  FixedWindowCounter,
   LeakyBucket,
-  createSlidingWindowLimiter,
-  createLeakyBucket,
+  createTokenBucket,
+  createSlidingWindow,
+  createFixedWindow,
 } from '../../app/modules/rate-limiter.js';
 
-// ─── SlidingWindowRateLimiter — constructor ───────────────────────────────────
+// ─── TokenBucket — constructor ────────────────────────────────────────────────
 
-describe('SlidingWindowRateLimiter – constructor', () => {
-  it('creates an instance with limit and windowMs', () => {
-    const limiter = new SlidingWindowRateLimiter(5, 1000);
-    assert.ok(limiter instanceof SlidingWindowRateLimiter);
+describe('TokenBucket – constructor', () => {
+  it('creates an instance with valid options', () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 1 });
+    assert.ok(bucket instanceof TokenBucket);
   });
 
-  it('starts with full remaining capacity', () => {
-    const limiter = new SlidingWindowRateLimiter(10, 5000);
-    assert.equal(limiter.remaining('user:1'), 10);
-  });
-});
-
-// ─── SlidingWindowRateLimiter — isAllowed ─────────────────────────────────────
-
-describe('SlidingWindowRateLimiter – isAllowed', () => {
-  it('allows requests within the limit', () => {
-    const limiter = new SlidingWindowRateLimiter(3, 1000);
-    const t = 100000;
-    assert.equal(limiter.isAllowed('u', t), true);
-    assert.equal(limiter.isAllowed('u', t + 1), true);
-    assert.equal(limiter.isAllowed('u', t + 2), true);
+  it('starts full (tokens === capacity)', () => {
+    const bucket = new TokenBucket({ capacity: 5, refillRate: 1 });
+    assert.equal(bucket.getTokens(), 5);
   });
 
-  it('denies the request that exceeds the limit', () => {
-    const limiter = new SlidingWindowRateLimiter(2, 1000);
-    const t = 200000;
-    limiter.isAllowed('u', t);
-    limiter.isAllowed('u', t + 1);
-    assert.equal(limiter.isAllowed('u', t + 2), false);
+  it('exposes capacity via getter', () => {
+    const bucket = new TokenBucket({ capacity: 20, refillRate: 2 });
+    assert.equal(bucket.capacity, 20);
   });
 
-  it('consumes a slot on each allowed call', () => {
-    const limiter = new SlidingWindowRateLimiter(5, 1000);
-    const t = 300000;
-    limiter.isAllowed('u', t);
-    assert.equal(limiter.remaining('u', t), 4);
-    limiter.isAllowed('u', t + 1);
-    assert.equal(limiter.remaining('u', t + 1), 3);
+  it('accepts a custom refillInterval', () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 5, refillInterval: 500 });
+    assert.equal(bucket.capacity, 10);
+    assert.equal(bucket.getTokens(), 10);
   });
 
-  it('tracks separate ids independently', () => {
-    const limiter = new SlidingWindowRateLimiter(2, 1000);
-    const t = 400000;
-    limiter.isAllowed('alice', t);
-    limiter.isAllowed('alice', t + 1);
-    assert.equal(limiter.isAllowed('alice', t + 2), false);
-    assert.equal(limiter.isAllowed('bob', t + 2), true);
+  it('throws on zero capacity', () => {
+    assert.throws(() => new TokenBucket({ capacity: 0, refillRate: 1 }), RangeError);
   });
 
-  it('allows requests again after the window slides forward', () => {
-    const limiter = new SlidingWindowRateLimiter(2, 1000);
-    const t = 500000;
-    limiter.isAllowed('u', t);
-    limiter.isAllowed('u', t + 100);
-    assert.equal(limiter.isAllowed('u', t + 200), false);
-    // At t+1101, both entries at t and t+100 are outside the 1000ms window
-    assert.equal(limiter.isAllowed('u', t + 1101), true);
+  it('throws on negative refillRate', () => {
+    assert.throws(() => new TokenBucket({ capacity: 10, refillRate: -1 }), RangeError);
   });
 
-  it('uses Date.now() when no now argument is provided', () => {
-    const limiter = new SlidingWindowRateLimiter(1, 1000);
-    assert.equal(limiter.isAllowed('x'), true);
-    assert.equal(limiter.isAllowed('x'), false);
-  });
-
-  it('a limit of 1 allows exactly one request per window', () => {
-    const limiter = new SlidingWindowRateLimiter(1, 5000);
-    const t = 600000;
-    assert.equal(limiter.isAllowed('u', t), true);
-    assert.equal(limiter.isAllowed('u', t + 1), false);
-    assert.equal(limiter.isAllowed('u', t + 5001), true);
+  it('throws on zero refillInterval', () => {
+    assert.throws(() => new TokenBucket({ capacity: 10, refillRate: 1, refillInterval: 0 }), RangeError);
   });
 });
 
-// ─── SlidingWindowRateLimiter — remaining ─────────────────────────────────────
+// ─── TokenBucket — consume ────────────────────────────────────────────────────
 
-describe('SlidingWindowRateLimiter – remaining', () => {
-  it('starts at limit for a new id', () => {
-    const limiter = new SlidingWindowRateLimiter(7, 1000);
-    assert.equal(limiter.remaining('new-id'), 7);
+describe('TokenBucket – consume', () => {
+  it('returns true when there are enough tokens', () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 1 });
+    assert.equal(bucket.consume(3), true);
   });
 
-  it('decrements after each allowed request', () => {
-    const limiter = new SlidingWindowRateLimiter(5, 1000);
-    const t = 700000;
-    limiter.isAllowed('u', t);
-    limiter.isAllowed('u', t + 1);
-    assert.equal(limiter.remaining('u', t + 1), 3);
+  it('reduces token count after consume', () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 1 });
+    bucket.consume(4);
+    assert.equal(bucket.getTokens(), 6);
   });
 
-  it('returns 0 when fully consumed', () => {
-    const limiter = new SlidingWindowRateLimiter(3, 1000);
-    const t = 800000;
-    limiter.isAllowed('u', t);
-    limiter.isAllowed('u', t + 1);
-    limiter.isAllowed('u', t + 2);
-    assert.equal(limiter.remaining('u', t + 2), 0);
+  it('returns false when not enough tokens', () => {
+    const bucket = new TokenBucket({ capacity: 5, refillRate: 1 });
+    bucket.consume(5); // empty it
+    assert.equal(bucket.consume(1), false);
   });
 
-  it('never goes below 0', () => {
-    const limiter = new SlidingWindowRateLimiter(2, 1000);
-    const t = 900000;
-    limiter.isAllowed('u', t);
-    limiter.isAllowed('u', t + 1);
-    limiter.isAllowed('u', t + 2); // denied, but remaining stays 0
-    assert.equal(limiter.remaining('u', t + 2), 0);
+  it('does not change tokens when consume fails', () => {
+    const bucket = new TokenBucket({ capacity: 3, refillRate: 1 });
+    bucket.consume(3); // empty it
+    bucket.consume(1); // should fail
+    assert.equal(bucket.getTokens(), 0);
   });
 
-  it('recovers as old entries leave the window', () => {
-    const limiter = new SlidingWindowRateLimiter(2, 1000);
-    const t = 1000000;
-    limiter.isAllowed('u', t);
-    limiter.isAllowed('u', t + 100);
-    assert.equal(limiter.remaining('u', t + 100), 0);
-    // At t+1101 both entries expire
-    assert.equal(limiter.remaining('u', t + 1101), 2);
-  });
-});
-
-// ─── SlidingWindowRateLimiter — advance ──────────────────────────────────────
-
-describe('SlidingWindowRateLimiter – advance', () => {
-  it('advances the internal clock so old entries expire', () => {
-    const limiter = new SlidingWindowRateLimiter(2, 1000);
-    limiter.isAllowed('u');
-    limiter.isAllowed('u');
-    assert.equal(limiter.remaining('u'), 0);
-    limiter.advance(1001);
-    assert.equal(limiter.remaining('u'), 2);
+  it('defaults to consuming 1 token', () => {
+    const bucket = new TokenBucket({ capacity: 5, refillRate: 1 });
+    bucket.consume();
+    assert.equal(bucket.getTokens(), 4);
   });
 
-  it('allows requests after clock advance', () => {
-    const limiter = new SlidingWindowRateLimiter(1, 1000);
-    assert.equal(limiter.isAllowed('u'), true);
-    assert.equal(limiter.isAllowed('u'), false);
-    limiter.advance(1001);
-    assert.equal(limiter.isAllowed('u'), true);
+  it('can consume multiple tokens at once', () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 1 });
+    assert.equal(bucket.consume(10), true);
+    assert.equal(bucket.getTokens(), 0);
   });
 
-  it('advance is cumulative across multiple calls', () => {
-    const limiter = new SlidingWindowRateLimiter(1, 1000);
-    limiter.isAllowed('u');
-    limiter.advance(500);
-    limiter.advance(501); // total 1001ms
-    assert.equal(limiter.isAllowed('u'), true);
-  });
-
-  it('advance of 0 does not change behavior', () => {
-    const limiter = new SlidingWindowRateLimiter(1, 1000);
-    limiter.isAllowed('u');
-    limiter.advance(0);
-    assert.equal(limiter.isAllowed('u'), false);
+  it('returns false when requesting more than capacity', () => {
+    const bucket = new TokenBucket({ capacity: 5, refillRate: 1 });
+    assert.equal(bucket.consume(6), false);
   });
 });
 
-// ─── createSlidingWindowLimiter factory ──────────────────────────────────────
+// ─── TokenBucket — tryConsume ─────────────────────────────────────────────────
 
-describe('createSlidingWindowLimiter – factory', () => {
-  it('returns a SlidingWindowRateLimiter instance', () => {
-    const limiter = createSlidingWindowLimiter(5, 1000);
-    assert.ok(limiter instanceof SlidingWindowRateLimiter);
+describe('TokenBucket – tryConsume', () => {
+  it('is an alias for consume (returns true)', () => {
+    const bucket = new TokenBucket({ capacity: 5, refillRate: 1 });
+    assert.equal(bucket.tryConsume(2), true);
   });
 
-  it('factory-created instance behaves correctly', () => {
-    const limiter = createSlidingWindowLimiter(2, 500);
-    const t = 2000000;
-    assert.equal(limiter.isAllowed('u', t), true);
-    assert.equal(limiter.isAllowed('u', t + 1), true);
-    assert.equal(limiter.isAllowed('u', t + 2), false);
+  it('is an alias for consume (returns false)', () => {
+    const bucket = new TokenBucket({ capacity: 2, refillRate: 1 });
+    bucket.consume(2);
+    assert.equal(bucket.tryConsume(1), false);
+  });
+});
+
+// ─── TokenBucket — getTokens ──────────────────────────────────────────────────
+
+describe('TokenBucket – getTokens', () => {
+  it('returns full capacity initially', () => {
+    const bucket = new TokenBucket({ capacity: 7, refillRate: 1 });
+    assert.equal(bucket.getTokens(), 7);
+  });
+
+  it('reflects remaining tokens after consume', () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 1 });
+    bucket.consume(3);
+    assert.equal(bucket.getTokens(), 7);
+  });
+});
+
+// ─── TokenBucket — reset ──────────────────────────────────────────────────────
+
+describe('TokenBucket – reset', () => {
+  it('refills to capacity after partial consume', () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 1 });
+    bucket.consume(7);
+    bucket.reset();
+    assert.equal(bucket.getTokens(), 10);
+  });
+
+  it('refills to capacity after total consume', () => {
+    const bucket = new TokenBucket({ capacity: 5, refillRate: 1 });
+    bucket.consume(5);
+    assert.equal(bucket.getTokens(), 0);
+    bucket.reset();
+    assert.equal(bucket.getTokens(), 5);
+  });
+});
+
+// ─── TokenBucket — refill (time-based) ───────────────────────────────────────
+
+describe('TokenBucket – refill', () => {
+  it('refills tokens after advancing internal clock past one interval', () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 5, refillInterval: 1000 });
+    bucket.consume(10); // empty it
+    assert.equal(bucket.getTokens(), 0);
+    // Simulate 1000ms passing
+    bucket._advanceTime(1000);
+    assert.equal(bucket.getTokens(), 5);
+  });
+
+  it('refills across multiple intervals', () => {
+    const bucket = new TokenBucket({ capacity: 20, refillRate: 3, refillInterval: 1000 });
+    bucket.consume(20); // empty it
+    bucket._advanceTime(3000); // 3 intervals = 9 tokens
+    assert.equal(bucket.getTokens(), 9);
+  });
+
+  it('does not exceed capacity on refill', () => {
+    const bucket = new TokenBucket({ capacity: 5, refillRate: 10, refillInterval: 1000 });
+    // starts full, advance time – should stay capped at capacity
+    bucket._advanceTime(2000);
+    assert.equal(bucket.getTokens(), 5);
+  });
+
+  it('partial interval does not yet refill', () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 5, refillInterval: 1000 });
+    bucket.consume(10);
+    bucket._advanceTime(999); // just under one interval
+    assert.equal(bucket.getTokens(), 0);
+  });
+
+  it('refills with very small interval via actual time passage', async () => {
+    const bucket = new TokenBucket({ capacity: 10, refillRate: 5, refillInterval: 20 });
+    bucket.consume(10);
+    await new Promise(res => setTimeout(res, 50));
+    assert.ok(bucket.getTokens() >= 5, 'should have refilled at least 5 tokens');
+  });
+});
+
+// ─── SlidingWindowCounter — basic hit tracking ────────────────────────────────
+
+describe('SlidingWindowCounter – basic hit tracking', () => {
+  it('creates an instance', () => {
+    const counter = new SlidingWindowCounter({ limit: 5, windowMs: 1000 });
+    assert.ok(counter instanceof SlidingWindowCounter);
+  });
+
+  it('exposes limit getter', () => {
+    const counter = new SlidingWindowCounter({ limit: 5, windowMs: 1000 });
+    assert.equal(counter.limit, 5);
+  });
+
+  it('exposes windowMs getter', () => {
+    const counter = new SlidingWindowCounter({ limit: 5, windowMs: 2000 });
+    assert.equal(counter.windowMs, 2000);
+  });
+
+  it('allows hits within limit', () => {
+    const counter = new SlidingWindowCounter({ limit: 3, windowMs: 10000 });
+    assert.equal(counter.hit('a'), true);
+    assert.equal(counter.hit('a'), true);
+    assert.equal(counter.hit('a'), true);
+  });
+
+  it('blocks hit when limit exceeded', () => {
+    const counter = new SlidingWindowCounter({ limit: 2, windowMs: 10000 });
+    counter.hit('a');
+    counter.hit('a');
+    assert.equal(counter.hit('a'), false);
+  });
+
+  it('uses default key when no key provided', () => {
+    const counter = new SlidingWindowCounter({ limit: 2, windowMs: 10000 });
+    assert.equal(counter.hit(), true);
+    assert.equal(counter.hit(), true);
+    assert.equal(counter.hit(), false);
+  });
+
+  it('throws on zero limit', () => {
+    assert.throws(() => new SlidingWindowCounter({ limit: 0, windowMs: 1000 }), RangeError);
+  });
+
+  it('throws on zero windowMs', () => {
+    assert.throws(() => new SlidingWindowCounter({ limit: 5, windowMs: 0 }), RangeError);
+  });
+});
+
+// ─── SlidingWindowCounter — getCount ─────────────────────────────────────────
+
+describe('SlidingWindowCounter – getCount', () => {
+  it('returns 0 for a new key', () => {
+    const counter = new SlidingWindowCounter({ limit: 5, windowMs: 1000 });
+    assert.equal(counter.getCount('x'), 0);
+  });
+
+  it('returns correct count after hits', () => {
+    const counter = new SlidingWindowCounter({ limit: 10, windowMs: 10000 });
+    counter.hit('k');
+    counter.hit('k');
+    counter.hit('k');
+    assert.equal(counter.getCount('k'), 3);
+  });
+
+  it('count does not exceed limit', () => {
+    const counter = new SlidingWindowCounter({ limit: 2, windowMs: 10000 });
+    counter.hit('k');
+    counter.hit('k');
+    counter.hit('k'); // denied
+    assert.equal(counter.getCount('k'), 2);
+  });
+});
+
+// ─── SlidingWindowCounter — multiple keys ─────────────────────────────────────
+
+describe('SlidingWindowCounter – multiple keys', () => {
+  it('tracks keys independently', () => {
+    const counter = new SlidingWindowCounter({ limit: 2, windowMs: 10000 });
+    counter.hit('alice');
+    counter.hit('alice');
+    assert.equal(counter.hit('alice'), false); // alice at limit
+    assert.equal(counter.hit('bob'), true);    // bob not affected
+  });
+
+  it('count for one key does not affect another', () => {
+    const counter = new SlidingWindowCounter({ limit: 5, windowMs: 10000 });
+    counter.hit('alice');
+    counter.hit('alice');
+    assert.equal(counter.getCount('alice'), 2);
+    assert.equal(counter.getCount('bob'), 0);
+  });
+});
+
+// ─── SlidingWindowCounter — reset ─────────────────────────────────────────────
+
+describe('SlidingWindowCounter – reset', () => {
+  it('clears count for a key', () => {
+    const counter = new SlidingWindowCounter({ limit: 3, windowMs: 10000 });
+    counter.hit('u');
+    counter.hit('u');
+    counter.reset('u');
+    assert.equal(counter.getCount('u'), 0);
+  });
+
+  it('allows hits again after reset', () => {
+    const counter = new SlidingWindowCounter({ limit: 2, windowMs: 10000 });
+    counter.hit('u');
+    counter.hit('u');
+    assert.equal(counter.hit('u'), false);
+    counter.reset('u');
+    assert.equal(counter.hit('u'), true);
+  });
+
+  it('reset only affects specified key', () => {
+    const counter = new SlidingWindowCounter({ limit: 5, windowMs: 10000 });
+    counter.hit('a');
+    counter.hit('b');
+    counter.reset('a');
+    assert.equal(counter.getCount('a'), 0);
+    assert.equal(counter.getCount('b'), 1);
+  });
+
+  it('resets default key when no key given', () => {
+    const counter = new SlidingWindowCounter({ limit: 5, windowMs: 10000 });
+    counter.hit();
+    counter.hit();
+    counter.reset();
+    assert.equal(counter.getCount(), 0);
+  });
+});
+
+// ─── SlidingWindowCounter — window expiry ─────────────────────────────────────
+
+describe('SlidingWindowCounter – window expiry', () => {
+  it('allows hits after window expires (actual time)', async () => {
+    const counter = new SlidingWindowCounter({ limit: 2, windowMs: 30 });
+    counter.hit('u');
+    counter.hit('u');
+    assert.equal(counter.hit('u'), false);
+    await new Promise(res => setTimeout(res, 50));
+    assert.equal(counter.hit('u'), true);
+  });
+
+  it('getCount drops old entries after window expires', async () => {
+    const counter = new SlidingWindowCounter({ limit: 10, windowMs: 30 });
+    counter.hit('u');
+    counter.hit('u');
+    await new Promise(res => setTimeout(res, 50));
+    assert.equal(counter.getCount('u'), 0);
+  });
+});
+
+// ─── FixedWindowCounter — basic hit tracking ─────────────────────────────────
+
+describe('FixedWindowCounter – basic hit tracking', () => {
+  it('creates an instance', () => {
+    const counter = new FixedWindowCounter({ limit: 10, windowMs: 1000 });
+    assert.ok(counter instanceof FixedWindowCounter);
+  });
+
+  it('allows hits within limit', () => {
+    const counter = new FixedWindowCounter({ limit: 3, windowMs: 10000 });
+    assert.equal(counter.hit('a'), true);
+    assert.equal(counter.hit('a'), true);
+    assert.equal(counter.hit('a'), true);
+  });
+
+  it('blocks hit when limit is exceeded', () => {
+    const counter = new FixedWindowCounter({ limit: 2, windowMs: 10000 });
+    counter.hit('a');
+    counter.hit('a');
+    assert.equal(counter.hit('a'), false);
+  });
+
+  it('uses default key when no key provided', () => {
+    const counter = new FixedWindowCounter({ limit: 2, windowMs: 10000 });
+    assert.equal(counter.hit(), true);
+    assert.equal(counter.hit(), true);
+    assert.equal(counter.hit(), false);
+  });
+
+  it('exposes limit getter', () => {
+    const counter = new FixedWindowCounter({ limit: 7, windowMs: 1000 });
+    assert.equal(counter.limit, 7);
+  });
+
+  it('exposes windowMs getter', () => {
+    const counter = new FixedWindowCounter({ limit: 5, windowMs: 5000 });
+    assert.equal(counter.windowMs, 5000);
+  });
+
+  it('throws on zero limit', () => {
+    assert.throws(() => new FixedWindowCounter({ limit: 0, windowMs: 1000 }), RangeError);
+  });
+
+  it('throws on zero windowMs', () => {
+    assert.throws(() => new FixedWindowCounter({ limit: 5, windowMs: 0 }), RangeError);
+  });
+});
+
+// ─── FixedWindowCounter — getCount ────────────────────────────────────────────
+
+describe('FixedWindowCounter – getCount', () => {
+  it('returns 0 initially', () => {
+    const counter = new FixedWindowCounter({ limit: 5, windowMs: 1000 });
+    assert.equal(counter.getCount('x'), 0);
+  });
+
+  it('increments with each hit', () => {
+    const counter = new FixedWindowCounter({ limit: 10, windowMs: 10000 });
+    counter.hit('k');
+    counter.hit('k');
+    assert.equal(counter.getCount('k'), 2);
+  });
+
+  it('caps count at limit (blocked hits not counted)', () => {
+    const counter = new FixedWindowCounter({ limit: 2, windowMs: 10000 });
+    counter.hit('k');
+    counter.hit('k');
+    counter.hit('k'); // denied
+    assert.equal(counter.getCount('k'), 2);
+  });
+});
+
+// ─── FixedWindowCounter — reset ───────────────────────────────────────────────
+
+describe('FixedWindowCounter – reset', () => {
+  it('clears the counter for a key', () => {
+    const counter = new FixedWindowCounter({ limit: 10, windowMs: 10000 });
+    counter.hit('u');
+    counter.hit('u');
+    counter.reset('u');
+    assert.equal(counter.getCount('u'), 0);
+  });
+
+  it('allows hits again after reset', () => {
+    const counter = new FixedWindowCounter({ limit: 1, windowMs: 10000 });
+    counter.hit('u');
+    assert.equal(counter.hit('u'), false);
+    counter.reset('u');
+    assert.equal(counter.hit('u'), true);
+  });
+
+  it('resets default key when no key given', () => {
+    const counter = new FixedWindowCounter({ limit: 5, windowMs: 10000 });
+    counter.hit();
+    counter.hit();
+    counter.reset();
+    assert.equal(counter.getCount(), 0);
+  });
+
+  it('reset only affects the specified key', () => {
+    const counter = new FixedWindowCounter({ limit: 5, windowMs: 10000 });
+    counter.hit('a');
+    counter.hit('b');
+    counter.reset('a');
+    assert.equal(counter.getCount('a'), 0);
+    assert.equal(counter.getCount('b'), 1);
+  });
+
+  it('window auto-resets after windowMs expires', async () => {
+    const counter = new FixedWindowCounter({ limit: 2, windowMs: 30 });
+    counter.hit('u');
+    counter.hit('u');
+    assert.equal(counter.hit('u'), false);
+    await new Promise(res => setTimeout(res, 50));
+    assert.equal(counter.hit('u'), true);
   });
 });
 
@@ -187,147 +458,194 @@ describe('createSlidingWindowLimiter – factory', () => {
 
 describe('LeakyBucket – constructor', () => {
   it('creates an instance', () => {
-    const bucket = new LeakyBucket(100, 0.1);
+    const bucket = new LeakyBucket({ capacity: 10, leakRate: 1 });
     assert.ok(bucket instanceof LeakyBucket);
   });
 
-  it('starts with level 0', () => {
-    const bucket = new LeakyBucket(100, 0.1);
-    assert.equal(bucket.level(), 0);
+  it('starts empty (size === 0)', () => {
+    const bucket = new LeakyBucket({ capacity: 10, leakRate: 1 });
+    assert.equal(bucket.size, 0);
+  });
+
+  it('exposes capacity getter', () => {
+    const bucket = new LeakyBucket({ capacity: 20, leakRate: 2 });
+    assert.equal(bucket.capacity, 20);
+  });
+
+  it('exposes leakRate getter', () => {
+    const bucket = new LeakyBucket({ capacity: 10, leakRate: 5 });
+    assert.equal(bucket.leakRate, 5);
+  });
+
+  it('throws on zero capacity', () => {
+    assert.throws(() => new LeakyBucket({ capacity: 0, leakRate: 1 }), RangeError);
+  });
+
+  it('throws on zero leakRate', () => {
+    assert.throws(() => new LeakyBucket({ capacity: 10, leakRate: 0 }), RangeError);
   });
 });
 
-// ─── LeakyBucket — add ────────────────────────────────────────────────────────
+// ─── LeakyBucket — push until full ────────────────────────────────────────────
 
-describe('LeakyBucket – add', () => {
-  it('returns true when adding within capacity', () => {
-    const bucket = new LeakyBucket(10, 0.1);
-    assert.equal(bucket.add(5), true);
+describe('LeakyBucket – push until full', () => {
+  it('returns true while bucket has space', () => {
+    const bucket = new LeakyBucket({ capacity: 5, leakRate: 1 });
+    assert.equal(bucket.push(), true);
+    assert.equal(bucket.push(), true);
+    assert.equal(bucket.push(), true);
   });
 
-  it('increases level after add', () => {
-    const bucket = new LeakyBucket(10, 0.1);
-    bucket.add(4);
-    assert.equal(bucket.level(), 4);
+  it('returns false when bucket is full', () => {
+    const bucket = new LeakyBucket({ capacity: 3, leakRate: 1 });
+    bucket.push();
+    bucket.push();
+    bucket.push();
+    assert.equal(bucket.push(), false);
   });
 
-  it('returns false when add would exceed capacity', () => {
-    const bucket = new LeakyBucket(10, 0.1);
-    bucket.add(8);
-    assert.equal(bucket.add(3), false);
+  it('filling exactly to capacity returns true', () => {
+    const bucket = new LeakyBucket({ capacity: 2, leakRate: 1 });
+    assert.equal(bucket.push(), true);
+    assert.equal(bucket.push(), true);
   });
 
-  it('does not change level on overflow', () => {
-    const bucket = new LeakyBucket(10, 0.1);
-    bucket.add(9);
-    bucket.add(2); // would overflow → rejected
-    assert.equal(bucket.level(), 9);
+  it('size is 0 after leak fully drains bucket', () => {
+    const bucket = new LeakyBucket({ capacity: 5, leakRate: 100 }); // fast leak
+    bucket.push();
+    bucket._advanceTime(100); // 100ms * 100/s = 10 tokens drained
+    assert.equal(bucket.size, 0);
   });
 
-  it('allows adding exactly to capacity', () => {
-    const bucket = new LeakyBucket(10, 0.1);
-    bucket.add(7);
-    assert.equal(bucket.add(3), true);
-    assert.equal(bucket.level(), 10);
-  });
-
-  it('returns false when adding 1 to a full bucket', () => {
-    const bucket = new LeakyBucket(5, 0.1);
-    bucket.add(5);
-    assert.equal(bucket.add(1), false);
-    assert.equal(bucket.add(), false);
-  });
-
-  it('default amount is 1', () => {
-    const bucket = new LeakyBucket(10, 0.1);
-    bucket.add();
-    assert.equal(bucket.level(), 1);
-  });
-
-  it('accepts fractional amounts', () => {
-    const bucket = new LeakyBucket(10, 0.1);
-    bucket.add(0.5);
-    assert.ok(Math.abs(bucket.level() - 0.5) < 0.001);
+  it('accepts more requests after partial drain', () => {
+    const bucket = new LeakyBucket({ capacity: 2, leakRate: 100 }); // leaks 100/s
+    bucket.push();
+    bucket.push(); // full
+    assert.equal(bucket.push(), false);
+    bucket._advanceTime(1000); // 1s * 100/s = 100 tokens leaked, bucket empty
+    assert.equal(bucket.push(), true);
   });
 });
 
-// ─── LeakyBucket — level ─────────────────────────────────────────────────────
+// ─── LeakyBucket — size tracking ──────────────────────────────────────────────
 
-describe('LeakyBucket – level', () => {
-  it('reflects current fill after several adds', () => {
-    const bucket = new LeakyBucket(20, 0.001);
-    bucket.add(5);
-    bucket.add(3);
-    assert.equal(bucket.level(), 8);
+describe('LeakyBucket – size tracking', () => {
+  it('tracks size after pushes', () => {
+    const bucket = new LeakyBucket({ capacity: 10, leakRate: 0.001 }); // very slow leak
+    bucket.push();
+    bucket.push();
+    bucket.push();
+    // Size should be approximately 3 (tiny leak over ns)
+    assert.ok(bucket.size >= 2 && bucket.size <= 3);
   });
 
-  it('accounts for leak when reading level', () => {
-    const bucket = new LeakyBucket(100, 0.1); // leaks 0.1/ms = 100ms drains 10
-    bucket.add(50);
-    bucket.advance(100); // drains 10
-    const lvl = bucket.level();
-    assert.ok(lvl >= 39.9 && lvl <= 40.1, `expected ~40, got ${lvl}`);
+  it('size decreases after time passes', () => {
+    const bucket = new LeakyBucket({ capacity: 10, leakRate: 2 }); // 2 per second
+    bucket.push();
+    bucket.push();
+    bucket.push(); // size = 3
+    bucket._advanceTime(1000); // 1s * 2/s = 2 leaked
+    const sz = bucket.size;
+    assert.ok(sz >= 0.9 && sz <= 1.1, `expected ~1, got ${sz}`);
   });
 
-  it('never reports below 0', () => {
-    const bucket = new LeakyBucket(10, 1); // leaks 1/ms
-    bucket.add(5);
-    bucket.advance(10000); // drains far more than 5
-    assert.equal(bucket.level(), 0);
-  });
-});
-
-// ─── LeakyBucket — advance ────────────────────────────────────────────────────
-
-describe('LeakyBucket – advance', () => {
-  it('leaks tokens over advanced time', () => {
-    const bucket = new LeakyBucket(100, 0.01); // 0.01/ms
-    bucket.add(10);
-    bucket.advance(500); // drains 5
-    const lvl = bucket.level();
-    assert.ok(lvl >= 4.9 && lvl <= 5.1, `expected ~5, got ${lvl}`);
-  });
-
-  it('advance makes room for more adds', () => {
-    const bucket = new LeakyBucket(10, 0.01); // 0.01/ms
-    bucket.add(10); // full
-    assert.equal(bucket.add(1), false);
-    bucket.advance(200); // drains 2
-    assert.equal(bucket.add(1), true);
-  });
-
-  it('cumulative advances drain correctly', () => {
-    const bucket = new LeakyBucket(100, 0.1); // 0.1/ms
-    bucket.add(100);
-    bucket.advance(500); // drains 50
-    bucket.advance(500); // drains another 50
-    assert.equal(bucket.level(), 0);
-  });
-
-  it('advance of 0 does not change level', () => {
-    const bucket = new LeakyBucket(10, 0.1);
-    bucket.add(5);
-    bucket.advance(0);
-    assert.equal(bucket.level(), 5);
+  it('size never goes below 0', () => {
+    const bucket = new LeakyBucket({ capacity: 10, leakRate: 100 });
+    bucket.push();
+    bucket._advanceTime(10000); // way more than needed
+    assert.equal(bucket.size, 0);
   });
 });
 
-// ─── createLeakyBucket factory ────────────────────────────────────────────────
+// ─── LeakyBucket — reset ──────────────────────────────────────────────────────
 
-describe('createLeakyBucket – factory', () => {
-  it('returns a LeakyBucket instance', () => {
-    const bucket = createLeakyBucket(50, 0.05);
-    assert.ok(bucket instanceof LeakyBucket);
+describe('LeakyBucket – reset', () => {
+  it('empties the bucket', () => {
+    const bucket = new LeakyBucket({ capacity: 5, leakRate: 1 });
+    bucket.push();
+    bucket.push();
+    bucket.reset();
+    assert.equal(bucket.size, 0);
   });
 
-  it('factory-created bucket starts at level 0', () => {
-    const bucket = createLeakyBucket(50, 0.05);
-    assert.equal(bucket.level(), 0);
+  it('allows pushes again after reset', () => {
+    const bucket = new LeakyBucket({ capacity: 2, leakRate: 1 });
+    bucket.push();
+    bucket.push();
+    assert.equal(bucket.push(), false);
+    bucket.reset();
+    assert.equal(bucket.push(), true);
+  });
+});
+
+// ─── Factory functions ────────────────────────────────────────────────────────
+
+describe('createTokenBucket – factory', () => {
+  it('returns a TokenBucket instance', () => {
+    const bucket = createTokenBucket(10, 2);
+    assert.ok(bucket instanceof TokenBucket);
   });
 
-  it('factory-created bucket enforces capacity', () => {
-    const bucket = createLeakyBucket(5, 0.001);
-    bucket.add(5);
-    assert.equal(bucket.add(1), false);
+  it('has correct capacity', () => {
+    const bucket = createTokenBucket(15, 3);
+    assert.equal(bucket.capacity, 15);
+  });
+
+  it('starts full', () => {
+    const bucket = createTokenBucket(8, 1);
+    assert.equal(bucket.getTokens(), 8);
+  });
+
+  it('allows consume after creation', () => {
+    const bucket = createTokenBucket(5, 1);
+    assert.equal(bucket.consume(3), true);
+    assert.equal(bucket.getTokens(), 2);
+  });
+});
+
+describe('createSlidingWindow – factory', () => {
+  it('returns a SlidingWindowCounter instance', () => {
+    const counter = createSlidingWindow(5, 1000);
+    assert.ok(counter instanceof SlidingWindowCounter);
+  });
+
+  it('has correct limit', () => {
+    const counter = createSlidingWindow(7, 2000);
+    assert.equal(counter.limit, 7);
+  });
+
+  it('has correct windowMs', () => {
+    const counter = createSlidingWindow(3, 5000);
+    assert.equal(counter.windowMs, 5000);
+  });
+
+  it('enforces limit correctly', () => {
+    const counter = createSlidingWindow(2, 10000);
+    assert.equal(counter.hit('u'), true);
+    assert.equal(counter.hit('u'), true);
+    assert.equal(counter.hit('u'), false);
+  });
+});
+
+describe('createFixedWindow – factory', () => {
+  it('returns a FixedWindowCounter instance', () => {
+    const counter = createFixedWindow(10, 1000);
+    assert.ok(counter instanceof FixedWindowCounter);
+  });
+
+  it('has correct limit', () => {
+    const counter = createFixedWindow(6, 500);
+    assert.equal(counter.limit, 6);
+  });
+
+  it('has correct windowMs', () => {
+    const counter = createFixedWindow(4, 3000);
+    assert.equal(counter.windowMs, 3000);
+  });
+
+  it('enforces limit correctly', () => {
+    const counter = createFixedWindow(1, 10000);
+    assert.equal(counter.hit('u'), true);
+    assert.equal(counter.hit('u'), false);
   });
 });

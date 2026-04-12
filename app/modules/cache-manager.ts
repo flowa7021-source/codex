@@ -36,7 +36,8 @@ export class Cache<V = unknown> {
   #defaultTtl: number | null;
   #strategy: 'lru' | 'lfu' | 'fifo';
   #onEvict: ((key: string, value: unknown) => void) | undefined;
-  #insertCounter: number;
+  /** Monotonically increasing clock used for both insertOrder and lastAccess. */
+  #clock: number;
   #hits: number;
   #misses: number;
   #evictions: number;
@@ -47,7 +48,7 @@ export class Cache<V = unknown> {
     this.#defaultTtl = options?.ttl ?? null;
     this.#strategy = options?.strategy ?? 'lru';
     this.#onEvict = options?.onEvict;
-    this.#insertCounter = 0;
+    this.#clock = 0;
     this.#hits = 0;
     this.#misses = 0;
     this.#evictions = 0;
@@ -91,12 +92,13 @@ export class Cache<V = unknown> {
     const resolvedTtl = ttl !== undefined ? ttl : this.#defaultTtl;
     const expiresAt = resolvedTtl !== null ? Date.now() + resolvedTtl : null;
 
+    const now = this.#clock++;
     this.#store.set(key, {
       value,
       expiresAt,
-      insertOrder: this.#insertCounter++,
+      insertOrder: now,
       frequency: 1,
-      lastAccess: Date.now(),
+      lastAccess: now,
     });
   }
 
@@ -117,9 +119,9 @@ export class Cache<V = unknown> {
       return undefined;
     }
 
-    // Update access metadata.
+    // Update access metadata using a monotonic clock for stable ordering.
     entry.frequency++;
-    entry.lastAccess = Date.now();
+    entry.lastAccess = this.#clock++;
     this.#hits++;
     return entry.value;
   }
@@ -248,25 +250,35 @@ export class Cache<V = unknown> {
         }
       }
     } else if (this.#strategy === 'lfu') {
-      // Evict the entry with the lowest frequency (ties: oldest lastAccess).
+      // Evict the entry with the lowest frequency.
+      // Ties broken by oldest lastAccess, then by oldest insertOrder.
       let minFreq = Infinity;
       let minAccess = Infinity;
+      let minOrder = Infinity;
       for (const [key, entry] of this.#store) {
         if (
           entry.frequency < minFreq ||
-          (entry.frequency === minFreq && entry.lastAccess < minAccess)
+          (entry.frequency === minFreq && entry.lastAccess < minAccess) ||
+          (entry.frequency === minFreq && entry.lastAccess === minAccess && entry.insertOrder < minOrder)
         ) {
           minFreq = entry.frequency;
           minAccess = entry.lastAccess;
+          minOrder = entry.insertOrder;
           victimKey = key;
         }
       }
     } else {
       // LRU: evict the entry with the oldest lastAccess.
+      // Ties broken by insertOrder (oldest insert is evicted first).
       let minAccess = Infinity;
+      let minOrder = Infinity;
       for (const [key, entry] of this.#store) {
-        if (entry.lastAccess < minAccess) {
+        if (
+          entry.lastAccess < minAccess ||
+          (entry.lastAccess === minAccess && entry.insertOrder < minOrder)
+        ) {
           minAccess = entry.lastAccess;
+          minOrder = entry.insertOrder;
           victimKey = key;
         }
       }

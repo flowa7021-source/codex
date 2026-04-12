@@ -1,134 +1,336 @@
 // @ts-check
 // ─── Pipeline ────────────────────────────────────────────────────────────────
-// Data transformation pipeline utilities for chaining synchronous and
-// asynchronous transforms in a readable, functional style.
+// Data transformation pipeline builder with synchronous and asynchronous
+// variants. Supports pipe, map, filter, tap, catch, execute/run.
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Internal Helpers ─────────────────────────────────────────────────────────
 
-/**
- * A function that transforms a value.
- */
-export type Transform<TIn, TOut> = (value: TIn) => TOut | Promise<TOut>;
+/** Sentinel wrapper used to propagate errors through the step chain. */
+class _ErrorSentinel {
+  #error: Error;
 
-// ─── Pipeline ────────────────────────────────────────────────────────────────
-
-/**
- * A synchronous pipeline that chains transform functions.
- */
-export class Pipeline<T> {
-  #value: T;
-
-  constructor(value: T) {
-    this.#value = value;
+  constructor(error: Error) {
+    this.#error = error;
   }
 
-  /** Apply a synchronous transform. Returns a new Pipeline. */
-  pipe<U>(fn: (value: T) => U): Pipeline<U> {
-    return new Pipeline(fn(this.#value));
-  }
-
-  /** Get the current value. */
-  value(): T {
-    return this.#value;
-  }
-
-  /** Apply a transform only if a condition is true. */
-  when(condition: boolean | ((value: T) => boolean), fn: (value: T) => T): Pipeline<T> {
-    const met =
-      typeof condition === 'function' ? condition(this.#value) : condition;
-    return met ? new Pipeline(fn(this.#value)) : this;
-  }
-
-  /** Apply a side effect without changing the value. */
-  tap(fn: (value: T) => void): Pipeline<T> {
-    fn(this.#value);
-    return this;
+  get error(): Error {
+    return this.#error;
   }
 }
 
-/**
- * Create a pipeline from a value.
- */
-export function pipeline<T>(value: T): Pipeline<T> {
-  return new Pipeline(value);
-}
-
-// ─── AsyncPipeline ───────────────────────────────────────────────────────────
+type SyncStep = (value: unknown) => unknown;
+type AsyncStep = (value: unknown) => unknown | Promise<unknown>;
 
 /**
- * An async pipeline that chains async transform functions.
+ * Re-wrap a list of sync steps so that errors thrown by each step are captured
+ * into an `_ErrorSentinel` rather than propagating immediately.
  */
-export class AsyncPipeline<T> {
-  #promise: Promise<T>;
-
-  constructor(value: T | Promise<T>) {
-    this.#promise = Promise.resolve(value);
-  }
-
-  /** Apply an async or sync transform. Returns a new AsyncPipeline. */
-  pipe<U>(fn: (value: T) => U | Promise<U>): AsyncPipeline<U> {
-    return new AsyncPipeline<U>(this.#promise.then(fn));
-  }
-
-  /** Apply a transform only if a condition is true. */
-  when(
-    condition: boolean | ((value: T) => boolean | Promise<boolean>),
-    fn: (value: T) => T | Promise<T>,
-  ): AsyncPipeline<T> {
-    const next = this.#promise.then(async (value) => {
-      const met =
-        typeof condition === 'function'
-          ? await condition(value)
-          : condition;
-      return met ? fn(value) : value;
-    });
-    return new AsyncPipeline<T>(next);
-  }
-
-  /** Apply a side effect without changing the value. */
-  tap(fn: (value: T) => void | Promise<void>): AsyncPipeline<T> {
-    const next = this.#promise.then(async (value) => {
-      await fn(value);
-      return value;
-    });
-    return new AsyncPipeline<T>(next);
-  }
-
-  /** Resolve the pipeline and get the final value. */
-  resolve(): Promise<T> {
-    return this.#promise;
-  }
-}
-
-/**
- * Create an async pipeline.
- */
-export function asyncPipeline<T>(value: T | Promise<T>): AsyncPipeline<T> {
-  return new AsyncPipeline(value);
-}
-
-// ─── Compose / PipeThrough ───────────────────────────────────────────────────
-
-/**
- * Compose multiple functions (right to left, like math compose).
- */
-export function compose<T>(...fns: Array<(value: T) => T>): (value: T) => T {
-  return (value: T) => {
-    let result = value;
-    for (let i = fns.length - 1; i >= 0; i--) {
-      result = fns[i](result);
+function _wrapStepsWithErrorCapture(steps: SyncStep[]): SyncStep[] {
+  return steps.map((step) => (value: unknown) => {
+    if (value instanceof _ErrorSentinel) {
+      return value; // propagate sentinel
     }
-    return result;
-  };
+    try {
+      return step(value);
+    } catch (err) {
+      return new _ErrorSentinel(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
 }
 
 /**
- * Pipe value through multiple functions (left to right).
+ * Re-wrap a list of async steps so that errors are captured into sentinels.
  */
-export function pipeThrough<T>(value: T, ...fns: Array<(value: T) => T>): T {
-  let result = value;
-  for (const fn of fns) {
-    result = fn(result);
+function _wrapAsyncStepsWithErrorCapture(steps: AsyncStep[]): AsyncStep[] {
+  return steps.map((step) => async (value: unknown) => {
+    if (value instanceof _ErrorSentinel) {
+      return value;
+    }
+    try {
+      return await step(value);
+    } catch (err) {
+      return new _ErrorSentinel(err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+}
+
+// ─── Pipeline (Synchronous) ───────────────────────────────────────────────────
+
+/**
+ * A synchronous data transformation pipeline.
+ *
+ * @template T - The input type
+ * @template R - The current output type (defaults to T)
+ *
+ * @example
+ *   const result = new Pipeline<number>()
+ *     .pipe(x => x * 2)
+ *     .pipe(x => x + 1)
+ *     .execute(5); // 11
+ */
+export class Pipeline<T, R = T> {
+  #steps: SyncStep[];
+
+  constructor() {
+    this.#steps = [];
   }
-  return result;
+
+  /** @internal Constructor used by step methods to carry steps forward. */
+  static #fromSteps<T, R>(steps: SyncStep[]): Pipeline<T, R> {
+    const p = new Pipeline<T, R>();
+    p.#steps = steps;
+    return p;
+  }
+
+  /**
+   * Add a transformation step. Returns a new Pipeline with the transformed type.
+   */
+  pipe<U>(fn: (value: R) => U): Pipeline<T, U> {
+    return Pipeline.#fromSteps<T, U>([...this.#steps, fn as SyncStep]);
+  }
+
+  /**
+   * Map over each item in the array value. Returns a new Pipeline whose output
+   * is an array of mapped values.
+   */
+  map<U>(fn: (value: R extends Array<infer I> ? I : R) => U): Pipeline<T, U[]> {
+    return this.pipe((value) => {
+      const arr = Array.isArray(value) ? value : [value];
+      return arr.map(fn as (x: unknown) => U);
+    }) as unknown as Pipeline<T, U[]>;
+  }
+
+  /**
+   * Filter items in the array value.
+   * For array values: keeps only items that pass the predicate.
+   * For scalar values: passes the value through unchanged.
+   */
+  filter(pred: (value: R extends Array<infer I> ? I : R) => boolean): Pipeline<T, R> {
+    return this.pipe((value) => {
+      if (Array.isArray(value)) {
+        return value.filter(pred as (x: unknown) => boolean);
+      }
+      return value;
+    }) as unknown as Pipeline<T, R>;
+  }
+
+  /**
+   * Side-effect step: calls `fn` with the current value, then passes the value
+   * through unchanged.
+   */
+  tap(fn: (value: R) => void): Pipeline<T, R> {
+    return this.pipe((value) => {
+      fn(value as R);
+      return value;
+    }) as unknown as Pipeline<T, R>;
+  }
+
+  /**
+   * Register an error handler. If a prior step throws, `fn` is called with the
+   * error and its return value becomes the new pipeline value.
+   */
+  catch(fn: (err: Error) => R): Pipeline<T, R> {
+    const catchStep: SyncStep = (value: unknown) => {
+      if (value instanceof _ErrorSentinel) {
+        return fn(value.error);
+      }
+      return value;
+    };
+    return Pipeline.#fromSteps<T, R>([
+      ..._wrapStepsWithErrorCapture(this.#steps),
+      catchStep,
+    ]);
+  }
+
+  /**
+   * Execute the pipeline with the given input, returning the final output.
+   */
+  execute(input: T): R {
+    let value: unknown = input;
+    for (const step of this.#steps) {
+      if (value instanceof _ErrorSentinel) {
+        // propagate error sentinel through non-catch steps
+        value = step(value);
+      } else {
+        try {
+          value = step(value);
+        } catch (err) {
+          value = new _ErrorSentinel(err instanceof Error ? err : new Error(String(err)));
+        }
+      }
+    }
+    if (value instanceof _ErrorSentinel) {
+      throw value.error;
+    }
+    return value as R;
+  }
+
+  /**
+   * Alias for `execute`.
+   */
+  run(input: T): R {
+    return this.execute(input);
+  }
+}
+
+// ─── AsyncPipeline ────────────────────────────────────────────────────────────
+
+/**
+ * An asynchronous data transformation pipeline.
+ *
+ * @template T - The input type
+ * @template R - The current output type (defaults to T)
+ *
+ * @example
+ *   const result = await new AsyncPipeline<number>()
+ *     .pipe(async x => x * 2)
+ *     .execute(5); // 10
+ */
+export class AsyncPipeline<T, R = T> {
+  #steps: AsyncStep[];
+
+  constructor() {
+    this.#steps = [];
+  }
+
+  /** @internal Constructor used by step methods to carry steps forward. */
+  static #fromSteps<T, R>(steps: AsyncStep[]): AsyncPipeline<T, R> {
+    const p = new AsyncPipeline<T, R>();
+    p.#steps = steps;
+    return p;
+  }
+
+  /**
+   * Add an async (or sync) transformation step.
+   */
+  pipe<U>(fn: (value: R) => U | Promise<U>): AsyncPipeline<T, U> {
+    return AsyncPipeline.#fromSteps<T, U>([...this.#steps, fn as AsyncStep]);
+  }
+
+  /**
+   * Async map over array items.
+   */
+  map<U>(fn: (value: R extends Array<infer I> ? I : R) => U | Promise<U>): AsyncPipeline<T, U[]> {
+    return this.pipe(async (value) => {
+      const arr = Array.isArray(value) ? value : [value];
+      return Promise.all(arr.map(fn as (x: unknown) => U | Promise<U>));
+    }) as unknown as AsyncPipeline<T, U[]>;
+  }
+
+  /**
+   * Async filter over array items (or scalar values).
+   */
+  filter(
+    pred: (value: R extends Array<infer I> ? I : R) => boolean | Promise<boolean>,
+  ): AsyncPipeline<T, R> {
+    return this.pipe(async (value) => {
+      if (Array.isArray(value)) {
+        const results = await Promise.all(
+          value.map(async (item: unknown) => ({
+            item,
+            keep: await (pred as (x: unknown) => boolean | Promise<boolean>)(item),
+          })),
+        );
+        return results.filter((r) => r.keep).map((r) => r.item);
+      }
+      return value;
+    }) as unknown as AsyncPipeline<T, R>;
+  }
+
+  /**
+   * Async side-effect step.
+   */
+  tap(fn: (value: R) => void | Promise<void>): AsyncPipeline<T, R> {
+    return this.pipe(async (value) => {
+      await fn(value as R);
+      return value;
+    }) as unknown as AsyncPipeline<T, R>;
+  }
+
+  /**
+   * Async error handler.
+   */
+  catch(fn: (err: Error) => R | Promise<R>): AsyncPipeline<T, R> {
+    const catchStep: AsyncStep = async (value: unknown) => {
+      if (value instanceof _ErrorSentinel) {
+        return fn(value.error);
+      }
+      return value;
+    };
+    return AsyncPipeline.#fromSteps<T, R>([
+      ..._wrapAsyncStepsWithErrorCapture(this.#steps),
+      catchStep,
+    ]);
+  }
+
+  /**
+   * Execute the async pipeline with the given input.
+   */
+  async execute(input: T): Promise<R> {
+    let value: unknown = input;
+    for (const step of this.#steps) {
+      if (value instanceof _ErrorSentinel) {
+        value = await step(value);
+      } else {
+        try {
+          value = await step(value);
+        } catch (err) {
+          value = new _ErrorSentinel(err instanceof Error ? err : new Error(String(err)));
+        }
+      }
+    }
+    if (value instanceof _ErrorSentinel) {
+      throw value.error;
+    }
+    return value as R;
+  }
+
+  /**
+   * Alias for `execute`.
+   */
+  run(input: T): Promise<R> {
+    return this.execute(input);
+  }
+}
+
+// ─── Factory Functions ────────────────────────────────────────────────────────
+
+/**
+ * Create a new synchronous pipeline.
+ *
+ * @template T
+ * @returns {Pipeline<T, T>}
+ *
+ * @example
+ *   const result = pipeline<number>().pipe(x => x * 2).execute(5); // 10
+ */
+export function pipeline<T>(): Pipeline<T, T> {
+  return new Pipeline<T, T>();
+}
+
+/**
+ * Create a new asynchronous pipeline.
+ *
+ * @template T
+ * @returns {AsyncPipeline<T, T>}
+ *
+ * @example
+ *   const result = await asyncPipeline<number>().pipe(async x => x * 2).execute(5); // 10
+ */
+export function asyncPipeline<T>(): AsyncPipeline<T, T> {
+  return new AsyncPipeline<T, T>();
+}
+
+/**
+ * Apply a sequence of transformation functions to an initial value (one-time use).
+ *
+ * @param {unknown} value - The initial value
+ * @param {...((x: unknown) => unknown)} fns - Functions to apply in order
+ * @returns {unknown}
+ *
+ * @example
+ *   pipeValue(5, x => x * 2, x => x + 1) // 11
+ */
+export function pipeValue<T>(value: T, ...fns: Array<(x: unknown) => unknown>): unknown {
+  return fns.reduce((acc: unknown, fn) => fn(acc), value as unknown);
 }
