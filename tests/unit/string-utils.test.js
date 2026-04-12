@@ -8,20 +8,20 @@ import {
   kebabCase,
   pascalCase,
   titleCase,
-  capitalize,
-  uncapitalize,
-  padStart,
-  padEnd,
-  repeat,
-  reverse,
+  padLeft,
+  padRight,
+  truncate,
   isPalindrome,
+  isAnagram,
   countOccurrences,
-  replaceAll,
-  trimChar,
-  splitWords,
+  reverse,
+  capitalize,
+  words,
   wrap,
-  slugify,
+  stripDiacritics,
   interpolate,
+  hammingDistance,
+  longestCommonPrefix,
 } from '../../app/modules/string-utils.js';
 
 // ─── camelCase ────────────────────────────────────────────────────────────────
@@ -168,148 +168,99 @@ describe('titleCase', () => {
   });
 });
 
-// ─── capitalize ───────────────────────────────────────────────────────────────
+// ─── padLeft ──────────────────────────────────────────────────────────────────
 
-describe('capitalize', () => {
-  it('capitalizes first letter', () => {
-    assert.equal(capitalize('hello'), 'Hello');
-  });
-
-  it('returns empty string unchanged', () => {
-    assert.equal(capitalize(''), '');
-  });
-
-  it('handles already-capitalized string', () => {
-    assert.equal(capitalize('Hello'), 'Hello');
-  });
-
-  it('handles single character', () => {
-    assert.equal(capitalize('a'), 'A');
-  });
-
-  it('does not alter the rest of the string', () => {
-    assert.equal(capitalize('hELLO'), 'HELLO');
-  });
-});
-
-// ─── uncapitalize ─────────────────────────────────────────────────────────────
-
-describe('uncapitalize', () => {
-  it('lowercases first letter', () => {
-    assert.equal(uncapitalize('Hello'), 'hello');
-  });
-
-  it('returns empty string unchanged', () => {
-    assert.equal(uncapitalize(''), '');
-  });
-
-  it('handles already-uncapitalized string', () => {
-    assert.equal(uncapitalize('hello'), 'hello');
-  });
-
-  it('handles single character', () => {
-    assert.equal(uncapitalize('A'), 'a');
-  });
-
-  it('does not alter the rest of the string', () => {
-    assert.equal(uncapitalize('HELLO'), 'hELLO');
-  });
-});
-
-// ─── padStart ─────────────────────────────────────────────────────────────────
-
-describe('padStart', () => {
+describe('padLeft', () => {
   it('pads with zeros', () => {
-    assert.equal(padStart('5', 3, '0'), '005');
+    assert.equal(padLeft('5', 3, '0'), '005');
   });
 
   it('returns string unchanged when at target length', () => {
-    assert.equal(padStart('hello', 5), 'hello');
+    assert.equal(padLeft('hello', 5), 'hello');
   });
 
   it('returns string unchanged when longer than target', () => {
-    assert.equal(padStart('toolong', 3), 'toolong');
+    assert.equal(padLeft('toolong', 3), 'toolong');
   });
 
-  it('uses space as default pad char', () => {
-    assert.equal(padStart('hi', 4), '  hi');
+  it('uses space as default pad character', () => {
+    assert.equal(padLeft('hi', 4), '  hi');
   });
 
-  it('handles zero length target', () => {
-    assert.equal(padStart('hi', 0), 'hi');
+  it('handles zero-length target', () => {
+    assert.equal(padLeft('hi', 0), 'hi');
+  });
+
+  it('pads with custom character', () => {
+    assert.equal(padLeft('42', 6, '*'), '****42');
+  });
+
+  it('handles empty source string', () => {
+    assert.equal(padLeft('', 3, '-'), '---');
   });
 });
 
-// ─── padEnd ───────────────────────────────────────────────────────────────────
+// ─── padRight ─────────────────────────────────────────────────────────────────
 
-describe('padEnd', () => {
-  it('pads on the right', () => {
-    assert.equal(padEnd('hi', 5, '-'), 'hi---');
+describe('padRight', () => {
+  it('pads on the right with custom character', () => {
+    assert.equal(padRight('hi', 5, '-'), 'hi---');
   });
 
   it('returns string unchanged when at target length', () => {
-    assert.equal(padEnd('hello', 5), 'hello');
+    assert.equal(padRight('hello', 5), 'hello');
   });
 
   it('returns string unchanged when longer than target', () => {
-    assert.equal(padEnd('toolong', 3), 'toolong');
+    assert.equal(padRight('toolong', 3), 'toolong');
   });
 
-  it('uses space as default pad char', () => {
-    assert.equal(padEnd('hi', 4), 'hi  ');
+  it('uses space as default pad character', () => {
+    assert.equal(padRight('hi', 4), 'hi  ');
   });
 
-  it('handles zero length target', () => {
-    assert.equal(padEnd('hi', 0), 'hi');
-  });
-});
-
-// ─── repeat ───────────────────────────────────────────────────────────────────
-
-describe('repeat', () => {
-  it('repeats a string n times', () => {
-    assert.equal(repeat('ab', 3), 'ababab');
+  it('handles zero-length target', () => {
+    assert.equal(padRight('hi', 0), 'hi');
   });
 
-  it('returns empty string when n is 0', () => {
-    assert.equal(repeat('abc', 0), '');
-  });
-
-  it('returns empty string when n is negative', () => {
-    assert.equal(repeat('abc', -1), '');
-  });
-
-  it('handles empty string input', () => {
-    assert.equal(repeat('', 5), '');
-  });
-
-  it('handles n = 1', () => {
-    assert.equal(repeat('x', 1), 'x');
+  it('handles empty source string', () => {
+    assert.equal(padRight('', 3, '.'), '...');
   });
 });
 
-// ─── reverse ──────────────────────────────────────────────────────────────────
+// ─── truncate ─────────────────────────────────────────────────────────────────
 
-describe('reverse', () => {
-  it('reverses a simple string', () => {
-    assert.equal(reverse('hello'), 'olleh');
+describe('truncate', () => {
+  it('truncates a long string with default ellipsis', () => {
+    assert.equal(truncate('Hello, World!', 8), 'Hello...');
   });
 
-  it('returns empty string unchanged', () => {
-    assert.equal(reverse(''), '');
+  it('returns original string when it fits exactly', () => {
+    assert.equal(truncate('Hello', 5), 'Hello');
   });
 
-  it('returns single character unchanged', () => {
-    assert.equal(reverse('a'), 'a');
+  it('returns original string when shorter than maxLength', () => {
+    assert.equal(truncate('Hi', 10), 'Hi');
   });
 
-  it('reverses a palindrome to itself', () => {
-    assert.equal(reverse('racecar'), 'racecar');
+  it('uses a custom ellipsis', () => {
+    assert.equal(truncate('Hello, World!', 9, '…'), 'Hello, W…');
   });
 
-  it('handles unicode characters', () => {
-    // emoji are multi-codepoint; spreading handles surrogates correctly
-    assert.equal(reverse('abc'), 'cba');
+  it('handles maxLength equal to ellipsis length', () => {
+    assert.equal(truncate('Hello, World!', 3), '...');
+  });
+
+  it('handles maxLength shorter than ellipsis', () => {
+    assert.equal(truncate('Hello, World!', 2), '..');
+  });
+
+  it('handles empty source string', () => {
+    assert.equal(truncate('', 5), '');
+  });
+
+  it('handles empty ellipsis', () => {
+    assert.equal(truncate('Hello World', 5, ''), 'Hello');
   });
 });
 
@@ -324,7 +275,7 @@ describe('isPalindrome', () => {
     assert.equal(isPalindrome('A man a plan a canal Panama'), true);
   });
 
-  it('returns false for non-palindrome', () => {
+  it('returns false for a non-palindrome', () => {
     assert.equal(isPalindrome('hello'), false);
   });
 
@@ -338,6 +289,42 @@ describe('isPalindrome', () => {
 
   it('ignores punctuation', () => {
     assert.equal(isPalindrome('Was it a car or a cat I saw?'), true);
+  });
+
+  it('is case-insensitive', () => {
+    assert.equal(isPalindrome('Racecar'), true);
+  });
+});
+
+// ─── isAnagram ────────────────────────────────────────────────────────────────
+
+describe('isAnagram', () => {
+  it('returns true for valid anagram', () => {
+    assert.equal(isAnagram('listen', 'silent'), true);
+  });
+
+  it('returns false for non-anagram', () => {
+    assert.equal(isAnagram('hello', 'world'), false);
+  });
+
+  it('is case-insensitive', () => {
+    assert.equal(isAnagram('Listen', 'Silent'), true);
+  });
+
+  it('ignores non-alphabetic characters', () => {
+    assert.equal(isAnagram('a b c', 'c b a'), true);
+  });
+
+  it('returns true for identical strings', () => {
+    assert.equal(isAnagram('abc', 'abc'), true);
+  });
+
+  it('returns false when one string has extra letters', () => {
+    assert.equal(isAnagram('abc', 'abcd'), false);
+  });
+
+  it('returns true for two empty strings', () => {
+    assert.equal(isAnagram('', ''), true);
   });
 });
 
@@ -369,94 +356,86 @@ describe('countOccurrences', () => {
   });
 });
 
-// ─── replaceAll ───────────────────────────────────────────────────────────────
+// ─── reverse ──────────────────────────────────────────────────────────────────
 
-describe('replaceAll', () => {
-  it('replaces all occurrences', () => {
-    assert.equal(replaceAll('foo bar foo baz foo', 'foo', 'qux'), 'qux bar qux baz qux');
+describe('reverse', () => {
+  it('reverses a simple string', () => {
+    assert.equal(reverse('hello'), 'olleh');
   });
 
-  it('returns string unchanged when search not found', () => {
-    assert.equal(replaceAll('hello world', 'xyz', 'abc'), 'hello world');
+  it('returns empty string unchanged', () => {
+    assert.equal(reverse(''), '');
   });
 
-  it('handles empty search (returns original)', () => {
-    assert.equal(replaceAll('hello', '', 'x'), 'hello');
+  it('returns single character unchanged', () => {
+    assert.equal(reverse('a'), 'a');
   });
 
-  it('handles empty string input', () => {
-    assert.equal(replaceAll('', 'a', 'b'), '');
+  it('reverses a palindrome to itself', () => {
+    assert.equal(reverse('racecar'), 'racecar');
   });
 
-  it('replaces with empty string (deletion)', () => {
-    assert.equal(replaceAll('hello world', 'l', ''), 'heo word');
-  });
-});
-
-// ─── trimChar ─────────────────────────────────────────────────────────────────
-
-describe('trimChar', () => {
-  it('trims a specific character from both ends', () => {
-    assert.equal(trimChar('---hello---', '-'), 'hello');
-  });
-
-  it('trims only matching characters', () => {
-    assert.equal(trimChar('xxhelloxx', 'x'), 'hello');
-  });
-
-  it('does not trim non-matching characters', () => {
-    assert.equal(trimChar('  hello  ', 'x'), '  hello  ');
-  });
-
-  it('handles empty string', () => {
-    assert.equal(trimChar('', '-'), '');
-  });
-
-  it('handles string that is all the char', () => {
-    assert.equal(trimChar('-----', '-'), '');
-  });
-
-  it('handles regex-special char like dot', () => {
-    assert.equal(trimChar('...hello...', '.'), 'hello');
+  it('handles numeric characters', () => {
+    assert.equal(reverse('12345'), '54321');
   });
 });
 
-// ─── splitWords ───────────────────────────────────────────────────────────────
+// ─── capitalize ───────────────────────────────────────────────────────────────
 
-describe('splitWords', () => {
-  it('splits camelCase into words', () => {
-    assert.deepEqual(splitWords('camelCase'), ['camel', 'Case']);
+describe('capitalize', () => {
+  it('capitalizes first letter', () => {
+    assert.equal(capitalize('hello'), 'Hello');
   });
 
-  it('splits snake_case into words', () => {
-    assert.deepEqual(splitWords('my_variable'), ['my', 'variable']);
+  it('returns empty string unchanged', () => {
+    assert.equal(capitalize(''), '');
   });
 
-  it('splits kebab-case into words', () => {
-    assert.deepEqual(splitWords('my-variable'), ['my', 'variable']);
+  it('handles already-capitalized string', () => {
+    assert.equal(capitalize('Hello'), 'Hello');
   });
 
-  it('splits space-separated words', () => {
-    assert.deepEqual(splitWords('hello world'), ['hello', 'world']);
+  it('handles single character', () => {
+    assert.equal(capitalize('a'), 'A');
   });
 
-  it('handles mixed separators', () => {
-    assert.deepEqual(splitWords('my-camelCase_word'), ['my', 'camel', 'Case', 'word']);
+  it('does not alter the rest of the string', () => {
+    assert.equal(capitalize('hELLO'), 'HELLO');
+  });
+});
+
+// ─── words ────────────────────────────────────────────────────────────────────
+
+describe('words', () => {
+  it('splits on whitespace', () => {
+    assert.deepEqual(words('hello world'), ['hello', 'world']);
   });
 
-  it('handles empty string', () => {
-    assert.deepEqual(splitWords(''), []);
+  it('splits on punctuation', () => {
+    assert.deepEqual(words('hello, world!'), ['hello', 'world']);
   });
 
-  it('handles PascalCase', () => {
-    assert.deepEqual(splitWords('HelloWorld'), ['Hello', 'World']);
+  it('handles multiple spaces', () => {
+    assert.deepEqual(words('foo   bar'), ['foo', 'bar']);
+  });
+
+  it('returns empty array for empty string', () => {
+    assert.deepEqual(words(''), []);
+  });
+
+  it('handles leading and trailing spaces', () => {
+    assert.deepEqual(words('  hello world  '), ['hello', 'world']);
+  });
+
+  it('handles mixed punctuation separators', () => {
+    assert.deepEqual(words('one.two,three'), ['one', 'two', 'three']);
   });
 });
 
 // ─── wrap ─────────────────────────────────────────────────────────────────────
 
 describe('wrap', () => {
-  it('wraps at the correct column width using default newline', () => {
+  it('wraps at the correct column width', () => {
     assert.equal(wrap('The quick brown fox', 10), 'The quick\nbrown fox');
   });
 
@@ -472,10 +451,6 @@ describe('wrap', () => {
     assert.equal(wrap('', 10), '');
   });
 
-  it('uses custom newline separator', () => {
-    assert.equal(wrap('hello world', 5, '<br>'), 'hello<br>world');
-  });
-
   it('fits exactly at width boundary', () => {
     assert.equal(wrap('ab cd ef', 5), 'ab cd\nef');
   });
@@ -483,33 +458,41 @@ describe('wrap', () => {
   it('handles multiple spaces between words', () => {
     assert.equal(wrap('hello   world', 20), 'hello world');
   });
+
+  it('uses custom newline separator', () => {
+    assert.equal(wrap('hello world', 5, '<br>'), 'hello<br>world');
+  });
 });
 
-// ─── slugify ──────────────────────────────────────────────────────────────────
+// ─── stripDiacritics ──────────────────────────────────────────────────────────
 
-describe('slugify', () => {
-  it('converts Hello World! to hello-world', () => {
-    assert.equal(slugify('Hello World!'), 'hello-world');
+describe('stripDiacritics', () => {
+  it('strips accents from é', () => {
+    assert.equal(stripDiacritics('café'), 'cafe');
   });
 
-  it('collapses multiple spaces to single hyphen', () => {
-    assert.equal(slugify('foo   bar'), 'foo-bar');
+  it('strips accents from multiple characters', () => {
+    assert.equal(stripDiacritics('résumé'), 'resume');
   });
 
-  it('removes leading and trailing hyphens', () => {
-    assert.equal(slugify(' hello '), 'hello');
+  it('strips umlaut from ü', () => {
+    assert.equal(stripDiacritics('über'), 'uber');
+  });
+
+  it('handles string with no diacritics unchanged', () => {
+    assert.equal(stripDiacritics('hello'), 'hello');
   });
 
   it('handles empty string', () => {
-    assert.equal(slugify(''), '');
+    assert.equal(stripDiacritics(''), '');
   });
 
-  it('converts to lowercase', () => {
-    assert.equal(slugify('NovaReader'), 'novareader');
+  it('strips cedilla from ç', () => {
+    assert.equal(stripDiacritics('façade'), 'facade');
   });
 
-  it('strips special characters', () => {
-    assert.equal(slugify('Hello, World! (2024)'), 'hello-world-2024');
+  it('handles Spanish characters', () => {
+    assert.equal(stripDiacritics('España'), 'Espana');
   });
 });
 
@@ -545,5 +528,89 @@ describe('interpolate', () => {
 
   it('handles repeated placeholder', () => {
     assert.equal(interpolate('{x} + {x} = {y}', { x: 1, y: 2 }), '1 + 1 = 2');
+  });
+});
+
+// ─── hammingDistance ──────────────────────────────────────────────────────────
+
+describe('hammingDistance', () => {
+  it('returns 0 for identical strings', () => {
+    assert.equal(hammingDistance('abc', 'abc'), 0);
+  });
+
+  it('returns correct distance for known example', () => {
+    // 'karolin' vs 'kathrin': k=k, a=a, r≠t, o≠h, l≠r, i=i, n=n → 3
+    assert.equal(hammingDistance('karolin', 'kathrin'), 3);
+  });
+
+  it('returns the full length when strings are completely different', () => {
+    assert.equal(hammingDistance('abc', 'xyz'), 3);
+  });
+
+  it('returns 0 for two empty strings', () => {
+    assert.equal(hammingDistance('', ''), 0);
+  });
+
+  it('handles single-character strings that match', () => {
+    assert.equal(hammingDistance('a', 'a'), 0);
+  });
+
+  it('handles single-character strings that differ', () => {
+    assert.equal(hammingDistance('a', 'b'), 1);
+  });
+
+  it('throws RangeError for different-length strings', () => {
+    assert.throws(
+      () => hammingDistance('abc', 'ab'),
+      RangeError,
+    );
+  });
+
+  it('throws RangeError with informative message', () => {
+    assert.throws(
+      () => hammingDistance('hello', 'hi'),
+      (err) => {
+        assert.ok(err instanceof RangeError);
+        assert.ok(/** @type {RangeError} */ (err).message.includes('5'));
+        assert.ok(/** @type {RangeError} */ (err).message.includes('2'));
+        return true;
+      },
+    );
+  });
+});
+
+// ─── longestCommonPrefix ──────────────────────────────────────────────────────
+
+describe('longestCommonPrefix', () => {
+  it('finds common prefix for standard example', () => {
+    assert.equal(longestCommonPrefix(['flower', 'flow', 'flight']), 'fl');
+  });
+
+  it('returns empty string when there is no common prefix', () => {
+    assert.equal(longestCommonPrefix(['dog', 'racecar', 'car']), '');
+  });
+
+  it('returns empty string for empty array', () => {
+    assert.equal(longestCommonPrefix([]), '');
+  });
+
+  it('returns the string itself for a single-element array', () => {
+    assert.equal(longestCommonPrefix(['hello']), 'hello');
+  });
+
+  it('returns the entire string when all strings are identical', () => {
+    assert.equal(longestCommonPrefix(['abc', 'abc', 'abc']), 'abc');
+  });
+
+  it('returns empty string when one element is empty', () => {
+    assert.equal(longestCommonPrefix(['abc', '', 'abcd']), '');
+  });
+
+  it('handles two-element array', () => {
+    assert.equal(longestCommonPrefix(['interview', 'interact']), 'inter');
+  });
+
+  it('returns full common prefix when one string is prefix of another', () => {
+    assert.equal(longestCommonPrefix(['prefix', 'pre', 'prefix-long']), 'pre');
   });
 });

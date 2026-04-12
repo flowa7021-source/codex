@@ -1,168 +1,344 @@
 // @ts-check
-// ─── Priority Queue ──────────────────────────────────────────────────────────
-// High-level priority queue backed by a binary min-heap. Supports custom
-// comparators, arbitrary item types, and O(log n) enqueue / dequeue.
+// ─── Priority Queues ──────────────────────────────────────────────────────────
+// Min-heap and max-heap priority queues backed by binary heaps, plus a generic
+// configurable variant. All classes maintain the heap invariant via sift-up
+// and sift-down operations running in O(log n).
 
-// ─── Internal heap helpers ───────────────────────────────────────────────────
+// ─── Internal node type ───────────────────────────────────────────────────────
 
-function defaultComparator<T>(a: T, b: T): number {
-  if (a < b) return -1;
-  if (a > b) return 1;
-  return 0;
+interface HeapNode<T> {
+  value: T;
+  priority: number;
 }
 
-function bubbleUp<T>(data: T[], cmp: (a: T, b: T) => number, i: number): void {
-  while (i > 0) {
-    const parent = (i - 1) >> 1;
-    if (cmp(data[i], data[parent]) < 0) {
-      [data[i], data[parent]] = [data[parent], data[i]];
-      i = parent;
-    } else {
-      break;
+// ─── MinHeap ─────────────────────────────────────────────────────────────────
+
+/**
+ * Min-heap priority queue.
+ * The item with the *smallest* priority number is returned first by `pop`.
+ */
+export class MinHeap<T> {
+  #heap: HeapNode<T>[];
+
+  constructor() {
+    this.#heap = [];
+  }
+
+  // ── Public API ──────────────────────────────────────────────────────────────
+
+  /** Add `value` with the given `priority`. O(log n). */
+  push(value: T, priority: number): void {
+    this.#heap.push({ value, priority });
+    this.#siftUp(this.#heap.length - 1);
+  }
+
+  /**
+   * Remove and return the item with the smallest priority.
+   * Returns `undefined` when the heap is empty. O(log n).
+   */
+  pop(): T | undefined {
+    if (this.#heap.length === 0) return undefined;
+    const top = this.#heap[0];
+    const last = this.#heap.pop()!;
+    if (this.#heap.length > 0) {
+      this.#heap[0] = last;
+      this.#siftDown(0);
+    }
+    return top.value;
+  }
+
+  /**
+   * Return the item with the smallest priority without removing it.
+   * Returns `undefined` when the heap is empty. O(1).
+   */
+  peek(): T | undefined {
+    return this.#heap.length > 0 ? this.#heap[0].value : undefined;
+  }
+
+  /** Number of items currently in the heap. */
+  get size(): number {
+    return this.#heap.length;
+  }
+
+  /** `true` when the heap contains no items. */
+  get isEmpty(): boolean {
+    return this.#heap.length === 0;
+  }
+
+  /**
+   * Return all stored values in internal heap order (NOT sorted).
+   * The first element is always the current minimum.
+   */
+  toArray(): T[] {
+    return this.#heap.map((n) => n.value);
+  }
+
+  // ── Heap maintenance ────────────────────────────────────────────────────────
+
+  #siftUp(index: number): void {
+    const heap = this.#heap;
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (heap[parent].priority <= heap[index].priority) break;
+      [heap[parent], heap[index]] = [heap[index], heap[parent]];
+      index = parent;
+    }
+  }
+
+  #siftDown(index: number): void {
+    const heap = this.#heap;
+    const length = heap.length;
+    while (true) {
+      const left = 2 * index + 1;
+      const right = 2 * index + 2;
+      let smallest = index;
+
+      if (left < length && heap[left].priority < heap[smallest].priority) {
+        smallest = left;
+      }
+      if (right < length && heap[right].priority < heap[smallest].priority) {
+        smallest = right;
+      }
+      if (smallest === index) break;
+
+      [heap[smallest], heap[index]] = [heap[index], heap[smallest]];
+      index = smallest;
     }
   }
 }
 
-function siftDown<T>(data: T[], cmp: (a: T, b: T) => number, i: number): void {
-  const n = data.length;
-  while (true) {
-    let top = i;
-    const left = 2 * i + 1;
-    const right = 2 * i + 2;
-    if (left < n && cmp(data[left], data[top]) < 0) top = left;
-    if (right < n && cmp(data[right], data[top]) < 0) top = right;
-    if (top === i) break;
-    [data[i], data[top]] = [data[top], data[i]];
-    i = top;
+// ─── MaxHeap ─────────────────────────────────────────────────────────────────
+
+/**
+ * Max-heap priority queue.
+ * The item with the *largest* priority number is returned first by `pop`.
+ */
+export class MaxHeap<T> {
+  #heap: HeapNode<T>[];
+
+  constructor() {
+    this.#heap = [];
+  }
+
+  // ── Public API ──────────────────────────────────────────────────────────────
+
+  /** Add `value` with the given `priority`. O(log n). */
+  push(value: T, priority: number): void {
+    this.#heap.push({ value, priority });
+    this.#siftUp(this.#heap.length - 1);
+  }
+
+  /**
+   * Remove and return the item with the largest priority.
+   * Returns `undefined` when the heap is empty. O(log n).
+   */
+  pop(): T | undefined {
+    if (this.#heap.length === 0) return undefined;
+    const top = this.#heap[0];
+    const last = this.#heap.pop()!;
+    if (this.#heap.length > 0) {
+      this.#heap[0] = last;
+      this.#siftDown(0);
+    }
+    return top.value;
+  }
+
+  /**
+   * Return the item with the largest priority without removing it.
+   * Returns `undefined` when the heap is empty. O(1).
+   */
+  peek(): T | undefined {
+    return this.#heap.length > 0 ? this.#heap[0].value : undefined;
+  }
+
+  /** Number of items currently in the heap. */
+  get size(): number {
+    return this.#heap.length;
+  }
+
+  /** `true` when the heap contains no items. */
+  get isEmpty(): boolean {
+    return this.#heap.length === 0;
+  }
+
+  /**
+   * Return all stored values in internal heap order (NOT sorted).
+   * The first element is always the current maximum.
+   */
+  toArray(): T[] {
+    return this.#heap.map((n) => n.value);
+  }
+
+  // ── Heap maintenance ────────────────────────────────────────────────────────
+
+  #siftUp(index: number): void {
+    const heap = this.#heap;
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (heap[parent].priority >= heap[index].priority) break;
+      [heap[parent], heap[index]] = [heap[index], heap[parent]];
+      index = parent;
+    }
+  }
+
+  #siftDown(index: number): void {
+    const heap = this.#heap;
+    const length = heap.length;
+    while (true) {
+      const left = 2 * index + 1;
+      const right = 2 * index + 2;
+      let largest = index;
+
+      if (left < length && heap[left].priority > heap[largest].priority) {
+        largest = left;
+      }
+      if (right < length && heap[right].priority > heap[largest].priority) {
+        largest = right;
+      }
+      if (largest === index) break;
+
+      [heap[largest], heap[index]] = [heap[index], heap[largest]];
+      index = largest;
+    }
   }
 }
 
 // ─── PriorityQueue ───────────────────────────────────────────────────────────
 
 /**
- * Generic priority queue backed by a binary min-heap.
+ * Generic priority queue backed by a min-heap.
+ *
+ * Items are enqueued with an optional explicit `priority` number.  When no
+ * priority is supplied the item itself is cast to a number and used directly.
+ *
+ * A custom `compareFn` overrides the default numeric priority comparison as a
+ * tiebreaker when two items share the same numeric priority: return a negative
+ * number when `a` should be dequeued *before* `b`.
  *
  * @example
- *   const pq = new PriorityQueue<number>();
- *   pq.enqueue(5); pq.enqueue(1); pq.enqueue(3);
- *   pq.dequeue(); // 1
+ *   const pq = new PriorityQueue<string>();
+ *   pq.enqueue('urgent', 1);
+ *   pq.enqueue('normal', 5);
+ *   pq.dequeue(); // 'urgent'
  */
 export class PriorityQueue<T> {
-  #data: T[];
-  #cmp: (a: T, b: T) => number;
+  #heap: HeapNode<T>[];
+  #compareFn: (a: T, b: T) => number;
+
+  constructor(compareFn?: (a: T, b: T) => number) {
+    this.#heap = [];
+    this.#compareFn = compareFn ?? ((a, b) => (a as unknown as number) - (b as unknown as number));
+  }
+
+  // ── Public API ──────────────────────────────────────────────────────────────
 
   /**
-   * @param comparator - Returns negative if a has higher priority than b.
-   *   Default: min-heap (lower numbers = higher priority).
+   * Add `item` to the queue with an optional `priority`.
+   * When `priority` is omitted the item itself is coerced to a number. O(log n).
    */
-  constructor(comparator: (a: T, b: T) => number = defaultComparator) {
-    this.#data = [];
-    this.#cmp = comparator;
+  enqueue(item: T, priority?: number): void {
+    const p = priority ?? (item as unknown as number);
+    this.#heap.push({ value: item, priority: p });
+    this.#siftUp(this.#heap.length - 1);
   }
 
-  /** Add an item. O(log n). */
-  enqueue(item: T): void {
-    this.#data.push(item);
-    bubbleUp(this.#data, this.#cmp, this.#data.length - 1);
-  }
-
-  /** Remove and return highest-priority item. O(log n). */
+  /**
+   * Remove and return the highest-priority item (smallest numeric priority).
+   * Returns `undefined` when the queue is empty. O(log n).
+   */
   dequeue(): T | undefined {
-    if (this.#data.length === 0) return undefined;
-    const top = this.#data[0];
-    const last = this.#data.pop()!;
-    if (this.#data.length > 0) {
-      this.#data[0] = last;
-      siftDown(this.#data, this.#cmp, 0);
+    if (this.#heap.length === 0) return undefined;
+    const top = this.#heap[0];
+    const last = this.#heap.pop()!;
+    if (this.#heap.length > 0) {
+      this.#heap[0] = last;
+      this.#siftDown(0);
     }
-    return top;
-  }
-
-  /** Peek at highest-priority item without removing. O(1). */
-  peek(): T | undefined {
-    return this.#data[0];
-  }
-
-  /** Number of items. */
-  get size(): number {
-    return this.#data.length;
-  }
-
-  /** Check if empty. */
-  get isEmpty(): boolean {
-    return this.#data.length === 0;
+    return top.value;
   }
 
   /**
-   * Convert to sorted array (does not modify queue).
-   * Items are returned in priority order (highest-priority first).
+   * Return the highest-priority item without removing it.
+   * Returns `undefined` when the queue is empty. O(1).
    */
-  toArray(): T[] {
-    // Drain a copy so we don't mutate this queue
-    const copy = new PriorityQueue<T>(this.#cmp);
-    copy.#data = [...this.#data];
+  peek(): T | undefined {
+    return this.#heap.length > 0 ? this.#heap[0].value : undefined;
+  }
+
+  /** Number of items in the queue. */
+  get size(): number {
+    return this.#heap.length;
+  }
+
+  /** `true` when the queue is empty. */
+  get isEmpty(): boolean {
+    return this.#heap.length === 0;
+  }
+
+  /**
+   * Drain the queue and return all items in priority order (highest priority first).
+   * **Destructive** — the queue will be empty after this call. O(n log n).
+   */
+  toSortedArray(): T[] {
     const result: T[] = [];
-    while (!copy.isEmpty) {
-      result.push(copy.dequeue()!);
+    while (!this.isEmpty) {
+      result.push(this.dequeue()!);
     }
     return result;
   }
 
-  /** Clear all items. */
-  clear(): void {
-    this.#data = [];
+  // ── Heap maintenance ────────────────────────────────────────────────────────
+
+  /** Returns true when heap[a] should sit above heap[b] (i.e. a has higher priority). */
+  #less(
+    a: HeapNode<T>,
+    b: HeapNode<T>,
+  ): boolean {
+    const diff = a.priority - b.priority;
+    if (diff !== 0) return diff < 0;
+    return this.#compareFn(a.value, b.value) < 0;
   }
 
-  /** Check if an item exists (uses === equality). */
-  has(item: T): boolean {
-    return this.#data.includes(item);
-  }
-
-  /**
-   * Remove a specific item. O(n) scan + O(log n) heap repair.
-   * Returns true if the item was found and removed.
-   */
-  remove(item: T): boolean {
-    const idx = this.#data.indexOf(item);
-    if (idx === -1) return false;
-
-    const last = this.#data.pop()!;
-    if (idx < this.#data.length) {
-      this.#data[idx] = last;
-      // The replacement could be either smaller or larger — try both directions
-      bubbleUp(this.#data, this.#cmp, idx);
-      siftDown(this.#data, this.#cmp, idx);
+  #siftUp(index: number): void {
+    const heap = this.#heap;
+    while (index > 0) {
+      const parent = (index - 1) >> 1;
+      if (!this.#less(heap[index], heap[parent])) break;
+      [heap[parent], heap[index]] = [heap[index], heap[parent]];
+      index = parent;
     }
-    return true;
   }
 
-  /** Build a PriorityQueue from an array. O(n). */
-  static from<T>(
-    items: T[],
-    comparator: (a: T, b: T) => number = defaultComparator,
-  ): PriorityQueue<T> {
-    const pq = new PriorityQueue<T>(comparator);
-    pq.#data = [...items];
-    // Heapify: start from last non-leaf and sift down
-    for (let i = Math.floor(pq.#data.length / 2) - 1; i >= 0; i--) {
-      siftDown(pq.#data, pq.#cmp, i);
+  #siftDown(index: number): void {
+    const heap = this.#heap;
+    const length = heap.length;
+    while (true) {
+      const left = 2 * index + 1;
+      const right = 2 * index + 2;
+      let best = index;
+
+      if (left < length && this.#less(heap[left], heap[best])) {
+        best = left;
+      }
+      if (right < length && this.#less(heap[right], heap[best])) {
+        best = right;
+      }
+      if (best === index) break;
+
+      [heap[best], heap[index]] = [heap[index], heap[best]];
+      index = best;
     }
-    return pq;
   }
 }
 
-// ─── Convenience subclasses ──────────────────────────────────────────────────
+// ─── Factories ───────────────────────────────────────────────────────────────
 
-/** Max-heap wrapper: higher numbers (or lexicographically later strings) come out first. */
-export class MaxPriorityQueue<T extends number | string> extends PriorityQueue<T> {
-  constructor() {
-    super((a, b) => (a < b ? 1 : a > b ? -1 : 0));
-  }
+/** Create a new empty `MinHeap`. */
+export function createMinHeap<T>(): MinHeap<T> {
+  return new MinHeap<T>();
 }
 
-/** Min-heap (default): lower numbers (or lexicographically earlier strings) come out first. */
-export class MinPriorityQueue<T extends number | string> extends PriorityQueue<T> {
-  constructor() {
-    super();
-  }
+/** Create a new empty `MaxHeap`. */
+export function createMaxHeap<T>(): MaxHeap<T> {
+  return new MaxHeap<T>();
 }

@@ -1,136 +1,292 @@
 // @ts-check
 // ─── Observable ──────────────────────────────────────────────────────────────
-// Simple reactive value that notifies subscribers on change.
+// Reactive state primitive with derived observables, computed values, and
+// batched notifications.
 
-// ─── Public API ──────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+/** Function that removes a subscription when called. */
+export type Unsubscribe = () => void;
+
+/** Callback invoked when an observable value changes. */
+export type Observer<T> = (value: T, prev: T | undefined) => void;
+
+// ─── Batch machinery ─────────────────────────────────────────────────────────
+
+/** Notifier record used by the batch queue. */
+interface PendingNotification {
+  notify: () => void;
+}
+
+let _batchDepth = 0;
+const _batchQueue: PendingNotification[] = [];
 
 /**
- * A reactive value that notifies subscribers on change.
+ * Flush all pending notifications accumulated during a batch.
+ * Runs in insertion order; each notifier fires once per batch.
+ */
+function flushBatch(): void {
+  // Snapshot to allow re-entrant batches spawned inside a notifier
+  const queue = _batchQueue.splice(0, _batchQueue.length);
+  for (const entry of queue) {
+    entry.notify();
+  }
+}
+
+/**
+ * Run `fn` as a batch: all observable notifications are deferred until `fn`
+ * returns, then every subscriber is called at most once with the final value.
+ *
+ * @example
+ *   batch(() => {
+ *     count.set(1);
+ *     count.set(2);
+ *   });
+ *   // subscribers see only one notification: value=2, prev=0
+ */
+export function batch(fn: () => void): void {
+  _batchDepth++;
+  try {
+    fn();
+  } finally {
+    _batchDepth--;
+    if (_batchDepth === 0) {
+      flushBatch();
+    }
+  }
+}
+
+// ─── Observable ──────────────────────────────────────────────────────────────
+
+/**
+ * A reactive state container. Subscribers are notified synchronously (or once
+ * at the end of a `batch()`) whenever the value changes.
+ *
+ * @template T - Type of the held value
  *
  * @example
  *   const count = new Observable(0);
- *   count.subscribe((val, prev) => console.log(prev, '->', val));
- *   count.value = 1; // logs: 0 -> 1
+ *   const unsub = count.subscribe((val, prev) => console.log(val, prev));
+ *   count.set(1); // logs: 1, 0
+ *   unsub();
  */
 export class Observable<T> {
   #value: T;
-  #subscribers = new Set<(value: T, prev: T) => void>();
+  #observers: Set<Observer<T>> = new Set();
+
+  /** Pre-batch value recorded when this observable is first dirtied. */
+  #pendingPrev: T | undefined = undefined;
+  /** Whether this observable is already queued in the current batch. */
+  #queued = false;
 
   constructor(initialValue: T) {
     this.#value = initialValue;
   }
 
-  /** Get the current value. */
+  // ─── value ───────────────────────────────────────────────────────────────
+
+  /** Current value. */
   get value(): T {
     return this.#value;
   }
 
-  /** Set a new value. Notifies all subscribers if changed. */
-  set value(newValue: T) {
-    if (Object.is(this.#value, newValue)) return;
+  // ─── set ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Update the value. Notifies subscribers (or queues notification inside a
+   * `batch()`). No-ops when the new value is strictly equal to the current one.
+   */
+  set(newValue: T): void {
+    if (newValue === this.#value) return;
+
     const prev = this.#value;
     this.#value = newValue;
-    for (const subscriber of [...this.#subscribers]) {
-      subscriber(newValue, prev);
+
+    if (_batchDepth > 0) {
+      if (!this.#queued) {
+        // First mutation in this batch — record the value before the batch
+        this.#pendingPrev = prev;
+        this.#queued = true;
+        _batchQueue.push({
+          notify: () => {
+            this.#queued = false;
+            const batchPrev = this.#pendingPrev;
+            this.#pendingPrev = undefined;
+            // If the value was mutated back to the pre-batch value, skip notification
+            if (this.#value === batchPrev) return;
+            this._notifyObservers(this.#value, batchPrev);
+          },
+        });
+      }
+      // Subsequent mutations in the same batch: keep the original pendingPrev
+      // so subscribers receive (finalValue, valueBefore‑the‑batch).
+    } else {
+      this._notifyObservers(this.#value, prev);
     }
   }
 
+  // ─── update ──────────────────────────────────────────────────────────────
+
   /**
-   * Subscribe to value changes.
-   * @returns Unsubscribe function — call to stop receiving updates.
+   * Derive a new value from the current one and set it.
+   *
+   * @param fn - Pure function receiving the current value, returning the next
    */
-  subscribe(callback: (value: T, prev: T) => void): () => void {
-    this.#subscribers.add(callback);
+  update(fn: (current: T) => T): void {
+    this.set(fn(this.#value));
+  }
+
+  // ─── subscribe ───────────────────────────────────────────────────────────
+
+  /**
+   * Register an observer called on every future change.
+   *
+   * @param observer - Receives `(newValue, prevValue)`
+   * @returns Unsubscribe function
+   */
+  subscribe(observer: Observer<T>): Unsubscribe {
+    this.#observers.add(observer);
     return () => {
-      this.#subscribers.delete(callback);
+      this.#observers.delete(observer);
     };
   }
 
-  /** Subscribe to the next change only (once). */
-  once(callback: (value: T, prev: T) => void): () => void {
-    const unsubscribe = this.subscribe((value, prev) => {
-      unsubscribe();
-      callback(value, prev);
-    });
-    return unsubscribe;
-  }
-
-  /** Apply a transform to get the current value (like .map in streams). */
-  map<U>(fn: (value: T) => U): U {
-    return fn(this.#value);
-  }
+  // ─── once ────────────────────────────────────────────────────────────────
 
   /**
-   * Create a derived observable that updates when this one changes.
-   * The derived value is computed from the current value via `fn`.
+   * Subscribe for a single notification, then auto-unsubscribe.
+   *
+   * @param observer - Receives `(newValue, prevValue)` exactly once
+   * @returns Unsubscribe function to cancel before the first change
    */
-  derive<U>(fn: (value: T) => U): Observable<U> {
-    const derived = new Observable<U>(fn(this.#value));
+  once(observer: Observer<T>): Unsubscribe {
+    const wrapper: Observer<T> = (value, prev) => {
+      unsub();
+      observer(value, prev);
+    };
+    const unsub = this.subscribe(wrapper);
+    return unsub;
+  }
+
+  // ─── pipe ────────────────────────────────────────────────────────────────
+
+  /**
+   * Create a derived `Observable<U>` whose value is `transform(this.value)`.
+   * The derived observable updates automatically whenever this one changes.
+   *
+   * @param transform - Pure mapping function
+   * @returns New derived observable
+   *
+   * @example
+   *   const doubled = count.pipe(n => n * 2);
+   *   doubled.value; // 0
+   *   count.set(5);
+   *   doubled.value; // 10
+   */
+  pipe<U>(transform: (value: T) => U): Observable<U> {
+    const derived = new Observable<U>(transform(this.#value));
     this.subscribe((value) => {
-      derived.value = fn(value);
+      derived.set(transform(value));
     });
     return derived;
   }
 
-  /**
-   * Wait for the value to satisfy a condition.
-   * Resolves immediately if the predicate is already true.
-   */
-  when(predicate: (value: T) => boolean): Promise<T> {
-    if (predicate(this.#value)) {
-      return Promise.resolve(this.#value);
+  // ─── Internal ────────────────────────────────────────────────────────────
+
+  /** @internal Notify all current observers. Snapshot to guard against mid-call mutation. */
+  _notifyObservers(value: T, prev: T | undefined): void {
+    for (const observer of [...this.#observers]) {
+      observer(value, prev);
     }
-    return new Promise<T>((resolve) => {
-      const unsubscribe = this.subscribe((value) => {
-        if (predicate(value)) {
-          unsubscribe();
-          resolve(value);
-        }
+  }
+}
+
+// ─── Computed ────────────────────────────────────────────────────────────────
+
+/**
+ * A read-only reactive value derived from one or more `Observable` sources.
+ * Recomputes whenever any dependency changes.
+ *
+ * @template T - Type of the computed result
+ *
+ * @example
+ *   const a = new Observable(2);
+ *   const b = new Observable(3);
+ *   const sum = new Computed([a, b], (x, y) => x + y);
+ *   console.log(sum.value); // 5
+ *   a.set(10);
+ *   console.log(sum.value); // 13
+ */
+export class Computed<T> {
+  #deps: Observable<unknown>[];
+  #compute: (...values: unknown[]) => T;
+  #inner: Observable<T>;
+
+  constructor(
+    deps: Observable<unknown>[],
+    compute: (...values: unknown[]) => T,
+  ) {
+    this.#deps = deps;
+    this.#compute = compute;
+    this.#inner = new Observable<T>(this.#recompute());
+
+    for (const dep of this.#deps) {
+      dep.subscribe(() => {
+        this.#inner.set(this.#recompute());
       });
-    });
+    }
   }
 
-  /** Number of active subscribers. */
-  get subscriberCount(): number {
-    return this.#subscribers.size;
+  // ─── value ───────────────────────────────────────────────────────────────
+
+  /** Current computed value. */
+  get value(): T {
+    return this.#inner.value;
+  }
+
+  // ─── subscribe ───────────────────────────────────────────────────────────
+
+  /**
+   * Subscribe to changes in the computed value.
+   *
+   * @param observer - Receives `(newValue, prevValue)`
+   * @returns Unsubscribe function
+   */
+  subscribe(observer: Observer<T>): Unsubscribe {
+    return this.#inner.subscribe(observer);
+  }
+
+  // ─── Internal ────────────────────────────────────────────────────────────
+
+  #recompute(): T {
+    const values = this.#deps.map((dep) => dep.value);
+    return this.#compute(...values);
   }
 }
 
+// ─── Factory functions ────────────────────────────────────────────────────────
+
 /**
- * Create an observable value.
+ * Create a new `Observable` with the given initial value.
  *
  * @example
- *   const name = observable('Alice');
- *   name.subscribe((v) => console.log('Name changed to', v));
- *   name.value = 'Bob';
+ *   const name = createObservable('Alice');
+ *   name.subscribe((v, prev) => console.log(prev, '->', v));
+ *   name.set('Bob'); // logs: Alice -> Bob
  */
-export function observable<T>(initial: T): Observable<T> {
-  return new Observable<T>(initial);
+export function createObservable<T>(initialValue: T): Observable<T> {
+  return new Observable<T>(initialValue);
 }
 
 /**
- * Combine multiple observables into one that emits an array of their current
- * values whenever any of them changes.
+ * Create a new `Computed` value derived from the given dependencies.
  *
  * @example
- *   const a = observable(1);
- *   const b = observable('hi');
- *   const combined = combineLatest(a, b);
- *   combined.subscribe(([aVal, bVal]) => console.log(aVal, bVal));
+ *   const total = createComputed([price, qty], (p, q) => p * q);
  */
-export function combineLatest<T extends unknown[]>(
-  ...observables: { [K in keyof T]: Observable<T[K]> }
-): Observable<T> {
-  const getCurrent = (): T =>
-    observables.map((obs) => obs.value) as unknown as T;
-
-  const combined = new Observable<T>(getCurrent());
-
-  for (const obs of observables) {
-    obs.subscribe(() => {
-      combined.value = getCurrent();
-    });
-  }
-
-  return combined;
+export function createComputed<T>(
+  deps: Observable<unknown>[],
+  compute: (...values: unknown[]) => T,
+): Computed<T> {
+  return new Computed<T>(deps, compute);
 }
