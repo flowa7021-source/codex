@@ -1,321 +1,221 @@
 // @ts-check
-// ─── Graph Data Structure ─────────────────────────────────────────────────────
-// Directed and undirected weighted graph with traversal, shortest path,
-// cycle detection, topological sort, and connected-components algorithms.
+// ─── Graph (Directed / Undirected Weighted Graph) ─────────────────────────────
+// Supports adjacency-map representation, BFS/DFS traversal, cycle detection,
+// connectivity checks, Dijkstra's shortest path, and topological sort.
 
 // ─── Internal types ───────────────────────────────────────────────────────────
 
-interface NodeEntry {
-  id: string;
-  data: Record<string, unknown>;
-}
-
-interface EdgeEntry {
-  to: string;
-  weight: number;
+interface Vertex<T> {
+  data: T | undefined;
+  /** neighbour id → weight */
+  edges: Map<string, number>;
 }
 
 // ─── Graph ────────────────────────────────────────────────────────────────────
 
-/**
- * A weighted graph that can operate in directed or undirected mode.
- *
- * - Node ids are arbitrary non-empty strings.
- * - Edge weights default to 1.
- * - In undirected mode every `addEdge(u, v)` call creates two directed
- *   adjacency entries so that traversal works symmetrically.
- */
-export class Graph {
+export class Graph<T = unknown> {
   #directed: boolean;
-  /** Map from node-id → node metadata */
-  #nodes: Map<string, NodeEntry>;
-  /** Adjacency list: node-id → list of {to, weight} */
-  #adj: Map<string, EdgeEntry[]>;
-  /** Total number of logical edges (each undirected edge counts as one). */
+  #vertices: Map<string, Vertex<T>>;
   #edgeCount: number;
 
-  constructor(directed = false) {
-    this.#directed = directed;
-    this.#nodes = new Map();
-    this.#adj = new Map();
+  constructor(options?: { directed?: boolean }) {
+    this.#directed = options?.directed ?? false;
+    this.#vertices = new Map();
     this.#edgeCount = 0;
   }
 
-  // ─── Getters ────────────────────────────────────────────────────────────────
+  // ── Vertices ──────────────────────────────────────────────────────────────────
 
-  get nodeCount(): number {
-    return this.#nodes.size;
-  }
-
-  get edgeCount(): number {
-    return this.#edgeCount;
-  }
-
-  get isDirected(): boolean {
-    return this.#directed;
-  }
-
-  // ─── Node operations ────────────────────────────────────────────────────────
-
-  /** Add a node with optional metadata. No-op if the node already exists. */
-  addNode(id: string, data: Record<string, unknown> = {}): void {
-    if (!this.#nodes.has(id)) {
-      this.#nodes.set(id, { id, data });
-      this.#adj.set(id, []);
+  /** Add a vertex with optional associated data. Silently ignored if already present. */
+  addVertex(id: string, data?: T): void {
+    if (!this.#vertices.has(id)) {
+      this.#vertices.set(id, { data, edges: new Map() });
     }
   }
 
   /**
-   * Remove a node and all edges incident to it.
-   * Returns `true` if the node existed, `false` otherwise.
+   * Remove a vertex and all edges incident to it.
+   * @returns `true` if the vertex existed and was removed, `false` otherwise.
    */
-  removeNode(id: string): boolean {
-    if (!this.#nodes.has(id)) return false;
+  removeVertex(id: string): boolean {
+    if (!this.#vertices.has(id)) return false;
 
     // Count outgoing edges being removed.
-    const outgoing = this.#adj.get(id) ?? [];
-    this.#edgeCount -= outgoing.length;
-
-    // Remove all edges pointing TO this node from other nodes.
-    for (const [otherId, edges] of this.#adj) {
-      if (otherId === id) continue;
-      const before = edges.length;
-      const filtered = edges.filter((e) => e.to !== id);
-      this.#adj.set(otherId, filtered);
-      const removed = before - filtered.length;
-      if (this.#directed) {
-        // In directed mode, incoming edges to `id` are separate logical edges.
-        this.#edgeCount -= removed;
-      }
-      // In undirected mode the reverse edges were already counted via outgoing.
+    const removed = this.#vertices.get(id)!;
+    if (this.#directed) {
+      this.#edgeCount -= removed.edges.size;
+    } else {
+      this.#edgeCount -= removed.edges.size;
     }
 
-    this.#nodes.delete(id);
-    this.#adj.delete(id);
+    // Remove all edges pointing TO this vertex from other vertices.
+    for (const [otherId, vertex] of this.#vertices) {
+      if (otherId !== id && vertex.edges.has(id)) {
+        vertex.edges.delete(id);
+        if (this.#directed) {
+          this.#edgeCount--;
+        }
+        // In undirected mode the reverse edge was already counted above.
+      }
+    }
+
+    this.#vertices.delete(id);
     return true;
   }
 
-  hasNode(id: string): boolean {
-    return this.#nodes.has(id);
+  /** @returns `true` if a vertex with this id exists. */
+  hasVertex(id: string): boolean {
+    return this.#vertices.has(id);
   }
 
-  getNode(id: string): { id: string; data: Record<string, unknown> } | undefined {
-    return this.#nodes.get(id);
+  /** Number of vertices currently in the graph. */
+  get vertexCount(): number {
+    return this.#vertices.size;
   }
 
-  /** Return all node ids in insertion order. */
-  nodes(): string[] {
-    return [...this.#nodes.keys()];
+  /** Return all vertex IDs in insertion order. */
+  vertices(): string[] {
+    return [...this.#vertices.keys()];
   }
 
-  // ─── Edge operations ────────────────────────────────────────────────────────
+  // ── Edges ─────────────────────────────────────────────────────────────────────
 
   /**
-   * Add an edge from `from` to `to` with an optional weight (default 1).
-   * Both nodes are auto-created if they do not exist.
-   * If the edge already exists its weight is updated (no duplicate).
+   * Add an edge from `from` to `to` with an optional `weight` (default 1).
+   * Missing vertices are created automatically.
+   * If the edge already exists its weight is updated without changing edge count.
    */
-  addEdge(from: string, to: string, weight = 1): void {
-    this.addNode(from);
-    this.addNode(to);
+  addEdge(from: string, to: string, weight: number = 1): void {
+    this.addVertex(from);
+    this.addVertex(to);
 
-    const fromEdges = this.#adj.get(from)!;
-    const existingFwd = fromEdges.find((e) => e.to === to);
-    if (existingFwd) {
-      existingFwd.weight = weight;
-    } else {
-      fromEdges.push({ to, weight });
-      this.#edgeCount++;
-    }
+    const fromVertex = this.#vertices.get(from)!;
+    const alreadyExists = fromVertex.edges.has(to);
+    fromVertex.edges.set(to, weight);
 
     if (!this.#directed) {
-      const toEdges = this.#adj.get(to)!;
-      const existingRev = toEdges.find((e) => e.to === from);
-      if (existingRev) {
-        existingRev.weight = weight;
-      } else {
-        toEdges.push({ to: from, weight });
-        // Do NOT increment edgeCount for the reverse direction.
-      }
+      this.#vertices.get(to)!.edges.set(from, weight);
+    }
+
+    if (!alreadyExists) {
+      this.#edgeCount++;
     }
   }
 
   /**
    * Remove the edge from `from` to `to`.
-   * In undirected mode the reverse edge is also removed.
-   * Returns `true` if the edge existed.
+   * @returns `true` if the edge existed and was removed, `false` otherwise.
    */
   removeEdge(from: string, to: string): boolean {
-    if (!this.#adj.has(from)) return false;
-    const fromEdges = this.#adj.get(from)!;
-    const idx = fromEdges.findIndex((e) => e.to === to);
-    if (idx === -1) return false;
+    const fromVertex = this.#vertices.get(from);
+    if (!fromVertex || !fromVertex.edges.has(to)) return false;
 
-    fromEdges.splice(idx, 1);
-    this.#edgeCount--;
-
-    if (!this.#directed && this.#adj.has(to)) {
-      const toEdges = this.#adj.get(to)!;
-      const revIdx = toEdges.findIndex((e) => e.to === from);
-      if (revIdx !== -1) toEdges.splice(revIdx, 1);
+    fromVertex.edges.delete(to);
+    if (!this.#directed) {
+      this.#vertices.get(to)?.edges.delete(from);
     }
-
+    this.#edgeCount--;
     return true;
   }
 
+  /** @returns `true` if an edge from `from` to `to` exists. */
   hasEdge(from: string, to: string): boolean {
-    return (this.#adj.get(from)?.some((e) => e.to === to)) ?? false;
+    return this.#vertices.get(from)?.edges.has(to) ?? false;
   }
 
-  getEdgeWeight(from: string, to: string): number | undefined {
-    return this.#adj.get(from)?.find((e) => e.to === to)?.weight;
+  /** @returns The weight of the edge from `from` to `to`, or `undefined` if absent. */
+  getWeight(from: string, to: string): number | undefined {
+    return this.#vertices.get(from)?.edges.get(to);
   }
 
-  /** Return the ids of all nodes adjacent to `id` (outgoing neighbours). */
-  neighbors(id: string): string[] {
-    return (this.#adj.get(id) ?? []).map((e) => e.to);
+  /** Number of edges currently in the graph. */
+  get edgeCount(): number {
+    return this.#edgeCount;
   }
 
-  /** Return a snapshot of every logical edge in the graph. */
+  /**
+   * Return all edges as plain objects.
+   * In undirected graphs each undirected edge is listed once.
+   */
   edges(): Array<{ from: string; to: string; weight: number }> {
     const result: Array<{ from: string; to: string; weight: number }> = [];
     const seen = new Set<string>();
 
-    for (const [from, edgeList] of this.#adj) {
-      for (const { to, weight } of edgeList) {
-        if (this.#directed) {
-          result.push({ from, to, weight });
-        } else {
-          // Deduplicate: only emit (u,v) once, not (v,u) too.
-          const key = from < to ? `${from}|${to}` : `${to}|${from}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            result.push({ from, to, weight });
-          }
+    for (const [fromId, vertex] of this.#vertices) {
+      for (const [toId, weight] of vertex.edges) {
+        if (!this.#directed) {
+          const key = fromId < toId ? `${fromId}\0${toId}` : `${toId}\0${fromId}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
         }
+        result.push({ from: fromId, to: toId, weight });
       }
     }
-
     return result;
   }
 
-  // ─── Traversals ─────────────────────────────────────────────────────────────
+  /** Return neighbour IDs of `id` (vertices reachable by a single edge). */
+  getNeighbors(id: string): string[] {
+    const vertex = this.#vertices.get(id);
+    if (!vertex) return [];
+    return [...vertex.edges.keys()];
+  }
+
+  // ── Traversals ────────────────────────────────────────────────────────────────
 
   /**
    * Breadth-first traversal starting from `start`.
-   * Returns visited node ids in BFS order.
-   * Throws if `start` does not exist in the graph.
+   * @returns Vertex IDs in BFS discovery order, or empty array if `start` is absent.
    */
   bfs(start: string): string[] {
-    if (!this.#nodes.has(start)) {
-      throw new Error(`bfs: node "${start}" not found`);
-    }
-    const visited = new Set<string>([start]);
-    const queue: string[] = [start];
+    if (!this.#vertices.has(start)) return [];
+    const visited = new Set<string>();
     const order: string[] = [];
+    const queue: string[] = [start];
+    visited.add(start);
 
     while (queue.length > 0) {
       const current = queue.shift()!;
       order.push(current);
-      for (const { to } of this.#adj.get(current) ?? []) {
-        if (!visited.has(to)) {
-          visited.add(to);
-          queue.push(to);
+      const neighbours = [...(this.#vertices.get(current)?.edges.keys() ?? [])].sort();
+      for (const neighbour of neighbours) {
+        if (!visited.has(neighbour)) {
+          visited.add(neighbour);
+          queue.push(neighbour);
         }
       }
     }
-
     return order;
   }
 
   /**
-   * Iterative depth-first traversal starting from `start`.
-   * Returns visited node ids in DFS pre-order (same as recursive DFS).
-   * Throws if `start` does not exist in the graph.
+   * Depth-first traversal starting from `start`.
+   * @returns Vertex IDs in DFS discovery order, or empty array if `start` is absent.
    */
   dfs(start: string): string[] {
-    if (!this.#nodes.has(start)) {
-      throw new Error(`dfs: node "${start}" not found`);
-    }
+    if (!this.#vertices.has(start)) return [];
     const visited = new Set<string>();
     const order: string[] = [];
-    const stack: string[] = [start];
-
-    while (stack.length > 0) {
-      const current = stack.pop()!;
-      if (visited.has(current)) continue;
-      visited.add(current);
-      order.push(current);
-
-      // Push neighbours in reverse order so we visit them in the natural order
-      // (same result as recursive DFS).
-      const neighbours = this.#adj.get(current) ?? [];
-      for (let i = neighbours.length - 1; i >= 0; i--) {
-        const { to } = neighbours[i];
-        if (!visited.has(to)) {
-          stack.push(to);
-        }
-      }
-    }
-
+    this.#dfsVisit(start, visited, order);
     return order;
   }
 
-  // ─── Shortest path ──────────────────────────────────────────────────────────
-
-  /**
-   * Dijkstra's algorithm from `start`.
-   * Returns a Map of node-id → shortest distance from `start`.
-   * Nodes unreachable from `start` have distance `Infinity`.
-   * Throws if `start` does not exist in the graph.
-   */
-  dijkstra(start: string): Map<string, number> {
-    if (!this.#nodes.has(start)) {
-      throw new Error(`dijkstra: node "${start}" not found`);
-    }
-
-    const dist = new Map<string, number>();
-    for (const id of this.#nodes.keys()) {
-      dist.set(id, Infinity);
-    }
-    dist.set(start, 0);
-
-    const unvisited = new Set<string>(this.#nodes.keys());
-
-    while (unvisited.size > 0) {
-      // Pick the unvisited node with smallest known distance.
-      let current: string | null = null;
-      let bestDist = Infinity;
-      for (const id of unvisited) {
-        const d = dist.get(id) ?? Infinity;
-        if (d < bestDist) {
-          bestDist = d;
-          current = id;
-        }
-      }
-
-      if (current === null || bestDist === Infinity) break; // remaining unreachable
-
-      unvisited.delete(current);
-
-      for (const { to, weight } of this.#adj.get(current) ?? []) {
-        const alt = bestDist + weight;
-        if (alt < (dist.get(to) ?? Infinity)) {
-          dist.set(to, alt);
-        }
+  #dfsVisit(id: string, visited: Set<string>, order: string[]): void {
+    visited.add(id);
+    order.push(id);
+    const neighbours = [...(this.#vertices.get(id)?.edges.keys() ?? [])].sort();
+    for (const neighbour of neighbours) {
+      if (!visited.has(neighbour)) {
+        this.#dfsVisit(neighbour, visited, order);
       }
     }
-
-    return dist;
   }
 
-  // ─── Cycle detection ────────────────────────────────────────────────────────
+  // ── Graph Properties ──────────────────────────────────────────────────────────
 
   /**
    * Detect whether the graph contains at least one cycle.
-   *
-   * For directed graphs: uses DFS with a recursion stack (white/grey/black).
-   * For undirected graphs: uses DFS parent-tracking.
+   * Works for both directed and undirected graphs.
    */
   hasCycle(): boolean {
     if (this.#directed) {
@@ -325,25 +225,24 @@ export class Graph {
   }
 
   #hasCycleDirected(): boolean {
-    // 0 = white (unvisited), 1 = grey (in stack), 2 = black (done)
-    const color = new Map<string, number>();
-    for (const id of this.#nodes.keys()) color.set(id, 0);
+    // 0 = unvisited, 1 = in current DFS path (grey), 2 = fully processed (black)
+    const state = new Map<string, number>();
+    for (const id of this.#vertices.keys()) state.set(id, 0);
 
-    const dfsVisit = (node: string): boolean => {
-      color.set(node, 1); // grey
-      for (const { to } of this.#adj.get(node) ?? []) {
-        const c = color.get(to) ?? 0;
-        if (c === 1) return true; // back edge → cycle
-        if (c === 0 && dfsVisit(to)) return true;
+    const dfs = (id: string): boolean => {
+      state.set(id, 1);
+      const neighbours = this.#vertices.get(id)?.edges.keys() ?? [].values();
+      for (const neighbour of neighbours) {
+        const s = state.get(neighbour) ?? 0;
+        if (s === 1) return true; // back-edge → cycle
+        if (s === 0 && dfs(neighbour)) return true;
       }
-      color.set(node, 2); // black
+      state.set(id, 2);
       return false;
     };
 
-    for (const id of this.#nodes.keys()) {
-      if ((color.get(id) ?? 0) === 0) {
-        if (dfsVisit(id)) return true;
-      }
+    for (const id of this.#vertices.keys()) {
+      if (state.get(id) === 0 && dfs(id)) return true;
     }
     return false;
   }
@@ -351,119 +250,158 @@ export class Graph {
   #hasCycleUndirected(): boolean {
     const visited = new Set<string>();
 
-    const dfsVisit = (node: string, parent: string | null): boolean => {
-      visited.add(node);
-      for (const { to } of this.#adj.get(node) ?? []) {
-        if (!visited.has(to)) {
-          if (dfsVisit(to, node)) return true;
-        } else if (to !== parent) {
-          return true; // back edge to a non-parent → cycle
+    const dfs = (id: string, parent: string | null): boolean => {
+      visited.add(id);
+      const neighbours = this.#vertices.get(id)?.edges.keys() ?? [].values();
+      for (const neighbour of neighbours) {
+        if (!visited.has(neighbour)) {
+          if (dfs(neighbour, id)) return true;
+        } else if (neighbour !== parent) {
+          return true;
         }
       }
       return false;
     };
 
-    for (const id of this.#nodes.keys()) {
-      if (!visited.has(id)) {
-        if (dfsVisit(id, null)) return true;
-      }
+    for (const id of this.#vertices.keys()) {
+      if (!visited.has(id) && dfs(id, null)) return true;
     }
     return false;
   }
 
-  // ─── Topological sort ───────────────────────────────────────────────────────
-
   /**
-   * Kahn's algorithm topological sort for directed graphs.
-   * Returns a valid topological ordering, or `null` if the graph has a cycle.
-   * Returns `null` for undirected graphs that have any edges (cyclic by
-   * definition when treated bidirectionally).
+   * Check whether all vertices are reachable from each other.
+   * For directed graphs this checks weak connectivity (treats edges as undirected).
+   * @returns `true` when the graph is connected (or empty).
    */
-  topologicalSort(): string[] | null {
-    if (!this.#directed) {
-      // Topological sort is only meaningful for directed graphs.
-      if (this.#edgeCount > 0) return null;
-      return [...this.#nodes.keys()];
-    }
+  isConnected(): boolean {
+    if (this.#vertices.size === 0) return true;
 
-    // Compute in-degrees.
-    const inDegree = new Map<string, number>();
-    for (const id of this.#nodes.keys()) inDegree.set(id, 0);
-    for (const edges of this.#adj.values()) {
-      for (const { to } of edges) {
-        inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
+    // Build an undirected adjacency view for the connectivity check.
+    const adjacency = new Map<string, Set<string>>();
+    for (const id of this.#vertices.keys()) adjacency.set(id, new Set());
+    for (const [fromId, vertex] of this.#vertices) {
+      for (const toId of vertex.edges.keys()) {
+        adjacency.get(fromId)!.add(toId);
+        adjacency.get(toId)!.add(fromId);
       }
     }
 
-    const queue: string[] = [];
-    for (const [id, deg] of inDegree) {
-      if (deg === 0) queue.push(id);
-    }
-
-    const result: string[] = [];
+    const visited = new Set<string>();
+    const startId = this.#vertices.keys().next().value as string;
+    const queue = [startId];
+    visited.add(startId);
     while (queue.length > 0) {
       const current = queue.shift()!;
-      result.push(current);
-      for (const { to } of this.#adj.get(current) ?? []) {
-        const newDeg = (inDegree.get(to) ?? 0) - 1;
-        inDegree.set(to, newDeg);
-        if (newDeg === 0) queue.push(to);
-      }
-    }
-
-    return result.length === this.#nodes.size ? result : null;
-  }
-
-  // ─── Connected components ───────────────────────────────────────────────────
-
-  /**
-   * Return all weakly-connected components as arrays of node ids.
-   *
-   * For undirected graphs these are the standard connected components.
-   * For directed graphs edges are treated as undirected (weakly connected).
-   */
-  connectedComponents(): string[][] {
-    const visited = new Set<string>();
-    const components: string[][] = [];
-
-    // Build an undirected adjacency view for directed graphs.
-    const undirAdj = new Map<string, Set<string>>();
-    for (const id of this.#nodes.keys()) undirAdj.set(id, new Set());
-    for (const [from, edges] of this.#adj) {
-      for (const { to } of edges) {
-        undirAdj.get(from)!.add(to);
-        undirAdj.get(to)!.add(from);
-      }
-    }
-
-    for (const id of this.#nodes.keys()) {
-      if (visited.has(id)) continue;
-      const component: string[] = [];
-      const stack = [id];
-      while (stack.length > 0) {
-        const node = stack.pop()!;
-        if (visited.has(node)) continue;
-        visited.add(node);
-        component.push(node);
-        for (const neighbor of undirAdj.get(node) ?? []) {
-          if (!visited.has(neighbor)) stack.push(neighbor);
+      for (const neighbour of adjacency.get(current) ?? []) {
+        if (!visited.has(neighbour)) {
+          visited.add(neighbour);
+          queue.push(neighbour);
         }
       }
-      components.push(component);
+    }
+    return visited.size === this.#vertices.size;
+  }
+
+  // ── Shortest Path (Dijkstra's) ────────────────────────────────────────────────
+
+  /**
+   * Find the shortest path between `from` and `to` using Dijkstra's algorithm.
+   * Assumes non-negative weights.
+   * @returns An ordered array of vertex IDs forming the path, or `null` if unreachable.
+   */
+  shortestPath(from: string, to: string): string[] | null {
+    if (!this.#vertices.has(from) || !this.#vertices.has(to)) return null;
+    if (from === to) return [from];
+
+    const dist = new Map<string, number>();
+    const prev = new Map<string, string | null>();
+    const unvisited = new Set<string>();
+
+    for (const id of this.#vertices.keys()) {
+      dist.set(id, Infinity);
+      prev.set(id, null);
+      unvisited.add(id);
+    }
+    dist.set(from, 0);
+
+    while (unvisited.size > 0) {
+      // Pick the unvisited vertex with smallest distance.
+      let current: string | null = null;
+      let smallest = Infinity;
+      for (const id of unvisited) {
+        const d = dist.get(id) ?? Infinity;
+        if (d < smallest) {
+          smallest = d;
+          current = id;
+        }
+      }
+
+      if (current === null || smallest === Infinity) break; // unreachable nodes remain
+      if (current === to) break;
+
+      unvisited.delete(current);
+
+      const vertex = this.#vertices.get(current)!;
+      for (const [neighbour, weight] of vertex.edges) {
+        if (!unvisited.has(neighbour)) continue;
+        const alt = (dist.get(current) ?? Infinity) + weight;
+        if (alt < (dist.get(neighbour) ?? Infinity)) {
+          dist.set(neighbour, alt);
+          prev.set(neighbour, current);
+        }
+      }
     }
 
-    return components;
+    if ((dist.get(to) ?? Infinity) === Infinity) return null;
+
+    // Reconstruct path.
+    const path: string[] = [];
+    let step: string | null = to;
+    while (step !== null) {
+      path.unshift(step);
+      step = prev.get(step) ?? null;
+    }
+    return path;
+  }
+
+  // ── Topological Sort ──────────────────────────────────────────────────────────
+
+  /**
+   * Compute a topological ordering of vertices (directed graphs only).
+   * Uses DFS post-order.
+   * @returns An array of vertex IDs in topological order, or `null` if the graph
+   *          contains a cycle or is undirected.
+   */
+  topologicalSort(): string[] | null {
+    if (!this.#directed) return null;
+    if (this.hasCycle()) return null;
+
+    const visited = new Set<string>();
+    const result: string[] = [];
+
+    const dfs = (id: string): void => {
+      visited.add(id);
+      const neighbours = [...(this.#vertices.get(id)?.edges.keys() ?? [])].sort();
+      for (const neighbour of neighbours) {
+        if (!visited.has(neighbour)) dfs(neighbour);
+      }
+      result.unshift(id);
+    };
+
+    // Process in sorted order for deterministic output.
+    for (const id of [...this.#vertices.keys()].sort()) {
+      if (!visited.has(id)) dfs(id);
+    }
+    return result;
   }
 }
 
-// ─── Factory functions ────────────────────────────────────────────────────────
+// ─── Factory ──────────────────────────────────────────────────────────────────
 
-/** Create a new graph. Pass `true` for a directed graph, or omit for undirected. */
-export function createGraph(directed = false): Graph {
-  return new Graph(directed);
-}
-
-/** Create a new directed graph. */
-export function createDirectedGraph(): Graph {
-  return new Graph(true);
+/**
+ * Convenience factory — returns a new `Graph<T>` with the given options.
+ */
+export function createGraph<T = unknown>(options?: { directed?: boolean }): Graph<T> {
+  return new Graph<T>(options);
 }

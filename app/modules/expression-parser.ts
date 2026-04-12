@@ -1,34 +1,28 @@
 // @ts-check
-// ─── Mathematical Expression Parser & Evaluator ──────────────────────────────
-// Tokenizes, parses, and evaluates mathematical expressions with support for
-// variables, built-in functions, constants, and correct operator precedence.
+// ─── Arithmetic Expression Parser / Evaluator ────────────────────────────────
+// Supports: +, -, *, /, ^ (right-associative power), unary minus,
+// parentheses, numeric literals, and named variable substitution.
 //
-// Precedence (highest to lowest):
-//   ^ (power, right-associative) > unary - > * / % > + -
+// Operator precedence (highest to lowest):
+//   ^ (right-associative) > unary - > * / > + -
 
 // ─── Token ───────────────────────────────────────────────────────────────────
 
-/** A single lexical token produced by the tokenizer. */
+/** A single lexical unit produced by the tokenizer. */
 export interface Token {
-  type: 'number' | 'operator' | 'lparen' | 'rparen' | 'identifier';
+  type: 'number' | 'op' | 'lparen' | 'rparen' | 'ident';
   value: string;
 }
 
-// ─── AST ─────────────────────────────────────────────────────────────────────
+// ─── AST Nodes ────────────────────────────────────────────────────────────────
 
-/** A numeric literal. */
+/** A numeric literal node. */
 export interface NumberNode {
   type: 'number';
   value: number;
 }
 
-/** A variable or constant reference. */
-export interface IdentifierNode {
-  type: 'identifier';
-  name: string;
-}
-
-/** A binary operation (+, -, *, /, %, ^). */
+/** A binary operation node (+, -, *, /, ^). */
 export interface BinaryNode {
   type: 'binary';
   op: string;
@@ -36,134 +30,119 @@ export interface BinaryNode {
   right: ASTNode;
 }
 
-/** A unary operation (negation). */
+/** A unary operation node (negation). */
 export interface UnaryNode {
   type: 'unary';
   op: string;
   operand: ASTNode;
 }
 
-/** A function call. */
-export interface CallNode {
-  type: 'call';
+/** A variable reference node. */
+export interface VariableNode {
+  type: 'variable';
   name: string;
-  args: ASTNode[];
 }
 
 /** Discriminated union of all AST node variants. */
-export type ASTNode = NumberNode | IdentifierNode | BinaryNode | UnaryNode | CallNode;
+export type ASTNode = NumberNode | BinaryNode | UnaryNode | VariableNode;
 
-// ─── Constants ───────────────────────────────────────────────────────────────
+// ─── Error ────────────────────────────────────────────────────────────────────
 
-const CONSTANTS: Record<string, number> = {
-  pi: Math.PI,
-  e: Math.E,
-};
+/** Thrown for any invalid expression — syntax errors, unknown variables, division by zero, etc. */
+export class ExpressionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExpressionError';
+  }
+}
 
-// ─── Built-in Functions ──────────────────────────────────────────────────────
+// ─── Tokenizer ────────────────────────────────────────────────────────────────
 
-const FUNCTIONS: Record<string, (...args: number[]) => number> = {
-  sin: Math.sin,
-  cos: Math.cos,
-  tan: Math.tan,
-  sqrt: Math.sqrt,
-  abs: Math.abs,
-  floor: Math.floor,
-  ceil: Math.ceil,
-  round: Math.round,
-  log: Math.log,
-  exp: Math.exp,
-  min: (...args) => Math.min(...args),
-  max: (...args) => Math.max(...args),
-};
-
-// ─── Tokenizer ───────────────────────────────────────────────────────────────
+const OPERATORS = new Set(['+', '-', '*', '/', '^']);
 
 /**
- * Convert an expression string into an ordered list of tokens.
+ * Convert an expression string into an ordered array of tokens.
+ * Whitespace is ignored. Throws `ExpressionError` on unrecognised characters.
  *
- * Token types:
- *   - `'number'`     — numeric literal (e.g. `3`, `3.14`)
- *   - `'identifier'` — variable, constant, or function name (e.g. `x`, `sin`)
- *   - `'operator'`   — `+`, `-`, `*`, `/`, `%`, `^`, or `,`
- *   - `'lparen'`     — `(`
- *   - `'rparen'`     — `)`
- *
- * @throws {SyntaxError} on unrecognised characters.
+ * @param expr - The raw expression string.
+ * @returns Array of `Token` objects.
  */
-export function tokenize(expression: string): Token[] {
+export function tokenize(expr: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
 
-  while (i < expression.length) {
-    const ch = expression[i];
+  while (i < expr.length) {
+    const ch = expr[i];
 
     // Skip whitespace
-    if (/\s/.test(ch)) {
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
       i++;
       continue;
     }
 
-    // Number literal (integer or float, including leading-dot form like .5)
-    if (/[0-9]/.test(ch) || (ch === '.' && /[0-9]/.test(expression[i + 1] ?? ''))) {
-      let num = '';
-      while (i < expression.length && /[0-9.]/.test(expression[i])) {
-        num += expression[i++];
+    // Numeric literal — integer or decimal, with optional exponent
+    if ((ch >= '0' && ch <= '9') || (ch === '.' && i + 1 < expr.length && expr[i + 1] >= '0' && expr[i + 1] <= '9')) {
+      const start = i;
+      while (i < expr.length && ((expr[i] >= '0' && expr[i] <= '9') || expr[i] === '.')) {
+        i++;
       }
-      tokens.push({ type: 'number', value: num });
-      continue;
-    }
-
-    // Identifier (variable / function / constant)
-    if (/[a-zA-Z_]/.test(ch)) {
-      let ident = '';
-      while (i < expression.length && /[a-zA-Z0-9_]/.test(expression[i])) {
-        ident += expression[i++];
+      // Optional scientific notation exponent
+      if (i < expr.length && (expr[i] === 'e' || expr[i] === 'E')) {
+        i++;
+        if (i < expr.length && (expr[i] === '+' || expr[i] === '-')) i++;
+        while (i < expr.length && expr[i] >= '0' && expr[i] <= '9') i++;
       }
-      tokens.push({ type: 'identifier', value: ident });
+      tokens.push({ type: 'number', value: expr.slice(start, i) });
       continue;
     }
 
-    // Operators
-    if ('+-*/%^'.includes(ch)) {
-      tokens.push({ type: 'operator', value: ch });
-      i++;
+    // Identifier — letter or underscore followed by letters/digits/underscores
+    if (ch === '_' || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+      const start = i;
+      while (
+        i < expr.length &&
+        (expr[i] === '_' ||
+          (expr[i] >= 'a' && expr[i] <= 'z') ||
+          (expr[i] >= 'A' && expr[i] <= 'Z') ||
+          (expr[i] >= '0' && expr[i] <= '9'))
+      ) {
+        i++;
+      }
+      tokens.push({ type: 'ident', value: expr.slice(start, i) });
       continue;
     }
 
-    // Parentheses
     if (ch === '(') { tokens.push({ type: 'lparen', value: '(' }); i++; continue; }
     if (ch === ')') { tokens.push({ type: 'rparen', value: ')' }); i++; continue; }
 
-    // Comma — argument separator, modelled as an operator token
-    if (ch === ',') { tokens.push({ type: 'operator', value: ',' }); i++; continue; }
+    if (OPERATORS.has(ch)) {
+      tokens.push({ type: 'op', value: ch });
+      i++;
+      continue;
+    }
 
-    throw new SyntaxError(`Unexpected character: '${ch}' at position ${i}`);
+    throw new ExpressionError(`Unexpected character '${ch}' at position ${i}`);
   }
 
   return tokens;
 }
 
-// ─── Parser ──────────────────────────────────────────────────────────────────
+// ─── Parser (recursive-descent with correct precedence) ──────────────────────
+//
+// Grammar:
+//   expr           = additive
+//   additive       = multiplicative (('+' | '-') multiplicative)*
+//   multiplicative = unary          (('*' | '/') unary)*
+//   unary          = '-' unary | power
+//   power          = primary ('^' unary)?   ← right-associative
+//   primary        = NUMBER | IDENT | '(' expr ')'
 
-/**
- * Recursive-descent parser.
- *
- * Grammar (lowest → highest precedence):
- *   expr           = additive
- *   additive       = multiplicative (('+' | '-') multiplicative)*
- *   multiplicative = unary (('*' | '/' | '%') unary)*
- *   unary          = '-' unary | power
- *   power          = primary ('^' unary)?   ← right-associative
- *   primary        = NUMBER | IDENT | IDENT '(' args ')' | '(' expr ')'
- */
-class ExpressionParser {
+class Parser {
   #tokens: Token[];
-  #pos: number;
+  #pos: number = 0;
 
   constructor(tokens: Token[]) {
     this.#tokens = tokens;
-    this.#pos = 0;
   }
 
   #peek(): Token | undefined {
@@ -172,7 +151,7 @@ class ExpressionParser {
 
   #consume(): Token {
     const tok = this.#tokens[this.#pos];
-    if (tok === undefined) throw new SyntaxError('Unexpected end of expression');
+    if (tok === undefined) throw new ExpressionError('Unexpected end of expression');
     this.#pos++;
     return tok;
   }
@@ -180,56 +159,48 @@ class ExpressionParser {
   #expectRparen(): void {
     const tok = this.#consume();
     if (tok.type !== 'rparen') {
-      throw new SyntaxError(`Expected ')' but got '${tok.value}'`);
+      throw new ExpressionError(`Expected ')' but got '${tok.value}'`);
     }
-  }
-
-  /** Parse a full expression; asserts no leftover tokens afterwards. */
-  parseExpression(): ASTNode {
-    const node = this.#parseAdditive();
-    const leftover = this.#peek();
-    if (leftover !== undefined) {
-      throw new SyntaxError(`Unexpected token '${leftover.value}'`);
-    }
-    return node;
   }
 
   // additive = multiplicative (('+' | '-') multiplicative)*
   #parseAdditive(): ASTNode {
     let left = this.#parseMultiplicative();
-    while (
-      this.#peek()?.type === 'operator' &&
-      (this.#peek()!.value === '+' || this.#peek()!.value === '-')
-    ) {
+    let tok = this.#peek();
+    while (tok?.type === 'op' && (tok.value === '+' || tok.value === '-')) {
       const op = this.#consume().value;
       const right = this.#parseMultiplicative();
       left = { type: 'binary', op, left, right };
+      tok = this.#peek();
     }
     return left;
   }
 
-  // multiplicative = unary (('*' | '/' | '%') unary)*
+  // multiplicative = unary (('*' | '/') unary)*
   #parseMultiplicative(): ASTNode {
     let left = this.#parseUnary();
-    while (
-      this.#peek()?.type === 'operator' &&
-      (this.#peek()!.value === '*' ||
-        this.#peek()!.value === '/' ||
-        this.#peek()!.value === '%')
-    ) {
+    let tok = this.#peek();
+    while (tok?.type === 'op' && (tok.value === '*' || tok.value === '/')) {
       const op = this.#consume().value;
       const right = this.#parseUnary();
       left = { type: 'binary', op, left, right };
+      tok = this.#peek();
     }
     return left;
   }
 
   // unary = '-' unary | power
   #parseUnary(): ASTNode {
-    if (this.#peek()?.type === 'operator' && this.#peek()!.value === '-') {
+    const tok = this.#peek();
+    if (tok?.type === 'op' && tok.value === '-') {
       this.#consume();
       const operand = this.#parseUnary();
       return { type: 'unary', op: '-', operand };
+    }
+    // Unary plus — consume and discard
+    if (tok?.type === 'op' && tok.value === '+') {
+      this.#consume();
+      return this.#parseUnary();
     }
     return this.#parsePower();
   }
@@ -237,20 +208,21 @@ class ExpressionParser {
   // power = primary ('^' unary)?   right-associative
   #parsePower(): ASTNode {
     const base = this.#parsePrimary();
-    if (this.#peek()?.type === 'operator' && this.#peek()!.value === '^') {
+    const tok = this.#peek();
+    if (tok?.type === 'op' && tok.value === '^') {
       this.#consume();
-      // Recurse into #parseUnary so that -x^2 = -(x^2) and 2^3^2 = 2^(3^2)
+      // Recurse into #parseUnary for right-associativity: 2^3^2 = 2^(3^2)
       const exponent = this.#parseUnary();
       return { type: 'binary', op: '^', left: base, right: exponent };
     }
     return base;
   }
 
-  // primary = NUMBER | IDENT | IDENT '(' args ')' | '(' expr ')'
+  // primary = NUMBER | IDENT | '(' expr ')'
   #parsePrimary(): ASTNode {
     const tok = this.#peek();
     if (tok === undefined) {
-      throw new SyntaxError('Unexpected end of expression — expected a value');
+      throw new ExpressionError('Unexpected end of expression — expected a value');
     }
 
     // Parenthesised sub-expression
@@ -264,51 +236,43 @@ class ExpressionParser {
     // Numeric literal
     if (tok.type === 'number') {
       this.#consume();
-      return { type: 'number', value: Number(tok.value) };
+      const n = Number(tok.value);
+      if (Number.isNaN(n)) throw new ExpressionError(`Invalid number literal '${tok.value}'`);
+      return { type: 'number', value: n };
     }
 
-    // Identifier — either a variable/constant or a function call
-    if (tok.type === 'identifier') {
+    // Identifier → variable reference
+    if (tok.type === 'ident') {
       this.#consume();
-      if (this.#peek()?.type === 'lparen') {
-        // Function call
-        this.#consume(); // consume '('
-        const args: ASTNode[] = [];
-        if (this.#peek()?.type !== 'rparen') {
-          args.push(this.#parseAdditive());
-          while (
-            this.#peek()?.type === 'operator' &&
-            this.#peek()!.value === ','
-          ) {
-            this.#consume(); // consume ','
-            args.push(this.#parseAdditive());
-          }
-        }
-        this.#expectRparen();
-        return { type: 'call', name: tok.value, args };
-      }
-      return { type: 'identifier', name: tok.value };
+      return { type: 'variable', name: tok.value };
     }
 
-    throw new SyntaxError(`Unexpected token '${tok.value}'`);
+    throw new ExpressionError(`Unexpected token '${tok.value}' (${tok.type})`);
+  }
+
+  /** Parse the full token stream and return the root AST node. */
+  parse(): ASTNode {
+    if (this.#tokens.length === 0) throw new ExpressionError('Empty expression');
+    const ast = this.#parseAdditive();
+    const leftover = this.#peek();
+    if (leftover !== undefined) {
+      throw new ExpressionError(`Unexpected token '${leftover.value}'`);
+    }
+    return ast;
   }
 }
-
-// ─── Public: tokenize() — already defined above ───────────────────────────────
 
 // ─── Public: parse() ─────────────────────────────────────────────────────────
 
 /**
- * Parse a mathematical expression string into an AST.
+ * Parse an arithmetic expression string into an AST.
+ * Throws `ExpressionError` on syntax errors or empty input.
  *
- * @throws {SyntaxError} on invalid syntax or empty input.
+ * @param expr - The expression to parse, e.g. `"2 + x * 3"`.
+ * @returns Root `ASTNode` of the abstract syntax tree.
  */
-export function parse(expression: string): ASTNode {
-  const tokens = tokenize(expression);
-  if (tokens.length === 0) {
-    throw new SyntaxError('Empty expression');
-  }
-  return new ExpressionParser(tokens).parseExpression();
+export function parse(expr: string): ASTNode {
+  return new Parser(tokenize(expr)).parse();
 }
 
 // ─── AST Evaluator ───────────────────────────────────────────────────────────
@@ -318,17 +282,17 @@ function evalNode(node: ASTNode, vars: Record<string, number>): number {
     case 'number':
       return node.value;
 
-    case 'identifier': {
-      const { name } = node;
-      if (Object.prototype.hasOwnProperty.call(CONSTANTS, name)) return CONSTANTS[name];
-      if (Object.prototype.hasOwnProperty.call(vars, name)) return vars[name];
-      throw new ReferenceError(`Unknown variable: '${name}'`);
+    case 'variable': {
+      if (!Object.prototype.hasOwnProperty.call(vars, node.name)) {
+        throw new ExpressionError(`Undefined variable '${node.name}'`);
+      }
+      return vars[node.name];
     }
 
     case 'unary': {
       const val = evalNode(node.operand, vars);
       if (node.op === '-') return -val;
-      throw new Error(`Unknown unary operator: '${node.op}'`);
+      throw new ExpressionError(`Unknown unary operator '${node.op}'`);
     }
 
     case 'binary': {
@@ -338,20 +302,13 @@ function evalNode(node: ASTNode, vars: Record<string, number>): number {
         case '+': return l + r;
         case '-': return l - r;
         case '*': return l * r;
-        case '/': return l / r;
-        case '%': return l % r;
+        case '/':
+          if (r === 0) throw new ExpressionError('Division by zero');
+          return l / r;
         case '^': return Math.pow(l, r);
-        default: throw new Error(`Unknown binary operator: '${node.op}'`);
+        default:
+          throw new ExpressionError(`Unknown operator '${node.op}'`);
       }
-    }
-
-    case 'call': {
-      const fn = FUNCTIONS[node.name];
-      if (fn === undefined) {
-        throw new ReferenceError(`Unknown function: '${node.name}'`);
-      }
-      const args = node.args.map((a) => evalNode(a, vars));
-      return fn(...args);
     }
   }
 }
@@ -359,34 +316,14 @@ function evalNode(node: ASTNode, vars: Record<string, number>): number {
 // ─── Public: evaluate() ──────────────────────────────────────────────────────
 
 /**
- * Parse and evaluate a mathematical expression string in one step.
+ * Parse and evaluate an arithmetic expression string in one step.
+ * Supports +, -, *, /, ^ (power), unary minus, parentheses, and variables.
  *
- * @param expression - E.g. `"2 + x * 3"`.
- * @param variables  - Optional map of variable names → values.
+ * @param expr - The expression to evaluate, e.g. `"2 + x * 3"`.
+ * @param vars - Optional map of variable names to numeric values.
  * @returns The numeric result.
- * @throws {SyntaxError}    on invalid syntax.
- * @throws {ReferenceError} on unknown variables or functions.
+ * @throws {ExpressionError} on syntax errors, undefined variables, or division by zero.
  */
-export function evaluate(
-  expression: string,
-  variables: Record<string, number> = {},
-): number {
-  return evalNode(parse(expression), variables);
-}
-
-// ─── Public: compile() ───────────────────────────────────────────────────────
-
-/**
- * Compile an expression into a reusable evaluator function.
- * The expression is parsed once; subsequent calls only run the evaluator.
- *
- * @param expression - The expression to compile.
- * @returns A function `(variables?) => number`.
- * @throws {SyntaxError} eagerly, during compilation.
- */
-export function compile(
-  expression: string,
-): (variables?: Record<string, number>) => number {
-  const ast = parse(expression);
-  return (variables: Record<string, number> = {}): number => evalNode(ast, variables);
+export function evaluate(expr: string, vars: Record<string, number> = {}): number {
+  return evalNode(parse(expr), vars);
 }

@@ -1,5 +1,5 @@
 // ─── Unit Tests: promise-utils ────────────────────────────────────────────────
-import { describe, it } from 'node:test';
+import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
@@ -15,6 +15,14 @@ import {
   pQueue,
   promisify,
   tap,
+  // new exports
+  TimeoutError,
+  retry,
+  mapConcurrent,
+  pDebounce,
+  pThrottle,
+  race,
+  withAbort,
 } from '../../app/modules/promise-utils.js';
 
 // ─── delay ────────────────────────────────────────────────────────────────────
@@ -603,5 +611,482 @@ describe('tap', () => {
       () => tap(Promise.resolve('ok'), () => { throw new Error('side effect error'); }),
       /side effect error/,
     );
+  });
+});
+
+// ─── TimeoutError ─────────────────────────────────────────────────────────────
+
+describe('TimeoutError', () => {
+  it('is an instance of Error', () => {
+    const err = new TimeoutError(100);
+    assert.ok(err instanceof Error);
+  });
+
+  it('is an instance of TimeoutError', () => {
+    const err = new TimeoutError(100);
+    assert.ok(err instanceof TimeoutError);
+  });
+
+  it('has name "TimeoutError"', () => {
+    const err = new TimeoutError(100);
+    assert.equal(err.name, 'TimeoutError');
+  });
+
+  it('message contains the ms value', () => {
+    const err = new TimeoutError(250);
+    assert.ok(err.message.includes('250'), `expected message to contain 250, got: ${err.message}`);
+  });
+
+  it('stack is populated', () => {
+    const err = new TimeoutError(1);
+    assert.ok(typeof err.stack === 'string');
+  });
+});
+
+// ─── timeout (TimeoutError) ───────────────────────────────────────────────────
+
+describe('timeout – TimeoutError variant', () => {
+  it('rejects with TimeoutError (not plain Error) on timeout', async () => {
+    await assert.rejects(
+      () => timeout(new Promise(() => {}), 15),
+      (err) => err instanceof TimeoutError,
+    );
+  });
+
+  it('does not leave a dangling timer when promise resolves first', async () => {
+    // Should resolve cleanly without any unhandled-rejection noise
+    const result = await timeout(Promise.resolve('clean'), 500);
+    assert.equal(result, 'clean');
+  });
+
+  it('clears timer when underlying promise rejects before deadline', async () => {
+    const err = new Error('rejected first');
+    await assert.rejects(
+      () => timeout(Promise.reject(err), 500),
+      (e) => e === err,
+    );
+  });
+});
+
+// ─── retry ────────────────────────────────────────────────────────────────────
+
+describe('retry', () => {
+  it('returns value on first success', async () => {
+    const fn = mock.fn(() => Promise.resolve(42));
+    const result = await retry(fn);
+    assert.equal(result, 42);
+    assert.equal(fn.mock.calls.length, 1);
+  });
+
+  it('retries on failure and succeeds on 2nd attempt', async () => {
+    let calls = 0;
+    const fn = () => {
+      calls++;
+      if (calls < 2) return Promise.reject(new Error('not yet'));
+      return Promise.resolve('done');
+    };
+    const result = await retry(fn, { retries: 3, delay: 0 });
+    assert.equal(result, 'done');
+    assert.equal(calls, 2);
+  });
+
+  it('throws last error after all retries exhausted', async () => {
+    const err = new Error('always fails');
+    const fn = () => Promise.reject(err);
+    await assert.rejects(
+      () => retry(fn, { retries: 2, delay: 0 }),
+      (e) => e === err,
+    );
+  });
+
+  it('default retries=3 means 4 total calls', async () => {
+    let calls = 0;
+    const fn = () => { calls++; return Promise.reject(new Error('x')); };
+    await assert.rejects(() => retry(fn, { delay: 0 }));
+    assert.equal(calls, 4);
+  });
+
+  it('retries: 0 means only 1 attempt total', async () => {
+    let calls = 0;
+    const fn = () => { calls++; return Promise.reject(new Error('x')); };
+    await assert.rejects(() => retry(fn, { retries: 0 }));
+    assert.equal(calls, 1);
+  });
+
+  it('respects delay between retries', async () => {
+    let calls = 0;
+    const fn = () => {
+      calls++;
+      if (calls < 2) return Promise.reject(new Error('fail'));
+      return Promise.resolve('ok');
+    };
+    const start = Date.now();
+    await retry(fn, { retries: 2, delay: 20 });
+    assert.ok(Date.now() - start >= 15, 'should have waited for delay');
+  });
+
+  it('succeeds immediately when retries: 0 and fn resolves', async () => {
+    const result = await retry(() => Promise.resolve('yes'), { retries: 0 });
+    assert.equal(result, 'yes');
+  });
+
+  it('backoff > 1 increases delay each retry without throwing', async () => {
+    let calls = 0;
+    const fn = () => {
+      calls++;
+      if (calls < 3) return Promise.reject(new Error('x'));
+      return Promise.resolve('done');
+    };
+    const result = await retry(fn, { retries: 3, delay: 5, backoff: 2 });
+    assert.equal(result, 'done');
+    assert.equal(calls, 3);
+  });
+
+  it('delay: 0 with backoff: 1 does not sleep between retries', async () => {
+    const start = Date.now();
+    let calls = 0;
+    const fn = () => { calls++; return Promise.reject(new Error('x')); };
+    await assert.rejects(() => retry(fn, { retries: 3, delay: 0, backoff: 1 }));
+    assert.ok(Date.now() - start < 200, 'no-delay retries should complete quickly');
+    assert.equal(calls, 4);
+  });
+});
+
+// ─── mapConcurrent ────────────────────────────────────────────────────────────
+
+describe('mapConcurrent', () => {
+  it('maps items and preserves order', async () => {
+    const results = await mapConcurrent(
+      [1, 2, 3],
+      (x) => Promise.resolve(x * 2),
+      2,
+    );
+    assert.deepEqual(results, [2, 4, 6]);
+  });
+
+  it('limits concurrency', async () => {
+    let active = 0;
+    let maxActive = 0;
+    const fn = async (x) => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      await delay(10);
+      active--;
+      return x;
+    };
+    await mapConcurrent([1, 2, 3, 4, 5], fn, 2);
+    assert.ok(maxActive <= 2, `max concurrent was ${maxActive}, expected <= 2`);
+  });
+
+  it('concurrency=1 processes items serially', async () => {
+    const order = [];
+    const fn = async (x) => {
+      order.push(`start-${x}`);
+      await delay(5);
+      order.push(`end-${x}`);
+      return x;
+    };
+    await mapConcurrent([1, 2, 3], fn, 1);
+    assert.deepEqual(order, ['start-1', 'end-1', 'start-2', 'end-2', 'start-3', 'end-3']);
+  });
+
+  it('returns empty array for empty input', async () => {
+    const results = await mapConcurrent([], () => Promise.resolve(0), 4);
+    assert.deepEqual(results, []);
+  });
+
+  it('concurrency larger than item count works', async () => {
+    const results = await mapConcurrent([10, 20], (x) => Promise.resolve(x + 1), 10);
+    assert.deepEqual(results, [11, 21]);
+  });
+
+  it('propagates errors from fn', async () => {
+    const boom = new Error('boom');
+    await assert.rejects(
+      () => mapConcurrent([1, 2], () => Promise.reject(boom), 2),
+      (e) => e === boom,
+    );
+  });
+
+  it('single item with concurrency=1', async () => {
+    const results = await mapConcurrent(['hello'], (x) => Promise.resolve(x.toUpperCase()), 1);
+    assert.deepEqual(results, ['HELLO']);
+  });
+});
+
+// ─── deferred (new tests) ─────────────────────────────────────────────────────
+
+describe('deferred – additional', () => {
+  it('resolve with a PromiseLike value chains correctly', async () => {
+    const d = deferred();
+    d.resolve(Promise.resolve('chained'));
+    const result = await d.promise;
+    assert.equal(result, 'chained');
+  });
+
+  it('reject without argument settles with undefined reason', async () => {
+    const d = deferred();
+    d.reject();
+    await assert.rejects(() => d.promise, (e) => e === undefined);
+  });
+});
+
+// ─── race ─────────────────────────────────────────────────────────────────────
+
+describe('race', () => {
+  it('resolves with the first fulfilled value', async () => {
+    const result = await race([
+      new Promise((res) => setTimeout(() => res('slow'), 40)),
+      new Promise((res) => setTimeout(() => res('fast'), 5)),
+    ]);
+    assert.equal(result, 'fast');
+  });
+
+  it('rejects with the first rejected reason', async () => {
+    const boom = new Error('first-reject');
+    await assert.rejects(
+      () => race([
+        new Promise((_, rej) => setTimeout(() => rej(boom), 5)),
+        new Promise((res) => setTimeout(() => res('late'), 50)),
+      ]),
+      (e) => e === boom,
+    );
+  });
+
+  it('single-element array resolves correctly', async () => {
+    const result = await race([Promise.resolve('only')]);
+    assert.equal(result, 'only');
+  });
+
+  it('already-resolved promise wins', async () => {
+    const result = await race([
+      Promise.resolve(7),
+      new Promise((res) => setTimeout(() => res(8), 50)),
+    ]);
+    assert.equal(result, 7);
+  });
+
+  it('returns the same promise semantics as Promise.race', async () => {
+    const p1 = Promise.resolve('a');
+    const p2 = Promise.resolve('b');
+    const result = await race([p1, p2]);
+    // Either 'a' or 'b' – both already resolved, so implementation-defined
+    assert.ok(result === 'a' || result === 'b');
+  });
+});
+
+// ─── any (new tests) ──────────────────────────────────────────────────────────
+
+describe('any – additional', () => {
+  it('resolves with the first fulfilled even among rejections', async () => {
+    const result = await any([
+      Promise.reject(new Error('no-1')),
+      Promise.resolve('yes'),
+      Promise.reject(new Error('no-2')),
+    ]);
+    assert.equal(result, 'yes');
+  });
+
+  it('AggregateError contains all rejection reasons', async () => {
+    const e1 = new Error('a');
+    const e2 = new Error('b');
+    await assert.rejects(
+      () => any([Promise.reject(e1), Promise.reject(e2)]),
+      (e) => e instanceof AggregateError && e.errors.includes(e1) && e.errors.includes(e2),
+    );
+  });
+});
+
+// ─── withAbort ────────────────────────────────────────────────────────────────
+
+describe('withAbort', () => {
+  it('exposes promise and abort()', () => {
+    const { promise, abort } = withAbort(() => delay(10000));
+    assert.ok(promise instanceof Promise);
+    assert.equal(typeof abort, 'function');
+    abort(); // cleanup
+    return promise.catch(() => {}); // swallow AbortError
+  });
+
+  it('resolves normally when not aborted', async () => {
+    const { promise } = withAbort(() => Promise.resolve('done'));
+    assert.equal(await promise, 'done');
+  });
+
+  it('rejects with DOMException(AbortError) when abort() is called', async () => {
+    const { promise, abort } = withAbort(() => delay(2000));
+    setTimeout(abort, 10);
+    await assert.rejects(
+      () => promise,
+      (e) => e instanceof DOMException && e.name === 'AbortError',
+    );
+  });
+
+  it('passes a valid AbortSignal to fn', async () => {
+    let receivedSignal;
+    const { promise } = withAbort((signal) => {
+      receivedSignal = signal;
+      return Promise.resolve('ok');
+    });
+    await promise;
+    assert.ok(receivedSignal instanceof AbortSignal);
+  });
+
+  it('propagates rejection from fn', async () => {
+    const err = new Error('fn failed');
+    const { promise } = withAbort(() => Promise.reject(err));
+    await assert.rejects(() => promise, (e) => e === err);
+  });
+
+  it('abort after resolution does not change the resolved value', async () => {
+    const { promise, abort } = withAbort(() => Promise.resolve('value'));
+    const result = await promise;
+    abort(); // too late
+    assert.equal(result, 'value');
+  });
+});
+
+// ─── pDebounce ────────────────────────────────────────────────────────────────
+
+describe('pDebounce', () => {
+  it('calls fn only once when invoked multiple times rapidly', async () => {
+    const fn = mock.fn(() => Promise.resolve('result'));
+    const debounced = pDebounce(fn, 20);
+
+    const p1 = debounced('a');
+    const p2 = debounced('b');
+    const p3 = debounced('c');
+
+    const [r1, r2, r3] = await Promise.all([p1, p2, p3]);
+    assert.equal(fn.mock.calls.length, 1);
+    assert.equal(r1, 'result');
+    assert.equal(r2, 'result');
+    assert.equal(r3, 'result');
+  });
+
+  it('uses the last arguments passed', async () => {
+    const received = [];
+    const fn = mock.fn((x) => { received.push(x); return Promise.resolve(x); });
+    const debounced = pDebounce(fn, 20);
+
+    debounced('first');
+    debounced('second');
+    const result = await debounced('third');
+
+    assert.equal(result, 'third');
+    assert.deepEqual(received, ['third']);
+  });
+
+  it('resets the timer on each rapid call', async () => {
+    let calls = 0;
+    const fn = () => { calls++; return Promise.resolve(calls); };
+    const debounced = pDebounce(fn, 30);
+
+    const p1 = debounced();
+    await delay(15);
+    const p2 = debounced(); // resets timer
+    await delay(15);
+    const p3 = debounced(); // resets timer again
+
+    await Promise.all([p1, p2, p3]);
+    assert.equal(calls, 1);
+  });
+
+  it('propagates rejection to all pending callers', async () => {
+    const err = new Error('debounce fail');
+    const fn = () => Promise.reject(err);
+    const debounced = pDebounce(fn, 10);
+
+    const p1 = debounced();
+    const p2 = debounced();
+
+    const results = await Promise.allSettled([p1, p2]);
+    assert.equal(results[0].status, 'rejected');
+    assert.equal(results[0].reason, err);
+    assert.equal(results[1].status, 'rejected');
+    assert.equal(results[1].reason, err);
+  });
+
+  it('allows a second invocation after the first window expires', async () => {
+    let calls = 0;
+    const fn = () => { calls++; return Promise.resolve(calls); };
+    const debounced = pDebounce(fn, 15);
+
+    const r1 = await debounced();
+    await delay(25); // wait for window to expire
+    const r2 = await debounced();
+
+    assert.equal(calls, 2);
+    assert.equal(r1, 1);
+    assert.equal(r2, 2);
+  });
+
+  it('single call resolves with fn result', async () => {
+    const fn = () => Promise.resolve(42);
+    const debounced = pDebounce(fn, 10);
+    const result = await debounced();
+    assert.equal(result, 42);
+  });
+});
+
+// ─── pThrottle ────────────────────────────────────────────────────────────────
+
+describe('pThrottle', () => {
+  it('calls fn immediately on first invocation', async () => {
+    const fn = mock.fn(() => Promise.resolve('first'));
+    const throttled = pThrottle(fn, 50);
+    const result = await throttled();
+    assert.equal(result, 'first');
+    assert.equal(fn.mock.calls.length, 1);
+  });
+
+  it('queues a call made during cooldown and fires after window', async () => {
+    const results = [];
+    const fn = (x) => { results.push(x); return Promise.resolve(x); };
+    const throttled = pThrottle(fn, 20);
+
+    const p1 = throttled('a');  // fires immediately
+    const p2 = throttled('b');  // queued
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+    assert.equal(r1, 'a');
+    assert.equal(r2, 'b');
+    assert.equal(results[0], 'a');
+    assert.equal(results[1], 'b');
+  });
+
+  it('most-recent queued args win when multiple calls queue during cooldown', async () => {
+    const received = [];
+    const fn = (x) => { received.push(x); return Promise.resolve(x); };
+    const throttled = pThrottle(fn, 30);
+
+    const p1 = throttled('first');   // fires immediately
+    throttled('second');             // queued, will be replaced
+    const p3 = throttled('third');   // replaces 'second' in queue
+
+    await Promise.all([p1, p3]);
+    assert.ok(received.includes('first'), 'first call should have fired');
+    assert.ok(received.includes('third'), 'queued call with latest args should have fired');
+    assert.ok(!received.includes('second'), 'intermediate queued call should have been dropped');
+  });
+
+  it('does not call fn during cooldown window', async () => {
+    let calls = 0;
+    const fn = () => { calls++; return Promise.resolve(calls); };
+    const throttled = pThrottle(fn, 50);
+
+    throttled(); // fires immediately
+    throttled(); // queued
+    throttled(); // replaces queued
+
+    // At this point only 1 call should have fired synchronously
+    assert.equal(calls, 1);
+  });
+
+  it('fn return value is passed through to the caller', async () => {
+    const fn = (x) => Promise.resolve(x * 10);
+    const throttled = pThrottle(fn, 20);
+    const result = await throttled(5);
+    assert.equal(result, 50);
   });
 });

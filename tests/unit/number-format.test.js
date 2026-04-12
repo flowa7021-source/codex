@@ -1,815 +1,529 @@
-// ─── Unit Tests: Number Formatting & Parsing Library ─────────────────────────
+// ─── Unit Tests: number-format ────────────────────────────────────────────────
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
   formatNumber,
+  parseNumber,
   formatCurrency,
   formatPercent,
-  formatBytes,
+  formatFileSize,
   formatOrdinal,
-  formatDuration,
-  formatScientific,
-  parseNumber,
-  parsePercent,
+  toRoman,
+  fromRoman,
   clamp,
   lerp,
   roundTo,
+  floorTo,
+  ceilTo,
   isPrime,
+  primeFactors,
   gcd,
   lcm,
-  factorial,
   fibonacci,
-  randomInt,
-  randomFloat,
+  factorial,
 } from '../../app/modules/number-format.js';
 
-// ─── formatNumber ────────────────────────────────────────────────────────────
+// ─── formatNumber ─────────────────────────────────────────────────────────────
 
-describe('formatNumber', () => {
-  it('formats with default 2 decimal places and commas', () => {
-    assert.equal(formatNumber(1234567.89), '1,234,567.89');
+describe('formatNumber - defaults', () => {
+  it('formats an integer with default options (no decimals, comma thousands)', () => {
+    assert.equal(formatNumber(1000), '1,000');
   });
 
-  it('formats 0 correctly', () => {
-    assert.equal(formatNumber(0), '0.00');
+  it('formats zero', () => {
+    assert.equal(formatNumber(0), '0');
   });
 
-  it('formats a small number with no thousands separator', () => {
-    assert.equal(formatNumber(42.5), '42.50');
+  it('formats a number below 1000 with no thousands separator', () => {
+    assert.equal(formatNumber(999), '999');
   });
 
-  it('formats negative numbers correctly', () => {
-    assert.equal(formatNumber(-1234.5), '-1,234.50');
+  it('formats a large number with multiple thousands groups', () => {
+    assert.equal(formatNumber(1234567), '1,234,567');
   });
 
-  it('respects custom decimals option', () => {
-    assert.equal(formatNumber(3.14159, { decimals: 4 }), '3.1416');
+  it('rounds to 0 decimals by default', () => {
+    assert.equal(formatNumber(1.6), '2');
   });
 
-  it('uses 0 decimal places', () => {
-    assert.equal(formatNumber(999.9, { decimals: 0 }), '1,000');
-  });
-
-  it('uses custom decimal separator', () => {
-    assert.equal(formatNumber(1234.56, { decimalSep: ',' }), '1,234,56');
-  });
-
-  it('uses custom thousands separator', () => {
-    assert.equal(formatNumber(1234567, { thousandsSep: '.', decimals: 0 }), '1.234.567');
-  });
-
-  it('uses both custom separators (European style)', () => {
-    assert.equal(
-      formatNumber(1234567.89, { thousandsSep: '.', decimalSep: ',' }),
-      '1.234.567,89',
-    );
-  });
-
-  it('formats exactly 1000', () => {
-    assert.equal(formatNumber(1000), '1,000.00');
-  });
-
-  it('formats very large number', () => {
-    assert.equal(formatNumber(1000000, { decimals: 0 }), '1,000,000');
-  });
-
-  it('uses empty thousands separator', () => {
-    assert.equal(formatNumber(1234567.89, { thousandsSep: '' }), '1234567.89');
+  it('formats a negative number', () => {
+    assert.equal(formatNumber(-1500), '-1,500');
   });
 });
 
-// ─── formatCurrency ──────────────────────────────────────────────────────────
-
-describe('formatCurrency', () => {
-  it('formats USD with dollar sign and 2 decimals', () => {
-    assert.equal(formatCurrency(1234.5, 'USD'), '$1,234.50');
+describe('formatNumber - decimals option', () => {
+  it('formats with 2 decimal places', () => {
+    assert.equal(formatNumber(1234.5, { decimals: 2 }), '1,234.50');
   });
 
-  it('formats USD by default', () => {
-    assert.equal(formatCurrency(0), '$0.00');
+  it('rounds correctly at the specified decimal place', () => {
+    assert.equal(formatNumber(1.125, { decimals: 2 }), '1.13');
   });
 
-  it('formats EUR with euro sign', () => {
-    assert.ok(formatCurrency(99.9, 'EUR').includes('€') || formatCurrency(99.9, 'EUR').includes('EUR'));
+  it('formats with 3 decimal places', () => {
+    assert.equal(formatNumber(3.14159, { decimals: 3 }), '3.142');
   });
 
-  it('formats GBP with pound sign', () => {
-    const result = formatCurrency(50, 'GBP');
-    assert.ok(result.includes('£'), `Expected £ in: ${result}`);
-  });
-
-  it('handles negative amounts', () => {
-    const result = formatCurrency(-25.5, 'USD');
-    assert.ok(result.includes('25.50'), `Expected 25.50 in: ${result}`);
-    assert.ok(result.includes('-'), `Expected minus sign in: ${result}`);
-  });
-
-  it('handles zero', () => {
-    assert.equal(formatCurrency(0, 'USD'), '$0.00');
-  });
-
-  it('formats large amounts with thousands separator', () => {
-    assert.equal(formatCurrency(1000000, 'USD'), '$1,000,000.00');
-  });
-
-  it('respects custom decimals option', () => {
-    const result = formatCurrency(9.9, 'USD', { decimals: 0 });
-    assert.ok(result.includes('$') && !result.includes('.'), `Got: ${result}`);
-  });
-
-  it('respects custom locale option', () => {
-    const result = formatCurrency(1234.5, 'USD', { locale: 'en-US' });
-    assert.equal(result, '$1,234.50');
+  it('formats zero with decimals', () => {
+    assert.equal(formatNumber(0, { decimals: 2 }), '0.00');
   });
 });
 
-// ─── formatPercent ───────────────────────────────────────────────────────────
-
-describe('formatPercent', () => {
-  it('converts 0.1234 → "12.34%"', () => {
-    assert.equal(formatPercent(0.1234), '12.34%');
+describe('formatNumber - custom separators', () => {
+  it('uses a period as thousands separator and comma as decimal separator', () => {
+    assert.equal(formatNumber(1234567.89, { decimals: 2, thousandsSep: '.', decimalSep: ',' }), '1.234.567,89');
   });
 
-  it('converts 0.5 → "50.00%"', () => {
-    assert.equal(formatPercent(0.5), '50.00%');
+  it('uses space as thousands separator', () => {
+    assert.equal(formatNumber(1000000, { thousandsSep: ' ' }), '1 000 000');
   });
 
-  it('converts 1 → "100.00%"', () => {
-    assert.equal(formatPercent(1), '100.00%');
+  it('uses empty string as thousands separator (no grouping)', () => {
+    assert.equal(formatNumber(1234567, { thousandsSep: '' }), '1234567');
   });
 
-  it('converts 0 → "0.00%"', () => {
-    assert.equal(formatPercent(0), '0.00%');
-  });
-
-  it('handles negative ratios', () => {
-    assert.equal(formatPercent(-0.25), '-25.00%');
-  });
-
-  it('uses custom decimal places', () => {
-    assert.equal(formatPercent(0.3333, 1), '33.3%');
-  });
-
-  it('handles ratio > 1', () => {
-    assert.equal(formatPercent(1.5, 0), '150%');
-  });
-
-  it('0 decimals rounds correctly', () => {
-    assert.equal(formatPercent(0.999, 0), '100%');
-  });
-});
-
-// ─── formatBytes ─────────────────────────────────────────────────────────────
-
-describe('formatBytes', () => {
-  it('formats 0 bytes', () => {
-    assert.equal(formatBytes(0), '0 Bytes');
-  });
-
-  it('formats bytes under 1 KB', () => {
-    assert.equal(formatBytes(512), '512.00 Bytes');
-  });
-
-  it('formats exactly 1 KB (1024 bytes)', () => {
-    assert.equal(formatBytes(1024), '1.00 KB');
-  });
-
-  it('formats 1.5 KB', () => {
-    assert.equal(formatBytes(1536), '1.50 KB');
-  });
-
-  it('formats 1 MB', () => {
-    assert.equal(formatBytes(1024 * 1024), '1.00 MB');
-  });
-
-  it('formats 1 GB', () => {
-    assert.equal(formatBytes(1024 ** 3), '1.00 GB');
-  });
-
-  it('formats 1 TB', () => {
-    assert.equal(formatBytes(1024 ** 4), '1.00 TB');
-  });
-
-  it('handles large values beyond TB', () => {
-    const result = formatBytes(1024 ** 5);
-    assert.ok(result.endsWith('PB') || result.endsWith('TB') || result.endsWith('EB'),
-      `Unexpected unit in: ${result}`);
-  });
-
-  it('handles custom decimal places', () => {
-    assert.equal(formatBytes(1536, 0), '2 KB');
-  });
-
-  it('handles single decimal place', () => {
-    assert.equal(formatBytes(1024, 1), '1.0 KB');
-  });
-});
-
-// ─── formatOrdinal ───────────────────────────────────────────────────────────
-
-describe('formatOrdinal', () => {
-  it('1 → "1st"', () => {
-    assert.equal(formatOrdinal(1), '1st');
-  });
-
-  it('2 → "2nd"', () => {
-    assert.equal(formatOrdinal(2), '2nd');
-  });
-
-  it('3 → "3rd"', () => {
-    assert.equal(formatOrdinal(3), '3rd');
-  });
-
-  it('4 → "4th"', () => {
-    assert.equal(formatOrdinal(4), '4th');
-  });
-
-  it('11 → "11th" (teen exception)', () => {
-    assert.equal(formatOrdinal(11), '11th');
-  });
-
-  it('12 → "12th" (teen exception)', () => {
-    assert.equal(formatOrdinal(12), '12th');
-  });
-
-  it('13 → "13th" (teen exception)', () => {
-    assert.equal(formatOrdinal(13), '13th');
-  });
-
-  it('21 → "21st"', () => {
-    assert.equal(formatOrdinal(21), '21st');
-  });
-
-  it('22 → "22nd"', () => {
-    assert.equal(formatOrdinal(22), '22nd');
-  });
-
-  it('101 → "101st"', () => {
-    assert.equal(formatOrdinal(101), '101st');
-  });
-
-  it('111 → "111th" (teen exception at 100s boundary)', () => {
-    assert.equal(formatOrdinal(111), '111th');
-  });
-
-  it('0 → "0th"', () => {
-    assert.equal(formatOrdinal(0), '0th');
-  });
-});
-
-// ─── formatDuration ──────────────────────────────────────────────────────────
-
-describe('formatDuration', () => {
-  it('formats 500ms → "500ms"', () => {
-    assert.equal(formatDuration(500), '500ms');
-  });
-
-  it('formats 999ms → "999ms"', () => {
-    assert.equal(formatDuration(999), '999ms');
-  });
-
-  it('formats 0ms → "0ms"', () => {
-    assert.equal(formatDuration(0), '0ms');
-  });
-
-  it('formats 1000ms → "1s"', () => {
-    assert.equal(formatDuration(1000), '1s');
-  });
-
-  it('formats 45000ms → "45s"', () => {
-    assert.equal(formatDuration(45000), '45s');
-  });
-
-  it('formats 60000ms → "1m"', () => {
-    assert.equal(formatDuration(60000), '1m');
-  });
-
-  it('formats 90000ms → "1m 30s"', () => {
-    assert.equal(formatDuration(90000), '1m 30s');
-  });
-
-  it('formats 61000ms → "1m 1s"', () => {
-    assert.equal(formatDuration(61000), '1m 1s');
-  });
-
-  it('formats 2h 30m (no seconds shown for hours)', () => {
-    assert.equal(formatDuration((2 * 3600 + 30 * 60) * 1000), '2h 30m');
-  });
-
-  it('formats exactly 1h with no minutes', () => {
-    assert.equal(formatDuration(3600000), '1h');
-  });
-
-  it('formats hours and minutes (omits zero-second component)', () => {
-    assert.equal(formatDuration((1 * 3600 + 23 * 60) * 1000), '1h 23m');
-  });
-
-  it('handles negative durations', () => {
-    assert.equal(formatDuration(-500), '-500ms');
-  });
-
-  it('handles negative seconds duration', () => {
-    assert.equal(formatDuration(-45000), '-45s');
-  });
-});
-
-// ─── formatScientific ────────────────────────────────────────────────────────
-
-describe('formatScientific', () => {
-  it('formats 1234.5 → "1.23e+3"', () => {
-    assert.equal(formatScientific(1234.5), '1.23e+3');
-  });
-
-  it('formats 12300 → "1.23e+4"', () => {
-    assert.equal(formatScientific(12300), '1.23e+4');
-  });
-
-  it('formats 0.00123 → "1.23e-3"', () => {
-    assert.equal(formatScientific(0.00123, 2), '1.23e-3');
-  });
-
-  it('formats 0 → "0.00e+0"', () => {
-    assert.equal(formatScientific(0), '0.00e+0');
-  });
-
-  it('formats negative numbers', () => {
-    assert.equal(formatScientific(-5000, 1), '-5.0e+3');
-  });
-
-  it('uses custom decimal places', () => {
-    assert.equal(formatScientific(12345, 4), '1.2345e+4');
-  });
-
-  it('formats 1 → "1.00e+0"', () => {
-    assert.equal(formatScientific(1), '1.00e+0');
-  });
-
-  it('formats 100 → "1.00e+2"', () => {
-    assert.equal(formatScientific(100), '1.00e+2');
+  it('handles negative number with custom separators', () => {
+    assert.equal(formatNumber(-9999.5, { decimals: 1, thousandsSep: '.', decimalSep: ',' }), '-9.999,5');
   });
 });
 
 // ─── parseNumber ─────────────────────────────────────────────────────────────
 
-describe('parseNumber', () => {
+describe('parseNumber - defaults', () => {
   it('parses a plain integer string', () => {
     assert.equal(parseNumber('42'), 42);
   });
 
-  it('parses a float string', () => {
-    assert.equal(parseNumber('3.14'), 3.14);
-  });
-
-  it('strips commas from thousands-formatted strings', () => {
-    assert.equal(parseNumber('1,234.56'), 1234.56);
-  });
-
-  it('strips multiple comma groups', () => {
+  it('parses a number with comma thousands separator', () => {
     assert.equal(parseNumber('1,234,567'), 1234567);
   });
 
-  it('handles negative numbers', () => {
-    assert.equal(parseNumber('-99.9'), -99.9);
+  it('parses a decimal number', () => {
+    assert.equal(parseNumber('3.14'), 3.14);
   });
 
-  it('handles whitespace', () => {
-    assert.equal(parseNumber('  100  '), 100);
+  it('parses a formatted number with thousands and decimals', () => {
+    assert.equal(parseNumber('1,234.56'), 1234.56);
   });
 
-  it('throws for non-numeric input', () => {
-    assert.throws(() => parseNumber('abc'), /parseNumber/);
+  it('parses a negative number', () => {
+    assert.equal(parseNumber('-1,500'), -1500);
   });
 
-  it('parses zero', () => {
-    assert.equal(parseNumber('0'), 0);
-  });
-
-  it('throws for empty string', () => {
-    // Number('') is 0, but Number('   ') is 0 too — empty stripped is ''
-    // Actually Number('') === 0, so it won't throw. Test with truly invalid.
-    assert.throws(() => parseNumber('hello world'), /parseNumber/);
+  it('returns NaN for invalid input', () => {
+    assert.ok(isNaN(parseNumber('abc')));
   });
 });
 
-// ─── parsePercent ────────────────────────────────────────────────────────────
-
-describe('parsePercent', () => {
-  it('parses "12.34%" → 0.1234', () => {
-    assert.ok(Math.abs(parsePercent('12.34%') - 0.1234) < 1e-10);
+describe('parseNumber - custom separators', () => {
+  it('parses European format (dot thousands, comma decimal)', () => {
+    assert.equal(parseNumber('1.234,56', { thousandsSep: '.', decimalSep: ',' }), 1234.56);
   });
 
-  it('parses "50%" → 0.5', () => {
-    assert.ok(Math.abs(parsePercent('50%') - 0.5) < 1e-10);
+  it('parses with space thousands separator', () => {
+    assert.equal(parseNumber('1 000 000', { thousandsSep: ' ' }), 1000000);
   });
 
-  it('parses "100%" → 1', () => {
-    assert.ok(Math.abs(parsePercent('100%') - 1) < 1e-10);
+  it('round-trips formatNumber → parseNumber', () => {
+    const original = 1234567.89;
+    const formatted = formatNumber(original, { decimals: 2 });
+    assert.equal(parseNumber(formatted), original);
   });
 
-  it('parses "0%" → 0', () => {
-    assert.equal(parsePercent('0%'), 0);
-  });
-
-  it('parses negative percentages', () => {
-    assert.ok(Math.abs(parsePercent('-25%') - (-0.25)) < 1e-10);
-  });
-
-  it('parses string without percent sign', () => {
-    assert.ok(Math.abs(parsePercent('50') - 0.5) < 1e-10);
-  });
-
-  it('throws for non-numeric input', () => {
-    assert.throws(() => parsePercent('abc%'), /parsePercent/);
+  it('round-trips European format', () => {
+    const original = 9876.54;
+    const opts = { decimals: 2, thousandsSep: '.', decimalSep: ',' };
+    const formatted = formatNumber(original, opts);
+    assert.equal(parseNumber(formatted, { thousandsSep: '.', decimalSep: ',' }), original);
   });
 });
 
-// ─── clamp ───────────────────────────────────────────────────────────────────
+// ─── formatCurrency ───────────────────────────────────────────────────────────
+
+describe('formatCurrency - defaults', () => {
+  it('formats with default dollar symbol before', () => {
+    assert.equal(formatCurrency(1234.5), '$1,234.50');
+  });
+
+  it('formats zero', () => {
+    assert.equal(formatCurrency(0), '$0.00');
+  });
+
+  it('formats a large amount', () => {
+    assert.equal(formatCurrency(1000000), '$1,000,000.00');
+  });
+
+  it('formats a negative amount', () => {
+    assert.equal(formatCurrency(-99.99), '$-99.99');
+  });
+});
+
+describe('formatCurrency - options', () => {
+  it('uses a custom symbol', () => {
+    assert.equal(formatCurrency(10, { symbol: '€' }), '€10.00');
+  });
+
+  it('places symbol after when symbolBefore is false', () => {
+    assert.equal(formatCurrency(42, { symbol: '£', symbolBefore: false }), '42.00£');
+  });
+
+  it('uses custom decimal places', () => {
+    assert.equal(formatCurrency(9.9, { decimals: 0 }), '$10');
+  });
+
+  it('uses custom symbol and decimals combined', () => {
+    assert.equal(formatCurrency(1.5, { symbol: '¥', decimals: 0 }), '¥2');
+  });
+});
+
+// ─── formatPercent ────────────────────────────────────────────────────────────
+
+describe('formatPercent', () => {
+  it('formats 0.5 as 50% (no decimals)', () => {
+    assert.equal(formatPercent(0.5), '50%');
+  });
+
+  it('formats 0.1234 with 1 decimal', () => {
+    assert.equal(formatPercent(0.1234, 1), '12.3%');
+  });
+
+  it('formats 1.0 as 100%', () => {
+    assert.equal(formatPercent(1.0), '100%');
+  });
+
+  it('formats 0 as 0%', () => {
+    assert.equal(formatPercent(0), '0%');
+  });
+
+  it('formats 0.001 with 2 decimals', () => {
+    assert.equal(formatPercent(0.001, 2), '0.10%');
+  });
+
+  it('formats a value greater than 1', () => {
+    assert.equal(formatPercent(1.5), '150%');
+  });
+
+  it('formats negative percent', () => {
+    assert.equal(formatPercent(-0.25), '-25%');
+  });
+});
+
+// ─── formatFileSize ───────────────────────────────────────────────────────────
+
+describe('formatFileSize', () => {
+  it('formats bytes under 1024', () => {
+    assert.equal(formatFileSize(500), '500.0 B');
+  });
+
+  it('formats exactly 1024 bytes as 1.0 KB', () => {
+    assert.equal(formatFileSize(1024), '1.0 KB');
+  });
+
+  it('formats 1536 bytes as 1.5 KB', () => {
+    assert.equal(formatFileSize(1536), '1.5 KB');
+  });
+
+  it('formats megabytes', () => {
+    assert.equal(formatFileSize(1024 * 1024 * 2.3, 1), '2.3 MB');
+  });
+
+  it('formats gigabytes', () => {
+    assert.equal(formatFileSize(1024 * 1024 * 1024), '1.0 GB');
+  });
+
+  it('formats terabytes', () => {
+    assert.equal(formatFileSize(1024 ** 4), '1.0 TB');
+  });
+
+  it('respects custom decimal places', () => {
+    assert.equal(formatFileSize(1536, 2), '1.50 KB');
+  });
+
+  it('formats zero bytes', () => {
+    assert.equal(formatFileSize(0), '0.0 B');
+  });
+});
+
+// ─── formatOrdinal ────────────────────────────────────────────────────────────
+
+describe('formatOrdinal', () => {
+  it('1 → 1st', () => { assert.equal(formatOrdinal(1), '1st'); });
+  it('2 → 2nd', () => { assert.equal(formatOrdinal(2), '2nd'); });
+  it('3 → 3rd', () => { assert.equal(formatOrdinal(3), '3rd'); });
+  it('4 → 4th', () => { assert.equal(formatOrdinal(4), '4th'); });
+  it('11 → 11th (teen exception)', () => { assert.equal(formatOrdinal(11), '11th'); });
+  it('12 → 12th (teen exception)', () => { assert.equal(formatOrdinal(12), '12th'); });
+  it('13 → 13th (teen exception)', () => { assert.equal(formatOrdinal(13), '13th'); });
+  it('21 → 21st', () => { assert.equal(formatOrdinal(21), '21st'); });
+  it('22 → 22nd', () => { assert.equal(formatOrdinal(22), '22nd'); });
+  it('23 → 23rd', () => { assert.equal(formatOrdinal(23), '23rd'); });
+  it('100 → 100th', () => { assert.equal(formatOrdinal(100), '100th'); });
+  it('101 → 101st', () => { assert.equal(formatOrdinal(101), '101st'); });
+  it('111 → 111th (teen exception)', () => { assert.equal(formatOrdinal(111), '111th'); });
+  it('0 → 0th', () => { assert.equal(formatOrdinal(0), '0th'); });
+});
+
+// ─── toRoman ─────────────────────────────────────────────────────────────────
+
+describe('toRoman', () => {
+  it('converts 1 → I', () => { assert.equal(toRoman(1), 'I'); });
+  it('converts 4 → IV', () => { assert.equal(toRoman(4), 'IV'); });
+  it('converts 9 → IX', () => { assert.equal(toRoman(9), 'IX'); });
+  it('converts 14 → XIV', () => { assert.equal(toRoman(14), 'XIV'); });
+  it('converts 40 → XL', () => { assert.equal(toRoman(40), 'XL'); });
+  it('converts 90 → XC', () => { assert.equal(toRoman(90), 'XC'); });
+  it('converts 400 → CD', () => { assert.equal(toRoman(400), 'CD'); });
+  it('converts 900 → CM', () => { assert.equal(toRoman(900), 'CM'); });
+  it('converts 1994 → MCMXCIV', () => { assert.equal(toRoman(1994), 'MCMXCIV'); });
+  it('converts 3999 → MMMCMXCIX', () => { assert.equal(toRoman(3999), 'MMMCMXCIX'); });
+  it('converts 2024 → MMXXIV', () => { assert.equal(toRoman(2024), 'MMXXIV'); });
+
+  it('throws RangeError for 0', () => {
+    assert.throws(() => toRoman(0), RangeError);
+  });
+
+  it('throws RangeError for 4000', () => {
+    assert.throws(() => toRoman(4000), RangeError);
+  });
+
+  it('throws RangeError for negative numbers', () => {
+    assert.throws(() => toRoman(-1), RangeError);
+  });
+
+  it('throws RangeError for non-integer', () => {
+    assert.throws(() => toRoman(1.5), RangeError);
+  });
+});
+
+// ─── fromRoman ────────────────────────────────────────────────────────────────
+
+describe('fromRoman', () => {
+  it('parses I → 1', () => { assert.equal(fromRoman('I'), 1); });
+  it('parses IV → 4', () => { assert.equal(fromRoman('IV'), 4); });
+  it('parses IX → 9', () => { assert.equal(fromRoman('IX'), 9); });
+  it('parses XIV → 14', () => { assert.equal(fromRoman('XIV'), 14); });
+  it('parses MCMXCIV → 1994', () => { assert.equal(fromRoman('MCMXCIV'), 1994); });
+  it('parses MMMCMXCIX → 3999', () => { assert.equal(fromRoman('MMMCMXCIX'), 3999); });
+  it('parses lowercase input', () => { assert.equal(fromRoman('xiv'), 14); });
+  it('parses mixed case input', () => { assert.equal(fromRoman('McM'), 1900); });
+
+  it('throws TypeError for empty string', () => {
+    assert.throws(() => fromRoman(''), TypeError);
+  });
+
+  it('throws TypeError for invalid characters', () => {
+    assert.throws(() => fromRoman('ABC'), TypeError);
+  });
+
+  it('throws TypeError for IIII (invalid Roman)', () => {
+    assert.throws(() => fromRoman('IIII'), TypeError);
+  });
+
+  it('round-trips toRoman → fromRoman for all values 1–20', () => {
+    for (let i = 1; i <= 20; i++) {
+      assert.equal(fromRoman(toRoman(i)), i);
+    }
+  });
+
+  it('round-trips toRoman → fromRoman for 1994', () => {
+    assert.equal(fromRoman(toRoman(1994)), 1994);
+  });
+});
+
+// ─── clamp ────────────────────────────────────────────────────────────────────
 
 describe('clamp', () => {
-  it('returns value when within range', () => {
-    assert.equal(clamp(5, 0, 10), 5);
+  it('returns n when within range', () => {
+    assert.equal(clamp(5, 1, 10), 5);
   });
 
-  it('clamps to min when below range', () => {
+  it('returns min when n is below min', () => {
     assert.equal(clamp(-5, 0, 10), 0);
   });
 
-  it('clamps to max when above range', () => {
+  it('returns max when n is above max', () => {
     assert.equal(clamp(15, 0, 10), 10);
   });
 
-  it('returns min when value equals min', () => {
+  it('returns n when n equals min', () => {
     assert.equal(clamp(0, 0, 10), 0);
   });
 
-  it('returns max when value equals max', () => {
+  it('returns n when n equals max', () => {
     assert.equal(clamp(10, 0, 10), 10);
   });
 
   it('works with negative range', () => {
-    assert.equal(clamp(-15, -10, -1), -10);
+    assert.equal(clamp(-5, -10, -1), -5);
   });
 
   it('works with floating point values', () => {
-    assert.ok(Math.abs(clamp(0.5, 0, 1) - 0.5) < 1e-10);
+    assert.equal(clamp(0.5, 0, 1), 0.5);
   });
 });
 
-// ─── lerp ────────────────────────────────────────────────────────────────────
+// ─── lerp ─────────────────────────────────────────────────────────────────────
 
 describe('lerp', () => {
-  it('t=0 returns a', () => {
-    assert.equal(lerp(10, 20, 0), 10);
+  it('returns a when t=0', () => {
+    assert.equal(lerp(0, 10, 0), 0);
   });
 
-  it('t=1 returns b', () => {
-    assert.equal(lerp(10, 20, 1), 20);
+  it('returns b when t=1', () => {
+    assert.equal(lerp(0, 10, 1), 10);
   });
 
-  it('t=0.5 returns midpoint', () => {
-    assert.ok(Math.abs(lerp(0, 100, 0.5) - 50) < 1e-10);
-  });
-
-  it('extrapolates beyond [0,1] when t > 1', () => {
-    assert.ok(Math.abs(lerp(0, 10, 2) - 20) < 1e-10);
-  });
-
-  it('extrapolates before 0 when t < 0', () => {
-    assert.ok(Math.abs(lerp(0, 10, -1) - (-10)) < 1e-10);
+  it('returns midpoint when t=0.5', () => {
+    assert.equal(lerp(0, 10, 0.5), 5);
   });
 
   it('works with negative values', () => {
-    assert.ok(Math.abs(lerp(-10, 10, 0.5)) < 1e-10);
+    assert.equal(lerp(-10, 10, 0.5), 0);
+  });
+
+  it('extrapolates when t > 1', () => {
+    assert.equal(lerp(0, 10, 2), 20);
+  });
+
+  it('extrapolates when t < 0', () => {
+    assert.equal(lerp(0, 10, -1), -10);
   });
 });
 
-// ─── roundTo ─────────────────────────────────────────────────────────────────
+// ─── roundTo / floorTo / ceilTo ───────────────────────────────────────────────
 
 describe('roundTo', () => {
-  it('roundTo(3.14159, 2) → 3.14', () => {
-    assert.equal(roundTo(3.14159, 2), 3.14);
-  });
-
-  it('rounds up when next digit >= 5', () => {
-    assert.equal(roundTo(1.235, 2), 1.24);
-  });
-
-  it('rounds down when next digit < 5', () => {
-    assert.equal(roundTo(1.234, 2), 1.23);
-  });
-
-  it('rounds to 0 decimals (integer)', () => {
+  it('rounds to 0 decimal places', () => {
     assert.equal(roundTo(2.6, 0), 3);
   });
 
+  it('rounds to 2 decimal places', () => {
+    assert.equal(roundTo(3.14159, 2), 3.14);
+  });
+
+  it('rounds up correctly', () => {
+    assert.equal(roundTo(1.125, 2), 1.13);
+  });
+
   it('handles negative numbers', () => {
-    assert.equal(roundTo(-1.4, 0), -1);
-  });
-
-  it('handles zero', () => {
-    assert.equal(roundTo(0, 3), 0);
-  });
-
-  it('rounds to 4 decimal places', () => {
-    assert.ok(Math.abs(roundTo(Math.PI, 4) - 3.1416) < 1e-10);
+    assert.equal(roundTo(-1.5, 0), -1);
   });
 });
 
-// ─── isPrime ─────────────────────────────────────────────────────────────────
+describe('floorTo', () => {
+  it('floors to 0 decimal places', () => {
+    assert.equal(floorTo(2.9, 0), 2);
+  });
+
+  it('floors to 2 decimal places', () => {
+    assert.equal(floorTo(3.149, 2), 3.14);
+  });
+
+  it('handles negative numbers', () => {
+    assert.equal(floorTo(-1.1, 0), -2);
+  });
+});
+
+describe('ceilTo', () => {
+  it('ceils to 0 decimal places', () => {
+    assert.equal(ceilTo(2.1, 0), 3);
+  });
+
+  it('ceils to 2 decimal places', () => {
+    assert.equal(ceilTo(3.141, 2), 3.15);
+  });
+
+  it('handles negative numbers', () => {
+    assert.equal(ceilTo(-1.9, 0), -1);
+  });
+});
+
+// ─── isPrime ──────────────────────────────────────────────────────────────────
 
 describe('isPrime', () => {
-  it('2 is prime', () => {
-    assert.equal(isPrime(2), true);
-  });
+  it('returns false for 0', () => { assert.equal(isPrime(0), false); });
+  it('returns false for 1', () => { assert.equal(isPrime(1), false); });
+  it('returns true for 2', () => { assert.equal(isPrime(2), true); });
+  it('returns true for 3', () => { assert.equal(isPrime(3), true); });
+  it('returns false for 4', () => { assert.equal(isPrime(4), false); });
+  it('returns true for 5', () => { assert.equal(isPrime(5), true); });
+  it('returns false for 9', () => { assert.equal(isPrime(9), false); });
+  it('returns true for 97', () => { assert.equal(isPrime(97), true); });
+  it('returns false for 100', () => { assert.equal(isPrime(100), false); });
+  it('returns false for negative numbers', () => { assert.equal(isPrime(-7), false); });
+  it('returns false for non-integers', () => { assert.equal(isPrime(2.5), false); });
+});
 
-  it('3 is prime', () => {
-    assert.equal(isPrime(3), true);
-  });
+// ─── primeFactors ─────────────────────────────────────────────────────────────
 
-  it('5 is prime', () => {
-    assert.equal(isPrime(5), true);
-  });
-
-  it('7 is prime', () => {
-    assert.equal(isPrime(7), true);
-  });
-
-  it('11 is prime', () => {
-    assert.equal(isPrime(11), true);
-  });
-
-  it('13 is prime', () => {
-    assert.equal(isPrime(13), true);
-  });
-
-  it('97 is prime', () => {
-    assert.equal(isPrime(97), true);
-  });
-
-  it('1 is not prime', () => {
-    assert.equal(isPrime(1), false);
-  });
-
-  it('0 is not prime', () => {
-    assert.equal(isPrime(0), false);
-  });
-
-  it('negative numbers are not prime', () => {
-    assert.equal(isPrime(-7), false);
-  });
-
-  it('4 is not prime', () => {
-    assert.equal(isPrime(4), false);
-  });
-
-  it('9 is not prime', () => {
-    assert.equal(isPrime(9), false);
-  });
-
-  it('25 is not prime', () => {
-    assert.equal(isPrime(25), false);
-  });
-
-  it('100 is not prime', () => {
-    assert.equal(isPrime(100), false);
-  });
+describe('primeFactors', () => {
+  it('returns [] for 1', () => { assert.deepEqual(primeFactors(1), []); });
+  it('returns [2] for 2', () => { assert.deepEqual(primeFactors(2), [2]); });
+  it('returns [3] for 3', () => { assert.deepEqual(primeFactors(3), [3]); });
+  it('returns [2, 2] for 4', () => { assert.deepEqual(primeFactors(4), [2, 2]); });
+  it('returns [2, 3] for 6', () => { assert.deepEqual(primeFactors(6), [2, 3]); });
+  it('returns [2, 2, 3] for 12', () => { assert.deepEqual(primeFactors(12), [2, 2, 3]); });
+  it('returns [2, 2, 2, 2, 2] for 32', () => { assert.deepEqual(primeFactors(32), [2, 2, 2, 2, 2]); });
+  it('returns [13] for prime 13', () => { assert.deepEqual(primeFactors(13), [13]); });
+  it('returns [] for 0', () => { assert.deepEqual(primeFactors(0), []); });
+  it('returns [] for negative numbers', () => { assert.deepEqual(primeFactors(-12), []); });
 });
 
 // ─── gcd ─────────────────────────────────────────────────────────────────────
 
 describe('gcd', () => {
-  it('gcd(12, 8) === 4', () => {
-    assert.equal(gcd(12, 8), 4);
-  });
-
-  it('gcd(100, 75) === 25', () => {
-    assert.equal(gcd(100, 75), 25);
-  });
-
-  it('gcd(7, 3) === 1 (coprime)', () => {
-    assert.equal(gcd(7, 3), 1);
-  });
-
-  it('gcd(0, 5) === 5', () => {
-    assert.equal(gcd(0, 5), 5);
-  });
-
-  it('gcd(5, 0) === 5', () => {
-    assert.equal(gcd(5, 0), 5);
-  });
-
-  it('gcd(0, 0) === 0', () => {
-    assert.equal(gcd(0, 0), 0);
-  });
-
-  it('gcd is commutative: gcd(a,b) === gcd(b,a)', () => {
-    assert.equal(gcd(48, 18), gcd(18, 48));
-  });
-
-  it('handles negative inputs (returns non-negative)', () => {
-    assert.equal(gcd(-12, 8), 4);
-  });
+  it('gcd(12, 8) = 4', () => { assert.equal(gcd(12, 8), 4); });
+  it('gcd(100, 75) = 25', () => { assert.equal(gcd(100, 75), 25); });
+  it('gcd(7, 13) = 1 (coprime)', () => { assert.equal(gcd(7, 13), 1); });
+  it('gcd(0, 5) = 5', () => { assert.equal(gcd(0, 5), 5); });
+  it('gcd(5, 0) = 5', () => { assert.equal(gcd(5, 0), 5); });
+  it('gcd(0, 0) = 0', () => { assert.equal(gcd(0, 0), 0); });
+  it('works with negative inputs', () => { assert.equal(gcd(-12, 8), 4); });
 });
 
 // ─── lcm ─────────────────────────────────────────────────────────────────────
 
 describe('lcm', () => {
-  it('lcm(4, 6) === 12', () => {
-    assert.equal(lcm(4, 6), 12);
-  });
-
-  it('lcm(3, 5) === 15 (coprime)', () => {
-    assert.equal(lcm(3, 5), 15);
-  });
-
-  it('lcm(0, 5) === 0', () => {
-    assert.equal(lcm(0, 5), 0);
-  });
-
-  it('lcm(5, 0) === 0', () => {
-    assert.equal(lcm(5, 0), 0);
-  });
-
-  it('lcm(7, 7) === 7', () => {
-    assert.equal(lcm(7, 7), 7);
-  });
-
-  it('lcm is commutative', () => {
-    assert.equal(lcm(12, 18), lcm(18, 12));
-  });
-
-  it('lcm(12, 18) === 36', () => {
-    assert.equal(lcm(12, 18), 36);
-  });
+  it('lcm(4, 6) = 12', () => { assert.equal(lcm(4, 6), 12); });
+  it('lcm(3, 5) = 15', () => { assert.equal(lcm(3, 5), 15); });
+  it('lcm(0, 5) = 0', () => { assert.equal(lcm(0, 5), 0); });
+  it('lcm(7, 7) = 7', () => { assert.equal(lcm(7, 7), 7); });
+  it('lcm(1, n) = n', () => { assert.equal(lcm(1, 42), 42); });
 });
 
-// ─── factorial ───────────────────────────────────────────────────────────────
-
-describe('factorial', () => {
-  it('0! === 1', () => {
-    assert.equal(factorial(0), 1);
-  });
-
-  it('1! === 1', () => {
-    assert.equal(factorial(1), 1);
-  });
-
-  it('5! === 120', () => {
-    assert.equal(factorial(5), 120);
-  });
-
-  it('10! === 3628800', () => {
-    assert.equal(factorial(10), 3628800);
-  });
-
-  it('20! is a valid large integer', () => {
-    assert.equal(factorial(20), 2432902008176640000);
-  });
-
-  it('throws for n > 20', () => {
-    assert.throws(() => factorial(21), /factorial/);
-  });
-
-  it('throws for negative n', () => {
-    assert.throws(() => factorial(-1), /factorial/);
-  });
-
-  it('throws for non-integer n', () => {
-    assert.throws(() => factorial(2.5), /factorial/);
-  });
-});
-
-// ─── fibonacci ───────────────────────────────────────────────────────────────
+// ─── fibonacci ────────────────────────────────────────────────────────────────
 
 describe('fibonacci', () => {
-  it('fib(0) === 0', () => {
-    assert.equal(fibonacci(0), 0);
+  it('fibonacci(0) = 0', () => { assert.equal(fibonacci(0), 0); });
+  it('fibonacci(1) = 1', () => { assert.equal(fibonacci(1), 1); });
+  it('fibonacci(2) = 1', () => { assert.equal(fibonacci(2), 1); });
+  it('fibonacci(3) = 2', () => { assert.equal(fibonacci(3), 2); });
+  it('fibonacci(7) = 13', () => { assert.equal(fibonacci(7), 13); });
+  it('fibonacci(10) = 55', () => { assert.equal(fibonacci(10), 55); });
+
+  it('throws RangeError for negative n', () => {
+    assert.throws(() => fibonacci(-1), RangeError);
   });
 
-  it('fib(1) === 1', () => {
-    assert.equal(fibonacci(1), 1);
-  });
-
-  it('fib(2) === 1', () => {
-    assert.equal(fibonacci(2), 1);
-  });
-
-  it('fib(3) === 2', () => {
-    assert.equal(fibonacci(3), 2);
-  });
-
-  it('fib(4) === 3', () => {
-    assert.equal(fibonacci(4), 3);
-  });
-
-  it('fib(5) === 5', () => {
-    assert.equal(fibonacci(5), 5);
-  });
-
-  it('fib(6) === 8', () => {
-    assert.equal(fibonacci(6), 8);
-  });
-
-  it('fib(7) === 13', () => {
-    assert.equal(fibonacci(7), 13);
-  });
-
-  it('fib(8) === 21', () => {
-    assert.equal(fibonacci(8), 21);
-  });
-
-  it('fib(9) === 34', () => {
-    assert.equal(fibonacci(9), 34);
-  });
-
-  it('throws for negative n', () => {
-    assert.throws(() => fibonacci(-1), /fibonacci/);
-  });
-
-  it('throws for non-integer n', () => {
-    assert.throws(() => fibonacci(1.5), /fibonacci/);
+  it('throws RangeError for non-integer n', () => {
+    assert.throws(() => fibonacci(1.5), RangeError);
   });
 });
 
-// ─── randomInt ───────────────────────────────────────────────────────────────
+// ─── factorial ────────────────────────────────────────────────────────────────
 
-describe('randomInt', () => {
-  it('returns an integer within [min, max]', () => {
-    for (let i = 0; i < 100; i++) {
-      const n = randomInt(1, 10);
-      assert.ok(Number.isInteger(n), `Expected integer, got ${n}`);
-      assert.ok(n >= 1 && n <= 10, `Expected 1..10, got ${n}`);
-    }
+describe('factorial', () => {
+  it('factorial(0) = 1', () => { assert.equal(factorial(0), 1); });
+  it('factorial(1) = 1', () => { assert.equal(factorial(1), 1); });
+  it('factorial(5) = 120', () => { assert.equal(factorial(5), 120); });
+  it('factorial(10) = 3628800', () => { assert.equal(factorial(10), 3628800); });
+
+  it('throws RangeError for negative n', () => {
+    assert.throws(() => factorial(-1), RangeError);
   });
 
-  it('can return exactly min', () => {
-    // With enough samples, min should appear
-    let sawMin = false;
-    for (let i = 0; i < 1000; i++) {
-      if (randomInt(0, 1) === 0) { sawMin = true; break; }
-    }
-    assert.ok(sawMin, 'min value was never returned');
-  });
-
-  it('can return exactly max', () => {
-    let sawMax = false;
-    for (let i = 0; i < 1000; i++) {
-      if (randomInt(0, 1) === 1) { sawMax = true; break; }
-    }
-    assert.ok(sawMax, 'max value was never returned');
-  });
-
-  it('returns the only possible value when min === max', () => {
-    for (let i = 0; i < 10; i++) {
-      assert.equal(randomInt(5, 5), 5);
-    }
-  });
-
-  it('works with negative range', () => {
-    for (let i = 0; i < 50; i++) {
-      const n = randomInt(-10, -1);
-      assert.ok(n >= -10 && n <= -1, `Expected -10..-1, got ${n}`);
-    }
-  });
-});
-
-// ─── randomFloat ─────────────────────────────────────────────────────────────
-
-describe('randomFloat', () => {
-  it('returns a float within [min, max)', () => {
-    for (let i = 0; i < 100; i++) {
-      const n = randomFloat(0, 1);
-      assert.ok(n >= 0 && n < 1, `Expected [0,1), got ${n}`);
-    }
-  });
-
-  it('result is at least min', () => {
-    for (let i = 0; i < 50; i++) {
-      const n = randomFloat(5, 10);
-      assert.ok(n >= 5, `Expected >= 5, got ${n}`);
-    }
-  });
-
-  it('result is strictly less than max', () => {
-    for (let i = 0; i < 100; i++) {
-      const n = randomFloat(0, 100);
-      assert.ok(n < 100, `Expected < 100, got ${n}`);
-    }
-  });
-
-  it('works with negative range', () => {
-    for (let i = 0; i < 50; i++) {
-      const n = randomFloat(-10, -1);
-      assert.ok(n >= -10 && n < -1, `Expected [-10,-1), got ${n}`);
-    }
-  });
-
-  it('returns a non-integer for most samples', () => {
-    let nonInt = false;
-    for (let i = 0; i < 100; i++) {
-      if (!Number.isInteger(randomFloat(0, 100))) { nonInt = true; break; }
-    }
-    assert.ok(nonInt, 'randomFloat never returned a non-integer in 100 samples');
+  it('throws RangeError for non-integer n', () => {
+    assert.throws(() => factorial(2.5), RangeError);
   });
 });

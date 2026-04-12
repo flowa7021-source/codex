@@ -36,7 +36,7 @@ export interface TokenizerConfig {
   skipComments?: boolean;
   /** Prefix that begins a single-line comment (e.g. `'//'`). */
   lineComment?: string;
-  /** Start and end markers for a block comment (e.g. `['/*', '*/']`). */
+  /** Start and end markers for a block comment (e.g. slash-star and star-slash). */
   blockComment?: [string, string];
 }
 

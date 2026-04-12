@@ -1,13 +1,13 @@
 // @ts-check
 // ─── String Utilities ────────────────────────────────────────────────────────
-// Comprehensive string manipulation helpers: case conversions, trimming,
-// padding, truncation, testing, and transformation. No DOM, no side-effects.
+// Pure string helper functions: case conversion, padding, truncation,
+// HTML escaping, slug generation, validation, and more.
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 /**
- * Split a string into lowercase word tokens, handling camelCase, PascalCase,
- * spaces, dashes, and underscores.
+ * Split a string into word tokens, handling camelCase, PascalCase, spaces,
+ * dashes, and underscores.
  */
 function splitWords(str: string): string[] {
   if (!str) return [];
@@ -53,199 +53,111 @@ export function kebabCase(str: string): string {
     .join('-');
 }
 
-/** Convert a string to Title Case. 'hello world' → 'Hello World' */
+/**
+ * Convert a string to Title Case (first letter of each whitespace-delimited
+ * word uppercased, rest lowercased). 'hello world' → 'Hello World'
+ */
 export function titleCase(str: string): string {
-  return splitWords(str)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(' ');
-}
-
-/** Convert a string to CONSTANT_CASE. 'helloWorld' → 'HELLO_WORLD' */
-export function constantCase(str: string): string {
-  return splitWords(str)
-    .map((w) => w.toUpperCase())
-    .join('_');
-}
-
-// ─── Trimming & padding ───────────────────────────────────────────────────────
-
-/**
- * Trim leading and trailing characters from a string.
- * When `chars` is omitted, trims whitespace (same as String.prototype.trim).
- * When provided, trims any character in the `chars` set from both ends.
- */
-export function trim(str: string, chars?: string): string {
-  if (chars === undefined) return str.trim();
-  return trimStart(trimEnd(str, chars), chars);
+  if (str === '') return '';
+  return str.replace(/\S+/g, (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 }
 
 /**
- * Trim leading characters from a string.
- * When `chars` is omitted, trims whitespace.
+ * Uppercase the very first character; leave the rest of the string unchanged.
+ * 'hello World' → 'Hello World'
  */
-export function trimStart(str: string, chars?: string): string {
-  if (chars === undefined) return str.trimStart();
-  let start = 0;
-  while (start < str.length && chars.includes(str[start])) start++;
-  return str.slice(start);
+export function capitalize(str: string): string {
+  if (str === '') return '';
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+// ─── Truncation & padding ─────────────────────────────────────────────────────
+
+/**
+ * Truncate `str` to at most `maxLength` characters.
+ * If the string is longer, it is cut and `ellipsis` (default `'...'`) is appended.
+ * The total result length will not exceed `maxLength`.
+ */
+export function truncate(str: string, maxLength: number, ellipsis = '...'): string {
+  if (str.length <= maxLength) return str;
+  const cutAt = Math.max(0, maxLength - ellipsis.length);
+  return str.slice(0, cutAt) + ellipsis;
 }
 
 /**
- * Trim trailing characters from a string.
- * When `chars` is omitted, trims whitespace.
+ * Pad `str` on the left to `length` using `char` (default `' '`).
+ * If `str` is already at least `length` characters, it is returned unchanged.
  */
-export function trimEnd(str: string, chars?: string): string {
-  if (chars === undefined) return str.trimEnd();
-  let end = str.length;
-  while (end > 0 && chars.includes(str[end - 1])) end--;
-  return str.slice(0, end);
-}
-
-/**
- * Pad the start of a string to a target length with a fill character.
- * Default fill character is a space ' '.
- */
-export function padStart(str: string, len: number, char = ' '): string {
+export function padStart(str: string, length: number, char = ' '): string {
   const fill = char.length > 0 ? char[0] : ' ';
-  if (str.length >= len) return str;
-  return fill.repeat(len - str.length) + str;
+  if (str.length >= length) return str;
+  return fill.repeat(length - str.length) + str;
 }
 
 /**
- * Pad the end of a string to a target length with a fill character.
- * Default fill character is a space ' '.
+ * Pad `str` on the right to `length` using `char` (default `' '`).
+ * If `str` is already at least `length` characters, it is returned unchanged.
  */
-export function padEnd(str: string, len: number, char = ' '): string {
+export function padEnd(str: string, length: number, char = ' '): string {
   const fill = char.length > 0 ? char[0] : ' ';
-  if (str.length >= len) return str;
-  return str + fill.repeat(len - str.length);
+  if (str.length >= length) return str;
+  return str + fill.repeat(length - str.length);
 }
 
-// ─── Truncation ───────────────────────────────────────────────────────────────
+// ─── Repetition & reversal ────────────────────────────────────────────────────
 
 /**
- * Truncate a string to at most `maxLen` characters (including the suffix).
- * Default suffix is '...'. Returns the original string if it fits.
+ * Repeat `str` exactly `count` times.
+ * Throws a `RangeError` for negative `count`.
  */
-export function truncate(str: string, maxLen: number, suffix = '...'): string {
-  if (str.length <= maxLen) return str;
-  const cutAt = Math.max(0, maxLen - suffix.length);
-  return str.slice(0, cutAt) + suffix;
+export function repeat(str: string, count: number): string {
+  if (count < 0) throw new RangeError(`repeat count must be non-negative, got ${count}`);
+  return str.repeat(count);
 }
+
+/** Reverse the characters in `str`. */
+export function reverse(str: string): string {
+  return [...str].reverse().join('');
+}
+
+// ─── Palindrome ───────────────────────────────────────────────────────────────
 
 /**
- * Truncate a string to at most `maxWords` words, appending `suffix` if truncated.
- * Default suffix is '...'.
- */
-export function truncateWords(str: string, maxWords: number, suffix = '...'): string {
-  const wordList = str.trim().split(/\s+/);
-  if (wordList.length <= maxWords || (wordList.length === 1 && wordList[0] === '')) {
-    return str;
-  }
-  return wordList.slice(0, maxWords).join(' ') + suffix;
-}
-
-// ─── Testing ──────────────────────────────────────────────────────────────────
-
-/** Return true if `str` starts with `prefix`. */
-export function startsWith(str: string, prefix: string): boolean {
-  return str.startsWith(prefix);
-}
-
-/** Return true if `str` ends with `suffix`. */
-export function endsWith(str: string, suffix: string): boolean {
-  return str.endsWith(suffix);
-}
-
-/** Return true if `str` contains `substr`. */
-export function includes(str: string, substr: string): boolean {
-  return str.includes(substr);
-}
-
-/** Return true if `str` is empty or contains only whitespace. */
-export function isBlank(str: string): boolean {
-  return str.trim().length === 0;
-}
-
-/**
- * Return true if `str` is a palindrome.
- * Ignores case and all non-alphanumeric characters.
+ * Return `true` if `str` is a palindrome.
+ * The comparison is case-insensitive and ignores all non-alphanumeric characters.
  */
 export function isPalindrome(str: string): boolean {
-  const cleaned = str.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const reversed = cleaned.split('').reverse().join('');
-  return cleaned === reversed;
+  const clean = str.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const rev = [...clean].reverse().join('');
+  return clean === rev;
 }
 
-// ─── Transformation ───────────────────────────────────────────────────────────
-
-/** Reverse a string. */
-export function reverse(str: string): string {
-  return str.split('').reverse().join('');
-}
+// ─── Occurrences ──────────────────────────────────────────────────────────────
 
 /**
- * Repeat a string `n` times.
- * Returns an empty string for n ≤ 0.
+ * Count the number of non-overlapping occurrences of `sub` within `str`.
+ * Returns 0 if `sub` is an empty string.
  */
-export function repeat(str: string, n: number): string {
-  if (n <= 0) return '';
-  return str.repeat(n);
-}
-
-/**
- * Replace all occurrences of `search` in `str` with `replacement`.
- * Uses literal string matching (not regex).
- */
-export function replaceAll(str: string, search: string, replacement: string): string {
-  if (search === '') return str;
-  return str.split(search).join(replacement);
-}
-
-/**
- * Count the number of non-overlapping occurrences of `substr` in `str`.
- * Returns 0 when `substr` is empty.
- */
-export function countOccurrences(str: string, substr: string): number {
-  if (substr === '') return 0;
+export function countOccurrences(str: string, sub: string): number {
+  if (sub === '') return 0;
   let count = 0;
   let pos = 0;
-  while ((pos = str.indexOf(substr, pos)) !== -1) {
+  while ((pos = str.indexOf(sub, pos)) !== -1) {
     count++;
-    pos += substr.length;
+    pos += sub.length;
   }
   return count;
 }
 
-/**
- * Split a string into words, handling camelCase, PascalCase, spaces, dashes,
- * and underscores. Returns segments with their original casing preserved.
- */
-export function words(str: string): string[] {
-  if (!str) return [];
-  const spaced = str
-    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
-    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
-  return spaced.split(/[^a-zA-Z\d]+/).filter((w) => w.length > 0);
+// ─── HTML ─────────────────────────────────────────────────────────────────────
+
+/** Remove all HTML tags from `str`. */
+export function stripHtml(str: string): string {
+  return str.replace(/<[^>]*>/g, '');
 }
 
 /**
- * Convert a string to a URL-friendly slug.
- * 'Hello World!' → 'hello-world'
- */
-export function slugify(str: string): string {
-  return str
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s-]/g, '')
-    .trim()
-    .replace(/[\s-]+/g, '-');
-}
-
-/**
- * Escape HTML special characters in a string.
- * & < > " ' are replaced with their HTML entities.
+ * Escape `&`, `<`, `>`, `"`, and `'` for safe embedding in HTML.
  */
 export function escapeHtml(str: string): string {
   return str
@@ -257,8 +169,7 @@ export function escapeHtml(str: string): string {
 }
 
 /**
- * Unescape HTML entities back to their original characters.
- * Reverses the output of `escapeHtml`.
+ * Reverse the escaping applied by `escapeHtml`.
  */
 export function unescapeHtml(str: string): string {
   return str
@@ -269,45 +180,107 @@ export function unescapeHtml(str: string): string {
     .replace(/&amp;/g, '&');
 }
 
-/** Strip all HTML tags from a string, leaving only text content. */
-export function stripHtml(str: string): string {
-  return str.replace(/<[^>]*>/g, '');
-}
+// ─── Slugify ──────────────────────────────────────────────────────────────────
 
 /**
- * Wrap a string at word boundaries so no line exceeds `width` characters.
- * Lines are joined with '\n'. Words longer than `width` are placed on their
- * own line without splitting.
+ * Convert `str` to a URL-friendly slug: lowercase, replace spaces and
+ * special characters with hyphens, collapse consecutive hyphens, and trim
+ * leading/trailing hyphens.
  */
-export function wrapAt(str: string, width: number): string {
-  const wordList = str.split(/\s+/);
-  const lines: string[] = [];
-  let currentLine = '';
+export function slugify(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
-  for (const word of wordList) {
-    if (word === '') continue;
-    if (currentLine === '') {
-      currentLine = word;
-    } else if (currentLine.length + 1 + word.length <= width) {
-      currentLine += ' ' + word;
-    } else {
-      lines.push(currentLine);
-      currentLine = word;
-    }
-  }
-  if (currentLine !== '') lines.push(currentLine);
-  return lines.join('\n');
+// ─── Counting ─────────────────────────────────────────────────────────────────
+
+/**
+ * Count the number of words in `str` (split by whitespace).
+ * An empty or whitespace-only string has 0 words.
+ */
+export function wordCount(str: string): number {
+  const trimmed = str.trim();
+  if (trimmed === '') return 0;
+  return trimmed.split(/\s+/).length;
 }
 
 /**
- * Interpolate a template string, replacing `{key}` placeholders with values
- * from the `vars` record.
- * 'Hello {name}!' with { name: 'Alice' } → 'Hello Alice!'
- * Missing keys are left unchanged.
+ * Count the number of lines in `str` (split by `\n`).
+ * An empty string is considered to have 1 line.
+ */
+export function lineCount(str: string): number {
+  return str.split('\n').length;
+}
+
+// ─── Line manipulation ────────────────────────────────────────────────────────
+
+/** Trim leading and trailing whitespace from each line in `str`. */
+export function trimLines(str: string): string {
+  return str
+    .split('\n')
+    .map((line) => line.trim())
+    .join('\n');
+}
+
+/**
+ * Remove the common leading whitespace prefix from every non-empty line in `str`.
+ * Whitespace-only lines are preserved unchanged; they do not influence the
+ * common-indent calculation.
+ */
+export function dedent(str: string): string {
+  const lines = str.split('\n');
+  const nonEmpty = lines.filter((l) => l.trim() !== '');
+  if (nonEmpty.length === 0) return str;
+
+  const minIndent = nonEmpty.reduce((min, line) => {
+    const match = line.match(/^(\s*)/);
+    const indent = match ? match[1].length : 0;
+    return Math.min(min, indent);
+  }, Infinity);
+
+  return lines
+    .map((line) => (line.trim() === '' ? line : line.slice(minIndent)))
+    .join('\n');
+}
+
+// ─── Interpolation ────────────────────────────────────────────────────────────
+
+/**
+ * Replace `{{key}}` placeholders in `template` with the corresponding values
+ * from `vars`. Unknown keys are left as-is (the placeholder text is kept).
  */
 export function interpolate(template: string, vars: Record<string, unknown>): string {
-  return template.replace(/\{([^{}]+)\}/g, (match, key: string) => {
-    const k = key.trim();
-    return Object.prototype.hasOwnProperty.call(vars, k) ? String(vars[k]) : match;
+  return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) => {
+    return Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key]) : match;
   });
+}
+
+// ─── Random string ────────────────────────────────────────────────────────────
+
+const DEFAULT_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+/**
+ * Generate a random string of exactly `length` characters chosen from `chars`.
+ * Default character set is alphanumeric (A-Z, a-z, 0-9).
+ */
+export function randomString(length: number, chars = DEFAULT_CHARS): string {
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return result;
+}
+
+// ─── Validation ───────────────────────────────────────────────────────────────
+
+/** Return `true` if `str` looks like a valid email address (basic regex check). */
+export function isEmail(str: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str);
+}
+
+/** Return `true` if `str` looks like a valid http or https URL (basic regex check). */
+export function isUrl(str: string): boolean {
+  return /^https?:\/\/[^\s/$.?#].[^\s]*$/i.test(str);
 }

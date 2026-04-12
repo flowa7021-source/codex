@@ -6,6 +6,68 @@
 // behaviour is predictable when tests construct dates with the local-time
 // constructor new Date(year, month-1, day, ...).
 
+// ─── Duration constants ───────────────────────────────────────────────────────
+
+const _MS_PER_SECOND = 1_000;
+const _MS_PER_MINUTE = 60 * _MS_PER_SECOND;
+const _MS_PER_HOUR   = 60 * _MS_PER_MINUTE;
+const _MS_PER_DAY    = 24 * _MS_PER_HOUR;
+const _MS_PER_MONTH  = 30 * _MS_PER_DAY;   // approximate for humanizeRelative
+const _MS_PER_YEAR   = 365 * _MS_PER_DAY;  // approximate for humanizeRelative
+
+// ─── Duration formatting & parsing ───────────────────────────────────────────
+
+/**
+ * Format milliseconds as "Xh Ym Zs".
+ * Zero-valued units are omitted. Input of 0 ms returns "0s".
+ *
+ * @example
+ *   formatDuration(9_000_000) // "2h 30m"
+ *   formatDuration(45_000)    // "45s"
+ *   formatDuration(3_605_000) // "1h 5s"
+ */
+export function formatDuration(ms: number): string {
+  const totalSeconds = Math.floor(Math.abs(ms) / _MS_PER_SECOND);
+  const hours   = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  const parts: string[] = [];
+  if (hours   > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  if (seconds > 0) parts.push(`${seconds}s`);
+
+  return parts.length > 0 ? parts.join(' ') : '0s';
+}
+
+/**
+ * Parse a duration string of the form "Xh Ym Zs" back to milliseconds.
+ * Each component is optional but at least one must be present.
+ * Throws `RangeError` on invalid format.
+ *
+ * @example
+ *   parseDuration("2h 30m") // 9_000_000
+ *   parseDuration("45s")    // 45_000
+ *   parseDuration("1h 5s")  // 3_605_000
+ */
+export function parseDuration(str: string): number {
+  const trimmed = str.trim();
+  if (trimmed === '') throw new RangeError(`Invalid duration string: "${str}"`);
+
+  const pattern = /^(?:(\d+)h\s*)?(?:(\d+)m\s*)?(?:(\d+)s\s*)?$/;
+  const match = pattern.exec(trimmed);
+
+  if (!match || (match[1] === undefined && match[2] === undefined && match[3] === undefined)) {
+    throw new RangeError(`Invalid duration string: "${str}"`);
+  }
+
+  const hours   = match[1] !== undefined ? parseInt(match[1], 10) : 0;
+  const minutes = match[2] !== undefined ? parseInt(match[2], 10) : 0;
+  const seconds = match[3] !== undefined ? parseInt(match[3], 10) : 0;
+
+  return (hours * _MS_PER_HOUR) + (minutes * _MS_PER_MINUTE) + (seconds * _MS_PER_SECOND);
+}
+
 // ─── Formatting ──────────────────────────────────────────────────────────────
 
 /**
@@ -251,6 +313,98 @@ export function startOfMonth(date: Date): Date {
 export function endOfMonth(date: Date): Date {
   const lastDay = daysInMonth(date.getFullYear(), date.getMonth() + 1);
   return new Date(date.getFullYear(), date.getMonth(), lastDay, 23, 59, 59, 999);
+}
+
+// ─── Absolute day difference ──────────────────────────────────────────────────
+
+/**
+ * Return the absolute number of whole calendar days between two dates.
+ * Time-of-day is ignored (dates are normalised to midnight UTC for the
+ * arithmetic so that DST changes do not distort the result).
+ */
+export function diffDays(a: Date, b: Date): number {
+  const msA = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const msB = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.abs(Math.round((msA - msB) / _MS_PER_DAY));
+}
+
+// ─── Clamping ─────────────────────────────────────────────────────────────────
+
+/**
+ * Clamp `date` so that it falls within [min, max].
+ * Returns a new Date equal to `min` if `date < min`, `max` if `date > max`,
+ * or a copy of `date` otherwise.
+ */
+export function clampDate(date: Date, min: Date, max: Date): Date {
+  if (date.getTime() < min.getTime()) return new Date(min);
+  if (date.getTime() > max.getTime()) return new Date(max);
+  return new Date(date);
+}
+
+// ─── Unix timestamps ──────────────────────────────────────────────────────────
+
+/** Convert a Date to a Unix timestamp (whole seconds since the Unix epoch). */
+export function toUnixTimestamp(date: Date): number {
+  return Math.floor(date.getTime() / _MS_PER_SECOND);
+}
+
+/** Convert a Unix timestamp (seconds since epoch) to a Date. */
+export function fromUnixTimestamp(ts: number): Date {
+  return new Date(ts * _MS_PER_SECOND);
+}
+
+// ─── Humanised relative time ──────────────────────────────────────────────────
+
+/**
+ * Return a human-readable description of a duration given in milliseconds.
+ *
+ * Thresholds (applied to the absolute value of `ms`):
+ *   < 5 s              → "just now"
+ *   < 60 s             → "X seconds ago"
+ *   < 60 min           → "X minutes ago"
+ *   < 24 h             → "X hours ago"
+ *   < 30 days (~month) → "X days ago"
+ *   < 365 days (~year) → "X months ago"
+ *   else               → "X years ago"
+ *
+ * @example
+ *   humanizeRelative(3_000)       // "just now"
+ *   humanizeRelative(30_000)      // "30 seconds ago"
+ *   humanizeRelative(3_600_000)   // "1 hour ago"
+ *   humanizeRelative(86_400_000)  // "1 day ago"
+ */
+export function humanizeRelative(ms: number): string {
+  const abs = Math.abs(ms);
+
+  if (abs < 5 * _MS_PER_SECOND) return 'just now';
+
+  if (abs < _MS_PER_MINUTE) {
+    const s = Math.floor(abs / _MS_PER_SECOND);
+    return `${s} second${s === 1 ? '' : 's'} ago`;
+  }
+
+  if (abs < _MS_PER_HOUR) {
+    const m = Math.floor(abs / _MS_PER_MINUTE);
+    return `${m} minute${m === 1 ? '' : 's'} ago`;
+  }
+
+  if (abs < _MS_PER_DAY) {
+    const h = Math.floor(abs / _MS_PER_HOUR);
+    return `${h} hour${h === 1 ? '' : 's'} ago`;
+  }
+
+  if (abs < _MS_PER_MONTH) {
+    const d = Math.floor(abs / _MS_PER_DAY);
+    return `${d} day${d === 1 ? '' : 's'} ago`;
+  }
+
+  if (abs < _MS_PER_YEAR) {
+    const mo = Math.floor(abs / _MS_PER_MONTH);
+    return `${mo} month${mo === 1 ? '' : 's'} ago`;
+  }
+
+  const y = Math.floor(abs / _MS_PER_YEAR);
+  return `${y} year${y === 1 ? '' : 's'} ago`;
 }
 
 // ─── Ranges ──────────────────────────────────────────────────────────────────

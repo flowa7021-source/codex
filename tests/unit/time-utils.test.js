@@ -18,6 +18,7 @@ import {
   diffInDays,
   diffInHours,
   diffInMinutes,
+  diffDays,
   isWeekend,
   isLeapYear,
   daysInMonth,
@@ -25,6 +26,12 @@ import {
   endOfDay,
   startOfMonth,
   endOfMonth,
+  clampDate,
+  toUnixTimestamp,
+  fromUnixTimestamp,
+  humanizeRelative,
+  formatDuration,
+  parseDuration,
   dateRange,
 } from '../../app/modules/time-utils.js';
 
@@ -711,5 +718,327 @@ describe('dateRange', () => {
     const end   = new Date(2024, 2, 12);
     const range = dateRange(start, end);
     assert.equal(range.length, 3);
+  });
+});
+
+// ─── formatDuration ───────────────────────────────────────────────────────────
+
+describe('formatDuration', () => {
+  it('returns "0s" for 0 ms', () => {
+    assert.equal(formatDuration(0), '0s');
+  });
+
+  it('formats seconds only', () => {
+    assert.equal(formatDuration(45_000), '45s');
+  });
+
+  it('formats minutes only', () => {
+    assert.equal(formatDuration(5 * 60_000), '5m');
+  });
+
+  it('formats hours only', () => {
+    assert.equal(formatDuration(2 * 3_600_000), '2h');
+  });
+
+  it('formats hours and minutes (omits zero seconds)', () => {
+    assert.equal(formatDuration(9_000_000), '2h 30m');
+  });
+
+  it('formats hours and seconds (omits zero minutes)', () => {
+    assert.equal(formatDuration(3_605_000), '1h 5s');
+  });
+
+  it('formats minutes and seconds', () => {
+    assert.equal(formatDuration(90_000), '1m 30s');
+  });
+
+  it('formats hours, minutes, and seconds', () => {
+    assert.equal(formatDuration(3_661_000), '1h 1m 1s');
+  });
+
+  it('uses absolute value for negative input', () => {
+    assert.equal(formatDuration(-45_000), '45s');
+  });
+
+  it('truncates sub-second ms', () => {
+    // 1500 ms → 1s (fractional second dropped)
+    assert.equal(formatDuration(1_500), '1s');
+  });
+
+  it('handles exactly 1 hour', () => {
+    assert.equal(formatDuration(3_600_000), '1h');
+  });
+
+  it('handles large values', () => {
+    // 25 h = 25 * 3600 * 1000 ms → "25h"
+    assert.equal(formatDuration(25 * 3_600_000), '25h');
+  });
+});
+
+// ─── parseDuration ────────────────────────────────────────────────────────────
+
+describe('parseDuration', () => {
+  it('parses hours only', () => {
+    assert.equal(parseDuration('2h'), 2 * 3_600_000);
+  });
+
+  it('parses minutes only', () => {
+    assert.equal(parseDuration('30m'), 30 * 60_000);
+  });
+
+  it('parses seconds only', () => {
+    assert.equal(parseDuration('45s'), 45_000);
+  });
+
+  it('parses hours and minutes', () => {
+    assert.equal(parseDuration('2h 30m'), 9_000_000);
+  });
+
+  it('parses hours and seconds', () => {
+    assert.equal(parseDuration('1h 5s'), 3_605_000);
+  });
+
+  it('parses minutes and seconds', () => {
+    assert.equal(parseDuration('1m 30s'), 90_000);
+  });
+
+  it('parses hours, minutes, and seconds', () => {
+    assert.equal(parseDuration('1h 1m 1s'), 3_661_000);
+  });
+
+  it('round-trips with formatDuration for a complex value', () => {
+    const ms = 3_661_000;
+    assert.equal(parseDuration(formatDuration(ms)), ms);
+  });
+
+  it('handles strings without spaces between components', () => {
+    assert.equal(parseDuration('2h30m'), 9_000_000);
+  });
+
+  it('throws RangeError for empty string', () => {
+    assert.throws(() => parseDuration(''), RangeError);
+  });
+
+  it('throws RangeError for arbitrary text', () => {
+    assert.throws(() => parseDuration('not a duration'), RangeError);
+  });
+
+  it('throws RangeError for bare number with no unit', () => {
+    assert.throws(() => parseDuration('42'), RangeError);
+  });
+
+  it('throws RangeError for invalid order (m before h in wrong form)', () => {
+    // "30m 2h" is invalid because hours must come before minutes
+    assert.throws(() => parseDuration('30m 2h'), RangeError);
+  });
+});
+
+// ─── diffDays ─────────────────────────────────────────────────────────────────
+
+describe('diffDays', () => {
+  it('returns 0 for the same date', () => {
+    const a = new Date(2024, 2, 15);
+    assert.equal(diffDays(a, a), 0);
+  });
+
+  it('returns 1 for adjacent days', () => {
+    const a = new Date(2024, 2, 15);
+    const b = new Date(2024, 2, 16);
+    assert.equal(diffDays(a, b), 1);
+  });
+
+  it('is symmetric (absolute value)', () => {
+    const a = new Date(2024, 2, 15);
+    const b = new Date(2024, 2, 20);
+    assert.equal(diffDays(a, b), diffDays(b, a));
+  });
+
+  it('returns correct count across a month boundary', () => {
+    const a = new Date(2024, 0, 29); // Jan 29
+    const b = new Date(2024, 1, 2);  // Feb 2
+    assert.equal(diffDays(a, b), 4);
+  });
+
+  it('ignores time-of-day', () => {
+    const a = new Date(2024, 2, 15, 23, 59, 59);
+    const b = new Date(2024, 2, 15, 0, 0, 0);
+    assert.equal(diffDays(a, b), 0);
+  });
+
+  it('returns correct count across a year boundary', () => {
+    const a = new Date(2023, 11, 31); // Dec 31
+    const b = new Date(2024, 0, 1);   // Jan 1
+    assert.equal(diffDays(a, b), 1);
+  });
+});
+
+// ─── clampDate ────────────────────────────────────────────────────────────────
+
+describe('clampDate', () => {
+  const min = new Date(2024, 0, 1);  // Jan 1
+  const max = new Date(2024, 11, 31); // Dec 31
+
+  it('returns a copy of min when date is before min', () => {
+    const result = clampDate(new Date(2023, 6, 15), min, max);
+    assert.equal(result.getTime(), min.getTime());
+  });
+
+  it('returns a copy of max when date is after max', () => {
+    const result = clampDate(new Date(2025, 6, 15), min, max);
+    assert.equal(result.getTime(), max.getTime());
+  });
+
+  it('returns a copy of date when date is within range', () => {
+    const mid = new Date(2024, 6, 15);
+    const result = clampDate(mid, min, max);
+    assert.equal(result.getTime(), mid.getTime());
+  });
+
+  it('returns a copy of min when date equals min', () => {
+    const result = clampDate(new Date(min), min, max);
+    assert.equal(result.getTime(), min.getTime());
+  });
+
+  it('returns a copy of max when date equals max', () => {
+    const result = clampDate(new Date(max), min, max);
+    assert.equal(result.getTime(), max.getTime());
+  });
+
+  it('always returns a new Date object (not the same reference)', () => {
+    const mid = new Date(2024, 6, 15);
+    const result = clampDate(mid, min, max);
+    assert.notEqual(result, mid);
+  });
+});
+
+// ─── toUnixTimestamp / fromUnixTimestamp ──────────────────────────────────────
+
+describe('toUnixTimestamp', () => {
+  it('returns 0 for the Unix epoch', () => {
+    assert.equal(toUnixTimestamp(new Date(0)), 0);
+  });
+
+  it('returns whole seconds (floors sub-second ms)', () => {
+    // 1500 ms past epoch → 1 (not 1.5)
+    assert.equal(toUnixTimestamp(new Date(1_500)), 1);
+  });
+
+  it('returns correct value for a known date', () => {
+    // 2024-01-01T00:00:00Z = 1704067200
+    const d = new Date(Date.UTC(2024, 0, 1, 0, 0, 0));
+    assert.equal(toUnixTimestamp(d), 1_704_067_200);
+  });
+});
+
+describe('fromUnixTimestamp', () => {
+  it('returns the Unix epoch for ts=0', () => {
+    assert.equal(fromUnixTimestamp(0).getTime(), 0);
+  });
+
+  it('returns a Date with the correct ms value', () => {
+    assert.equal(fromUnixTimestamp(1).getTime(), 1_000);
+  });
+
+  it('round-trips with toUnixTimestamp', () => {
+    const d = new Date(Date.UTC(2024, 0, 1, 0, 0, 0));
+    const ts = toUnixTimestamp(d);
+    assert.equal(fromUnixTimestamp(ts).getTime(), d.getTime());
+  });
+
+  it('returns correct date for known timestamp', () => {
+    const d = fromUnixTimestamp(1_704_067_200);
+    assert.equal(d.getUTCFullYear(), 2024);
+    assert.equal(d.getUTCMonth(), 0);
+    assert.equal(d.getUTCDate(), 1);
+  });
+});
+
+// ─── humanizeRelative ─────────────────────────────────────────────────────────
+
+describe('humanizeRelative', () => {
+  it('returns "just now" for 0 ms', () => {
+    assert.equal(humanizeRelative(0), 'just now');
+  });
+
+  it('returns "just now" for exactly 4999 ms', () => {
+    assert.equal(humanizeRelative(4_999), 'just now');
+  });
+
+  it('returns "X seconds ago" for 5000 ms', () => {
+    assert.equal(humanizeRelative(5_000), '5 seconds ago');
+  });
+
+  it('returns "1 second ago" (singular) for exactly 1 s worth rounding', () => {
+    // floor(5000/1000) = 5 actually, so test singular: floor(1000) = 1
+    // But < 5s is "just now". Test the boundary carefully:
+    // 5000ms exactly: floor(5000/1000)=5 → "5 seconds ago"
+    // We can't hit singular "1 second ago" because 1000 ms < 5000 ms threshold.
+    // Skip singular test for seconds since it's unreachable.
+    // Instead verify "30 seconds ago":
+    assert.equal(humanizeRelative(30_000), '30 seconds ago');
+  });
+
+  it('returns "X seconds ago" for 59999 ms', () => {
+    assert.equal(humanizeRelative(59_999), '59 seconds ago');
+  });
+
+  it('returns "1 minute ago" (singular) for exactly 1 minute', () => {
+    assert.equal(humanizeRelative(60_000), '1 minute ago');
+  });
+
+  it('returns "X minutes ago" for 5 minutes', () => {
+    assert.equal(humanizeRelative(5 * 60_000), '5 minutes ago');
+  });
+
+  it('returns "X minutes ago" for 59 minutes', () => {
+    assert.equal(humanizeRelative(59 * 60_000), '59 minutes ago');
+  });
+
+  it('returns "1 hour ago" (singular) for exactly 1 hour', () => {
+    assert.equal(humanizeRelative(3_600_000), '1 hour ago');
+  });
+
+  it('returns "X hours ago" for 5 hours', () => {
+    assert.equal(humanizeRelative(5 * 3_600_000), '5 hours ago');
+  });
+
+  it('returns "X hours ago" for 23 hours', () => {
+    assert.equal(humanizeRelative(23 * 3_600_000), '23 hours ago');
+  });
+
+  it('returns "1 day ago" (singular) for exactly 1 day', () => {
+    assert.equal(humanizeRelative(86_400_000), '1 day ago');
+  });
+
+  it('returns "X days ago" for 7 days', () => {
+    assert.equal(humanizeRelative(7 * 86_400_000), '7 days ago');
+  });
+
+  it('returns "X days ago" for 29 days (< 30 day month threshold)', () => {
+    assert.equal(humanizeRelative(29 * 86_400_000), '29 days ago');
+  });
+
+  it('returns "1 month ago" (singular) for exactly 30 days', () => {
+    assert.equal(humanizeRelative(30 * 86_400_000), '1 month ago');
+  });
+
+  it('returns "X months ago" for 6 months', () => {
+    assert.equal(humanizeRelative(6 * 30 * 86_400_000), '6 months ago');
+  });
+
+  it('returns "X months ago" for 11 months', () => {
+    assert.equal(humanizeRelative(11 * 30 * 86_400_000), '11 months ago');
+  });
+
+  it('returns "1 year ago" (singular) for exactly 365 days', () => {
+    assert.equal(humanizeRelative(365 * 86_400_000), '1 year ago');
+  });
+
+  it('returns "X years ago" for 3 years', () => {
+    assert.equal(humanizeRelative(3 * 365 * 86_400_000), '3 years ago');
+  });
+
+  it('uses absolute value for negative ms (future dates)', () => {
+    assert.equal(humanizeRelative(-45_000), '45 seconds ago');
   });
 });

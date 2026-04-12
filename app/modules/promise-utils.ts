@@ -3,6 +3,16 @@
 // A collection of Promise and async utility functions.
 // Pure JS — no DOM, no browser APIs.
 
+// ─── TimeoutError ─────────────────────────────────────────────────────────────
+
+/** Thrown by `timeout()` when the promise does not settle within the time limit. */
+export class TimeoutError extends Error {
+  constructor(ms: number) {
+    super(`Promise timed out after ${ms}ms`);
+    this.name = 'TimeoutError';
+  }
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 /** A deferred promise that exposes resolve and reject externally. */
@@ -52,17 +62,16 @@ export function delay(ms: number): Promise<void> {
 
 /**
  * Races `promise` against a timer of `ms` milliseconds.
- * Rejects with an Error if the timer fires first.
+ * Rejects with a `TimeoutError` if the timer fires first.
  */
 export function timeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  const timer = new Promise<never>((_, reject) => {
-    const id = setTimeout(() => {
-      reject(new Error(`Promise timed out after ${ms}ms`));
-    }, ms);
-    // Clear the timer if the original promise settles first.
-    promise.then(() => clearTimeout(id), () => clearTimeout(id));
+  return new Promise<T>((resolve, reject) => {
+    const id = setTimeout(() => reject(new TimeoutError(ms)), ms);
+    promise.then(
+      (value) => { clearTimeout(id); resolve(value); },
+      (reason) => { clearTimeout(id); reject(reason); },
+    );
   });
-  return Promise.race([promise, timer]);
 }
 
 // ─── Control flow ────────────────────────────────────────────────────────────
@@ -139,6 +148,17 @@ export function allSettled<T>(
   );
 }
 
+// ─── race ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Resolves or rejects with the first settled promise in `promises`.
+ */
+export function race<T>(promises: Promise<T>[]): Promise<T> {
+  return Promise.race(promises);
+}
+
+// ─── any ──────────────────────────────────────────────────────────────────────
+
 /**
  * Resolves with the value of the first fulfilled promise.
  * Rejects with an AggregateError if all promises reject.
@@ -196,6 +216,186 @@ export async function retryWithBackoff<T>(
   }
   // TypeScript requires a definite return; unreachable in practice.
   throw new Error('retryWithBackoff: exhausted all attempts');
+}
+
+// ─── retry ────────────────────────────────────────────────────────────────────
+
+export interface SimpleRetryOptions {
+  /** Number of retry attempts after the first failure. Default: 3 */
+  retries?: number;
+  /** Base delay in ms between retries. Default: 0 */
+  delay?: number;
+  /** Backoff multiplier applied to delay after each failure. Default: 1 */
+  backoff?: number;
+}
+
+/**
+ * Calls `fn` repeatedly on failure until it succeeds or the attempt budget is
+ * exhausted. Uses simple linear/multiplicative backoff. The last error is
+ * re-thrown when all attempts fail.
+ */
+export async function retry<T>(
+  fn: () => Promise<T>,
+  options?: SimpleRetryOptions,
+): Promise<T> {
+  const retries = options?.retries ?? 3;
+  const baseDelay = options?.delay ?? 0;
+  const backoff = options?.backoff ?? 1;
+
+  let lastError: unknown;
+  let currentDelay = baseDelay;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries && currentDelay > 0) {
+        await delay(currentDelay);
+        currentDelay *= backoff;
+      } else if (attempt < retries) {
+        currentDelay = baseDelay * Math.pow(backoff, attempt + 1);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+// ─── mapConcurrent ────────────────────────────────────────────────────────────
+
+/**
+ * Maps `items` through async `fn` with at most `concurrency` in-flight at once.
+ * Preserves input order in the result array.
+ */
+export async function mapConcurrent<T, U>(
+  items: T[],
+  fn: (item: T) => Promise<U>,
+  concurrency: number,
+): Promise<U[]> {
+  const results: U[] = new Array(items.length);
+  let nextIndex = 0;
+
+  async function worker(): Promise<void> {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await fn(items[index]);
+    }
+  }
+
+  const cap = Math.min(concurrency, items.length);
+  if (cap === 0) return results;
+  const workers: Promise<void>[] = [];
+  for (let i = 0; i < cap; i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  return results;
+}
+
+// ─── pDebounce ────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a debounced version of `fn`. Repeated calls within `ms` reset the
+ * timer; only the last call's promise settles all pending callers.
+ */
+export function pDebounce<T extends unknown[], R>(
+  fn: (...args: T) => Promise<R>,
+  ms: number,
+): (...args: T) => Promise<R> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let pending: Array<{ resolve: (v: R) => void; reject: (e: unknown) => void }> = [];
+
+  return (...args: T): Promise<R> => {
+    return new Promise<R>((resolve, reject) => {
+      pending.push({ resolve, reject });
+      if (timer !== undefined) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = undefined;
+        const batch = pending;
+        pending = [];
+        fn(...args).then(
+          (v) => { for (const p of batch) p.resolve(v); },
+          (e) => { for (const p of batch) p.reject(e); },
+        );
+      }, ms);
+    });
+  };
+}
+
+// ─── pThrottle ────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a throttled version of `fn`. At most one invocation per `ms` window.
+ * Calls made during the cooldown are queued; the most-recent arguments win.
+ */
+export function pThrottle<T extends unknown[], R>(
+  fn: (...args: T) => Promise<R>,
+  ms: number,
+): (...args: T) => Promise<R> {
+  let lastCall = -Infinity;
+  let cooldownTimer: ReturnType<typeof setTimeout> | undefined;
+  let queued: { args: T; resolve: (v: R) => void; reject: (e: unknown) => void } | undefined;
+
+  function flush(args: T, resolve: (v: R) => void, reject: (e: unknown) => void): void {
+    lastCall = Date.now();
+    fn(...args).then(resolve, reject);
+    cooldownTimer = setTimeout(() => {
+      cooldownTimer = undefined;
+      if (queued) {
+        const { args: qa, resolve: qr, reject: qj } = queued;
+        queued = undefined;
+        flush(qa, qr, qj);
+      }
+    }, ms);
+  }
+
+  return (...args: T): Promise<R> => {
+    return new Promise<R>((resolve, reject) => {
+      const now = Date.now();
+      if (cooldownTimer === undefined && now - lastCall >= ms) {
+        flush(args, resolve, reject);
+      } else {
+        queued = { args, resolve, reject };
+      }
+    });
+  };
+}
+
+// ─── withAbort ────────────────────────────────────────────────────────────────
+
+export interface WithAbortResult<T> {
+  promise: Promise<T>;
+  abort: () => void;
+}
+
+/**
+ * Runs `fn` with an `AbortSignal`. Returns the promise and an `abort()` helper.
+ * When `abort()` is called the signal fires and the promise rejects with an
+ * `AbortError` (DOMException name "AbortError").
+ */
+export function withAbort<T>(
+  fn: (signal: AbortSignal) => Promise<T>,
+): WithAbortResult<T> {
+  const controller = new AbortController();
+
+  const promise = new Promise<T>((resolve, reject) => {
+    if (controller.signal.aborted) {
+      reject(controller.signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      return;
+    }
+
+    controller.signal.addEventListener('abort', () => {
+      reject(controller.signal.reason ?? new DOMException('Aborted', 'AbortError'));
+    }, { once: true });
+
+    fn(controller.signal).then(resolve, reject);
+  });
+
+  return {
+    promise,
+    abort: () => controller.abort(new DOMException('Aborted', 'AbortError')),
+  };
 }
 
 // ─── Deferred promise ────────────────────────────────────────────────────────

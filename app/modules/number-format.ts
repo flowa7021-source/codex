@@ -1,183 +1,174 @@
 // @ts-check
-// ─── Number Formatting & Parsing Library ─────────────────────────────────────
-// Pure functions for formatting numbers, currencies, percentages, bytes,
-// ordinals, durations, and scientific notation, plus parsing and math utilities.
+// ─── Number Formatting Utilities ─────────────────────────────────────────────
+// Pure math/string number formatting, parsing, and math utilities.
+// No browser APIs (no Intl, no toLocaleString).
 
-// ─── formatNumber ────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface FormatNumberOptions {
+  /** Number of decimal places. Default: `0` */
+  decimals?: number;
+  /** Thousands separator. Default: `','` */
+  thousandsSep?: string;
+  /** Decimal separator. Default: `'.'` */
+  decimalSep?: string;
+}
+
+export interface ParseNumberOptions {
+  /** Thousands separator. Default: `','` */
+  thousandsSep?: string;
+  /** Decimal separator. Default: `'.'` */
+  decimalSep?: string;
+}
+
+export interface FormatCurrencyOptions {
+  /** Currency symbol. Default: `'$'` */
+  symbol?: string;
+  /** Number of decimal places. Default: `2` */
+  decimals?: number;
+  /** Place symbol before the number. Default: `true` */
+  symbolBefore?: boolean;
+}
+
+// ─── Internal helpers ─────────────────────────────────────────────────────────
+
+/** Split a non-negative integer string into groups of 3 with a separator. */
+function insertThousandsSep(intStr: string, sep: string): string {
+  if (sep === '') return intStr;
+  let result = '';
+  const len = intStr.length;
+  for (let i = 0; i < len; i++) {
+    if (i > 0 && (len - i) % 3 === 0) {
+      result += sep;
+    }
+    result += intStr[i];
+  }
+  return result;
+}
+
+// ─── Formatting functions ─────────────────────────────────────────────────────
 
 /**
- * Formats a number with configurable decimal places and separators.
- * @param n - The number to format.
- * @param options - Optional formatting options.
- * @param options.decimals - Number of decimal places (default 2).
- * @param options.decimalSep - Decimal separator character (default '.').
- * @param options.thousandsSep - Thousands separator character (default ',').
+ * Format a number as a string with configurable thousands separator,
+ * decimal separator, and number of decimal places.
+ *
+ * Defaults: 0 decimals, `','` thousands separator, `'.'` decimal separator.
  */
-export function formatNumber(
-  n: number,
-  options?: { decimals?: number; decimalSep?: string; thousandsSep?: string },
-): string {
-  const decimals = options?.decimals ?? 2;
-  const decimalSep = options?.decimalSep ?? '.';
+export function formatNumber(n: number, options?: FormatNumberOptions): string {
+  const decimals = options?.decimals ?? 0;
   const thousandsSep = options?.thousandsSep ?? ',';
+  const decimalSep = options?.decimalSep ?? '.';
 
-  const fixed = Math.abs(n).toFixed(decimals);
+  const negative = n < 0;
+  const abs = Math.abs(n);
+
+  // Round to the requested number of decimal places
+  const factor = Math.pow(10, decimals);
+  const rounded = Math.round(abs * factor) / factor;
+
+  // Split into integer and fractional parts
+  const fixed = rounded.toFixed(decimals);
   const dotIndex = fixed.indexOf('.');
   const intPart = dotIndex === -1 ? fixed : fixed.slice(0, dotIndex);
   const fracPart = dotIndex === -1 ? '' : fixed.slice(dotIndex + 1);
 
-  const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSep);
+  const intFormatted = insertThousandsSep(intPart, thousandsSep);
 
-  const sign = n < 0 ? '-' : '';
-  if (fracPart.length > 0) {
-    return `${sign}${intFormatted}${decimalSep}${fracPart}`;
-  }
-  return `${sign}${intFormatted}`;
-}
-
-// ─── formatThousands (internal helper) ───────────────────────────────────────
-
-/** Internal helper: adds thousands separators to integer n. */
-function formatThousands(n: number, separator = ','): string {
-  const str = String(n);
-  const dotIndex = str.indexOf('.');
-  const intPart = dotIndex === -1 ? str : str.slice(0, dotIndex);
-  const decPart = dotIndex === -1 ? '' : str.slice(dotIndex);
-
-  // Handle negative sign separately
-  const negative = intPart.startsWith('-');
-  const digits = negative ? intPart.slice(1) : intPart;
-
-  let result = '';
-  for (let i = 0; i < digits.length; i++) {
-    if (i > 0 && (digits.length - i) % 3 === 0) {
-      result += separator;
-    }
-    result += digits[i];
+  let result = intFormatted;
+  if (decimals > 0) {
+    result += decimalSep + fracPart;
   }
 
-  return (negative ? '-' : '') + result + decPart;
+  return negative ? '-' + result : result;
 }
-
-// ─── formatCurrency ──────────────────────────────────────────────────────────
 
 /**
- * Formats a number as a currency string using Intl.NumberFormat.
- * @param amount - The monetary amount to format.
- * @param currency - ISO 4217 currency code (default 'USD').
- * @param options - Optional options.
- * @param options.decimals - Number of decimal places (default 2).
- * @param options.locale - BCP 47 locale string (default 'en-US').
+ * Parse a formatted number string back to a JavaScript number.
+ * Inverse of `formatNumber`.
+ *
+ * Defaults: `','` thousands separator, `'.'` decimal separator.
  */
-export function formatCurrency(
-  amount: number,
-  currency?: string,
-  options?: { decimals?: number; locale?: string },
-): string {
-  const cur = currency ?? 'USD';
+export function parseNumber(str: string, options?: ParseNumberOptions): number {
+  const thousandsSep = options?.thousandsSep ?? ',';
+  const decimalSep = options?.decimalSep ?? '.';
+
+  // Remove thousands separators
+  let cleaned = str;
+  if (thousandsSep !== '') {
+    const sepEscaped = thousandsSep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cleaned = cleaned.replace(new RegExp(sepEscaped, 'g'), '');
+  }
+
+  // Replace decimal separator with '.' for parseFloat
+  if (decimalSep !== '.') {
+    const sepEscaped = decimalSep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    cleaned = cleaned.replace(new RegExp(sepEscaped), '.');
+  }
+
+  const result = parseFloat(cleaned);
+  if (isNaN(result)) return NaN;
+  return result;
+}
+
+/**
+ * Format a currency amount.
+ *
+ * Defaults: symbol `'$'`, 2 decimal places, symbol placed before the number.
+ */
+export function formatCurrency(amount: number, options?: FormatCurrencyOptions): string {
+  const symbol = options?.symbol ?? '$';
   const decimals = options?.decimals ?? 2;
-  const locale = options?.locale ?? 'en-US';
+  const symbolBefore = options?.symbolBefore ?? true;
 
-  return new Intl.NumberFormat(locale, {
-    style: 'currency',
-    currency: cur,
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }).format(amount);
+  const formatted = formatNumber(amount, { decimals, thousandsSep: ',', decimalSep: '.' });
+
+  return symbolBefore ? symbol + formatted : formatted + symbol;
 }
 
-// ─── formatPercent ───────────────────────────────────────────────────────────
-
 /**
- * Format a ratio as a percentage string.
- * 0.1234 → '12.34%'
- * @param n - The ratio (e.g. 0.5 = 50%).
- * @param decimals - Number of decimal places (default 2).
+ * Format a fraction as a percentage string.
+ *
+ * e.g. `formatPercent(0.1234, 1)` → `"12.3%"`
  */
-export function formatPercent(n: number, decimals = 2): string {
-  return (n * 100).toFixed(decimals) + '%';
+export function formatPercent(n: number, decimals: number = 0): string {
+  const pct = n * 100;
+  const factor = Math.pow(10, decimals);
+  const rounded = Math.round(pct * factor) / factor;
+  return formatNumber(rounded, { decimals, thousandsSep: '', decimalSep: '.' }) + '%';
 }
 
-// ─── formatScientific ────────────────────────────────────────────────────────
-
 /**
- * Formats a number in scientific notation.
- * e.g. 1234.5 → '1.23e+3'
- * @param n - The number to format.
- * @param decimals - Number of decimal places in the mantissa (default 2).
+ * Format a byte count as a human-readable file size string.
+ * Uses 1024-based units: B, KB, MB, GB, TB.
+ *
+ * e.g. `formatFileSize(1536, 1)` → `"1.5 KB"`
  */
-export function formatScientific(n: number, decimals = 2): string {
-  if (n === 0) return `0.${'0'.repeat(decimals)}e+0`;
-  const exp = Math.floor(Math.log10(Math.abs(n)));
-  const mantissa = n / Math.pow(10, exp);
-  const sign = exp < 0 ? '-' : '+';
-  const absExp = Math.abs(exp);
-  return `${mantissa.toFixed(decimals)}e${sign}${absExp}`;
-}
+export function formatFileSize(bytes: number, decimals: number = 1): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = Math.abs(bytes);
+  let unitIndex = 0;
 
-// ─── formatBytes ─────────────────────────────────────────────────────────────
-
-/**
- * Formats a byte count as a human-readable string using base-1024 units.
- * Units: Bytes, KB, MB, GB, TB
- * @param bytes - Number of bytes.
- * @param decimals - Number of decimal places (default 2).
- */
-export function formatBytes(bytes: number, decimals = 2): string {
-  const units = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
-  if (bytes === 0) return '0 Bytes';
-  const absBytes = Math.abs(bytes);
-  const index = Math.min(Math.floor(Math.log(absBytes) / Math.log(1024)), units.length - 1);
-  const value = absBytes / Math.pow(1024, index);
-  return (bytes < 0 ? '-' : '') + value.toFixed(decimals) + ' ' + units[index];
-}
-
-// ─── formatDuration ──────────────────────────────────────────────────────────
-
-/**
- * Formats a duration in milliseconds as a human-readable string.
- * Examples: '2h 30m', '45s', '1m 30s', '500ms'
- * Sub-second durations are shown as 'Xms'.
- * Hours: shows hours and optionally minutes (omits seconds).
- * Minutes: shows minutes and optionally seconds.
- * Seconds: shows only seconds.
- * @param ms - Duration in milliseconds.
- */
-export function formatDuration(ms: number): string {
-  const absMs = Math.abs(ms);
-  const sign = ms < 0 ? '-' : '';
-
-  if (absMs < 1000) {
-    return `${sign}${Math.round(absMs)}ms`;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex++;
   }
 
-  const totalSeconds = Math.floor(absMs / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+  const formatted = formatNumber(bytes < 0 ? -value : value, {
+    decimals,
+    thousandsSep: '',
+    decimalSep: '.',
+  });
 
-  if (hours > 0) {
-    const parts = [`${hours}h`];
-    if (minutes > 0) parts.push(`${minutes}m`);
-    return sign + parts.join(' ');
-  }
-  if (minutes > 0) {
-    const parts = [`${minutes}m`];
-    if (seconds > 0) parts.push(`${seconds}s`);
-    return sign + parts.join(' ');
-  }
-  return `${sign}${seconds}s`;
+  return formatted + ' ' + units[unitIndex];
 }
 
-// ─── formatOrdinal ───────────────────────────────────────────────────────────
-
 /**
- * Format a positive integer as an ordinal string.
- * e.g. 1 → '1st', 2 → '2nd', 3 → '3rd', 4 → '4th', 11 → '11th', 21 → '21st'
- * @param n - The integer to format (positive integers expected).
+ * Format an integer as an ordinal string.
+ *
+ * e.g. `1` → `"1st"`, `11` → `"11th"`, `21` → `"21st"`
  */
 export function formatOrdinal(n: number): string {
-  const abs = Math.abs(Math.trunc(n));
+  const abs = Math.abs(n);
   const mod100 = abs % 100;
   const mod10 = abs % 10;
 
@@ -194,159 +185,142 @@ export function formatOrdinal(n: number): string {
     suffix = 'th';
   }
 
-  return String(Math.trunc(n)) + suffix;
+  return String(n) + suffix;
 }
 
-// ─── parseNumber ─────────────────────────────────────────────────────────────
+// ─── Roman numerals ───────────────────────────────────────────────────────────
+
+const ROMAN_MAP: [number, string][] = [
+  [1000, 'M'],
+  [900, 'CM'],
+  [500, 'D'],
+  [400, 'CD'],
+  [100, 'C'],
+  [90, 'XC'],
+  [50, 'L'],
+  [40, 'XL'],
+  [10, 'X'],
+  [9, 'IX'],
+  [5, 'V'],
+  [4, 'IV'],
+  [1, 'I'],
+];
 
 /**
- * Parses a formatted number string (e.g. '1,234.56') into a number.
- * Strips thousands separators (commas) before parsing.
- * Throws if the result is NaN.
- * @param str - The string to parse.
+ * Convert a positive integer (1–3999) to a Roman numeral string.
+ * Throws a `RangeError` for values outside [1, 3999].
  */
-export function parseNumber(str: string): number {
-  const cleaned = str.replace(/,/g, '').trim();
-  const result = Number(cleaned);
-  if (Number.isNaN(result)) {
-    throw new Error(`parseNumber: invalid number string "${str}"`);
+export function toRoman(n: number): string {
+  if (!Number.isInteger(n) || n < 1 || n > 3999) {
+    throw new RangeError(`toRoman: value must be an integer between 1 and 3999, got ${n}`);
   }
+
+  let result = '';
+  let remaining = n;
+
+  for (const [value, numeral] of ROMAN_MAP) {
+    while (remaining >= value) {
+      result += numeral;
+      remaining -= value;
+    }
+  }
+
   return result;
 }
 
-// ─── parsePercent ────────────────────────────────────────────────────────────
+const ROMAN_VALUES: Record<string, number> = {
+  I: 1,
+  V: 5,
+  X: 10,
+  L: 50,
+  C: 100,
+  D: 500,
+  M: 1000,
+};
 
 /**
- * Parses a percentage string (e.g. '12.34%') into a fractional number.
- * '12.34%' → 0.1234
- * @param str - The percentage string to parse.
+ * Parse a Roman numeral string to a positive integer.
+ * Throws a `TypeError` for invalid input.
  */
-export function parsePercent(str: string): number {
-  const cleaned = str.replace(/%/g, '').trim();
-  const result = Number(cleaned);
-  if (Number.isNaN(result)) {
-    throw new Error(`parsePercent: invalid percent string "${str}"`);
+export function fromRoman(s: string): number {
+  const upper = s.toUpperCase().trim();
+  if (upper === '') {
+    throw new TypeError(`fromRoman: empty string is not a valid Roman numeral`);
   }
-  return result / 100;
+
+  let result = 0;
+  let prev = 0;
+
+  for (let i = upper.length - 1; i >= 0; i--) {
+    const ch = upper[i];
+    const val = ROMAN_VALUES[ch];
+    if (val === undefined) {
+      throw new TypeError(`fromRoman: invalid character '${ch}' in Roman numeral '${s}'`);
+    }
+    if (val < prev) {
+      result -= val;
+    } else {
+      result += val;
+    }
+    prev = val;
+  }
+
+  if (result < 1 || result > 3999) {
+    throw new RangeError(`fromRoman: parsed value ${result} is outside range [1, 3999]`);
+  }
+
+  // Validate round-trip to reject malformed strings like "IIII"
+  if (toRoman(result) !== upper) {
+    throw new TypeError(`fromRoman: '${s}' is not a valid Roman numeral`);
+  }
+
+  return result;
 }
 
-// ─── clamp ───────────────────────────────────────────────────────────────────
+// ─── Math utilities ───────────────────────────────────────────────────────────
 
 /**
- * Clamp a value to the range [min, max].
- * @param value - The value to clamp.
- * @param min - The minimum allowed value.
- * @param max - The maximum allowed value.
+ * Clamp a number to the range [min, max].
  */
-export function clamp(value: number, min: number, max: number): number {
-  return value < min ? min : value > max ? max : value;
+export function clamp(n: number, min: number, max: number): number {
+  return n < min ? min : n > max ? max : n;
 }
 
-// ─── lerp ────────────────────────────────────────────────────────────────────
-
 /**
- * Linear interpolation between a and b by factor t.
- * t=0 → a, t=1 → b. t is not clamped.
- * @param a - Start value.
- * @param b - End value.
- * @param t - Interpolation factor.
+ * Linear interpolation between `a` and `b` by factor `t`.
  */
 export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-// ─── roundTo ─────────────────────────────────────────────────────────────────
-
 /**
- * Round a number to a given number of decimal places.
- * Uses "round half away from zero" semantics via toFixed.
- * @param n - The number to round.
- * @param decimals - Number of decimal places.
+ * Round a number to `decimals` decimal places.
  */
 export function roundTo(n: number, decimals: number): number {
   const factor = Math.pow(10, decimals);
   return Math.round(n * factor) / factor;
 }
 
-// ─── floorTo ─────────────────────────────────────────────────────────────────
-
 /**
- * Floor a number to a given number of decimal places.
- * @param n - The number to floor.
- * @param decimals - Number of decimal places.
+ * Floor a number to `decimals` decimal places.
  */
 export function floorTo(n: number, decimals: number): number {
   const factor = Math.pow(10, decimals);
   return Math.floor(n * factor) / factor;
 }
 
-// ─── ceilTo ──────────────────────────────────────────────────────────────────
-
 /**
- * Ceil a number to a given number of decimal places.
- * @param n - The number to ceil.
- * @param decimals - Number of decimal places.
+ * Ceil a number to `decimals` decimal places.
  */
 export function ceilTo(n: number, decimals: number): number {
   const factor = Math.pow(10, decimals);
   return Math.ceil(n * factor) / factor;
 }
 
-// ─── mapRange ────────────────────────────────────────────────────────────────
+// ─── Number theory ────────────────────────────────────────────────────────────
 
 /**
- * Map a value from one range to another.
- * e.g. mapRange(5, 0, 10, 0, 100) → 50
- * The input value is NOT clamped to [inMin, inMax].
- * @param value  - The value to map.
- * @param inMin  - Input range minimum.
- * @param inMax  - Input range maximum.
- * @param outMin - Output range minimum.
- * @param outMax - Output range maximum.
- */
-export function mapRange(
-  value: number,
-  inMin: number,
-  inMax: number,
-  outMin: number,
-  outMax: number,
-): number {
-  if (inMin === inMax) return outMin;
-  return outMin + ((value - inMin) / (inMax - inMin)) * (outMax - outMin);
-}
-
-// ─── inRange ─────────────────────────────────────────────────────────────────
-
-/**
- * Test whether a value falls within [min, max] (inclusive by default).
- * @param value     - The value to test.
- * @param min       - Range minimum.
- * @param max       - Range maximum.
- * @param inclusive - When true (default), both endpoints are included.
- */
-export function inRange(value: number, min: number, max: number, inclusive = true): boolean {
-  return inclusive
-    ? value >= min && value <= max
-    : value > min && value < max;
-}
-
-// ─── toFixed ─────────────────────────────────────────────────────────────────
-
-/**
- * Behaves identically to Number.prototype.toFixed.
- * @param n - The number to format.
- * @param decimals - Number of decimal places.
- */
-export function toFixed(n: number, decimals: number): string {
-  return n.toFixed(decimals);
-}
-
-// ─── isPrime ─────────────────────────────────────────────────────────────────
-
-/**
- * Returns true if n is a prime number.
- * Returns false for n < 2 and for non-integers.
- * @param n - The integer to test.
+ * Return `true` if `n` is a prime number.
  */
 export function isPrime(n: number): boolean {
   if (!Number.isInteger(n) || n < 2) return false;
@@ -359,17 +333,34 @@ export function isPrime(n: number): boolean {
   return true;
 }
 
-// ─── gcd ─────────────────────────────────────────────────────────────────────
+/**
+ * Return the sorted prime factors of `n` (with repetition).
+ * e.g. `primeFactors(12)` → `[2, 2, 3]`
+ */
+export function primeFactors(n: number): number[] {
+  if (!Number.isInteger(n) || n < 2) return [];
+  const factors: number[] = [];
+  let remaining = n;
+
+  for (let d = 2; d * d <= remaining; d++) {
+    while (remaining % d === 0) {
+      factors.push(d);
+      remaining = Math.floor(remaining / d);
+    }
+  }
+  if (remaining > 1) {
+    factors.push(remaining);
+  }
+
+  return factors;
+}
 
 /**
- * Returns the greatest common divisor of two integers using the Euclidean
- * algorithm. Always returns a non-negative value.
- * @param a - First integer.
- * @param b - Second integer.
+ * Greatest common divisor of two non-negative integers (Euclidean algorithm).
  */
 export function gcd(a: number, b: number): number {
-  a = Math.abs(Math.round(a));
-  b = Math.abs(Math.round(b));
+  a = Math.abs(Math.floor(a));
+  b = Math.abs(Math.floor(b));
   while (b !== 0) {
     const t = b;
     b = a % b;
@@ -378,32 +369,41 @@ export function gcd(a: number, b: number): number {
   return a;
 }
 
-// ─── lcm ─────────────────────────────────────────────────────────────────────
-
 /**
- * Returns the least common multiple of two integers.
- * Returns 0 if either operand is 0.
- * @param a - First integer.
- * @param b - Second integer.
+ * Least common multiple of two non-negative integers.
  */
 export function lcm(a: number, b: number): number {
   if (a === 0 || b === 0) return 0;
-  return Math.abs(Math.round(a) * Math.round(b)) / gcd(a, b);
+  return Math.abs(Math.floor(a) * Math.floor(b)) / gcd(a, b);
 }
 
-// ─── factorial ───────────────────────────────────────────────────────────────
+/**
+ * Return the nth Fibonacci number (0-indexed).
+ * `fibonacci(0)` → 0, `fibonacci(1)` → 1, `fibonacci(2)` → 1, …
+ * Throws a `RangeError` for `n < 0`.
+ */
+export function fibonacci(n: number): number {
+  if (!Number.isInteger(n) || n < 0) {
+    throw new RangeError(`fibonacci: n must be a non-negative integer, got ${n}`);
+  }
+  if (n === 0) return 0;
+  let a = 0;
+  let b = 1;
+  for (let i = 1; i < n; i++) {
+    const tmp = a + b;
+    a = b;
+    b = tmp;
+  }
+  return b;
+}
 
 /**
- * Returns the factorial of a non-negative integer n.
- * Throws for negative n or n > 20 (to avoid unsafe integer overflow).
- * @param n - The non-negative integer.
+ * Return `n!` (factorial).
+ * Throws a `RangeError` for `n < 0` or non-integer `n`.
  */
 export function factorial(n: number): number {
   if (!Number.isInteger(n) || n < 0) {
-    throw new Error(`factorial: n must be a non-negative integer, got ${n}`);
-  }
-  if (n > 20) {
-    throw new Error(`factorial: n must be ≤ 20, got ${n}`);
+    throw new RangeError(`factorial: n must be a non-negative integer, got ${n}`);
   }
   let result = 1;
   for (let i = 2; i <= n; i++) {
@@ -411,60 +411,3 @@ export function factorial(n: number): number {
   }
   return result;
 }
-
-// ─── fibonacci ───────────────────────────────────────────────────────────────
-
-/**
- * Returns the nth Fibonacci number (0-indexed).
- * fib(0) = 0, fib(1) = 1, fib(2) = 1, fib(3) = 2, ...
- * @param n - The index (non-negative integer).
- */
-export function fibonacci(n: number): number {
-  if (!Number.isInteger(n) || n < 0) {
-    throw new Error(`fibonacci: n must be a non-negative integer, got ${n}`);
-  }
-  if (n === 0) return 0;
-  if (n === 1) return 1;
-  let a = 0;
-  let b = 1;
-  for (let i = 2; i <= n; i++) {
-    const next = a + b;
-    a = b;
-    b = next;
-  }
-  return b;
-}
-
-// ─── randomInt ───────────────────────────────────────────────────────────────
-
-/**
- * Returns a random integer in the inclusive range [min, max].
- * @param min - Minimum value (inclusive).
- * @param max - Maximum value (inclusive).
- */
-export function randomInt(min: number, max: number): number {
-  min = Math.ceil(min);
-  max = Math.floor(max);
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-// ─── randomFloat ─────────────────────────────────────────────────────────────
-
-/**
- * Returns a random float in the range [min, max).
- * @param min - Minimum value (inclusive).
- * @param max - Maximum value (exclusive).
- */
-export function randomFloat(min: number, max: number): number {
-  return Math.random() * (max - min) + min;
-}
-
-
-// ─── Additional exports ───────────────────────────────────────────────────────
-
-/** Format a number to a fixed number of decimal places (default 2). */
-export function formatDecimal(n: number, decimals = 2): string {
-  return n.toFixed(decimals);
-}
-
-export { formatThousands };

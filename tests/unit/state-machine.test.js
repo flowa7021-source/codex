@@ -11,34 +11,36 @@ import {
 
 /**
  * Traffic-light FSM: red → green → yellow → red (NEXT cycles).
- * Accepts an optional spread of extra config properties (onEnter, onExit …).
+ * Uses the states-map config expected by the spec.
  */
-function makeTrafficLight(extra = {}) {
+function makeTrafficLight() {
   return new StateMachine({
     initial: 'red',
-    transitions: [
-      { from: 'red',    event: 'NEXT', to: 'green'  },
-      { from: 'green',  event: 'NEXT', to: 'yellow' },
-      { from: 'yellow', event: 'NEXT', to: 'red'    },
-    ],
-    ...extra,
+    states: {
+      red:    { on: { NEXT: 'green'  } },
+      green:  { on: { NEXT: 'yellow' } },
+      yellow: { on: { NEXT: 'red'   } },
+    },
   });
 }
 
 // ─── 1. Basic transitions ─────────────────────────────────────────────────────
 
 describe('StateMachine – basic transitions', () => {
-  it('state getter returns initial state right after construction', () => {
+  it('current getter returns initial state right after construction', () => {
     const m = makeTrafficLight();
-    assert.equal(m.state, 'red');
+    assert.equal(m.current, 'red');
   });
 
   it('initial state is respected for any starting state value', () => {
     const m = new StateMachine({
       initial: 'loading',
-      transitions: [{ from: 'loading', event: 'DONE', to: 'idle' }],
+      states: {
+        loading: { on: { DONE: 'idle' } },
+        idle: {},
+      },
     });
-    assert.equal(m.state, 'loading');
+    assert.equal(m.current, 'loading');
   });
 
   it('send returns true when a valid transition fires', () => {
@@ -46,10 +48,10 @@ describe('StateMachine – basic transitions', () => {
     assert.equal(m.send('NEXT'), true);
   });
 
-  it('send updates state correctly after a successful transition', () => {
+  it('send updates current correctly after a successful transition', () => {
     const m = makeTrafficLight();
     m.send('NEXT');
-    assert.equal(m.state, 'green');
+    assert.equal(m.current, 'green');
   });
 
   it('send returns false for an unknown event', () => {
@@ -57,19 +59,19 @@ describe('StateMachine – basic transitions', () => {
     assert.equal(m.send('BOGUS'), false);
   });
 
-  it('state does not change when send returns false', () => {
+  it('current does not change when send returns false', () => {
     const m = makeTrafficLight();
     m.send('BOGUS');
-    assert.equal(m.state, 'red');
+    assert.equal(m.current, 'red');
   });
 
   it('send returns false when event is valid elsewhere but not in current state', () => {
     const m = new StateMachine({
       initial: 'idle',
-      transitions: [
-        { from: 'idle',    event: 'START', to: 'running' },
-        { from: 'running', event: 'STOP',  to: 'idle'    },
-      ],
+      states: {
+        idle:    { on: { START: 'running' } },
+        running: { on: { STOP:  'idle'    } },
+      },
     });
     // STOP is only valid from 'running'
     assert.equal(m.send('STOP'), false);
@@ -80,211 +82,64 @@ describe('StateMachine – basic transitions', () => {
     m.send('NEXT'); // green
     m.send('NEXT'); // yellow
     m.send('NEXT'); // red
-    assert.equal(m.state, 'red');
+    assert.equal(m.current, 'red');
   });
 
   it('repeated sends accumulate state changes', () => {
     const m = makeTrafficLight();
     m.send('NEXT');
     m.send('NEXT');
-    assert.equal(m.state, 'yellow');
+    assert.equal(m.current, 'yellow');
   });
 
   it('traffic light cycles through all three states correctly over six transitions', () => {
     const m = makeTrafficLight();
-    const states = [m.state];
+    const states = [m.current];
     for (let i = 0; i < 6; i++) {
       m.send('NEXT');
-      states.push(m.state);
+      states.push(m.current);
     }
     assert.deepEqual(states, [
       'red', 'green', 'yellow', 'red', 'green', 'yellow', 'red',
     ]);
   });
-});
 
-// ─── 2. Guard conditions ──────────────────────────────────────────────────────
+  it('self-transition is valid when explicitly configured', () => {
+    const m = new StateMachine({
+      initial: 'ping',
+      states: { ping: { on: { TICK: 'ping' } } },
+    });
+    assert.equal(m.send('TICK'), true);
+    assert.equal(m.current, 'ping');
+  });
 
-describe('StateMachine – guard conditions', () => {
-  it('transition is blocked when guard returns false', () => {
+  it('multiple distinct events can coexist in a single state', () => {
     const m = new StateMachine({
       initial: 'idle',
-      transitions: [
-        {
-          from: 'idle',
-          event: 'START',
-          to: 'running',
-          guard: (ctx) => /** @type {any} */ (ctx).ready === true,
-        },
-      ],
+      states: {
+        idle:  { on: { START: 'running', SKIP: 'done' } },
+        running: {},
+        done: {},
+      },
     });
-    const result = m.send('START', { ready: false });
-    assert.equal(result, false);
-    assert.equal(m.state, 'idle');
-  });
-
-  it('transition proceeds when guard returns true', () => {
-    const m = new StateMachine({
-      initial: 'idle',
-      transitions: [
-        {
-          from: 'idle',
-          event: 'START',
-          to: 'running',
-          guard: (ctx) => /** @type {any} */ (ctx).ready === true,
-        },
-      ],
-    });
-    assert.equal(m.send('START', { ready: true }), true);
-    assert.equal(m.state, 'running');
-  });
-
-  it('guard returning false makes can() return false', () => {
-    const m = new StateMachine({
-      initial: 'idle',
-      transitions: [
-        { from: 'idle', event: 'GO', to: 'done', guard: () => false },
-      ],
-    });
-    assert.equal(m.can('GO'), false);
-  });
-
-  it('guard returning true allows can() to return true', () => {
-    const m = new StateMachine({
-      initial: 'idle',
-      transitions: [
-        { from: 'idle', event: 'GO', to: 'done', guard: () => true },
-      ],
-    });
-    assert.equal(m.can('GO'), true);
-  });
-
-  it('guard receives the context passed to send()', () => {
-    let received;
-    const ctx = { key: 'value' };
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        {
-          from: 'a',
-          event: 'GO',
-          to: 'b',
-          guard: (c) => { received = c; return true; },
-        },
-      ],
-    });
-    m.send('GO', ctx);
-    assert.equal(received, ctx);
-  });
-
-  it('absent guard is treated as always-true', () => {
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [{ from: 'a', event: 'GO', to: 'b' }],
-    });
-    assert.equal(m.send('GO'), true);
-  });
-
-  it('guard receives the context passed to can()', () => {
-    let received;
-    const ctx = { ok: true };
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        {
-          from: 'a',
-          event: 'GO',
-          to: 'b',
-          guard: (c) => { received = c; return true; },
-        },
-      ],
-    });
-    m.can('GO', ctx);
-    assert.equal(received, ctx);
+    // pick SKIP path
+    assert.equal(m.send('SKIP'), true);
+    assert.equal(m.current, 'done');
   });
 });
 
-// ─── 3. Actions on transitions ────────────────────────────────────────────────
-
-describe('StateMachine – actions on transitions', () => {
-  it('action is called when a transition fires', () => {
-    let called = false;
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        { from: 'a', event: 'GO', to: 'b', action: () => { called = true; } },
-      ],
-    });
-    m.send('GO');
-    assert.equal(called, true);
-  });
-
-  it('action is NOT called when the transition is blocked by a guard', () => {
-    let called = false;
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        {
-          from: 'a',
-          event: 'GO',
-          to: 'b',
-          guard: () => false,
-          action: () => { called = true; },
-        },
-      ],
-    });
-    m.send('GO');
-    assert.equal(called, false);
-  });
-
-  it('action receives the context passed to send()', () => {
-    let received;
-    const ctx = { flag: 1 };
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        { from: 'a', event: 'GO', to: 'b', action: (c) => { received = c; } },
-      ],
-    });
-    m.send('GO', ctx);
-    assert.equal(received, ctx);
-  });
-
-  it('action fires between onExit and onEnter (correct order)', () => {
-    const order = [];
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        { from: 'a', event: 'GO', to: 'b', action: () => order.push('action') },
-      ],
-      onExit:  { a: () => order.push('exitA')  },
-      onEnter: { b: () => order.push('enterB') },
-    });
-    m.send('GO');
-    assert.deepEqual(order, ['exitA', 'action', 'enterB']);
-  });
-
-  it('action can mutate the context object', () => {
-    const ctx = { count: 0 };
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        { from: 'a', event: 'INC', to: 'a', action: (c) => { /** @type {any} */ (c).count++; } },
-      ],
-    });
-    m.send('INC', ctx);
-    m.send('INC', ctx);
-    assert.equal(ctx.count, 2);
-  });
-});
-
-// ─── 4. onEnter / onExit hooks ───────────────────────────────────────────────
+// ─── 2. onEnter / onExit hooks ───────────────────────────────────────────────
 
 describe('StateMachine – onEnter / onExit hooks', () => {
   it('onEnter fires when entering a state', () => {
     const entered = [];
-    const m = makeTrafficLight({
-      onEnter: { green: () => entered.push('green') },
+    const m = new StateMachine({
+      initial: 'red',
+      states: {
+        red:    { on: { NEXT: 'green' } },
+        green:  { on: { NEXT: 'yellow' }, onEnter: () => entered.push('green') },
+        yellow: { on: { NEXT: 'red'   } },
+      },
     });
     m.send('NEXT');
     assert.deepEqual(entered, ['green']);
@@ -292,8 +147,13 @@ describe('StateMachine – onEnter / onExit hooks', () => {
 
   it('onExit fires when leaving a state', () => {
     const exited = [];
-    const m = makeTrafficLight({
-      onExit: { red: () => exited.push('red') },
+    const m = new StateMachine({
+      initial: 'red',
+      states: {
+        red:    { on: { NEXT: 'green' }, onExit: () => exited.push('red') },
+        green:  { on: { NEXT: 'yellow' } },
+        yellow: { on: { NEXT: 'red'   } },
+      },
     });
     m.send('NEXT');
     assert.deepEqual(exited, ['red']);
@@ -301,57 +161,87 @@ describe('StateMachine – onEnter / onExit hooks', () => {
 
   it('onExit fires before onEnter', () => {
     const order = [];
-    const m = makeTrafficLight({
-      onExit:  { red:   () => order.push('exit:red')    },
-      onEnter: { green: () => order.push('enter:green') },
+    const m = new StateMachine({
+      initial: 'red',
+      states: {
+        red:    { on: { NEXT: 'green' }, onExit: () => order.push('exit:red') },
+        green:  { on: { NEXT: 'yellow' }, onEnter: () => order.push('enter:green') },
+        yellow: { on: { NEXT: 'red'   } },
+      },
     });
     m.send('NEXT');
     assert.deepEqual(order, ['exit:red', 'enter:green']);
   });
 
-  it('hooks receive the context passed to send()', () => {
-    const received = [];
-    const ctx = { token: 42 };
-    const m = new StateMachine({
+  it('onEnter for initial state fires during construction', () => {
+    const log = [];
+    new StateMachine({
       initial: 'a',
-      transitions: [{ from: 'a', event: 'GO', to: 'b' }],
-      onEnter: { b: (c) => received.push(/** @type {any} */ (c).token) },
+      states: { a: { onEnter: () => log.push('entered:a') } },
     });
-    m.send('GO', ctx);
-    assert.deepEqual(received, [42]);
+    assert.deepEqual(log, ['entered:a']);
   });
 
-  it('onEnter and onExit are not called when transition is blocked by guard', () => {
+  it('onEnter does not fire for non-initial states at construction', () => {
+    const log = [];
+    new StateMachine({
+      initial: 'a',
+      states: {
+        a: { on: { GO: 'b' } },
+        b: { onEnter: () => log.push('entered:b') },
+      },
+    });
+    assert.deepEqual(log, []);
+  });
+
+  it('onEnter and onExit are not called when no transition occurs', () => {
     let called = false;
     const m = new StateMachine({
       initial: 'a',
-      transitions: [
-        { from: 'a', event: 'GO', to: 'b', guard: () => false },
-      ],
-      onExit:  { a: () => { called = true; } },
-      onEnter: { b: () => { called = true; } },
+      states: {
+        a: { onExit: () => { called = true; } },
+        b: { onEnter: () => { called = true; } },
+      },
     });
-    m.send('GO');
+    m.send('BOGUS');
     assert.equal(called, false);
   });
 
   it('multiple hooks fire on a full traffic-light cycle', () => {
     const log = [];
-    const m = makeTrafficLight({
-      onEnter: {
-        green:  () => log.push('enter:green'),
-        yellow: () => log.push('enter:yellow'),
-        red:    () => log.push('enter:red'),
+    const m = new StateMachine({
+      initial: 'red',
+      states: {
+        red:    { on: { NEXT: 'green'  }, onEnter: () => log.push('enter:red')    },
+        green:  { on: { NEXT: 'yellow' }, onEnter: () => log.push('enter:green')  },
+        yellow: { on: { NEXT: 'red'   }, onEnter: () => log.push('enter:yellow') },
       },
     });
+    // clear the initial onEnter
+    log.length = 0;
     m.send('NEXT');
     m.send('NEXT');
     m.send('NEXT');
     assert.deepEqual(log, ['enter:green', 'enter:yellow', 'enter:red']);
   });
+
+  it('both onExit and onEnter fire correctly in a multi-step sequence', () => {
+    const log = [];
+    const m = new StateMachine({
+      initial: 'a',
+      states: {
+        a: { on: { GO: 'b' }, onExit: () => log.push('exit:a') },
+        b: { on: { GO: 'c' }, onEnter: () => log.push('enter:b'), onExit: () => log.push('exit:b') },
+        c: { onEnter: () => log.push('enter:c') },
+      },
+    });
+    m.send('GO'); // a → b
+    m.send('GO'); // b → c
+    assert.deepEqual(log, ['exit:a', 'enter:b', 'exit:b', 'enter:c']);
+  });
 });
 
-// ─── 5. History tracking ──────────────────────────────────────────────────────
+// ─── 3. History tracking ──────────────────────────────────────────────────────
 
 describe('StateMachine – history tracking', () => {
   it('history includes only the initial state right after construction', () => {
@@ -381,7 +271,7 @@ describe('StateMachine – history tracking', () => {
     assert.deepEqual(m.history, ['red', 'green', 'yellow', 'red']);
   });
 
-  it('history getter returns a snapshot (mutation does not affect internal state)', () => {
+  it('history getter returns a snapshot — mutation does not affect internal state', () => {
     const m = makeTrafficLight();
     const snap = m.history;
     snap.push('hacked');
@@ -395,9 +285,24 @@ describe('StateMachine – history tracking', () => {
     m.reset();
     assert.deepEqual(m.history, ['red']);
   });
+
+  it('history length equals transition count plus one', () => {
+    const m = makeTrafficLight();
+    for (let i = 0; i < 5; i++) m.send('NEXT');
+    assert.equal(m.history.length, 6);
+  });
+
+  it('history accumulates correctly across a long sequence', () => {
+    const m = makeTrafficLight();
+    m.send('NEXT'); // green
+    m.send('NEXT'); // yellow
+    m.send('NEXT'); // red
+    m.send('NEXT'); // green
+    assert.deepEqual(m.history, ['red', 'green', 'yellow', 'red', 'green']);
+  });
 });
 
-// ─── 6. can() method ─────────────────────────────────────────────────────────
+// ─── 4. can() method ─────────────────────────────────────────────────────────
 
 describe('StateMachine – can()', () => {
   it('returns true for a valid event in the current state', () => {
@@ -410,13 +315,13 @@ describe('StateMachine – can()', () => {
     assert.equal(m.can('STOP'), false);
   });
 
-  it('returns false for an event that exists but not from the current state', () => {
+  it('returns false for an event that exists elsewhere but not in the current state', () => {
     const m = new StateMachine({
       initial: 'idle',
-      transitions: [
-        { from: 'idle',    event: 'START', to: 'running' },
-        { from: 'running', event: 'STOP',  to: 'idle'    },
-      ],
+      states: {
+        idle:    { on: { START: 'running' } },
+        running: { on: { STOP:  'idle'    } },
+      },
     });
     assert.equal(m.can('STOP'), false);
     m.send('START');
@@ -437,17 +342,37 @@ describe('StateMachine – can()', () => {
       m.send('NEXT');
     }
   });
+
+  it('can() returns false in a state with no on map at all', () => {
+    const m = new StateMachine({
+      initial: 'terminal',
+      states: { terminal: {} },
+    });
+    assert.equal(m.can('ANY'), false);
+  });
+
+  it('can() returns false after reaching a state with empty on map', () => {
+    const m = new StateMachine({
+      initial: 'a',
+      states: {
+        a: { on: { GO: 'b' } },
+        b: {},
+      },
+    });
+    m.send('GO');
+    assert.equal(m.can('GO'), false);
+  });
 });
 
-// ─── 7. reset() ───────────────────────────────────────────────────────────────
+// ─── 5. reset() ───────────────────────────────────────────────────────────────
 
 describe('StateMachine – reset()', () => {
-  it('resets state to the initial value', () => {
+  it('resets current to the initial value', () => {
     const m = makeTrafficLight();
     m.send('NEXT');
     m.send('NEXT');
     m.reset();
-    assert.equal(m.state, 'red');
+    assert.equal(m.current, 'red');
   });
 
   it('machine can transition normally after reset', () => {
@@ -455,21 +380,16 @@ describe('StateMachine – reset()', () => {
     m.send('NEXT');
     m.reset();
     m.send('NEXT');
-    assert.equal(m.state, 'green');
+    assert.equal(m.current, 'green');
   });
 
-  it('reset does NOT fire hooks or listeners', () => {
-    let hookCalled = false;
+  it('reset does NOT fire transition listeners', () => {
     let listenerCalled = false;
-    const m = makeTrafficLight({
-      onEnter: { red: () => { hookCalled = true; } },
-    });
+    const m = makeTrafficLight();
     m.on('transition', () => { listenerCalled = true; });
     m.send('NEXT'); // move away from red first
-    hookCalled = false;
     listenerCalled = false;
     m.reset();
-    assert.equal(hookCalled, false);
     assert.equal(listenerCalled, false);
   });
 
@@ -488,21 +408,59 @@ describe('StateMachine – reset()', () => {
     assert.equal(m.matches('red'), true);
     assert.equal(m.matches('green'), false);
   });
+
+  it('reset from a non-initial state fires onExit on current and onEnter on initial', () => {
+    const log = [];
+    const m = new StateMachine({
+      initial: 'a',
+      states: {
+        a: { on: { GO: 'b' }, onEnter: () => log.push('enter:a') },
+        b: { onExit: () => log.push('exit:b') },
+      },
+    });
+    log.length = 0; // clear construction onEnter
+    m.send('GO');
+    log.length = 0; // clear send hooks
+    m.reset();
+    assert.deepEqual(log, ['exit:b', 'enter:a']);
+  });
+
+  it('reset when already at initial state does not fire onExit or onEnter', () => {
+    const log = [];
+    const m = new StateMachine({
+      initial: 'a',
+      states: {
+        a: { onEnter: () => log.push('enter:a'), onExit: () => log.push('exit:a') },
+      },
+    });
+    log.length = 0;
+    m.reset(); // already at initial — no hooks should fire
+    assert.deepEqual(log, []);
+  });
+
+  it('history after two resets contains only the initial state', () => {
+    const m = makeTrafficLight();
+    m.send('NEXT');
+    m.reset();
+    m.send('NEXT');
+    m.reset();
+    assert.deepEqual(m.history, ['red']);
+  });
 });
 
-// ─── 8. Event listeners — on('transition', ...) ───────────────────────────────
+// ─── 6. Event listeners — on('transition', ...) ───────────────────────────────
 
 describe("StateMachine – on('transition', handler)", () => {
   it('listener is called after a successful transition', () => {
     const calls = [];
     const m = makeTrafficLight();
-    m.on('transition', (from, to, ev) => calls.push({ from, to, ev }));
+    m.on('transition', (from, to, via) => calls.push({ from, to, via }));
     m.send('NEXT');
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0], { from: 'red', to: 'green', ev: 'NEXT' });
+    assert.deepEqual(calls[0], { from: 'red', to: 'green', via: 'NEXT' });
   });
 
-  it('listener receives (from, to, event) in that order', () => {
+  it('listener receives (from, to, via) in that order', () => {
     let args;
     const m = makeTrafficLight();
     m.on('transition', (...a) => { args = a; });
@@ -510,16 +468,11 @@ describe("StateMachine – on('transition', handler)", () => {
     assert.deepEqual(args, ['red', 'green', 'NEXT']);
   });
 
-  it('listener is NOT called when transition is blocked', () => {
+  it('listener is NOT called when no transition occurs', () => {
     const calls = [];
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        { from: 'a', event: 'GO', to: 'b', guard: () => false },
-      ],
-    });
+    const m = makeTrafficLight();
     m.on('transition', () => calls.push(1));
-    m.send('GO');
+    m.send('BOGUS');
     assert.equal(calls.length, 0);
   });
 
@@ -561,10 +514,10 @@ describe("StateMachine – on('transition', handler)", () => {
     assert.equal(b.length, 1);
   });
 
-  it('listener receives correct (from, to, event) for each transition in a cycle', () => {
+  it('listener receives correct args for each transition in a cycle', () => {
     const calls = [];
     const m = makeTrafficLight();
-    m.on('transition', (from, to, ev) => calls.push([from, to, ev]));
+    m.on('transition', (from, to, via) => calls.push([from, to, via]));
     m.send('NEXT'); // red → green
     m.send('NEXT'); // green → yellow
     m.send('NEXT'); // yellow → red
@@ -574,201 +527,40 @@ describe("StateMachine – on('transition', handler)", () => {
       ['yellow', 'red',    'NEXT'],
     ]);
   });
-});
 
-// ─── 9. Multiple source states in from array ──────────────────────────────────
+  it('calling unsubscribe twice is safe and does not throw', () => {
+    const m = makeTrafficLight();
+    const unsub = m.on('transition', () => {});
+    unsub();
+    assert.doesNotThrow(() => unsub());
+  });
 
-describe('StateMachine – multiple from states', () => {
-  it('transition fires from any state listed in the from array', () => {
+  it('listener fires after onEnter hook has run', () => {
+    const order = [];
     const m = new StateMachine({
       initial: 'a',
-      transitions: [
-        { from: ['a', 'b'], event: 'DONE', to: 'end' },
-        { from: 'end',      event: 'BACK', to: 'a'   },
-        { from: 'a',        event: 'NEXT', to: 'b'   },
-      ],
+      states: {
+        a: { on: { GO: 'b' } },
+        b: { onEnter: () => order.push('onEnter') },
+      },
     });
+    m.on('transition', () => order.push('listener'));
+    m.send('GO');
+    assert.deepEqual(order, ['onEnter', 'listener']);
+  });
 
-    // Transition from 'a'
-    assert.equal(m.send('DONE'), true);
-    assert.equal(m.state, 'end');
-
-    // Back to 'a', then advance to 'b'
-    m.send('BACK');
+  it('three consecutive sends each notify listeners once', () => {
+    let count = 0;
+    const m = makeTrafficLight();
+    m.on('transition', () => count++);
     m.send('NEXT');
-    assert.equal(m.state, 'b');
-
-    // Transition from 'b'
-    assert.equal(m.send('DONE'), true);
-    assert.equal(m.state, 'end');
-  });
-
-  it('can() returns true for all listed from states', () => {
-    const makeM = (initial) => new StateMachine({
-      initial,
-      transitions: [{ from: ['x', 'y'], event: 'GO', to: 'z' }],
-    });
-    assert.equal(makeM('x').can('GO'), true);
-    assert.equal(makeM('y').can('GO'), true);
-  });
-
-  it('can() returns false when current state is not in the from array', () => {
-    const m = new StateMachine({
-      initial: 'z',
-      transitions: [{ from: ['x', 'y'], event: 'GO', to: 'z' }],
-    });
-    assert.equal(m.can('GO'), false);
-  });
-
-  it('guard is still evaluated for array-from transitions', () => {
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        { from: ['a', 'b'], event: 'GO', to: 'end', guard: () => false },
-      ],
-    });
-    assert.equal(m.send('GO'), false);
-    assert.equal(m.state, 'a');
-  });
-
-  it('history records all states when bouncing through multiple from states', () => {
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        { from: ['a', 'b'], event: 'DONE', to: 'end' },
-        { from: 'end',      event: 'BACK', to: 'b'   },
-      ],
-    });
-    m.send('DONE'); // a → end
-    m.send('BACK'); // end → b
-    m.send('DONE'); // b → end
-    assert.deepEqual(m.history, ['a', 'end', 'b', 'end']);
+    m.send('NEXT');
+    m.send('NEXT');
+    assert.equal(count, 3);
   });
 });
 
-// ─── 10. Invalid events ───────────────────────────────────────────────────────
-
-describe('StateMachine – invalid events (send returns false)', () => {
-  it('completely unknown event returns false', () => {
-    const m = makeTrafficLight();
-    assert.equal(m.send('UNKNOWN'), false);
-  });
-
-  it('event valid in another state returns false from current state', () => {
-    const m = new StateMachine({
-      initial: 'idle',
-      transitions: [
-        { from: 'idle',    event: 'RUN',  to: 'active' },
-        { from: 'active',  event: 'STOP', to: 'idle'   },
-      ],
-    });
-    assert.equal(m.send('STOP'), false);
-  });
-
-  it('multiple unknown events all return false without changing state', () => {
-    const m = makeTrafficLight();
-    assert.equal(m.send('A'), false);
-    assert.equal(m.send('B'), false);
-    assert.equal(m.send('C'), false);
-    assert.equal(m.state, 'red');
-  });
-
-  it('unknown event at any phase of a cycle returns false', () => {
-    const m = makeTrafficLight();
-    for (let i = 0; i < 3; i++) {
-      assert.equal(m.send('STOP'), false);
-      m.send('NEXT');
-    }
-  });
-
-  it('guard-blocked event also returns false', () => {
-    const m = new StateMachine({
-      initial: 'a',
-      transitions: [
-        { from: 'a', event: 'GO', to: 'b', guard: () => false },
-      ],
-    });
-    assert.equal(m.send('GO'), false);
-  });
-});
-
-// ─── 11. createMachine factory ───────────────────────────────────────────────
-
-describe('createMachine factory', () => {
-  it('returns a StateMachine instance', () => {
-    const m = createMachine({
-      initial: 'idle',
-      transitions: [{ from: 'idle', event: 'START', to: 'active' }],
-    });
-    assert.ok(m instanceof StateMachine);
-  });
-
-  it('factory instance starts in the correct initial state', () => {
-    const m = createMachine({ initial: 'idle', transitions: [] });
-    assert.equal(m.state, 'idle');
-  });
-
-  it('factory instance behaves identically to new StateMachine()', () => {
-    const config = {
-      initial: 'a',
-      transitions: [{ from: 'a', event: 'GO', to: 'b' }],
-    };
-    const viaFactory = createMachine(config);
-    const viaCtor    = new StateMachine(config);
-
-    assert.equal(viaFactory.state, viaCtor.state);
-    viaFactory.send('GO');
-    viaCtor.send('GO');
-    assert.equal(viaFactory.state, viaCtor.state);
-  });
-
-  it('factory forwards onEnter hooks', () => {
-    const log = [];
-    const m = createMachine({
-      initial: 'a',
-      transitions: [{ from: 'a', event: 'GO', to: 'b' }],
-      onEnter: { b: () => log.push('entered:b') },
-    });
-    m.send('GO');
-    assert.deepEqual(log, ['entered:b']);
-  });
-
-  it('factory forwards onExit hooks', () => {
-    const log = [];
-    const m = createMachine({
-      initial: 'a',
-      transitions: [{ from: 'a', event: 'GO', to: 'b' }],
-      onExit: { a: () => log.push('exited:a') },
-    });
-    m.send('GO');
-    assert.deepEqual(log, ['exited:a']);
-  });
-
-  it('factory instance supports on() and history', () => {
-    const events = [];
-    const m = createMachine({
-      initial: 'x',
-      transitions: [{ from: 'x', event: 'MOVE', to: 'y' }],
-    });
-    m.on('transition', (from, to, ev) => events.push([from, to, ev]));
-    m.send('MOVE');
-    assert.deepEqual(m.history, ['x', 'y']);
-    assert.deepEqual(events, [['x', 'y', 'MOVE']]);
-  });
-
-  it('factory supports reset', () => {
-    const m = createMachine({
-      initial: 'start',
-      transitions: [{ from: 'start', event: 'GO', to: 'end' }],
-    });
-    m.send('GO');
-    m.reset();
-    assert.equal(m.state, 'start');
-    assert.deepEqual(m.history, ['start']);
-  });
-});
-
-// ─── 12. matches() ────────────────────────────────────────────────────────────
+// ─── 7. matches() ────────────────────────────────────────────────────────────
 
 describe('StateMachine – matches()', () => {
   it('returns true when the machine is in the queried state', () => {
@@ -797,5 +589,173 @@ describe('StateMachine – matches()', () => {
     assert.equal(m.matches('yellow'), true);
     m.send('NEXT');
     assert.equal(m.matches('red'), true);
+  });
+});
+
+// ─── 8. createMachine factory ───────────────────────────────────────────────
+
+describe('createMachine factory', () => {
+  it('returns a StateMachine instance', () => {
+    const m = createMachine({
+      initial: 'idle',
+      states: {
+        idle: { on: { START: 'active' } },
+        active: {},
+      },
+    });
+    assert.ok(m instanceof StateMachine);
+  });
+
+  it('factory instance starts in the correct initial state', () => {
+    const m = createMachine({ initial: 'idle', states: { idle: {} } });
+    assert.equal(m.current, 'idle');
+  });
+
+  it('factory instance behaves identically to new StateMachine()', () => {
+    const config = {
+      initial: 'a',
+      states: {
+        a: { on: { GO: 'b' } },
+        b: {},
+      },
+    };
+    const viaFactory = createMachine(config);
+    const viaCtor    = new StateMachine(config);
+
+    assert.equal(viaFactory.current, viaCtor.current);
+    viaFactory.send('GO');
+    viaCtor.send('GO');
+    assert.equal(viaFactory.current, viaCtor.current);
+  });
+
+  it('factory forwards onEnter hooks', () => {
+    const log = [];
+    const m = createMachine({
+      initial: 'a',
+      states: {
+        a: { on: { GO: 'b' } },
+        b: { onEnter: () => log.push('entered:b') },
+      },
+    });
+    m.send('GO');
+    assert.deepEqual(log, ['entered:b']);
+  });
+
+  it('factory forwards onExit hooks', () => {
+    const log = [];
+    const m = createMachine({
+      initial: 'a',
+      states: {
+        a: { on: { GO: 'b' }, onExit: () => log.push('exited:a') },
+        b: {},
+      },
+    });
+    m.send('GO');
+    assert.deepEqual(log, ['exited:a']);
+  });
+
+  it('factory instance supports on() and history', () => {
+    const events = [];
+    const m = createMachine({
+      initial: 'x',
+      states: {
+        x: { on: { MOVE: 'y' } },
+        y: {},
+      },
+    });
+    m.on('transition', (from, to, via) => events.push([from, to, via]));
+    m.send('MOVE');
+    assert.deepEqual(m.history, ['x', 'y']);
+    assert.deepEqual(events, [['x', 'y', 'MOVE']]);
+  });
+
+  it('factory supports reset', () => {
+    const m = createMachine({
+      initial: 'start',
+      states: {
+        start: { on: { GO: 'end' } },
+        end: {},
+      },
+    });
+    m.send('GO');
+    m.reset();
+    assert.equal(m.current, 'start');
+    assert.deepEqual(m.history, ['start']);
+  });
+});
+
+// ─── 9. Edge cases ────────────────────────────────────────────────────────────
+
+describe('StateMachine – edge cases', () => {
+  it('machine with a single state and no transitions is valid', () => {
+    const m = new StateMachine({
+      initial: 'alone',
+      states: { alone: {} },
+    });
+    assert.equal(m.current, 'alone');
+    assert.equal(m.send('ANY'), false);
+  });
+
+  it('sending unknown event many times never changes state', () => {
+    const m = makeTrafficLight();
+    for (let i = 0; i < 20; i++) m.send('UNKNOWN');
+    assert.equal(m.current, 'red');
+    assert.deepEqual(m.history, ['red']);
+  });
+
+  it('can() returns false for empty string event name', () => {
+    const m = makeTrafficLight();
+    assert.equal(m.can(''), false);
+  });
+
+  it('send does not throw for events with no `on` map', () => {
+    const m = new StateMachine({
+      initial: 'term',
+      states: { term: {} },
+    });
+    assert.doesNotThrow(() => m.send('ANYTHING'));
+  });
+
+  it('history is an array, not a reference to internal state', () => {
+    const m = makeTrafficLight();
+    const h1 = m.history;
+    m.send('NEXT');
+    const h2 = m.history;
+    assert.equal(h1.length, 1);
+    assert.equal(h2.length, 2);
+  });
+
+  it('multiple distinct unsubscribers each clean up their own listener', () => {
+    const log = [];
+    const m = makeTrafficLight();
+    const u1 = m.on('transition', () => log.push('L1'));
+    const u2 = m.on('transition', () => log.push('L2'));
+    const u3 = m.on('transition', () => log.push('L3'));
+    u2(); // remove middle listener
+    m.send('NEXT');
+    assert.deepEqual(log, ['L1', 'L3']);
+    u1();
+    u3();
+    log.length = 0;
+    m.send('NEXT');
+    assert.deepEqual(log, []);
+  });
+
+  it('current matches the last entry of history after every send', () => {
+    const m = makeTrafficLight();
+    for (let i = 0; i < 9; i++) {
+      m.send('NEXT');
+      const h = m.history;
+      assert.equal(m.current, h[h.length - 1]);
+    }
+  });
+
+  it('reset followed by transitions builds fresh history', () => {
+    const m = makeTrafficLight();
+    m.send('NEXT');
+    m.send('NEXT');
+    m.reset();
+    m.send('NEXT');
+    assert.deepEqual(m.history, ['red', 'green']);
   });
 });
