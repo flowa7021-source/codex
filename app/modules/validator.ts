@@ -1,197 +1,377 @@
 // ─── Validator ───────────────────────────────────────────────────────────────
 // @ts-check
-// Data validation utilities for NovaReader.
+// Data validation library for NovaReader.
+// Provides individual string-format validators, schema-based object validation,
+// and per-field validation with rich error reporting.
 
-// ─── String Format Validators ────────────────────────────────────────────────
+// ─── Types ───────────────────────────────────────────────────────────────────
 
-/**
- * Whether a string is a valid email address.
- * Uses a pragmatic RFC-5321–style check: local@domain.tld.
- *
- * @param str - Candidate string
- */
-export function isEmail(str: string): boolean {
-  // Must have exactly one @, non-empty local part, domain with at least one dot
-  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return re.test(str);
-}
-
-/**
- * Whether a string is a valid URL (http or https scheme).
- *
- * @param str - Candidate string
- */
-export function isURL(str: string): boolean {
-  try {
-    const url = new URL(str);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Whether a string is a valid IPv4 address (dotted-decimal, 0–255 per octet).
- *
- * @param str - Candidate string
- */
-export function isIPv4(str: string): boolean {
-  const parts = str.split('.');
-  if (parts.length !== 4) return false;
-  return parts.every(part => {
-    if (!/^\d+$/.test(part)) return false;
-    const n = parseInt(part, 10);
-    return n >= 0 && n <= 255;
-  });
-}
-
-/**
- * Whether a string is a valid UUID (v4 format:
- * xxxxxxxx-xxxx-4xxx-[89ab]xxx-xxxxxxxxxxxx).
- *
- * @param str - Candidate string
- */
-export function isUUID(str: string): boolean {
-  const re =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return re.test(str);
-}
-
-// ─── Type Guards ─────────────────────────────────────────────────────────────
-
-/**
- * Whether a value is a finite number (not NaN, not ±Infinity).
- *
- * @param value - Value to check
- */
-export function isFiniteNumber(value: unknown): value is number {
-  return typeof value === 'number' && isFinite(value);
-}
-
-/**
- * Whether a value is a non-empty string.
- *
- * @param value - Value to check
- */
-export function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.length > 0;
-}
-
-// ─── Object Validators ───────────────────────────────────────────────────────
-
-/**
- * Whether an object has all the required keys (own or inherited).
- *
- * @param obj  - Object to inspect
- * @param keys - List of required keys
- */
-export function hasRequiredKeys<T extends object>(
-  obj: T,
-  keys: (keyof T)[],
-): boolean {
-  return keys.every(key => key in obj);
-}
-
-// ─── Pattern Matching ────────────────────────────────────────────────────────
-
-/**
- * Whether a string matches a pattern.
- * Accepts either a RegExp or a string pattern that is converted to a RegExp.
- *
- * @param str     - String to test
- * @param pattern - RegExp or pattern string
- */
-export function matchesPattern(str: string, pattern: string | RegExp): boolean {
-  const re = pattern instanceof RegExp ? pattern : new RegExp(pattern);
-  return re.test(str);
-}
-
-// ─── Schema Validation ───────────────────────────────────────────────────────
-
-interface ValidationSchema {
-  type?: 'string' | 'number' | 'boolean' | 'object' | 'array';
-  required?: boolean;
-  minLength?: number;
-  maxLength?: number;
-  min?: number;
-  max?: number;
-  pattern?: RegExp;
-  enum?: unknown[];
-}
-
+/** Result returned by `validate` and `validateField`. */
 interface ValidationResult {
   valid: boolean;
   errors: string[];
 }
 
 /**
- * Validate a value against a simple schema.
- * Returns `{ valid, errors }` where errors is an array of human-readable
- * messages describing each constraint violation.
- *
- * @param value  - Value to validate
- * @param schema - Validation schema
+ * Schema descriptor for a single field.
+ * Supports nested arrays (`items`) and nested objects (`properties`).
  */
-export function validate(
+interface SchemaField {
+  type: 'string' | 'number' | 'boolean' | 'array' | 'object';
+  required?: boolean;
+  minLength?: number;
+  maxLength?: number;
+  min?: number;
+  max?: number;
+  pattern?: RegExp;
+  validate?: (value: unknown) => boolean;
+  items?: SchemaField;
+  properties?: Record<string, SchemaField>;
+}
+
+/** Top-level schema: a map of field names to their descriptors. */
+type Schema = Record<string, SchemaField>;
+
+// ─── Individual Validators ───────────────────────────────────────────────────
+
+/**
+ * Collection of standalone boolean-returning validators.
+ * Each function accepts a single string and returns `true` when it conforms
+ * to the named format, `false` otherwise.
+ */
+const validators = {
+  /**
+   * Whether `str` is a valid email address (RFC-5321-style pragmatic check).
+   * Requires a non-empty local part, exactly one `@`, and a domain with at
+   * least one dot separator and a non-empty TLD.
+   */
+  isEmail(str: string): boolean {
+    // local@domain.tld — no whitespace, no @ in local or domain parts
+    const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return re.test(str);
+  },
+
+  /**
+   * Whether `str` is a valid URL with an http, https, or ftp scheme.
+   * Delegates to the WHATWG `URL` parser for structural correctness.
+   */
+  isUrl(str: string): boolean {
+    try {
+      const url = new URL(str);
+      return url.protocol === 'http:' || url.protocol === 'https:' || url.protocol === 'ftp:';
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Whether `str` is a valid dotted-decimal IPv4 address.
+   * Each of the four octets must be an integer in [0, 255] with no leading
+   * zeros (e.g. "01" is rejected).
+   */
+  isIPv4(str: string): boolean {
+    const parts = str.split('.');
+    if (parts.length !== 4) return false;
+    return parts.every(part => {
+      if (!/^\d+$/.test(part)) return false;
+      // Reject leading zeros ("01", "001", …)
+      if (part.length > 1 && part[0] === '0') return false;
+      const n = Number(part);
+      return n >= 0 && n <= 255;
+    });
+  },
+
+  /**
+   * Whether `str` is a valid IPv6 address.
+   * Accepts the full 8-group form as well as `::` compressed forms and
+   * mixed IPv4-mapped addresses.
+   */
+  isIPv6(str: string): boolean {
+    // Full form: eight groups of 1-4 hex digits separated by colons
+    const fullRe = /^([0-9a-f]{1,4}:){7}[0-9a-f]{1,4}$/i;
+    if (fullRe.test(str)) return true;
+
+    // Compressed form with "::" (at most one occurrence)
+    if ((str.match(/::/g) ?? []).length !== 1) return false;
+
+    // Split on "::" into left and right halves
+    const [left, right] = str.split('::');
+    const leftGroups  = left  ? left.split(':')  : [];
+    const rightGroups = right ? right.split(':') : [];
+
+    // Check for IPv4-mapped suffix in the right half (e.g. "::ffff:192.0.2.1")
+    if (rightGroups.length > 0) {
+      const last = rightGroups[rightGroups.length - 1];
+      if (last.includes('.')) {
+        // last token must be a valid IPv4 address; counts as 2 groups
+        if (!validators.isIPv4(last)) return false;
+        rightGroups.splice(rightGroups.length - 1, 1, 'ffff', 'ffff');
+      }
+    }
+
+    const totalGroups = leftGroups.length + rightGroups.length;
+    if (totalGroups > 7) return false; // "::" itself replaces ≥1 group
+
+    const hexGroup = /^[0-9a-f]{1,4}$/i;
+    return [...leftGroups, ...rightGroups].every(g => hexGroup.test(g));
+  },
+
+  /**
+   * Whether `str` is a valid credit-card number (Luhn algorithm).
+   * Strips spaces and dashes before validation; rejects non-digit characters.
+   * Accepts card numbers between 13 and 19 digits long.
+   */
+  isCreditCard(str: string): boolean {
+    const digits = str.replace(/[\s-]/g, '');
+    if (!/^\d{13,19}$/.test(digits)) return false;
+
+    // Luhn algorithm
+    let sum = 0;
+    let double = false;
+    for (let i = digits.length - 1; i >= 0; i--) {
+      let d = Number(digits[i]);
+      if (double) {
+        d *= 2;
+        if (d > 9) d -= 9;
+      }
+      sum += d;
+      double = !double;
+    }
+    return sum % 10 === 0;
+  },
+
+  /**
+   * Whether `str` is a v4 UUID
+   * (xxxxxxxx-xxxx-4xxx-[89ab]xxx-xxxxxxxxxxxx, case-insensitive).
+   */
+  isUUID(str: string): boolean {
+    const re =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return re.test(str);
+  },
+
+  /**
+   * Whether `str` is an ISO 8601 date or date-time string.
+   * Accepts YYYY-MM-DD, YYYY-MM-DDTHH:mm:ss, and variants with timezone
+   * offsets or trailing Z.
+   */
+  isISO8601(str: string): boolean {
+    // Basic date: YYYY-MM-DD (optional T... suffix)
+    const re =
+      /^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/;
+    if (!re.test(str)) return false;
+    // Also verify the date portion is a real calendar date via Date parsing
+    const date = new Date(str);
+    return !isNaN(date.getTime());
+  },
+
+  /**
+   * Whether `str` contains only ASCII letters (a-z, A-Z).
+   * Returns `false` for an empty string.
+   */
+  isAlpha(str: string): boolean {
+    return /^[a-zA-Z]+$/.test(str);
+  },
+
+  /**
+   * Whether `str` contains only ASCII letters and digits.
+   * Returns `false` for an empty string.
+   */
+  isAlphanumeric(str: string): boolean {
+    return /^[a-zA-Z0-9]+$/.test(str);
+  },
+
+  /**
+   * Whether `str` contains only decimal digits (0-9).
+   * Returns `false` for an empty string.
+   */
+  isNumeric(str: string): boolean {
+    return /^\d+$/.test(str);
+  },
+
+  /**
+   * Whether `str` is a valid CSS hex color.
+   * Accepts 3-digit (`#fff`) and 6-digit (`#ffffff`) forms, case-insensitive.
+   */
+  isHexColor(str: string): boolean {
+    return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(str);
+  },
+
+  /**
+   * Whether `str` is valid JSON (parseable by `JSON.parse`).
+   * An empty string is not valid JSON.
+   */
+  isJSON(str: string): boolean {
+    if (!str || !str.trim()) return false;
+    try {
+      JSON.parse(str);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Whether `str` is valid Base64-encoded data.
+   * Accepts standard Base64 with optional `=` padding and ignores whitespace.
+   */
+  isBase64(str: string): boolean {
+    if (!str) return false;
+    // Remove all whitespace to allow multi-line base64
+    const s = str.replace(/\s/g, '');
+    if (s.length === 0) return false;
+    return /^[A-Za-z0-9+/]*={0,2}$/.test(s) && s.length % 4 === 0;
+  },
+
+  /**
+   * Whether the value is "empty": `null`, `undefined`, an empty string, or a
+   * string containing only whitespace.
+   * The parameter is typed `unknown` so callers can pass any value without
+   * a cast.
+   */
+  isEmpty(str: unknown): boolean {
+    if (str === null || str === undefined) return true;
+    if (typeof str !== 'string') return false;
+    return str.trim().length === 0;
+  },
+
+  /**
+   * Whether `str` is a phone number in international E.164-compatible format.
+   * Accepts an optional leading `+`, then 7–15 digits (spaces/dashes/parens
+   * allowed as separators).
+   */
+  isPhoneNumber(str: string): boolean {
+    // Strip common separator characters
+    const stripped = str.replace(/[\s\-().]/g, '');
+    return /^\+?\d{7,15}$/.test(stripped);
+  },
+};
+
+// ─── Per-field Validation ────────────────────────────────────────────────────
+
+/**
+ * Validate a single `value` against a `SchemaField` descriptor.
+ *
+ * @param value - The value to validate (any type)
+ * @param field - Field descriptor with constraints
+ * @param name  - Optional field name used in error messages (default `"value"`)
+ * @returns `{ valid, errors }`
+ */
+function validateField(
   value: unknown,
-  schema: ValidationSchema,
+  field: SchemaField,
+  name = 'value',
 ): ValidationResult {
   const errors: string[] = [];
 
-  // Required check
-  if (schema.required && (value === null || value === undefined)) {
-    errors.push('Value is required');
+  // ── Required / absence ────────────────────────────────────────────────────
+  const absent = value === null || value === undefined;
+  if (absent) {
+    if (field.required) {
+      errors.push(`'${name}' is required`);
+    }
+    return { valid: errors.length === 0, errors };
+  }
+
+  // ── Type check ────────────────────────────────────────────────────────────
+  let typeOk: boolean;
+  if (field.type === 'array') {
+    typeOk = Array.isArray(value);
+  } else if (field.type === 'object') {
+    typeOk = typeof value === 'object' && !Array.isArray(value);
+  } else {
+    typeOk = typeof value === field.type;
+  }
+
+  if (!typeOk) {
+    const actual = Array.isArray(value) ? 'array' : typeof value;
+    errors.push(`'${name}' must be of type '${field.type}' (got '${actual}')`);
+    // Don't apply further constraints when the type is wrong
     return { valid: false, errors };
   }
 
-  // If not required and absent, nothing more to check
-  if (value === null || value === undefined) {
-    return { valid: true, errors };
-  }
-
-  // Type check
-  if (schema.type !== undefined) {
-    let typeOk: boolean;
-    if (schema.type === 'array') {
-      typeOk = Array.isArray(value);
-    } else if (schema.type === 'object') {
-      // Arrays are not considered plain objects
-      typeOk = typeof value === 'object' && !Array.isArray(value);
-    } else {
-      typeOk = typeof value === schema.type;
-    }
-    if (!typeOk) {
-      errors.push(`Expected type '${schema.type}' but got '${Array.isArray(value) ? 'array' : typeof value}'`);
-    }
-  }
-
-  // String constraints
+  // ── String constraints ────────────────────────────────────────────────────
   if (typeof value === 'string') {
-    if (schema.minLength !== undefined && value.length < schema.minLength) {
-      errors.push(`String length ${value.length} is less than minLength ${schema.minLength}`);
+    if (field.minLength !== undefined && value.length < field.minLength) {
+      errors.push(
+        `'${name}' must be at least ${field.minLength} character(s) long (got ${value.length})`,
+      );
     }
-    if (schema.maxLength !== undefined && value.length > schema.maxLength) {
-      errors.push(`String length ${value.length} exceeds maxLength ${schema.maxLength}`);
+    if (field.maxLength !== undefined && value.length > field.maxLength) {
+      errors.push(
+        `'${name}' must be at most ${field.maxLength} character(s) long (got ${value.length})`,
+      );
     }
-    if (schema.pattern !== undefined && !schema.pattern.test(value)) {
-      errors.push(`Value does not match pattern ${schema.pattern}`);
+    if (field.pattern !== undefined && !field.pattern.test(value)) {
+      errors.push(`'${name}' does not match required pattern ${field.pattern}`);
     }
   }
 
-  // Numeric constraints
+  // ── Numeric constraints ────────────────────────────────────────────────────
   if (typeof value === 'number') {
-    if (schema.min !== undefined && value < schema.min) {
-      errors.push(`Value ${value} is less than min ${schema.min}`);
+    if (field.min !== undefined && value < field.min) {
+      errors.push(`'${name}' must be >= ${field.min} (got ${value})`);
     }
-    if (schema.max !== undefined && value > schema.max) {
-      errors.push(`Value ${value} exceeds max ${schema.max}`);
+    if (field.max !== undefined && value > field.max) {
+      errors.push(`'${name}' must be <= ${field.max} (got ${value})`);
     }
   }
 
-  // Enum constraint
-  if (schema.enum !== undefined && !schema.enum.includes(value)) {
-    errors.push(`Value '${value}' is not one of [${schema.enum.join(', ')}]`);
+  // ── Array item constraints ────────────────────────────────────────────────
+  if (Array.isArray(value) && field.items !== undefined) {
+    const itemField = field.items;
+    value.forEach((item, idx) => {
+      const itemResult = validateField(item, itemField, `${name}[${idx}]`);
+      errors.push(...itemResult.errors);
+    });
+  }
+
+  // ── Nested object properties ───────────────────────────────────────────────
+  if (
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    field.properties !== undefined
+  ) {
+    const obj = value as Record<string, unknown>;
+    const result = validate(obj, field.properties);
+    errors.push(...result.errors);
+  }
+
+  // ── Custom validator ──────────────────────────────────────────────────────
+  if (field.validate !== undefined && !field.validate(value)) {
+    errors.push(`'${name}' failed custom validation`);
   }
 
   return { valid: errors.length === 0, errors };
 }
+
+// ─── Schema-based Validation ─────────────────────────────────────────────────
+
+/**
+ * Validate a plain data object against a schema.
+ * Each key in `schema` is validated against the corresponding value in `data`.
+ * Keys present in `data` but absent from `schema` are ignored.
+ *
+ * @param data   - Object whose fields are to be validated
+ * @param schema - Map of field names to their `SchemaField` descriptors
+ * @returns `{ valid, errors }` — errors is an array of human-readable messages
+ */
+function validate(
+  data: Record<string, unknown>,
+  schema: Schema,
+): ValidationResult {
+  const errors: string[] = [];
+
+  for (const [fieldName, fieldDef] of Object.entries(schema)) {
+    const value = data[fieldName];
+    const result = validateField(value, fieldDef, fieldName);
+    errors.push(...result.errors);
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
+// ─── Exports ─────────────────────────────────────────────────────────────────
+
+export { validators, validate, validateField };
+export type { ValidationResult, SchemaField, Schema };

@@ -1,469 +1,541 @@
 // ─── Unit Tests: hash-utils ───────────────────────────────────────────────────
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeFileSync, unlinkSync, mkdtempSync } from 'node:fs';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 
 import {
-  md5,
-  sha1,
-  sha256,
-  sha512,
-  hashFile,
-  checksum,
-  crc32,
-  fnv1a,
-  murmurhash3,
+  djb2,
+  sdbm,
+  fnv1a32,
+  murmur3,
+  djb2Bytes,
+  fnv1a32Bytes,
+  adler32,
+  fletcher16,
+  hashCode,
+  simpleHash,
   consistentHash,
+  RollingHash,
+  multiHash,
 } from '../../app/modules/hash-utils.js';
 
-// ─── md5() ───────────────────────────────────────────────────────────────────
+// ─── djb2() ──────────────────────────────────────────────────────────────────
 
-describe('md5()', () => {
-  it('returns a 32-character lowercase hex string', () => {
-    const h = md5('hello');
-    assert.equal(h.length, 32);
-    assert.match(h, /^[0-9a-f]{32}$/);
+describe('djb2()', () => {
+  it('returns 5381 for empty string (seed value)', () => {
+    assert.equal(djb2(''), 5381);
   });
 
-  it('matches the known MD5 of empty string', () => {
-    assert.equal(md5(''), 'd41d8cd98f00b204e9800998ecf8427e');
+  it('matches known value for "hello"', () => {
+    assert.equal(djb2('hello'), 0xa9cede7);
   });
 
-  it('matches the known MD5 of "hello"', () => {
-    assert.equal(md5('hello'), '5d41402abc4b2a76b9719d911017c592');
-  });
-
-  it('matches the known MD5 of "The quick brown fox jumps over the lazy dog"', () => {
-    assert.equal(
-      md5('The quick brown fox jumps over the lazy dog'),
-      '9e107d9d372bb6826bd81d3542a419d6',
-    );
+  it('matches known value for "abc"', () => {
+    assert.equal(djb2('abc'), 0xb873285);
   });
 
   it('is deterministic', () => {
-    assert.equal(md5('test'), md5('test'));
-  });
-
-  it('produces different hashes for different inputs', () => {
-    assert.notEqual(md5('foo'), md5('bar'));
-  });
-
-  it('accepts a Buffer as input', () => {
-    const h = md5(Buffer.from('hello'));
-    assert.equal(h, '5d41402abc4b2a76b9719d911017c592');
-  });
-
-  it('accepts an empty Buffer', () => {
-    assert.equal(md5(Buffer.alloc(0)), 'd41d8cd98f00b204e9800998ecf8427e');
-  });
-});
-
-// ─── sha1() ──────────────────────────────────────────────────────────────────
-
-describe('sha1()', () => {
-  it('returns a 40-character lowercase hex string', () => {
-    const h = sha1('hello');
-    assert.equal(h.length, 40);
-    assert.match(h, /^[0-9a-f]{40}$/);
-  });
-
-  it('matches the known SHA-1 of empty string', () => {
-    assert.equal(sha1(''), 'da39a3ee5e6b4b0d3255bfef95601890afd80709');
-  });
-
-  it('matches the known SHA-1 of "hello"', () => {
-    assert.equal(sha1('hello'), 'aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d');
-  });
-
-  it('matches the known SHA-1 of "abc"', () => {
-    assert.equal(sha1('abc'), 'a9993e364706816aba3e25717850c26c9cd0d89d');
-  });
-
-  it('is deterministic', () => {
-    assert.equal(sha1('hello world'), sha1('hello world'));
-  });
-
-  it('produces different hashes for different inputs', () => {
-    assert.notEqual(sha1('foo'), sha1('bar'));
-  });
-
-  it('accepts a Buffer as input', () => {
-    assert.equal(sha1(Buffer.from('hello')), 'aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d');
-  });
-
-  it('accepts an empty Buffer', () => {
-    assert.equal(sha1(Buffer.alloc(0)), 'da39a3ee5e6b4b0d3255bfef95601890afd80709');
-  });
-});
-
-// ─── sha256() ────────────────────────────────────────────────────────────────
-
-describe('sha256()', () => {
-  it('returns a 64-character lowercase hex string', () => {
-    const h = sha256('hello');
-    assert.equal(h.length, 64);
-    assert.match(h, /^[0-9a-f]{64}$/);
-  });
-
-  it('matches the known SHA-256 of empty string', () => {
-    assert.equal(
-      sha256(''),
-      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    );
-  });
-
-  it('matches the known SHA-256 of "hello"', () => {
-    assert.equal(
-      sha256('hello'),
-      '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
-    );
-  });
-
-  it('matches the known SHA-256 of "abc"', () => {
-    assert.equal(
-      sha256('abc'),
-      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
-    );
-  });
-
-  it('is deterministic', () => {
-    assert.equal(sha256('hello world'), sha256('hello world'));
-  });
-
-  it('produces different hashes for different inputs', () => {
-    assert.notEqual(sha256('foo'), sha256('bar'));
-  });
-
-  it('accepts a Buffer as input', () => {
-    assert.equal(
-      sha256(Buffer.from('hello')),
-      '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
-    );
-  });
-
-  it('accepts an empty Buffer', () => {
-    assert.equal(
-      sha256(Buffer.alloc(0)),
-      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-    );
-  });
-});
-
-// ─── sha512() ────────────────────────────────────────────────────────────────
-
-describe('sha512()', () => {
-  it('returns a 128-character lowercase hex string', () => {
-    const h = sha512('hello');
-    assert.equal(h.length, 128);
-    assert.match(h, /^[0-9a-f]{128}$/);
-  });
-
-  it('matches the known SHA-512 of empty string', () => {
-    assert.equal(
-      sha512(''),
-      'cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce' +
-      '47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e',
-    );
-  });
-
-  it('matches the known SHA-512 of "abc"', () => {
-    assert.equal(
-      sha512('abc'),
-      'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a' +
-      '2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f',
-    );
-  });
-
-  it('is deterministic', () => {
-    assert.equal(sha512('test'), sha512('test'));
-  });
-
-  it('produces different hashes for different inputs', () => {
-    assert.notEqual(sha512('foo'), sha512('bar'));
-  });
-
-  it('accepts a Buffer as input', () => {
-    const h = sha512(Buffer.from('abc'));
-    assert.equal(h.length, 128);
-  });
-
-  it('sha512 and sha256 produce different digests for the same input', () => {
-    assert.notEqual(sha512('hello'), sha256('hello'));
-  });
-
-  it('accepts an empty Buffer', () => {
-    assert.equal(sha512(Buffer.alloc(0)), sha512(''));
-  });
-});
-
-// ─── hashFile() ──────────────────────────────────────────────────────────────
-
-describe('hashFile()', () => {
-  const tmpDir = mkdtempSync(join(tmpdir(), 'hash-utils-test-'));
-
-  it('hashes a file with SHA-256 by default', async () => {
-    const filePath = join(tmpDir, 'file1.txt');
-    writeFileSync(filePath, 'hello');
-    const h = await hashFile(filePath);
-    assert.equal(h, sha256('hello'));
-  });
-
-  it('hashes a file with MD5 when requested', async () => {
-    const filePath = join(tmpDir, 'file2.txt');
-    writeFileSync(filePath, 'hello');
-    const h = await hashFile(filePath, 'md5');
-    assert.equal(h, md5('hello'));
-  });
-
-  it('hashes an empty file', async () => {
-    const filePath = join(tmpDir, 'empty.txt');
-    writeFileSync(filePath, '');
-    const h = await hashFile(filePath);
-    assert.equal(h, sha256(''));
-  });
-
-  it('returns a lowercase hex string', async () => {
-    const filePath = join(tmpDir, 'file3.txt');
-    writeFileSync(filePath, 'test content');
-    const h = await hashFile(filePath);
-    assert.match(h, /^[0-9a-f]+$/);
-  });
-
-  it('rejects for a non-existent file', async () => {
-    await assert.rejects(hashFile(join(tmpDir, 'nonexistent-xyz.txt')));
-  });
-
-  it('hashes binary content correctly', async () => {
-    const filePath = join(tmpDir, 'binary.bin');
-    const content = Buffer.from([0, 1, 2, 255, 128, 64]);
-    writeFileSync(filePath, content);
-    const h = await hashFile(filePath);
-    assert.equal(h, sha256(content));
-  });
-
-  it('returns the same hash on repeated calls for the same file', async () => {
-    const filePath = join(tmpDir, 'repeat.txt');
-    writeFileSync(filePath, 'deterministic content');
-    const h1 = await hashFile(filePath);
-    const h2 = await hashFile(filePath);
-    assert.equal(h1, h2);
-  });
-
-  it('hashes with sha1 algorithm', async () => {
-    const filePath = join(tmpDir, 'sha1test.txt');
-    writeFileSync(filePath, 'sha1 content');
-    const h = await hashFile(filePath, 'sha1');
-    assert.equal(h, sha1('sha1 content'));
-  });
-});
-
-// ─── checksum() ──────────────────────────────────────────────────────────────
-
-describe('checksum()', () => {
-  it('defaults to SHA-256', () => {
-    assert.equal(checksum('hello'), sha256('hello'));
-  });
-
-  it('supports md5 algorithm', () => {
-    assert.equal(checksum('hello', 'md5'), md5('hello'));
-  });
-
-  it('supports sha1 algorithm', () => {
-    assert.equal(checksum('hello', 'sha1'), sha1('hello'));
-  });
-
-  it('supports sha512 algorithm', () => {
-    assert.equal(checksum('hello', 'sha512'), sha512('hello'));
-  });
-
-  it('is deterministic', () => {
-    assert.equal(checksum('input'), checksum('input'));
-  });
-
-  it('produces different results for different inputs', () => {
-    assert.notEqual(checksum('a'), checksum('b'));
-  });
-
-  it('returns a lowercase hex string', () => {
-    assert.match(checksum('test'), /^[0-9a-f]+$/);
-  });
-
-  it('handles empty string', () => {
-    assert.equal(checksum(''), sha256(''));
-  });
-});
-
-// ─── crc32() ─────────────────────────────────────────────────────────────────
-
-describe('crc32()', () => {
-  it('returns 0x00000000 for empty string', () => {
-    assert.equal(crc32(''), 0x00000000);
-  });
-
-  it('matches the well-known CRC32 of "123456789"', () => {
-    // Standard CRC32 check value for "123456789" is 0xCBF43926
-    assert.equal(crc32('123456789'), 0xcbf43926);
+    assert.equal(djb2('hello world'), djb2('hello world'));
   });
 
   it('returns a non-negative 32-bit integer', () => {
-    const v = crc32('hello');
+    const v = djb2('test');
     assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
   });
 
-  it('is deterministic', () => {
-    assert.equal(crc32('hello'), crc32('hello'));
+  it('avalanche: "hello" and "Hello" produce different hashes', () => {
+    assert.notEqual(djb2('hello'), djb2('Hello'));
   });
 
-  it('produces different values for different inputs', () => {
-    assert.notEqual(crc32('foo'), crc32('bar'));
-  });
-
-  it('accepts a Buffer input', () => {
-    assert.equal(crc32(Buffer.from('hello')), crc32('hello'));
-  });
-
-  it('accepts an empty Buffer', () => {
-    assert.equal(crc32(Buffer.alloc(0)), 0);
-  });
-
-  it('matches CRC32 of "The quick brown fox jumps over the lazy dog"', () => {
-    // Known CRC32: 0x414FA339
-    assert.equal(crc32('The quick brown fox jumps over the lazy dog'), 0x414fa339);
-  });
-});
-
-// ─── fnv1a() ─────────────────────────────────────────────────────────────────
-
-describe('fnv1a()', () => {
-  it('returns the FNV offset basis for empty string', () => {
-    // FNV-1a of empty string = FNV_OFFSET_BASIS_32 = 0x811c9dc5 = 2166136261
-    assert.equal(fnv1a(''), 0x811c9dc5);
-  });
-
-  it('matches known FNV-1a 32-bit value for "hello"', () => {
-    // Computed: 0x4f9f2cab
-    assert.equal(fnv1a('hello'), 0x4f9f2cab);
-  });
-
-  it('matches known FNV-1a 32-bit value for "foobar"', () => {
-    // Known: 0xbf9cf968
-    assert.equal(fnv1a('foobar'), 0xbf9cf968);
-  });
-
-  it('returns a non-negative 32-bit integer', () => {
-    const v = fnv1a('test');
-    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
-  });
-
-  it('is deterministic', () => {
-    assert.equal(fnv1a('hello world'), fnv1a('hello world'));
-  });
-
-  it('produces different values for different inputs', () => {
-    assert.notEqual(fnv1a('foo'), fnv1a('bar'));
-  });
-
-  it('returns 0x811c9dc5 for empty string (offset basis)', () => {
-    assert.equal(fnv1a(''), 2166136261);
+  it('avalanche: similar strings differ', () => {
+    assert.notEqual(djb2('hello'), djb2('helo'));
+    assert.notEqual(djb2('abc'), djb2('abd'));
   });
 
   it('handles single character', () => {
-    const v = fnv1a('a');
+    const v = djb2('a');
+    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
+  });
+
+  it('handles a long string', () => {
+    const long = 'a'.repeat(10000);
+    const v = djb2(long);
     assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
   });
 });
 
-// ─── murmurhash3() ───────────────────────────────────────────────────────────
+// ─── sdbm() ──────────────────────────────────────────────────────────────────
 
-describe('murmurhash3()', () => {
-  it('returns 0 for empty string with seed 0', () => {
-    assert.equal(murmurhash3(''), 0);
+describe('sdbm()', () => {
+  it('returns 0 for empty string', () => {
+    assert.equal(sdbm(''), 0);
+  });
+
+  it('matches known value for "hello"', () => {
+    assert.equal(sdbm('hello'), 0x28d19932);
+  });
+
+  it('matches known value for "abc"', () => {
+    assert.equal(sdbm('abc'), 0x3025f862);
+  });
+
+  it('is deterministic', () => {
+    assert.equal(sdbm('test string'), sdbm('test string'));
   });
 
   it('returns a non-negative 32-bit integer', () => {
-    const v = murmurhash3('hello');
+    const v = sdbm('hello');
     assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
   });
 
-  it('is deterministic with same input and seed', () => {
-    assert.equal(murmurhash3('hello', 42), murmurhash3('hello', 42));
-  });
-
-  it('differs with different seeds for the same input', () => {
-    assert.notEqual(murmurhash3('hello', 0), murmurhash3('hello', 1));
+  it('avalanche: "hello" and "Hello" produce different hashes', () => {
+    assert.notEqual(sdbm('hello'), sdbm('Hello'));
   });
 
   it('produces different values for different inputs', () => {
-    assert.notEqual(murmurhash3('foo'), murmurhash3('bar'));
+    assert.notEqual(sdbm('foo'), sdbm('bar'));
+  });
+});
+
+// ─── fnv1a32() ───────────────────────────────────────────────────────────────
+
+describe('fnv1a32()', () => {
+  it('returns the FNV offset basis for empty string', () => {
+    assert.equal(fnv1a32(''), 0x811c9dc5);
   });
 
-  it('matches known MurmurHash3 value for "hello" with seed 0', () => {
-    // Reference value from canonical MurmurHash3_x86_32 implementation
-    assert.equal(murmurhash3('hello', 0), 0x248bfa47);
+  it('matches known value for "hello"', () => {
+    assert.equal(fnv1a32('hello'), 0x4f9f2cab);
   });
 
-  it('handles input length not divisible by 4', () => {
-    // 'ab' = 2 bytes (tail only), 'abc' = 3 bytes (tail only)
-    const v2 = murmurhash3('ab');
-    const v3 = murmurhash3('abc');
-    assert.ok(Number.isInteger(v2) && v2 >= 0);
-    assert.ok(Number.isInteger(v3) && v3 >= 0);
-    assert.notEqual(v2, v3);
+  it('matches known value for "abc"', () => {
+    assert.equal(fnv1a32('abc'), 0x1a47e90b);
   });
 
-  it('handles input of exactly 4 bytes (one block)', () => {
-    const v = murmurhash3('test');
+  it('matches known value for "foobar"', () => {
+    assert.equal(fnv1a32('foobar'), 0xbf9cf968);
+  });
+
+  it('is deterministic', () => {
+    assert.equal(fnv1a32('hello world'), fnv1a32('hello world'));
+  });
+
+  it('returns a non-negative 32-bit integer', () => {
+    const v = fnv1a32('test');
     assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
+  });
+
+  it('avalanche: single-character change differs', () => {
+    assert.notEqual(fnv1a32('hello'), fnv1a32('helo'));
+  });
+
+  it('handles single character', () => {
+    const v = fnv1a32('a');
+    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
+  });
+});
+
+// ─── murmur3() ───────────────────────────────────────────────────────────────
+
+describe('murmur3()', () => {
+  it('returns 0 for empty string with seed 0', () => {
+    assert.equal(murmur3(''), 0);
+  });
+
+  it('matches known value for "hello" with seed 0', () => {
+    assert.equal(murmur3('hello'), 0xbc834fd4);
+  });
+
+  it('matches known value for "abc"', () => {
+    assert.equal(murmur3('abc'), 0x754fe870);
+  });
+
+  it('returns a non-negative 32-bit integer', () => {
+    const v = murmur3('hello');
+    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
+  });
+
+  it('is deterministic with the same seed', () => {
+    assert.equal(murmur3('hello', 42), murmur3('hello', 42));
+  });
+
+  it('different seeds produce different hashes for the same string', () => {
+    assert.notEqual(murmur3('hello', 0), murmur3('hello', 1));
+  });
+
+  it('avalanche: "hello" and "Hello" differ', () => {
+    assert.notEqual(murmur3('hello'), murmur3('Hello'));
+  });
+
+  it('handles odd-length string (single remaining char)', () => {
+    const v = murmur3('a');
+    assert.equal(v, 0x3c2569b2);
+  });
+
+  it('handles a long string', () => {
+    const long = 'x'.repeat(5000);
+    const v = murmur3(long);
+    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
+  });
+});
+
+// ─── djb2Bytes() ─────────────────────────────────────────────────────────────
+
+describe('djb2Bytes()', () => {
+  it('returns 5381 for empty byte array (seed value)', () => {
+    assert.equal(djb2Bytes(new Uint8Array([])), 5381);
+  });
+
+  it('matches djb2() on ASCII "hello" bytes', () => {
+    const bytes = new Uint8Array([104, 101, 108, 108, 111]); // "hello"
+    assert.equal(djb2Bytes(bytes), 0xa9cede7);
+  });
+
+  it('is deterministic', () => {
+    const data = new Uint8Array([1, 2, 3, 4, 5]);
+    assert.equal(djb2Bytes(data), djb2Bytes(data));
+  });
+
+  it('returns a non-negative 32-bit integer', () => {
+    const v = djb2Bytes(new Uint8Array([0xff, 0x00, 0xab]));
+    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
+  });
+
+  it('different byte arrays produce different hashes', () => {
+    const a = new Uint8Array([1, 2, 3]);
+    const b = new Uint8Array([1, 2, 4]);
+    assert.notEqual(djb2Bytes(a), djb2Bytes(b));
+  });
+});
+
+// ─── fnv1a32Bytes() ──────────────────────────────────────────────────────────
+
+describe('fnv1a32Bytes()', () => {
+  it('returns FNV offset basis for empty byte array', () => {
+    assert.equal(fnv1a32Bytes(new Uint8Array([])), 0x811c9dc5);
+  });
+
+  it('matches fnv1a32() on ASCII "hello" bytes', () => {
+    const bytes = new Uint8Array([104, 101, 108, 108, 111]); // "hello"
+    assert.equal(fnv1a32Bytes(bytes), 0x4f9f2cab);
+  });
+
+  it('is deterministic', () => {
+    const data = new Uint8Array([10, 20, 30]);
+    assert.equal(fnv1a32Bytes(data), fnv1a32Bytes(data));
+  });
+
+  it('returns a non-negative 32-bit integer', () => {
+    const v = fnv1a32Bytes(new Uint8Array([0, 255, 128]));
+    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
+  });
+
+  it('different byte arrays produce different hashes', () => {
+    const a = new Uint8Array([65, 66, 67]); // "ABC"
+    const b = new Uint8Array([65, 66, 68]); // "ABD"
+    assert.notEqual(fnv1a32Bytes(a), fnv1a32Bytes(b));
+  });
+});
+
+// ─── adler32() ───────────────────────────────────────────────────────────────
+
+describe('adler32()', () => {
+  it('returns 1 for empty string (a=1, b=0)', () => {
+    assert.equal(adler32(''), 1);
+  });
+
+  it('matches known value for "abc"', () => {
+    assert.equal(adler32('abc'), 0x24d0127);
+  });
+
+  it('returns 1 for empty Uint8Array', () => {
+    assert.equal(adler32(new Uint8Array([])), 1);
+  });
+
+  it('accepts a Uint8Array and returns a non-negative integer', () => {
+    const v = adler32(new Uint8Array([1, 2, 3]));
+    assert.ok(Number.isInteger(v) && v >= 0);
+  });
+
+  it('is deterministic for strings', () => {
+    assert.equal(adler32('hello world'), adler32('hello world'));
+  });
+
+  it('is deterministic for byte arrays', () => {
+    const data = new Uint8Array([72, 101, 108, 108, 111]);
+    assert.equal(adler32(data), adler32(data));
+  });
+
+  it('different inputs produce different checksums', () => {
+    assert.notEqual(adler32('hello'), adler32('world'));
+  });
+
+  it('returns a 32-bit unsigned value', () => {
+    const v = adler32('The quick brown fox jumps over the lazy dog');
+    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
+  });
+});
+
+// ─── fletcher16() ────────────────────────────────────────────────────────────
+
+describe('fletcher16()', () => {
+  it('returns 0 for empty array', () => {
+    assert.equal(fletcher16([]), 0);
+  });
+
+  it('returns 0 for all-zero input', () => {
+    assert.equal(fletcher16([0, 0, 0]), 0);
+  });
+
+  it('matches known value for [1, 2, 3]', () => {
+    assert.equal(fletcher16([1, 2, 3]), 0xa06);
+  });
+
+  it('accepts Uint8Array input', () => {
+    const data = new Uint8Array([1, 2, 3]);
+    assert.equal(fletcher16(data), 0xa06);
+  });
+
+  it('is deterministic', () => {
+    const data = [10, 20, 30, 40];
+    assert.equal(fletcher16(data), fletcher16(data));
+  });
+
+  it('returns a non-negative integer fitting in 16 bits', () => {
+    const v = fletcher16([100, 200, 150, 50]);
+    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffff);
+  });
+
+  it('different inputs produce different checksums', () => {
+    assert.notEqual(fletcher16([1, 2, 3]), fletcher16([1, 2, 4]));
+  });
+});
+
+// ─── hashCode() ──────────────────────────────────────────────────────────────
+
+describe('hashCode()', () => {
+  it('returns 0 for empty string', () => {
+    assert.equal(hashCode(''), 0);
+  });
+
+  it('matches known Java-style hashCode for "hello"', () => {
+    assert.equal(hashCode('hello'), 99162322);
+  });
+
+  it('is deterministic', () => {
+    assert.equal(hashCode('test'), hashCode('test'));
+  });
+
+  it('returns a non-negative 32-bit integer', () => {
+    const v = hashCode('some string');
+    assert.ok(Number.isInteger(v) && v >= 0 && v <= 0xffffffff);
+  });
+
+  it('avalanche: "hello" and "Hello" differ', () => {
+    assert.notEqual(hashCode('hello'), hashCode('Hello'));
+  });
+
+  it('handles single character', () => {
+    const v = hashCode('a');
+    assert.ok(Number.isInteger(v) && v >= 0);
+  });
+});
+
+// ─── simpleHash() ─────────────────────────────────────────────────────────────
+
+describe('simpleHash()', () => {
+  it('returns an 8-character hex string', () => {
+    const h = simpleHash('hello');
+    assert.equal(h.length, 8);
+    assert.match(h, /^[0-9a-f]{8}$/);
+  });
+
+  it('matches known value for "hello"', () => {
+    assert.equal(simpleHash('hello'), '4f9f2cab');
+  });
+
+  it('matches known value for empty string', () => {
+    assert.equal(simpleHash(''), '811c9dc5');
+  });
+
+  it('is deterministic', () => {
+    assert.equal(simpleHash('abc'), simpleHash('abc'));
+  });
+
+  it('produces different values for different inputs', () => {
+    assert.notEqual(simpleHash('foo'), simpleHash('bar'));
+  });
+
+  it('pads to 8 chars when hex value is short', () => {
+    // All results must be exactly 8 chars
+    for (const s of ['a', 'b', 'c', '1', 'Z']) {
+      assert.equal(simpleHash(s).length, 8);
+    }
   });
 });
 
 // ─── consistentHash() ────────────────────────────────────────────────────────
 
 describe('consistentHash()', () => {
-  it('returns a value in [0, buckets)', () => {
+  it('returns a value in [0, buckets) for various bucket counts', () => {
     for (let b = 1; b <= 20; b++) {
       const idx = consistentHash('my-key', b);
       assert.ok(idx >= 0 && idx < b, `Expected 0 <= ${idx} < ${b}`);
     }
   });
 
-  it('always returns 0 with 1 bucket', () => {
+  it('returns 0 for buckets=1', () => {
     assert.equal(consistentHash('anything', 1), 0);
-    assert.equal(consistentHash('other', 1), 0);
   });
 
-  it('is deterministic for the same key + buckets', () => {
-    assert.equal(consistentHash('key', 10), consistentHash('key', 10));
+  it('returns 0 for buckets<=0 (safe fallback)', () => {
+    assert.equal(consistentHash('key', 0), 0);
+    assert.equal(consistentHash('key', -5), 0);
   });
 
-  it('distributes keys across buckets', () => {
+  it('is deterministic for the same key and bucket count', () => {
+    assert.equal(consistentHash('stable-key', 10), consistentHash('stable-key', 10));
+  });
+
+  it('matches known bucket for "key" with 10 buckets', () => {
+    assert.equal(consistentHash('key', 10), 2);
+  });
+
+  it('distributes 1000 keys across 10 buckets — all buckets used', () => {
     const counts = new Array(10).fill(0);
     for (let i = 0; i < 1000; i++) {
       counts[consistentHash(`key-${i}`, 10)]++;
     }
-    // Each bucket should see at least 1 key from 1000 samples
-    for (const c of counts) assert.ok(c > 0, `Bucket with 0 keys: ${counts}`);
+    for (const c of counts) {
+      assert.ok(c > 0, `A bucket received 0 keys out of 1000: ${counts}`);
+    }
   });
 
   it('different keys can map to different buckets', () => {
-    const buckets = new Set();
-    for (let i = 0; i < 20; i++) {
-      buckets.add(consistentHash(`key-${i}`, 5));
+    const seen = new Set();
+    for (let i = 0; i < 50; i++) {
+      seen.add(consistentHash(`item-${i}`, 5));
     }
-    assert.ok(buckets.size > 1, 'All keys mapped to the same bucket');
+    assert.ok(seen.size > 1, 'All keys mapped to the same bucket');
+  });
+});
+
+// ─── RollingHash ─────────────────────────────────────────────────────────────
+
+describe('RollingHash', () => {
+  it('hash("") returns 0', () => {
+    const rh = new RollingHash();
+    assert.equal(rh.hash(''), 0);
   });
 
-  it('throws RangeError for buckets=0', () => {
-    assert.throws(() => consistentHash('k', 0), RangeError);
+  it('hash("abc") matches known polynomial value', () => {
+    const rh = new RollingHash();
+    assert.equal(rh.hash('abc'), 96354);
   });
 
-  it('throws RangeError for negative buckets', () => {
-    assert.throws(() => consistentHash('k', -1), RangeError);
+  it('hash is deterministic — same result on two instances', () => {
+    const rh1 = new RollingHash();
+    const rh2 = new RollingHash();
+    assert.equal(rh1.hash('hello'), rh2.hash('hello'));
   });
 
-  it('throws RangeError for non-integer buckets', () => {
-    assert.throws(() => consistentHash('k', 3.5), RangeError);
+  it('hash("hello") matches Java-style hashCode("hello")', () => {
+    // Both use base-31, so hash("hello") should equal hashCode("hello")
+    const rh = new RollingHash(31, 1_000_000_007);
+    assert.equal(rh.hash('hello'), 99162322);
+  });
+
+  it('different strings produce different hashes', () => {
+    const rh1 = new RollingHash();
+    const rh2 = new RollingHash();
+    assert.notEqual(rh1.hash('abc'), rh2.hash('xyz'));
+  });
+
+  it('rolling update matches direct hash of the new window', () => {
+    // Window "abc" -> roll out 'a', roll in 'd' -> should equal hash("bcd")
+    const rh = new RollingHash();
+    rh.hash('abc');
+    const rolledHash = rh.update('a', 'd', 3);
+
+    const rh2 = new RollingHash();
+    const directHash = rh2.hash('bcd');
+
+    assert.equal(rolledHash, directHash);
+  });
+
+  it('rolling update returns a non-negative integer', () => {
+    const rh = new RollingHash();
+    rh.hash('hello');
+    const v = rh.update('h', 'x', 5);
+    assert.ok(Number.isInteger(v) && v >= 0);
+  });
+
+  it('custom base and mod are respected', () => {
+    const rh = new RollingHash(37, 999983);
+    const v = rh.hash('test');
+    assert.ok(v >= 0 && v < 999983);
+  });
+
+  it('sequential rolling matches hash of each new window', () => {
+    // Slide a window of size 3 over "abcde": abc -> bcd -> cde
+    const text = 'abcde';
+    const winSize = 3;
+    const rh = new RollingHash();
+    rh.hash(text.slice(0, winSize));
+
+    for (let i = 1; i + winSize <= text.length; i++) {
+      const rolled = rh.update(text[i - 1], text[i + winSize - 1], winSize);
+      const rh2 = new RollingHash();
+      const direct = rh2.hash(text.slice(i, i + winSize));
+      assert.equal(rolled, direct, `Mismatch at window "${text.slice(i, i + winSize)}"`);
+    }
+  });
+});
+
+// ─── multiHash() ──────────────────────────────────────────────────────────────
+
+describe('multiHash()', () => {
+  it('returns an array of the requested count', () => {
+    assert.equal(multiHash('hello', 3, 100).length, 3);
+    assert.equal(multiHash('hello', 7, 64).length, 7);
+  });
+
+  it('all positions are in [0, size)', () => {
+    const size = 100;
+    for (const pos of multiHash('hello', 5, size)) {
+      assert.ok(pos >= 0 && pos < size, `Position ${pos} out of range [0, ${size})`);
+    }
+  });
+
+  it('matches known values for "hello", count=3, size=100', () => {
+    assert.deepEqual(multiHash('hello', 3, 100), [23, 2, 81]);
+  });
+
+  it('matches known values for "hello", count=5, size=64', () => {
+    assert.deepEqual(multiHash('hello', 5, 64), [43, 18, 57, 32, 7]);
+  });
+
+  it('returns empty array for count=0', () => {
+    assert.deepEqual(multiHash('hello', 0, 100), []);
+  });
+
+  it('is deterministic', () => {
+    assert.deepEqual(multiHash('abc', 4, 256), multiHash('abc', 4, 256));
+  });
+
+  it('different strings produce different position sets', () => {
+    const h1 = multiHash('hello', 3, 100);
+    const h2 = multiHash('world', 3, 100);
+    assert.notDeepEqual(h1, h2);
+  });
+
+  it('all positions use size as the modulus bound', () => {
+    const size = 17; // prime, good stress test
+    for (const pos of multiHash('stress test', 10, size)) {
+      assert.ok(pos >= 0 && pos < size);
+    }
+  });
+
+  it('matches known values for empty string, count=3, size=10', () => {
+    assert.deepEqual(multiHash('', 3, 10), [1, 2, 3]);
   });
 });

@@ -1,63 +1,271 @@
 // @ts-check
-// ─── Date Utilities ───────────────────────────────────────────────────────────
-// General-purpose date manipulation helpers.
+// ─── Date/Time Utilities ─────────────────────────────────────────────────────
+// Date manipulation, formatting, parsing, arithmetic, and comparison helpers.
+// No external dependencies — pure Date API.
 
-// ─── Public API ──────────────────────────────────────────────────────────────
+// ─── Internal constants ──────────────────────────────────────────────────────
 
-/** Add days to a date. */
+const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAYS_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_LONG = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+const MS_PER_MINUTE = 60_000;
+const MS_PER_HOUR = 3_600_000;
+const MS_PER_DAY = 86_400_000;
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+// ─── Formatting ──────────────────────────────────────────────────────────────
+
+/**
+ * Format a Date using a format string.
+ *
+ * Supported tokens (longest match wins):
+ *   YYYY  — 4-digit year
+ *   MMMM  — full month name (January)
+ *   MMM   — abbreviated month (Jan)
+ *   MM    — 2-digit month (01-12)
+ *   DD    — 2-digit day of month (01-31)
+ *   HH    — 2-digit hour, 24h (00-23)
+ *   mm    — 2-digit minute (00-59)
+ *   ss    — 2-digit second (00-59)
+ *   dddd  — full weekday name (Monday)
+ *   ddd   — abbreviated weekday (Mon)
+ */
+export function formatDate(date: Date, format: string): string {
+  const dow = date.getDay();
+  const month = date.getMonth();
+
+  // Replace tokens longest-first to prevent partial matches
+  return format
+    .replace('YYYY', String(date.getFullYear()))
+    .replace('MMMM', MONTHS_LONG[month])
+    .replace('MMM', MONTHS_SHORT[month])
+    .replace('MM', pad2(month + 1))
+    .replace('DD', pad2(date.getDate()))
+    .replace('HH', pad2(date.getHours()))
+    .replace('mm', pad2(date.getMinutes()))
+    .replace('ss', pad2(date.getSeconds()))
+    .replace('dddd', DAYS_LONG[dow])
+    .replace('ddd', DAYS_SHORT[dow]);
+}
+
+/**
+ * Return a human-readable relative time string (past only).
+ *
+ * Examples: 'just now', '1 minute ago', '5 minutes ago', '1 hour ago',
+ *           '2 hours ago', 'yesterday', '3 days ago', '2 weeks ago',
+ *           '3 months ago', '2 years ago'
+ *
+ * @param date - The date to describe.
+ * @param from - Reference point in time (defaults to now).
+ */
+export function formatRelative(date: Date, from: Date = new Date()): string {
+  const diffMs = from.getTime() - date.getTime();
+  const absDiffMs = Math.abs(diffMs);
+
+  if (absDiffMs < 45_000) return 'just now';
+
+  const minutes = Math.round(absDiffMs / MS_PER_MINUTE);
+  if (minutes < 60) {
+    return minutes === 1 ? '1 minute ago' : `${minutes} minutes ago`;
+  }
+
+  const hours = Math.round(absDiffMs / MS_PER_HOUR);
+  if (hours < 24) {
+    return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  }
+
+  const days = Math.round(absDiffMs / MS_PER_DAY);
+  if (days === 1) return 'yesterday';
+  if (days < 14) return `${days} days ago`;
+
+  const weeks = Math.round(days / 7);
+  if (weeks < 8) {
+    return weeks === 1 ? '1 week ago' : `${weeks} weeks ago`;
+  }
+
+  const months = Math.round(days / 30.44);
+  if (months < 24) {
+    return months === 1 ? '1 month ago' : `${months} months ago`;
+  }
+
+  const years = Math.round(days / 365.25);
+  return years === 1 ? '1 year ago' : `${years} years ago`;
+}
+
+// ─── Parsing ─────────────────────────────────────────────────────────────────
+
+/**
+ * Parse a date string using the given format string.
+ * Supports the same tokens as formatDate.
+ * Throws an Error if the format or value is invalid.
+ */
+export function parseDate(str: string, format: string): Date {
+  // Token definitions ordered longest-first to avoid prefix ambiguity
+  const TOKEN_DEFS: Array<[string, string, string]> = [
+    ['YYYY',  'year',       '(\\d{4})'],
+    ['MMMM',  'monthLong',  '([A-Za-z]+)'],
+    ['MMM',   'monthShort', '([A-Za-z]+)'],
+    ['MM',    'month',      '(\\d{2})'],
+    ['DD',    'day',        '(\\d{2})'],
+    ['HH',    'hour',       '(\\d{2})'],
+    ['mm',    'minute',     '(\\d{2})'],
+    ['ss',    'second',     '(\\d{2})'],
+    ['dddd',  'dowLong',    '([A-Za-z]+)'],
+    ['ddd',   'dowShort',   '([A-Za-z]+)'],
+  ];
+
+  // Walk through the format string left-to-right, picking tokens greedily
+  const groupOrder: string[] = [];
+  let regexSource = '';
+  let pos = 0;
+
+  while (pos < format.length) {
+    let matched = false;
+    for (const [token, groupName, pattern] of TOKEN_DEFS) {
+      if (format.startsWith(token, pos)) {
+        regexSource += pattern;
+        groupOrder.push(groupName);
+        pos += token.length;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      // Escape the literal character for use in a regex
+      regexSource += format[pos].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      pos++;
+    }
+  }
+
+  const regex = new RegExp(`^${regexSource}$`);
+  const result = regex.exec(str);
+
+  if (!result) {
+    throw new Error(`parseDate: "${str}" does not match format "${format}"`);
+  }
+
+  let year = 1970;
+  let month = 0; // 0-based
+  let day = 1;
+  let hour = 0;
+  let minute = 0;
+  let second = 0;
+
+  groupOrder.forEach((groupName, i) => {
+    const value = result[i + 1];
+    switch (groupName) {
+      case 'year':
+        year = parseInt(value, 10);
+        break;
+      case 'month':
+        month = parseInt(value, 10) - 1;
+        break;
+      case 'monthShort': {
+        const idx = MONTHS_SHORT.indexOf(value);
+        if (idx === -1) throw new Error(`parseDate: unknown month abbreviation "${value}"`);
+        month = idx;
+        break;
+      }
+      case 'monthLong': {
+        const idx = MONTHS_LONG.indexOf(value);
+        if (idx === -1) throw new Error(`parseDate: unknown month name "${value}"`);
+        month = idx;
+        break;
+      }
+      case 'day':
+        day = parseInt(value, 10);
+        break;
+      case 'hour':
+        hour = parseInt(value, 10);
+        break;
+      case 'minute':
+        minute = parseInt(value, 10);
+        break;
+      case 'second':
+        second = parseInt(value, 10);
+        break;
+      // dowShort / dowLong are informational — ignored for construction
+    }
+  });
+
+  const parsed = new Date(year, month, day, hour, minute, second, 0);
+
+  // Validate: JS Date silently overflows (e.g. Feb 31 → Mar 3)
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month ||
+    parsed.getDate() !== day ||
+    parsed.getHours() !== hour ||
+    parsed.getMinutes() !== minute ||
+    parsed.getSeconds() !== second
+  ) {
+    throw new Error(`parseDate: invalid date values in "${str}"`);
+  }
+
+  return parsed;
+}
+
+// ─── Arithmetic ──────────────────────────────────────────────────────────────
+
+/** Return a new Date with `days` added (may be negative). */
 export function addDays(date: Date, days: number): Date {
   const result = new Date(date.getTime());
   result.setDate(result.getDate() + days);
   return result;
 }
 
-/** Add months to a date. */
+/**
+ * Return a new Date with `months` added (may be negative).
+ * If the resulting day overflows the target month (e.g. Jan 31 + 1 → Feb),
+ * it is clamped to the last valid day of that month.
+ */
 export function addMonths(date: Date, months: number): Date {
   const result = new Date(date.getTime());
-  const day = result.getDate();
+  const originalDay = result.getDate();
   result.setMonth(result.getMonth() + months);
-  // If the day overflowed (e.g., Jan 31 + 1 month → Mar 3), clamp to last day of the target month.
-  if (result.getDate() !== day) {
+  // Overflow guard: if setMonth pushed into the next month, back up to last day
+  if (result.getDate() !== originalDay) {
     result.setDate(0);
   }
   return result;
 }
 
-/** Add years to a date. */
+/** Return a new Date with `years` added (may be negative). */
 export function addYears(date: Date, years: number): Date {
   return addMonths(date, years * 12);
 }
 
-/** Get the start of a day (midnight). */
-export function startOfDay(date: Date): Date {
-  const result = new Date(date.getTime());
-  result.setHours(0, 0, 0, 0);
-  return result;
+/** Return a new Date with `hours` added (may be negative). */
+export function addHours(date: Date, hours: number): Date {
+  return new Date(date.getTime() + hours * MS_PER_HOUR);
 }
 
-/** Get the end of a day (23:59:59.999). */
-export function endOfDay(date: Date): Date {
-  const result = new Date(date.getTime());
-  result.setHours(23, 59, 59, 999);
-  return result;
+/** Return a new Date with `minutes` added (may be negative). */
+export function addMinutes(date: Date, minutes: number): Date {
+  return new Date(date.getTime() + minutes * MS_PER_MINUTE);
 }
 
-/** Get the start of a month. */
-export function startOfMonth(date: Date): Date {
-  const result = new Date(date.getTime());
-  result.setDate(1);
-  result.setHours(0, 0, 0, 0);
-  return result;
+// ─── Comparison ──────────────────────────────────────────────────────────────
+
+/** Return true if date `a` is strictly before date `b`. */
+export function isBefore(a: Date, b: Date): boolean {
+  return a.getTime() < b.getTime();
 }
 
-/** Get the end of a month. */
-export function endOfMonth(date: Date): Date {
-  const result = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-  result.setHours(23, 59, 59, 999);
-  return result;
+/** Return true if date `a` is strictly after date `b`. */
+export function isAfter(a: Date, b: Date): boolean {
+  return a.getTime() > b.getTime();
 }
 
-/** Check if two dates are the same day. */
+/** Return true if `a` and `b` fall on the same calendar day. */
 export function isSameDay(a: Date, b: Date): boolean {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -66,255 +274,69 @@ export function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
-/** Whether a date is today. */
-export function isToday(date: Date): boolean {
-  return isSameDay(date, new Date());
-}
-
-/** Check if a date is before another date. */
-export function isBefore(a: Date, b: Date): boolean {
-  return a.getTime() < b.getTime();
-}
-
-/** Check if a date is after another date. */
-export function isAfter(a: Date, b: Date): boolean {
-  return a.getTime() > b.getTime();
-}
-
-/** Get the difference between two dates in the given unit. */
-export function diffDates(
-  a: Date,
-  b: Date,
-  unit: 'days' | 'hours' | 'minutes' | 'seconds' | 'milliseconds',
-): number {
-  const ms = a.getTime() - b.getTime();
-  switch (unit) {
-    case 'milliseconds': return ms;
-    case 'seconds':      return ms / 1_000;
-    case 'minutes':      return ms / 60_000;
-    case 'hours':        return ms / 3_600_000;
-    case 'days':         return ms / 86_400_000;
-  }
-}
-
-/** Get the difference between two dates in days. */
+/** Return the absolute difference between `a` and `b` in whole days. */
 export function diffInDays(a: Date, b: Date): number {
-  const msPerDay = 1000 * 60 * 60 * 24;
-  return Math.trunc((a.getTime() - b.getTime()) / msPerDay);
+  return Math.floor(Math.abs(a.getTime() - b.getTime()) / MS_PER_DAY);
 }
 
-/** Get the difference between two dates in months. */
-export function diffInMonths(a: Date, b: Date): number {
-  return (
-    (a.getFullYear() - b.getFullYear()) * 12 +
-    (a.getMonth() - b.getMonth())
-  );
+/** Return the absolute difference between `a` and `b` in whole hours. */
+export function diffInHours(a: Date, b: Date): number {
+  return Math.floor(Math.abs(a.getTime() - b.getTime()) / MS_PER_HOUR);
 }
 
-/** Get the start of the week (Monday, midnight). */
-export function startOfWeek(date: Date): Date {
-  const result = new Date(date.getTime());
-  // getDay() returns 0 (Sun) – 6 (Sat); convert to ISO Mon=0 … Sun=6
-  const dow = (result.getDay() + 6) % 7;
-  result.setDate(result.getDate() - dow);
-  result.setHours(0, 0, 0, 0);
-  return result;
+// ─── Info ────────────────────────────────────────────────────────────────────
+
+/** Return a new Date set to midnight (00:00:00.000) on the same calendar day. */
+export function startOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
 }
 
-/** Get the number of days in a month (month is 1-based: 1=Jan … 12=Dec). */
-export function daysInMonth(year: number, month: number): number {
-  // Day 0 of the next month = last day of the given month
-  return new Date(year, month, 0).getDate();
+/** Return a new Date set to 23:59:59.999 on the same calendar day. */
+export function endOfDay(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
 }
 
-/** Parse a date string in ISO format (YYYY-MM-DD). Returns null on failure. */
-export function parseISODate(str: string): Date | null {
-  if (typeof str !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return null;
-  const [year, month, day] = str.split('-').map(Number);
-  if (month < 1 || month > 12) return null;
-  if (day < 1 || day > daysInMonth(year, month)) return null;
-  return new Date(year, month - 1, day);
+/** Return a new Date set to the first day of the month at midnight. */
+export function startOfMonth(date: Date): Date {
+  return new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
 }
 
-/** Format a date as ISO date string (YYYY-MM-DD). */
-export function toISODate(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+/** Return a new Date set to the last day of the month at 23:59:59.999. */
+export function endOfMonth(date: Date): Date {
+  // Day 0 of next month = last day of current month
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+  return new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate(), 23, 59, 59, 999);
 }
 
-/** Get the ISO week number of a date (1-53). */
-export function getWeekNumber(date: Date): number {
-  // Copy date and shift to Thursday in the current week (ISO week starts Monday).
-  const target = new Date(date.getTime());
-  target.setHours(0, 0, 0, 0);
-  // Set to nearest Thursday: current date + 4 - current day number (Mon=1 … Sun=7)
-  const dayOfWeek = target.getDay() || 7; // Sunday = 7 instead of 0
-  target.setDate(target.getDate() + 4 - dayOfWeek);
-  // Get first day of year
-  const yearStart = new Date(target.getFullYear(), 0, 1);
-  // Calculate full weeks to nearest Thursday
-  return Math.ceil(((target.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+/** Return the number of days in the month of the given date. */
+export function daysInMonth(date: Date): number {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
-/** Check if a year is a leap year. */
+/** Return true if the given year is a leap year. */
 export function isLeapYear(year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
-/** Parse a date from a string (ISO 8601 or common formats). Returns null on failure. */
-export function parseDate(str: string): Date | null {
-  if (!str || typeof str !== 'string') return null;
-  const trimmed = str.trim();
-  if (!trimmed) return null;
-  const d = new Date(trimmed);
-  if (isNaN(d.getTime())) return null;
-  return d;
-}
-
-/** Format a date as YYYY-MM-DD. */
-export function formatDateISO(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-/** Format a date using a simple format string: YYYY, MM, DD, HH, mm, ss */
-export function formatDate(date: Date, format: string): string {
-  const year = String(date.getFullYear());
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  const seconds = String(date.getSeconds()).padStart(2, '0');
-  return format
-    .replace('YYYY', year)
-    .replace('MM', month)
-    .replace('DD', day)
-    .replace('HH', hours)
-    .replace('mm', minutes)
-    .replace('ss', seconds);
-}
-
-/** Parse a date from ISO string or numeric timestamp. */
-export function parseDateInput(input: string | number): Date {
-  if (typeof input === 'number') return new Date(input);
-  const d = new Date(input);
-  if (isNaN(d.getTime())) throw new RangeError(`Invalid date: ${input}`);
-  return d;
-}
-
-/** Add an amount of time to a date. Returns a new Date. */
-export function addTime(
-  date: Date,
-  amount: number,
-  unit: 'days' | 'hours' | 'minutes' | 'seconds' | 'months' | 'years',
-): Date {
-  const result = new Date(date.getTime());
-  switch (unit) {
-    case 'seconds':
-      result.setSeconds(result.getSeconds() + amount);
-      break;
-    case 'minutes':
-      result.setMinutes(result.getMinutes() + amount);
-      break;
-    case 'hours':
-      result.setHours(result.getHours() + amount);
-      break;
-    case 'days':
-      result.setDate(result.getDate() + amount);
-      break;
-    case 'months': {
-      const day = result.getDate();
-      result.setMonth(result.getMonth() + amount);
-      if (result.getDate() !== day) result.setDate(0);
-      break;
-    }
-    case 'years': {
-      const day = result.getDate();
-      result.setFullYear(result.getFullYear() + amount);
-      if (result.getDate() !== day) result.setDate(0);
-      break;
-    }
-  }
-  return result;
-}
-
-/** Get the difference between two dates in the specified unit (truncated). */
-export function diffTime(
-  a: Date,
-  b: Date,
-  unit: 'days' | 'hours' | 'minutes' | 'seconds' | 'months' | 'years',
-): number {
-  switch (unit) {
-    case 'seconds':  return Math.trunc((a.getTime() - b.getTime()) / 1_000);
-    case 'minutes':  return Math.trunc((a.getTime() - b.getTime()) / 60_000);
-    case 'hours':    return Math.trunc((a.getTime() - b.getTime()) / 3_600_000);
-    case 'days':     return Math.trunc((a.getTime() - b.getTime()) / 86_400_000);
-    case 'months':
-      return (a.getFullYear() - b.getFullYear()) * 12 + (a.getMonth() - b.getMonth());
-    case 'years':
-      return a.getFullYear() - b.getFullYear();
-  }
-}
-
-/** Check if a date is between two others (inclusive). */
-export function isBetween(date: Date, start: Date, end: Date): boolean {
-  const t = date.getTime();
-  return t >= start.getTime() && t <= end.getTime();
-}
-
-/** Get the day of the year (1-366). */
+/** Return the 1-based day of the year (1–366). */
 export function dayOfYear(date: Date): number {
-  const start = new Date(date.getFullYear(), 0, 0);
-  const diff = date.getTime() - start.getTime();
-  return Math.floor(diff / 86_400_000);
+  const jan1 = new Date(date.getFullYear(), 0, 1, 0, 0, 0, 0);
+  const startOfToday = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+  return Math.floor((startOfToday.getTime() - jan1.getTime()) / MS_PER_DAY) + 1;
 }
 
-/** Get the ISO week of the year (1-53). */
+/**
+ * Return the ISO 8601 week number (1–53).
+ *
+ * ISO weeks start on Monday. Week 1 contains the first Thursday of the year
+ * (equivalently, the week containing January 4th).
+ */
 export function weekOfYear(date: Date): number {
-  return getWeekNumber(date);
-}
-
-/** Relative time string: '2 hours ago', 'in 3 days', 'just now'. */
-export function relativeTime(date: Date, now: Date = new Date()): string {
-  const diffMs = date.getTime() - now.getTime();
-  const absDiffMs = Math.abs(diffMs);
-
-  const seconds = Math.round(absDiffMs / 1_000);
-  const minutes = Math.round(absDiffMs / 60_000);
-  const hours   = Math.round(absDiffMs / 3_600_000);
-  const days    = Math.round(absDiffMs / 86_400_000);
-  const months  = Math.round(absDiffMs / (30 * 86_400_000));
-  const years   = Math.round(absDiffMs / (365 * 86_400_000));
-
-  let label: string;
-  if (seconds < 45) {
-    label = 'just now';
-    return label;
-  } else if (seconds < 90) {
-    label = '1 minute';
-  } else if (minutes < 45) {
-    label = `${minutes} minutes`;
-  } else if (minutes < 90) {
-    label = '1 hour';
-  } else if (hours < 22) {
-    label = `${hours} hours`;
-  } else if (hours < 36) {
-    label = '1 day';
-  } else if (days < 26) {
-    label = `${days} days`;
-  } else if (days < 45) {
-    label = '1 month';
-  } else if (days < 345) {
-    label = `${months} months`;
-  } else if (days < 545) {
-    label = '1 year';
-  } else {
-    label = `${years} years`;
-  }
-
-  return diffMs < 0 ? `${label} ago` : `in ${label}`;
+  // Move to the nearest Thursday in the current ISO week (pivot day for ISO week numbering)
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayOfWeek = d.getDay() === 0 ? 7 : d.getDay(); // Sun=0 → 7, Mon=1 … Sat=6
+  d.setDate(d.getDate() + 4 - dayOfWeek);
+  // Jan 1 of the Thursday's year
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil(((d.getTime() - yearStart.getTime()) / MS_PER_DAY + 1) / 7);
 }
