@@ -1,7 +1,7 @@
 // @ts-check
-// ─── Trie (Prefix Tree) ──────────────────────────────────────────────────────
-// A compact prefix-tree data structure supporting insertion, deletion, exact
-// lookup, prefix lookup, autocomplete, and longest-common-prefix queries.
+// ─── Trie (Prefix Tree) ───────────────────────────────────────────────────────
+// A classic trie data structure supporting insert, exact search, delete,
+// prefix queries, autocomplete, and longest-common-prefix computation.
 
 // ─── Internal Node ───────────────────────────────────────────────────────────
 
@@ -15,22 +15,16 @@ function createNode(): TrieNode {
   return { children: new Map(), isEnd: false };
 }
 
-// ─── Trie ─────────────────────────────────────────────────────────────────────
+// ─── Trie ────────────────────────────────────────────────────────────────────
 
 export class Trie {
   #root: TrieNode = createNode();
   #size: number = 0;
 
-  // ── Public API ──────────────────────────────────────────────────────────────
+  // ── Mutation ────────────────────────────────────────────────────────────────
 
-  /** Number of distinct words stored in the trie. */
-  get size(): number {
-    return this.#size;
-  }
-
-  /** Insert a word. Duplicate insertions are silently ignored. */
+  /** Insert a word into the trie. Duplicate insertions are silently ignored. */
   insert(word: string): void {
-    if (this.has(word)) return;
     let node = this.#root;
     for (const ch of word) {
       if (!node.children.has(ch)) {
@@ -38,13 +32,15 @@ export class Trie {
       }
       node = node.children.get(ch)!;
     }
-    node.isEnd = true;
-    this.#size++;
+    if (!node.isEnd) {
+      node.isEnd = true;
+      this.#size++;
+    }
   }
 
   /**
    * Delete a word from the trie.
-   * Returns `true` if the word existed and was removed, `false` otherwise.
+   * @returns `true` if the word existed and was removed, `false` otherwise.
    */
   delete(word: string): boolean {
     if (!this.has(word)) return false;
@@ -53,67 +49,72 @@ export class Trie {
     return true;
   }
 
-  /** Return `true` if `word` is stored as a complete word. */
-  has(word: string): boolean {
-    const node = this.#getNode(word);
-    return node !== null && node.isEnd;
-  }
-
-  /** Return `true` if any stored word starts with `prefix`. */
-  hasPrefix(prefix: string): boolean {
-    if (this.#size === 0) return false;
-    return this.#getNode(prefix) !== null;
-  }
-
-  /**
-   * Return all words that start with `prefix`, in alphabetical order.
-   * An empty prefix returns all words.
-   */
-  search(prefix: string): string[] {
-    const node = this.#getNode(prefix);
-    if (node === null) return [];
-    const results: string[] = [];
-    this.#collect(node, prefix, results);
-    return results.sort();
-  }
-
-  /** Alias for `search`. */
-  startsWith(prefix: string): string[] {
-    return this.search(prefix);
-  }
-
-  /**
-   * Return up to `limit` words (default 10) that start with `prefix`,
-   * in alphabetical order.
-   */
-  autocomplete(prefix: string, limit: number = 10): string[] {
-    return this.search(prefix).slice(0, limit);
-  }
-
-  /** Count how many stored words start with `prefix`. */
-  countWithPrefix(prefix: string): number {
-    return this.search(prefix).length;
-  }
-
   /** Remove all words from the trie. */
   clear(): void {
     this.#root = createNode();
     this.#size = 0;
   }
 
-  /** Return every stored word in alphabetical order. */
-  toArray(): string[] {
-    return this.search('');
+  // ── Queries ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Return `true` if `word` is stored as an exact complete word.
+   * Case-sensitive.
+   */
+  has(word: string): boolean {
+    const node = this.#traverse(word);
+    return node !== null && node.isEnd;
   }
 
-  /** Alias for search(). */
+  /**
+   * Return `true` if any inserted word starts with `prefix`.
+   * An empty prefix returns `true` when the trie is non-empty.
+   */
+  hasPrefix(prefix: string): boolean {
+    if (prefix === '') return this.#size > 0;
+    return this.#traverse(prefix) !== null;
+  }
+
+  /**
+   * Return all stored words that start with `prefix`, in lexicographic order.
+   * Alias: search(prefix) → wordsWithPrefix(prefix).
+   */
+  search(prefix: string): string[] {
+    return this.wordsWithPrefix(prefix);
+  }
+
+  /**
+   * Return all stored words that start with `prefix`, in lexicographic order.
+   * Alias: startsWith(prefix) → wordsWithPrefix(prefix).
+   */
+  startsWith(prefix: string): string[] {
+    return this.wordsWithPrefix(prefix);
+  }
+
+  /**
+   * Return all stored words that start with `prefix`, in lexicographic order.
+   * An empty prefix returns all words.
+   */
   wordsWithPrefix(prefix: string): string[] {
-    return this.search(prefix);
+    const node = this.#traverse(prefix);
+    if (node === null) return [];
+    const results: string[] = [];
+    this.#collect(node, prefix, results);
+    return results;
   }
 
-  /** Alias for toArray(). */
-  allWords(): string[] {
-    return this.toArray();
+  /**
+   * Return all words starting with `prefix` in lexicographic order.
+   * Default limit of 10 results; pass a custom limit to override.
+   */
+  autocomplete(prefix: string, maxResults = 10): string[] {
+    const all = this.wordsWithPrefix(prefix);
+    return all.slice(0, maxResults);
+  }
+
+  /** Count words that start with `prefix`. */
+  countWithPrefix(prefix: string): number {
+    return this.wordsWithPrefix(prefix).length;
   }
 
   /**
@@ -124,40 +125,53 @@ export class Trie {
     if (this.#size === 0) return '';
     let node = this.#root;
     let prefix = '';
+    // Walk while there is exactly one child and the current node is not a word end
     while (node.children.size === 1 && !node.isEnd) {
-      const entry = node.children.entries().next().value as [string, TrieNode];
-      prefix += entry[0];
-      node = entry[1];
+      const [ch, child] = node.children.entries().next().value as [string, TrieNode];
+      prefix += ch;
+      node = child;
     }
     return prefix;
   }
 
+  /** Number of distinct words currently stored. */
+  get size(): number {
+    return this.#size;
+  }
+
+  /** Return every stored word in lexicographic order. */
+  toArray(): string[] {
+    return this.wordsWithPrefix('');
+  }
+
   // ── Private helpers ─────────────────────────────────────────────────────────
 
-  /** Walk to the node for `prefix`, returning `null` if the path is missing. */
-  #getNode(prefix: string): TrieNode | null {
+  /** Walk the trie following each character of `str`. Returns the final node or `null`. */
+  #traverse(str: string): TrieNode | null {
     let node = this.#root;
-    for (const ch of prefix) {
-      if (!node.children.has(ch)) return null;
-      node = node.children.get(ch)!;
+    for (const ch of str) {
+      const next = node.children.get(ch);
+      if (!next) return null;
+      node = next;
     }
     return node;
   }
 
   /**
-   * Recursively collect all complete words in the subtree rooted at `node`,
-   * accumulating characters in `prefix`.
+   * Depth-first collection of all complete words in the subtree rooted at `node`.
+   * Children are visited in sorted (lexicographic) order so results are sorted.
    */
-  #collect(node: TrieNode, prefix: string, results: string[]): void {
-    if (node.isEnd) results.push(prefix);
-    for (const [ch, child] of node.children) {
-      this.#collect(child, prefix + ch, results);
+  #collect(node: TrieNode, prefix: string, out: string[]): void {
+    if (node.isEnd) out.push(prefix);
+    const keys = [...node.children.keys()].sort();
+    for (const ch of keys) {
+      this.#collect(node.children.get(ch)!, prefix + ch, out);
     }
   }
 
   /**
    * Recursive deletion. Prunes leaf nodes on the way back up.
-   * Returns `true` when the caller should delete the edge to this node.
+   * Returns `true` when the caller should delete the edge leading to this node.
    */
   #deleteHelper(node: TrieNode, word: string, depth: number): boolean {
     if (depth === word.length) {
@@ -166,11 +180,11 @@ export class Trie {
     }
     const ch = word[depth];
     const child = node.children.get(ch)!;
-    const shouldDelete = this.#deleteHelper(child, word, depth + 1);
-    if (shouldDelete) {
+    const shouldPrune = this.#deleteHelper(child, word, depth + 1);
+    if (shouldPrune) {
       node.children.delete(ch);
     }
-    return shouldDelete && !node.isEnd && node.children.size === 0;
+    return shouldPrune && !node.isEnd && node.children.size === 0;
   }
 }
 
@@ -179,10 +193,10 @@ export class Trie {
 /**
  * Convenience factory. Optionally pre-populates the trie with `words`.
  */
-export function createTrie(words: string[] = []): Trie {
+export function createTrie(words?: string[]): Trie {
   const trie = new Trie();
-  for (const word of words) {
-    trie.insert(word);
+  if (words) {
+    for (const word of words) trie.insert(word);
   }
   return trie;
 }
