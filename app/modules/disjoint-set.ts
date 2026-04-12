@@ -1,144 +1,90 @@
 // @ts-check
-// ─── Disjoint Set (Union-Find) ──────────────────────────────────────────────
-// Union-Find data structure with path compression and union by rank.
-// Supports generic element types via a Map-based internal representation.
+// ─── Disjoint Set / Union-Find ───────────────────────────────────────────────
+// Generic key-based Union-Find with union-by-rank and path compression.
 
-interface DSNode<T> {
-  parent: T;
-  rank: number;
-  size: number;
-}
+export class DisjointSet<K = unknown> {
+  #parent: Map<K, K>;
+  #rank: Map<K, number>;
+  #compSize: Map<K, number>;
+  #setCount: number;
 
-/**
- * Disjoint Set (Union-Find) with path compression and union by rank.
- *
- * Maintains a collection of non-overlapping sets with near-O(1) amortised
- * `find`, `union`, and `connected` operations thanks to path compression
- * and union by rank.
- *
- * @template T - Element type
- *
- * @example
- *   const ds = createDisjointSet<number>();
- *   ds.makeSet(1);
- *   ds.makeSet(2);
- *   ds.union(1, 2);
- *   ds.connected(1, 2); // true
- */
-export class DisjointSet<T> {
-  #nodes: Map<T, DSNode<T>> = new Map();
-  #setCount = 0;
+  constructor() {
+    this.#parent = new Map();
+    this.#rank = new Map();
+    this.#compSize = new Map();
+    this.#setCount = 0;
+  }
 
-  // ─── Public API ───────────────────────────────────────────────────────────
+  get size(): number { return this.#parent.size; }
+  get setCount(): number { return this.#setCount; }
 
-  /**
-   * Create a new singleton set containing `item`.
-   * If `item` already belongs to a set, this is a no-op.
-   */
-  makeSet(item: T): void {
-    if (this.#nodes.has(item)) return;
-    this.#nodes.set(item, { parent: item, rank: 0, size: 1 });
+  makeSet(key: K): void {
+    if (this.#parent.has(key)) return;
+    this.#parent.set(key, key);
+    this.#rank.set(key, 0);
+    this.#compSize.set(key, 1);
     this.#setCount++;
   }
 
-  /**
-   * Find the representative (root) of the set containing `item`.
-   * Uses path compression so subsequent lookups are faster.
-   *
-   * @throws {Error} If `item` has not been added via `makeSet`.
-   */
-  find(item: T): T {
-    const node = this.#nodes.get(item);
-    if (!node) throw new Error(`Item not found in disjoint set`);
-    if (node.parent !== item) {
-      node.parent = this.find(node.parent);
+  find(key: K): K {
+    if (!this.#parent.has(key)) {
+      throw new Error(`DisjointSet: key not found`);
     }
-    return node.parent;
+    let root = key;
+    while (this.#parent.get(root) !== root) {
+      root = this.#parent.get(root) as K;
+    }
+    let cur = key;
+    while (cur !== root) {
+      const next = this.#parent.get(cur) as K;
+      this.#parent.set(cur, root);
+      cur = next;
+    }
+    return root;
   }
 
-  /**
-   * Merge the sets containing `a` and `b`.
-   *
-   * @returns `true` if two distinct sets were merged, `false` if `a` and `b`
-   *          were already in the same set.
-   * @throws {Error} If either item has not been added via `makeSet`.
-   */
-  union(a: T, b: T): boolean {
+  union(a: K, b: K): boolean {
     const rootA = this.find(a);
     const rootB = this.find(b);
     if (rootA === rootB) return false;
-
-    const nodeA = this.#nodes.get(rootA)!;
-    const nodeB = this.#nodes.get(rootB)!;
-
-    // Union by rank: attach the shorter tree under the taller one.
-    if (nodeA.rank < nodeB.rank) {
-      nodeA.parent = rootB;
-      nodeB.size += nodeA.size;
-    } else if (nodeA.rank > nodeB.rank) {
-      nodeB.parent = rootA;
-      nodeA.size += nodeB.size;
+    const rankA = this.#rank.get(rootA) ?? 0;
+    const rankB = this.#rank.get(rootB) ?? 0;
+    const sizeA = this.#compSize.get(rootA) ?? 1;
+    const sizeB = this.#compSize.get(rootB) ?? 1;
+    if (rankA < rankB) {
+      this.#parent.set(rootA, rootB);
+      this.#compSize.set(rootB, sizeA + sizeB);
+    } else if (rankA > rankB) {
+      this.#parent.set(rootB, rootA);
+      this.#compSize.set(rootA, sizeA + sizeB);
     } else {
-      nodeB.parent = rootA;
-      nodeA.size += nodeB.size;
-      nodeA.rank++;
+      this.#parent.set(rootB, rootA);
+      this.#rank.set(rootA, rankA + 1);
+      this.#compSize.set(rootA, sizeA + sizeB);
     }
-
     this.#setCount--;
     return true;
   }
 
-  /**
-   * Check whether `a` and `b` belong to the same set.
-   *
-   * @throws {Error} If either item has not been added via `makeSet`.
-   */
-  connected(a: T, b: T): boolean {
+  connected(a: K, b: K): boolean {
     return this.find(a) === this.find(b);
   }
 
-  /** Total number of elements across all sets. */
-  get size(): number {
-    return this.#nodes.size;
+  setSize(key: K): number {
+    return this.#compSize.get(this.find(key)) ?? 1;
   }
 
-  /** Number of disjoint sets. */
-  get setCount(): number {
-    return this.#setCount;
-  }
-
-  /**
-   * Return the number of elements in the set containing `item`.
-   *
-   * @throws {Error} If `item` has not been added via `makeSet`.
-   */
-  setSize(item: T): number {
-    const root = this.find(item);
-    return this.#nodes.get(root)!.size;
-  }
-
-  /**
-   * Return all disjoint sets, each as an array of elements.
-   * Order of sets and elements within each set is not guaranteed.
-   */
-  sets(): T[][] {
-    const groups = new Map<T, T[]>();
-    for (const item of this.#nodes.keys()) {
-      const root = this.find(item);
-      let group = groups.get(root);
-      if (!group) {
-        group = [];
-        groups.set(root, group);
-      }
-      group.push(item);
+  sets(): K[][] {
+    const groups = new Map<K, K[]>();
+    for (const key of this.#parent.keys()) {
+      const root = this.find(key);
+      if (!groups.has(root)) groups.set(root, []);
+      (groups.get(root) as K[]).push(key);
     }
     return [...groups.values()];
   }
 }
 
-/**
- * Factory function for creating a new empty DisjointSet.
- */
-export function createDisjointSet<T>(): DisjointSet<T> {
-  return new DisjointSet<T>();
+export function createDisjointSet<K = unknown>(): DisjointSet<K> {
+  return new DisjointSet<K>();
 }

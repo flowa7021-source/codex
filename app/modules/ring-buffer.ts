@@ -1,156 +1,80 @@
 // @ts-check
-// ─── Ring Buffer ────────────────────────────────────────────────────────────
-// A typed ring buffer backed by Float64Array for numeric data.
-// Designed for audio/signal processing use cases where bulk read/write
-// of floating-point samples is the primary access pattern.
+// ─── Ring Buffer ─────────────────────────────────────────────────────────────
+// Fixed-capacity numeric ring buffer backed by a Float64Array.
+// Does NOT overwrite on overflow — write returns 0 when full.
 
-// ─── RingBuffer ─────────────────────────────────────────────────────────────
-
-/**
- * A fixed-capacity ring buffer for numeric (Float64) data.
- *
- * Unlike {@link CircularBuffer}, this buffer does **not** overwrite on full —
- * `write()` only writes as many values as free space allows. Data is stored in
- * a contiguous `Float64Array` and accessed via bulk `read()` / `peek()` calls,
- * making it suitable for audio buffers, DSP pipelines, and signal capture.
- *
- * @example
- *   const rb = new RingBuffer(1024);
- *   rb.write(new Float64Array([1, 2, 3]));
- *   const chunk = rb.read(2); // Float64Array [1, 2]
- */
 export class RingBuffer {
-  readonly #capacity: number;
-  readonly #buffer: Float64Array;
-  #head = 0;   // index of first readable element
-  #size = 0;   // number of readable elements
+  #buf: Float64Array;
+  #capacity: number;
+  #head: number;   // index of oldest item
+  #available: number; // count of readable items
 
   constructor(capacity: number) {
     if (!Number.isInteger(capacity) || capacity < 1) {
-      throw new RangeError('Capacity must be a positive integer');
+      throw new RangeError(`RingBuffer: capacity must be a positive integer, got ${capacity}`);
     }
     this.#capacity = capacity;
-    this.#buffer = new Float64Array(capacity);
+    this.#buf = new Float64Array(capacity);
+    this.#head = 0;
+    this.#available = 0;
   }
 
-  // ─── Capacity / status ──────────────────────────────────────────────────
-
-  /** Maximum number of samples the buffer can hold. */
-  get capacity(): number {
-    return this.#capacity;
-  }
-
-  /** Number of samples available for reading. */
-  get available(): number {
-    return this.#size;
-  }
-
-  /** Number of samples that can be written before the buffer is full. */
-  get free(): number {
-    return this.#capacity - this.#size;
-  }
-
-  /** Whether the buffer has no free space. */
-  get isFull(): boolean {
-    return this.#size === this.#capacity;
-  }
-
-  /** Whether the buffer contains no readable samples. */
-  get isEmpty(): boolean {
-    return this.#size === 0;
-  }
-
-  // ─── Write ──────────────────────────────────────────────────────────────
+  get capacity(): number { return this.#capacity; }
+  get available(): number { return this.#available; }
+  get free(): number { return this.#capacity - this.#available; }
+  get isEmpty(): boolean { return this.#available === 0; }
+  get isFull(): boolean { return this.#available === this.#capacity; }
 
   /**
-   * Write samples into the buffer.
-   *
-   * Only as many values as `free` space allows will be written.
-   * Returns the number of samples actually written.
+   * Write samples into the buffer. Stops when full.
+   * Returns number of samples actually written.
    */
-  write(values: Float64Array | number[]): number {
-    const toWrite = Math.min(values.length, this.free);
+  write(data: number[] | Float64Array): number {
+    const toWrite = Math.min(data.length, this.free);
     if (toWrite === 0) return 0;
-
-    const writeStart = (this.#head + this.#size) % this.#capacity;
-
-    // How many fit before we wrap around to index 0?
-    const firstChunk = Math.min(toWrite, this.#capacity - writeStart);
-    for (let i = 0; i < firstChunk; i++) {
-      this.#buffer[writeStart + i] = values[i];
+    const writeStart = (this.#head + this.#available) % this.#capacity;
+    for (let i = 0; i < toWrite; i++) {
+      this.#buf[(writeStart + i) % this.#capacity] = data[i];
     }
-
-    // Remaining values wrap to the beginning of the backing array.
-    const secondChunk = toWrite - firstChunk;
-    for (let i = 0; i < secondChunk; i++) {
-      this.#buffer[i] = values[firstChunk + i];
-    }
-
-    this.#size += toWrite;
+    this.#available += toWrite;
     return toWrite;
   }
 
-  // ─── Read ───────────────────────────────────────────────────────────────
-
   /**
-   * Read and remove up to `count` samples from the buffer.
-   *
-   * Returns a new `Float64Array` containing the consumed samples.
-   * The returned length may be less than `count` if fewer samples are available.
+   * Read up to `count` samples from the front. Removes them from the buffer.
+   * Returns a Float64Array (may be shorter than count if not enough available).
    */
   read(count: number): Float64Array {
-    const toRead = Math.min(count, this.#size);
-    const result = this.#copy(toRead);
+    const toRead = Math.min(count, this.#available);
+    const out = new Float64Array(toRead);
+    for (let i = 0; i < toRead; i++) {
+      out[i] = this.#buf[(this.#head + i) % this.#capacity];
+    }
     this.#head = (this.#head + toRead) % this.#capacity;
-    this.#size -= toRead;
-    return result;
+    this.#available -= toRead;
+    return out;
   }
 
   /**
-   * Peek at up to `count` samples without removing them.
-   *
-   * Returns a new `Float64Array` snapshot. The returned length may be less than
-   * `count` if fewer samples are available.
+   * Peek at up to `count` samples from the front without consuming them.
+   * Returns a Float64Array.
    */
   peek(count: number): Float64Array {
-    const toRead = Math.min(count, this.#size);
-    return this.#copy(toRead);
+    const toPeek = Math.min(count, this.#available);
+    const out = new Float64Array(toPeek);
+    for (let i = 0; i < toPeek; i++) {
+      out[i] = this.#buf[(this.#head + i) % this.#capacity];
+    }
+    return out;
   }
 
-  // ─── Mutation ───────────────────────────────────────────────────────────
-
-  /** Discard all samples and reset the buffer to empty. */
+  /** Reset the buffer to empty. */
   clear(): void {
     this.#head = 0;
-    this.#size = 0;
-    // No need to zero the backing array — data past #size is unreachable.
-  }
-
-  // ─── Internal ───────────────────────────────────────────────────────────
-
-  /** Copy `count` samples starting at #head into a new Float64Array. */
-  #copy(count: number): Float64Array {
-    const result = new Float64Array(count);
-    const firstChunk = Math.min(count, this.#capacity - this.#head);
-    for (let i = 0; i < firstChunk; i++) {
-      result[i] = this.#buffer[this.#head + i];
-    }
-    const secondChunk = count - firstChunk;
-    for (let i = 0; i < secondChunk; i++) {
-      result[firstChunk + i] = this.#buffer[i];
-    }
-    return result;
+    this.#available = 0;
   }
 }
 
-// ─── Factory ─────────────────────────────────────────────────────────────────
-
-/**
- * Create a typed ring buffer for numeric data.
- *
- * @example
- *   const rb = createRingBuffer(4096);
- */
 export function createRingBuffer(capacity: number): RingBuffer {
   return new RingBuffer(capacity);
 }
