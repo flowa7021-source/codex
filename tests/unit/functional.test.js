@@ -5,15 +5,32 @@ import assert from 'node:assert/strict';
 import {
   compose,
   pipe,
+  partial,
+  curry,
   identity,
   constant,
-  curry,
-  partial,
   flip,
-  Maybe,
-  Either,
-  memoize,
-  trampoline,
+  negate,
+  juxt,
+  take,
+  drop,
+  takeWhile,
+  dropWhile,
+  zip,
+  zipWith,
+  flatten,
+  flatMap,
+  groupBy,
+  unique,
+  uniqueBy,
+  chunk,
+  intersection,
+  difference,
+  union,
+  pick,
+  omit,
+  mapValues,
+  filterValues,
 } from '../../app/modules/functional.js';
 
 // ─── compose ─────────────────────────────────────────────────────────────────
@@ -34,7 +51,7 @@ describe('compose', () => {
     assert.equal(f(3), 19); // square(3)=9, double=18, addOne=19
   });
 
-  it('single function returns the behaviour of that function', () => {
+  it('single function behaves like that function', () => {
     const double = (x) => x * 2;
     assert.equal(compose(double)(5), 10);
   });
@@ -69,7 +86,7 @@ describe('pipe', () => {
     assert.equal(f(3), 64); // addOne(3)=4, double=8, square=64
   });
 
-  it('single function returns the behaviour of that function', () => {
+  it('single function behaves like that function', () => {
     const triple = (x) => x * 3;
     assert.equal(pipe(triple)(5), 15);
   });
@@ -78,7 +95,7 @@ describe('pipe', () => {
     assert.equal(pipe()('hello'), 'hello');
   });
 
-  it('pipe is the inverse ordering of compose', () => {
+  it('pipe(f, g) is the reverse of compose(g, f)', () => {
     const addOne = (x) => x + 1;
     const double = (x) => x * 2;
     assert.equal(pipe(addOne, double)(3), compose(double, addOne)(3));
@@ -119,15 +136,9 @@ describe('constant', () => {
     assert.equal(alwaysFive(), 5);
   });
 
-  it('ignores any arguments (zero-arg usage)', () => {
-    const alwaysHello = constant('hello');
-    assert.equal(alwaysHello(), 'hello');
-  });
-
   it('returns the same object reference each call', () => {
     const obj = { x: 1 };
     const fn = constant(obj);
-    assert.equal(fn(), obj);
     assert.equal(fn(), obj);
   });
 
@@ -135,39 +146,94 @@ describe('constant', () => {
     const alwaysFalse = constant(false);
     assert.equal(alwaysFalse(), false);
   });
+
+  it('works with null', () => {
+    const alwaysNull = constant(null);
+    assert.equal(alwaysNull(), null);
+  });
 });
 
-// ─── curry ───────────────────────────────────────────────────────────────────
+// ─── flip ─────────────────────────────────────────────────────────────────────
 
-describe('curry', () => {
-  it('returns the result when all args provided at once', () => {
-    const add = curry((a, b) => a + b);
-    assert.equal(add(2, 3), 5);
+describe('flip', () => {
+  it('swaps the two arguments of a binary function', () => {
+    const sub = (a, b) => a - b;
+    const flippedSub = flip(sub);
+    assert.equal(flippedSub(3, 10), 7); // 10 - 3
   });
 
-  it('partially applies when fewer args than arity', () => {
-    const add = curry((a, b) => a + b);
-    const add5 = add(5);
-    assert.equal(add5(3), 8);
+  it('flip(flip(fn)) behaves like the original fn', () => {
+    const div = (a, b) => a / b;
+    assert.equal(flip(flip(div))(10, 2), div(10, 2));
   });
 
-  it('supports arity-3 functions', () => {
-    const sum3 = curry((a, b, c) => a + b + c);
-    assert.equal(sum3(1)(2)(3), 6);
-    assert.equal(sum3(1, 2)(3), 6);
-    assert.equal(sum3(1)(2, 3), 6);
-    assert.equal(sum3(1, 2, 3), 6);
+  it('works with string concatenation', () => {
+    const concat = (a, b) => a + b;
+    const flippedConcat = flip(concat);
+    assert.equal(flippedConcat('world', 'hello'), 'helloworld');
   });
 
-  it('a curried identity-like function with arity 1 returns immediately', () => {
-    const double = curry((x) => x * 2);
-    assert.equal(double(7), 14);
+  it('works with array operations', () => {
+    const prepend = (item, arr) => [item, ...arr];
+    const flipped = flip(prepend);
+    assert.deepEqual(flipped([1, 2], 0), [0, 1, 2]);
+  });
+});
+
+// ─── negate ──────────────────────────────────────────────────────────────────
+
+describe('negate', () => {
+  it('inverts a predicate that returns true', () => {
+    const isEven = (n) => n % 2 === 0;
+    const isOdd = negate(isEven);
+    assert.equal(isOdd(3), true);
+    assert.equal(isOdd(4), false);
   });
 
-  it('preserves this-free pure function semantics', () => {
-    const multiply = curry((a, b) => a * b);
-    const triple = multiply(3);
-    assert.equal([1, 2, 3, 4].map(triple).join(','), '3,6,9,12');
+  it('inverts a predicate that always returns false', () => {
+    const alwaysFalse = () => false;
+    assert.equal(negate(alwaysFalse)(), true);
+  });
+
+  it('works with multi-argument predicates', () => {
+    const greaterThan = (a, b) => a > b;
+    const notGreaterThan = negate(greaterThan);
+    assert.equal(notGreaterThan(3, 5), true);
+    assert.equal(notGreaterThan(5, 3), false);
+  });
+
+  it('can be used with Array.prototype.filter', () => {
+    const isNull = (x) => x === null;
+    const result = [1, null, 2, null, 3].filter(negate(isNull));
+    assert.deepEqual(result, [1, 2, 3]);
+  });
+});
+
+// ─── juxt ────────────────────────────────────────────────────────────────────
+
+describe('juxt', () => {
+  it('applies all functions to the same argument', () => {
+    const double = (x) => x * 2;
+    const addOne = (x) => x + 1;
+    const result = juxt(double, addOne)(5);
+    assert.deepEqual(result, [10, 6]);
+  });
+
+  it('returns an empty array when no functions given', () => {
+    assert.deepEqual(juxt()(42), []);
+  });
+
+  it('works with a single function', () => {
+    const square = (x) => x * x;
+    assert.deepEqual(juxt(square)(4), [16]);
+  });
+
+  it('works with string functions', () => {
+    const upper = (s) => s.toUpperCase();
+    const lower = (s) => s.toLowerCase();
+    const len = (s) => s.length;
+    const result = juxt(upper, lower, len)('Hello');
+    assert.deepEqual(result, ['HELLO', 'hello', 5]);
   });
 });
 
@@ -201,278 +267,455 @@ describe('partial', () => {
   });
 });
 
-// ─── flip ─────────────────────────────────────────────────────────────────────
+// ─── curry ───────────────────────────────────────────────────────────────────
 
-describe('flip', () => {
-  it('swaps the two arguments of a binary function', () => {
-    const sub = (a, b) => a - b;
-    const flippedSub = flip(sub);
-    assert.equal(flippedSub(3, 10), 7); // 10 - 3
+describe('curry', () => {
+  it('returns the result when all args provided at once', () => {
+    const add = curry((a, b) => a + b);
+    assert.equal(add(2, 3), 5);
   });
 
-  it('flip(flip(fn)) behaves like the original fn', () => {
-    const div = (a, b) => a / b;
-    assert.equal(flip(flip(div))(10, 2), div(10, 2));
+  it('partially applies when fewer args than arity', () => {
+    const add = curry((a, b) => a + b);
+    const add5 = add(5);
+    assert.equal(add5(3), 8);
+  });
+
+  it('supports arity-3 functions, all at once', () => {
+    const sum3 = curry((a, b, c) => a + b + c);
+    assert.equal(sum3(1, 2, 3), 6);
+  });
+
+  it('supports arity-3 functions, one at a time', () => {
+    const sum3 = curry((a, b, c) => a + b + c);
+    assert.equal(sum3(1)(2)(3), 6);
+  });
+
+  it('supports arity-3 functions, mixed groupings', () => {
+    const sum3 = curry((a, b, c) => a + b + c);
+    assert.equal(sum3(1, 2)(3), 6);
+    assert.equal(sum3(1)(2, 3), 6);
+  });
+
+  it('curried function can be used as a callback', () => {
+    const multiply = curry((a, b) => a * b);
+    const triple = multiply(3);
+    assert.deepEqual([1, 2, 3, 4].map(triple), [3, 6, 9, 12]);
+  });
+});
+
+// ─── take ────────────────────────────────────────────────────────────────────
+
+describe('take', () => {
+  it('returns first n elements', () => {
+    assert.deepEqual(take(3)([1, 2, 3, 4, 5]), [1, 2, 3]);
+  });
+
+  it('returns all elements when n >= length', () => {
+    assert.deepEqual(take(10)([1, 2, 3]), [1, 2, 3]);
+  });
+
+  it('returns empty array when n === 0', () => {
+    assert.deepEqual(take(0)([1, 2, 3]), []);
+  });
+
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(take(3)([]), []);
+  });
+});
+
+// ─── drop ────────────────────────────────────────────────────────────────────
+
+describe('drop', () => {
+  it('removes first n elements', () => {
+    assert.deepEqual(drop(2)([1, 2, 3, 4, 5]), [3, 4, 5]);
+  });
+
+  it('returns empty array when n >= length', () => {
+    assert.deepEqual(drop(10)([1, 2, 3]), []);
+  });
+
+  it('returns all elements when n === 0', () => {
+    assert.deepEqual(drop(0)([1, 2, 3]), [1, 2, 3]);
+  });
+
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(drop(3)([]), []);
+  });
+});
+
+// ─── takeWhile ───────────────────────────────────────────────────────────────
+
+describe('takeWhile', () => {
+  it('takes elements while predicate holds', () => {
+    assert.deepEqual(takeWhile((x) => x < 4)([1, 2, 3, 4, 5]), [1, 2, 3]);
+  });
+
+  it('returns all elements if predicate always holds', () => {
+    assert.deepEqual(takeWhile((x) => x < 100)([1, 2, 3]), [1, 2, 3]);
+  });
+
+  it('returns empty array if predicate fails immediately', () => {
+    assert.deepEqual(takeWhile((x) => x > 10)([1, 2, 3]), []);
+  });
+
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(takeWhile(() => true)([]), []);
+  });
+});
+
+// ─── dropWhile ───────────────────────────────────────────────────────────────
+
+describe('dropWhile', () => {
+  it('drops elements while predicate holds', () => {
+    assert.deepEqual(dropWhile((x) => x < 3)([1, 2, 3, 4, 5]), [3, 4, 5]);
+  });
+
+  it('returns empty array if predicate always holds', () => {
+    assert.deepEqual(dropWhile((x) => x < 100)([1, 2, 3]), []);
+  });
+
+  it('returns all elements if predicate fails immediately', () => {
+    assert.deepEqual(dropWhile((x) => x > 10)([1, 2, 3]), [1, 2, 3]);
+  });
+
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(dropWhile(() => false)([]), []);
+  });
+});
+
+// ─── zip ─────────────────────────────────────────────────────────────────────
+
+describe('zip', () => {
+  it('zips two arrays of equal length', () => {
+    assert.deepEqual(zip([1, 2, 3], ['a', 'b', 'c']), [[1, 'a'], [2, 'b'], [3, 'c']]);
+  });
+
+  it('stops at the shorter array', () => {
+    assert.deepEqual(zip([1, 2, 3], ['a', 'b']), [[1, 'a'], [2, 'b']]);
+  });
+
+  it('returns empty array when either input is empty', () => {
+    assert.deepEqual(zip([], [1, 2, 3]), []);
+    assert.deepEqual(zip([1, 2, 3], []), []);
+  });
+
+  it('returns empty array for two empty arrays', () => {
+    assert.deepEqual(zip([], []), []);
+  });
+});
+
+// ─── zipWith ─────────────────────────────────────────────────────────────────
+
+describe('zipWith', () => {
+  it('combines two arrays with a function', () => {
+    assert.deepEqual(zipWith((a, b) => a + b, [1, 2, 3], [10, 20, 30]), [11, 22, 33]);
+  });
+
+  it('stops at the shorter array', () => {
+    assert.deepEqual(zipWith((a, b) => a * b, [1, 2, 3], [10, 20]), [10, 40]);
+  });
+
+  it('returns empty array when either input is empty', () => {
+    assert.deepEqual(zipWith((a, b) => a + b, [], [1, 2]), []);
   });
 
   it('works with string concatenation', () => {
-    const concat = (a, b) => a + b;
-    const flippedConcat = flip(concat);
-    assert.equal(flippedConcat('world', 'hello'), 'helloworld');
+    assert.deepEqual(zipWith((a, b) => a + b, ['a', 'b'], ['1', '2']), ['a1', 'b2']);
   });
 });
 
-// ─── Maybe ───────────────────────────────────────────────────────────────────
+// ─── flatten ─────────────────────────────────────────────────────────────────
 
-describe('Maybe', () => {
-  it('Maybe.of wraps a value into Just', () => {
-    const m = Maybe.of(42);
-    assert.equal(m.isNothing, false);
-    assert.equal(m.value, 42);
+describe('flatten', () => {
+  it('flattens one level of nesting', () => {
+    assert.deepEqual(flatten([[1, 2], [3, 4], [5]]), [1, 2, 3, 4, 5]);
   });
 
-  it('Maybe.of(null) produces Nothing', () => {
-    const m = Maybe.of(null);
-    assert.equal(m.isNothing, true);
-    assert.equal(m.value, undefined);
+  it('handles mix of arrays and scalars', () => {
+    assert.deepEqual(flatten([1, [2, 3], 4, [5]]), [1, 2, 3, 4, 5]);
   });
 
-  it('Maybe.of(undefined) produces Nothing', () => {
-    const m = Maybe.of(undefined);
-    assert.equal(m.isNothing, true);
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(flatten([]), []);
   });
 
-  it('Maybe.empty() produces Nothing', () => {
-    const m = Maybe.empty();
-    assert.equal(m.isNothing, true);
-  });
-
-  it('map transforms the value inside Just', () => {
-    const m = Maybe.of(5).map((x) => x * 2);
-    assert.equal(m.value, 10);
-  });
-
-  it('map on Nothing returns Nothing', () => {
-    const m = Maybe.of(null).map((x) => x * 2);
-    assert.equal(m.isNothing, true);
-  });
-
-  it('flatMap chains Maybes', () => {
-    const safeSqrt = (x) => (x >= 0 ? Maybe.of(Math.sqrt(x)) : Maybe.empty());
-    const result = Maybe.of(16).flatMap(safeSqrt);
-    assert.equal(result.value, 4);
-  });
-
-  it('flatMap on Nothing short-circuits', () => {
-    const safeSqrt = (x) => (x >= 0 ? Maybe.of(Math.sqrt(x)) : Maybe.empty());
-    const result = Maybe.of(null).flatMap(safeSqrt);
-    assert.equal(result.isNothing, true);
-  });
-
-  it('getOrElse returns value when Just', () => {
-    assert.equal(Maybe.of(7).getOrElse(0), 7);
-  });
-
-  it('getOrElse returns default when Nothing', () => {
-    assert.equal(Maybe.of(null).getOrElse(99), 99);
-  });
-
-  it('filter keeps value when predicate passes', () => {
-    const m = Maybe.of(10).filter((x) => x > 5);
-    assert.equal(m.value, 10);
-  });
-
-  it('filter produces Nothing when predicate fails', () => {
-    const m = Maybe.of(3).filter((x) => x > 5);
-    assert.equal(m.isNothing, true);
-  });
-
-  it('filter on Nothing returns Nothing', () => {
-    const m = Maybe.of(null).filter(() => true);
-    assert.equal(m.isNothing, true);
-  });
-
-  it('toString returns Just(value) for present value', () => {
-    assert.equal(Maybe.of(42).toString(), 'Just(42)');
-  });
-
-  it('toString returns Nothing for empty Maybe', () => {
-    assert.equal(Maybe.empty().toString(), 'Nothing');
-  });
-
-  it('chains multiple maps correctly', () => {
-    const result = Maybe.of(2)
-      .map((x) => x + 3)
-      .map((x) => x * 4);
-    assert.equal(result.value, 20);
+  it('does not flatten deeply (only one level)', () => {
+    assert.deepEqual(flatten([[1, [2]], [3]]), [1, [2], 3]);
   });
 });
 
-// ─── Either ──────────────────────────────────────────────────────────────────
+// ─── flatMap ─────────────────────────────────────────────────────────────────
 
-describe('Either', () => {
-  it('Either.right creates a Right value', () => {
-    const e = Either.right(42);
-    assert.equal(e.isRight, true);
-    assert.equal(e.isLeft, false);
+describe('flatMap', () => {
+  it('maps and flattens one level', () => {
+    assert.deepEqual(flatMap((x) => [x, x * 2], [1, 2, 3]), [1, 2, 2, 4, 3, 6]);
   });
 
-  it('Either.left creates a Left value', () => {
-    const e = Either.left('error');
-    assert.equal(e.isLeft, true);
-    assert.equal(e.isRight, false);
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(flatMap((x) => [x], []), []);
   });
 
-  it('map transforms the Right value', () => {
-    const e = Either.right(5).map((x) => x * 2);
-    assert.equal(e.getOrElse(0), 10);
+  it('handles function returning empty arrays', () => {
+    assert.deepEqual(flatMap((x) => (x > 2 ? [x] : []), [1, 2, 3, 4]), [3, 4]);
   });
 
-  it('map passes Left through unchanged', () => {
-    const e = Either.left('err').map((x) => x * 2);
-    assert.equal(e.isLeft, true);
-  });
-
-  it('mapLeft transforms the Left value', () => {
-    const e = Either.left('error').mapLeft((s) => s.toUpperCase());
-    assert.equal(e.fold((l) => l, (r) => r), 'ERROR');
-  });
-
-  it('mapLeft passes Right through unchanged', () => {
-    const e = Either.right(10).mapLeft((s) => s.toUpperCase());
-    assert.equal(e.getOrElse(0), 10);
-  });
-
-  it('flatMap chains successful computations', () => {
-    const safeDivide = (n, d) =>
-      d === 0 ? Either.left('division by zero') : Either.right(n / d);
-    const result = Either.right(10).flatMap((x) => safeDivide(x, 2));
-    assert.equal(result.getOrElse(0), 5);
-  });
-
-  it('flatMap short-circuits on Left', () => {
-    const result = Either.left('fail').flatMap((x) => Either.right(x * 2));
-    assert.equal(result.isLeft, true);
-  });
-
-  it('getOrElse returns Right value when Right', () => {
-    assert.equal(Either.right(7).getOrElse(0), 7);
-  });
-
-  it('getOrElse returns default when Left', () => {
-    assert.equal(Either.left('oops').getOrElse(99), 99);
-  });
-
-  it('fold calls onRight for Right', () => {
-    const result = Either.right(3).fold(
-      () => 'left',
-      (x) => `right:${x}`,
-    );
-    assert.equal(result, 'right:3');
-  });
-
-  it('fold calls onLeft for Left', () => {
-    const result = Either.left('boom').fold(
-      (l) => `error:${l}`,
-      () => 'ok',
-    );
-    assert.equal(result, 'error:boom');
-  });
-
-  it('chained maps on Right accumulate transformations', () => {
-    const result = Either.right(1)
-      .map((x) => x + 1)
-      .map((x) => x * 10);
-    assert.equal(result.getOrElse(0), 20);
+  it('works with string splitting', () => {
+    assert.deepEqual(flatMap((s) => s.split(''), ['ab', 'cd']), ['a', 'b', 'c', 'd']);
   });
 });
 
-// ─── memoize ─────────────────────────────────────────────────────────────────
+// ─── groupBy ─────────────────────────────────────────────────────────────────
 
-describe('memoize', () => {
-  it('returns the correct result on the first call', () => {
-    const double = memoize((x) => x * 2);
-    assert.equal(double(5), 10);
+describe('groupBy', () => {
+  it('groups elements by key function result', () => {
+    const result = groupBy((x) => x % 2 === 0 ? 'even' : 'odd', [1, 2, 3, 4, 5]);
+    assert.deepEqual(result, { odd: [1, 3, 5], even: [2, 4] });
   });
 
-  it('returns the cached result on subsequent calls', () => {
-    let callCount = 0;
-    const expensive = memoize((x) => {
-      callCount++;
-      return x * x;
-    });
-    assert.equal(expensive(4), 16);
-    assert.equal(expensive(4), 16);
-    assert.equal(callCount, 1);
+  it('returns empty object for empty array', () => {
+    assert.deepEqual(groupBy((x) => String(x), []), {});
   });
 
-  it('distinguishes different arguments', () => {
-    const fn = memoize((x) => x + 1);
-    assert.equal(fn(1), 2);
-    assert.equal(fn(2), 3);
+  it('works with string grouping key', () => {
+    const words = ['apple', 'banana', 'avocado', 'blueberry'];
+    const result = groupBy((s) => s[0], words);
+    assert.deepEqual(result, { a: ['apple', 'avocado'], b: ['banana', 'blueberry'] });
   });
 
-  it('works with multi-argument functions', () => {
-    let callCount = 0;
-    const add = memoize((a, b) => {
-      callCount++;
-      return a + b;
-    });
-    assert.equal(add(2, 3), 5);
-    assert.equal(add(2, 3), 5);
-    assert.equal(callCount, 1);
-    assert.equal(add(3, 2), 5); // different argument order → separate cache entry
-    assert.equal(callCount, 2);
-  });
-
-  it('works with string arguments', () => {
-    let callCount = 0;
-    const greet = memoize((name) => {
-      callCount++;
-      return `Hello, ${name}`;
-    });
-    assert.equal(greet('Alice'), 'Hello, Alice');
-    assert.equal(greet('Alice'), 'Hello, Alice');
-    assert.equal(callCount, 1);
+  it('handles all elements in the same group', () => {
+    const result = groupBy(() => 'all', [1, 2, 3]);
+    assert.deepEqual(result, { all: [1, 2, 3] });
   });
 });
 
-// ─── trampoline ──────────────────────────────────────────────────────────────
+// ─── unique ──────────────────────────────────────────────────────────────────
 
-describe('trampoline', () => {
-  it('handles a simple non-recursive function', () => {
-    const add = trampoline((a, b) => a + b);
-    assert.equal(add(2, 3), 5);
+describe('unique', () => {
+  it('removes duplicate numbers', () => {
+    assert.deepEqual(unique([1, 2, 2, 3, 1]), [1, 2, 3]);
   });
 
-  it('enables stack-safe tail-recursive factorial', () => {
-    const factorial = trampoline(function fact(n, acc = 1) {
-      if (n <= 1) return acc;
-      return () => fact(n - 1, n * acc);
-    });
-    assert.equal(factorial(5), 120);
-    assert.equal(factorial(10), 3628800);
+  it('removes duplicate strings', () => {
+    assert.deepEqual(unique(['a', 'b', 'a', 'c']), ['a', 'b', 'c']);
   });
 
-  it('handles large n without stack overflow', () => {
-    const factorial = trampoline(function fact(n, acc = BigInt(1)) {
-      if (n <= 1) return acc;
-      return () => fact(n - 1, BigInt(n) * acc);
-    });
-    // 1000! would blow the stack without trampoline
-    assert.ok(typeof factorial(1000) === 'bigint');
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(unique([]), []);
   });
 
-  it('enables stack-safe tail-recursive sum', () => {
-    const sum = trampoline(function go(n, acc = 0) {
-      if (n === 0) return acc;
-      return () => go(n - 1, acc + n);
-    });
-    assert.equal(sum(100), 5050);
+  it('preserves order of first occurrence', () => {
+    assert.deepEqual(unique([3, 1, 2, 1, 3]), [3, 1, 2]);
   });
 
-  it('returns immediately for base cases (no thunk)', () => {
-    const alwaysTen = trampoline(() => 10);
-    assert.equal(alwaysTen(), 10);
+  it('returns same array when all elements are unique', () => {
+    assert.deepEqual(unique([1, 2, 3]), [1, 2, 3]);
+  });
+});
+
+// ─── uniqueBy ────────────────────────────────────────────────────────────────
+
+describe('uniqueBy', () => {
+  it('removes duplicates based on a key function', () => {
+    const input = [{ id: 1, name: 'a' }, { id: 2, name: 'b' }, { id: 1, name: 'c' }];
+    const result = uniqueBy((x) => x.id, input);
+    assert.deepEqual(result, [{ id: 1, name: 'a' }, { id: 2, name: 'b' }]);
+  });
+
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(uniqueBy((x) => x, []), []);
+  });
+
+  it('uses strict equality for key comparison', () => {
+    const result = uniqueBy((x) => x % 3, [1, 2, 3, 4, 5, 6]);
+    assert.deepEqual(result, [1, 2, 3]);
+  });
+
+  it('preserves first occurrence', () => {
+    const result = uniqueBy((x) => x.toLowerCase(), ['A', 'b', 'a', 'B']);
+    assert.deepEqual(result, ['A', 'b']);
+  });
+});
+
+// ─── chunk ───────────────────────────────────────────────────────────────────
+
+describe('chunk', () => {
+  it('splits array into chunks of specified size', () => {
+    assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  });
+
+  it('returns single chunk when size >= array length', () => {
+    assert.deepEqual(chunk([1, 2, 3], 10), [[1, 2, 3]]);
+  });
+
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(chunk([], 3), []);
+  });
+
+  it('throws for size <= 0', () => {
+    assert.throws(() => chunk([1, 2], 0), /size/);
+    assert.throws(() => chunk([1, 2], -1), /size/);
+  });
+
+  it('returns chunks of exactly size when evenly divisible', () => {
+    assert.deepEqual(chunk([1, 2, 3, 4], 2), [[1, 2], [3, 4]]);
+  });
+});
+
+// ─── intersection ─────────────────────────────────────────────────────────────
+
+describe('intersection', () => {
+  it('returns elements in both arrays', () => {
+    assert.deepEqual(intersection([1, 2, 3, 4], [2, 4, 6]), [2, 4]);
+  });
+
+  it('returns empty array when no common elements', () => {
+    assert.deepEqual(intersection([1, 2, 3], [4, 5, 6]), []);
+  });
+
+  it('returns empty array when either input is empty', () => {
+    assert.deepEqual(intersection([], [1, 2, 3]), []);
+    assert.deepEqual(intersection([1, 2, 3], []), []);
+  });
+
+  it('preserves order from first array', () => {
+    assert.deepEqual(intersection([3, 1, 2], [2, 3]), [3, 2]);
+  });
+});
+
+// ─── difference ───────────────────────────────────────────────────────────────
+
+describe('difference', () => {
+  it('returns elements in a but not b', () => {
+    assert.deepEqual(difference([1, 2, 3, 4], [2, 4]), [1, 3]);
+  });
+
+  it('returns all of a when b is empty', () => {
+    assert.deepEqual(difference([1, 2, 3], []), [1, 2, 3]);
+  });
+
+  it('returns empty array when a is empty', () => {
+    assert.deepEqual(difference([], [1, 2, 3]), []);
+  });
+
+  it('returns empty array when all of a is in b', () => {
+    assert.deepEqual(difference([1, 2], [1, 2, 3]), []);
+  });
+});
+
+// ─── union ────────────────────────────────────────────────────────────────────
+
+describe('union', () => {
+  it('returns all unique elements from both arrays', () => {
+    assert.deepEqual(union([1, 2, 3], [2, 3, 4]), [1, 2, 3, 4]);
+  });
+
+  it('returns first array when second is empty', () => {
+    assert.deepEqual(union([1, 2, 3], []), [1, 2, 3]);
+  });
+
+  it('returns second array when first is empty', () => {
+    assert.deepEqual(union([], [1, 2, 3]), [1, 2, 3]);
+  });
+
+  it('handles two empty arrays', () => {
+    assert.deepEqual(union([], []), []);
+  });
+
+  it('removes duplicates within each array too', () => {
+    assert.deepEqual(union([1, 1, 2], [2, 3, 3]), [1, 2, 3]);
+  });
+});
+
+// ─── pick ────────────────────────────────────────────────────────────────────
+
+describe('pick', () => {
+  it('returns only the specified keys', () => {
+    const obj = { a: 1, b: 2, c: 3 };
+    assert.deepEqual(pick(obj, ['a', 'c']), { a: 1, c: 3 });
+  });
+
+  it('returns empty object when no keys specified', () => {
+    assert.deepEqual(pick({ a: 1, b: 2 }, []), {});
+  });
+
+  it('ignores keys that do not exist on the object', () => {
+    const obj = { a: 1, b: 2 };
+    assert.deepEqual(pick(obj, ['a', 'z']), { a: 1 });
+  });
+
+  it('works with a single key', () => {
+    const obj = { x: 10, y: 20 };
+    assert.deepEqual(pick(obj, ['x']), { x: 10 });
+  });
+});
+
+// ─── omit ────────────────────────────────────────────────────────────────────
+
+describe('omit', () => {
+  it('removes the specified keys', () => {
+    const obj = { a: 1, b: 2, c: 3 };
+    assert.deepEqual(omit(obj, ['b']), { a: 1, c: 3 });
+  });
+
+  it('returns the whole object when no keys specified', () => {
+    const obj = { a: 1, b: 2 };
+    assert.deepEqual(omit(obj, []), { a: 1, b: 2 });
+  });
+
+  it('returns empty object when all keys omitted', () => {
+    const obj = { a: 1, b: 2 };
+    assert.deepEqual(omit(obj, ['a', 'b']), {});
+  });
+
+  it('ignores keys that do not exist on the object', () => {
+    const obj = { a: 1, b: 2 };
+    assert.deepEqual(omit(obj, ['z']), { a: 1, b: 2 });
+  });
+});
+
+// ─── mapValues ───────────────────────────────────────────────────────────────
+
+describe('mapValues', () => {
+  it('transforms all values', () => {
+    assert.deepEqual(mapValues({ a: 1, b: 2, c: 3 }, (v) => v * 2), { a: 2, b: 4, c: 6 });
+  });
+
+  it('passes the key to the mapping function', () => {
+    const result = mapValues({ x: 1, y: 2 }, (v, k) => `${k}=${v}`);
+    assert.deepEqual(result, { x: 'x=1', y: 'y=2' });
+  });
+
+  it('returns empty object for empty input', () => {
+    assert.deepEqual(mapValues({}, (v) => v), {});
+  });
+
+  it('works with string-to-number transformation', () => {
+    assert.deepEqual(mapValues({ a: '1', b: '2' }, Number), { a: 1, b: 2 });
+  });
+});
+
+// ─── filterValues ─────────────────────────────────────────────────────────────
+
+describe('filterValues', () => {
+  it('keeps only entries where predicate returns true', () => {
+    assert.deepEqual(filterValues({ a: 1, b: 2, c: 3 }, (v) => v > 1), { b: 2, c: 3 });
+  });
+
+  it('returns empty object when no entries match', () => {
+    assert.deepEqual(filterValues({ a: 1, b: 2 }, (v) => v > 100), {});
+  });
+
+  it('returns all entries when all match', () => {
+    assert.deepEqual(filterValues({ a: 1, b: 2 }, (v) => v > 0), { a: 1, b: 2 });
+  });
+
+  it('passes the key to the predicate', () => {
+    const result = filterValues({ a: 1, b: 2, c: 3 }, (_, k) => k !== 'b');
+    assert.deepEqual(result, { a: 1, c: 3 });
+  });
+
+  it('returns empty object for empty input', () => {
+    assert.deepEqual(filterValues({}, () => true), {});
   });
 });

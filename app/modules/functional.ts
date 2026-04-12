@@ -246,6 +246,216 @@ export class Either<L, R> {
   }
 }
 
+// ─── Additional Combinators ───────────────────────────────────────────────────
+
+/**
+ * Negate combinator: inverts the boolean result of a predicate.
+ *
+ * @example
+ *   const isOdd = negate((n: number) => n % 2 === 0);
+ *   isOdd(3); // true
+ */
+export function negate<T extends unknown[]>(
+  fn: (...args: T) => boolean,
+): (...args: T) => boolean {
+  return (...args: T): boolean => !fn(...args);
+}
+
+/**
+ * Juxtaposition combinator: applies multiple functions to the same argument.
+ * `juxt(f, g, h)(x)` = `[f(x), g(x), h(x)]`
+ *
+ * @example
+ *   const stats = juxt(Math.min, Math.max);
+ *   stats(3); // [3, 3]
+ */
+export function juxt<T, R>(...fns: Array<(x: T) => R>): (x: T) => R[] {
+  return (x: T): R[] => fns.map((fn) => fn(x));
+}
+
+// ─── Array Utilities ──────────────────────────────────────────────────────────
+
+/** Returns a curried function that takes the first `n` elements of an array. */
+export function take<T>(n: number): (arr: T[]) => T[] {
+  return (arr: T[]): T[] => arr.slice(0, n);
+}
+
+/** Returns a curried function that drops the first `n` elements of an array. */
+export function drop<T>(n: number): (arr: T[]) => T[] {
+  return (arr: T[]): T[] => arr.slice(n);
+}
+
+/** Returns a curried function that takes elements while the predicate holds. */
+export function takeWhile<T>(pred: (x: T) => boolean): (arr: T[]) => T[] {
+  return (arr: T[]): T[] => {
+    const result: T[] = [];
+    for (const item of arr) {
+      if (!pred(item)) break;
+      result.push(item);
+    }
+    return result;
+  };
+}
+
+/** Returns a curried function that drops elements while the predicate holds. */
+export function dropWhile<T>(pred: (x: T) => boolean): (arr: T[]) => T[] {
+  return (arr: T[]): T[] => {
+    let i = 0;
+    while (i < arr.length && pred(arr[i])) i++;
+    return arr.slice(i);
+  };
+}
+
+/** Zips two arrays into an array of pairs, stopping at the shorter length. */
+export function zip<A, B>(a: A[], b: B[]): Array<[A, B]> {
+  const length = Math.min(a.length, b.length);
+  const result: Array<[A, B]> = [];
+  for (let i = 0; i < length; i++) {
+    result.push([a[i], b[i]]);
+  }
+  return result;
+}
+
+/** Zips two arrays by applying a combining function, stopping at the shorter length. */
+export function zipWith<A, B, C>(fn: (a: A, b: B) => C, a: A[], b: B[]): C[] {
+  const length = Math.min(a.length, b.length);
+  const result: C[] = [];
+  for (let i = 0; i < length; i++) {
+    result.push(fn(a[i], b[i]));
+  }
+  return result;
+}
+
+/** Flattens one level of nesting from an array. */
+export function flatten<T>(arr: Array<T | T[]>): T[] {
+  const result: T[] = [];
+  for (const item of arr) {
+    if (Array.isArray(item)) {
+      for (const sub of item) result.push(sub);
+    } else {
+      result.push(item as T);
+    }
+  }
+  return result;
+}
+
+/** Maps a function that returns an array over an array and flattens the result. */
+export function flatMap<T, R>(fn: (x: T) => R[], arr: T[]): R[] {
+  const result: R[] = [];
+  for (const item of arr) {
+    for (const sub of fn(item)) result.push(sub);
+  }
+  return result;
+}
+
+/** Groups array elements by the string result of a key function. */
+export function groupBy<T>(fn: (x: T) => string, arr: T[]): Record<string, T[]> {
+  const result: Record<string, T[]> = {};
+  for (const item of arr) {
+    const key = fn(item);
+    if (!result[key]) result[key] = [];
+    result[key].push(item);
+  }
+  return result;
+}
+
+/** Returns a new array with duplicate values removed (using ===). */
+export function unique<T>(arr: T[]): T[] {
+  return [...new Set(arr)];
+}
+
+/** Returns a new array with duplicates removed, using a key function for comparison. */
+export function uniqueBy<T>(fn: (x: T) => unknown, arr: T[]): T[] {
+  const seen = new Set<unknown>();
+  const result: T[] = [];
+  for (const item of arr) {
+    const key = fn(item);
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(item);
+    }
+  }
+  return result;
+}
+
+/** Splits an array into consecutive chunks of the given size. */
+export function chunk<T>(arr: T[], size: number): T[][] {
+  if (size <= 0) throw new Error('chunk: size must be a positive integer');
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+}
+
+/** Returns elements that appear in both arrays (intersection). */
+export function intersection<T>(a: T[], b: T[]): T[] {
+  const setB = new Set(b);
+  return a.filter((x) => setB.has(x));
+}
+
+/** Returns elements that are in `a` but not in `b` (set difference). */
+export function difference<T>(a: T[], b: T[]): T[] {
+  const setB = new Set(b);
+  return a.filter((x) => !setB.has(x));
+}
+
+/** Returns all unique elements from either array (set union). */
+export function union<T>(a: T[], b: T[]): T[] {
+  return unique([...a, ...b]);
+}
+
+// ─── Object Utilities ─────────────────────────────────────────────────────────
+
+/** Returns a new object containing only the specified keys. */
+export function pick<T extends object, K extends keyof T>(obj: T, keys: K[]): Pick<T, K> {
+  const result = {} as Pick<T, K>;
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(obj, key)) {
+      result[key] = obj[key];
+    }
+  }
+  return result;
+}
+
+/** Returns a new object with the specified keys removed. */
+export function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
+  const keySet = new Set<string>(keys as unknown as string[]);
+  const result = {} as Omit<T, K>;
+  for (const key of Object.keys(obj) as string[]) {
+    if (!keySet.has(key)) {
+      (result as Record<string, unknown>)[key] = (obj as Record<string, unknown>)[key];
+    }
+  }
+  return result;
+}
+
+/** Returns a new object with all values transformed by a mapping function. */
+export function mapValues<T, R>(
+  obj: Record<string, T>,
+  fn: (v: T, k: string) => R,
+): Record<string, R> {
+  const result: Record<string, R> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    result[key] = fn(value, key);
+  }
+  return result;
+}
+
+/** Returns a new object containing only entries for which the predicate returns true. */
+export function filterValues<T>(
+  obj: Record<string, T>,
+  pred: (v: T, k: string) => boolean,
+): Record<string, T> {
+  const result: Record<string, T> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (pred(value, key)) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 // ─── Memoization ─────────────────────────────────────────────────────────────
 
 /**
