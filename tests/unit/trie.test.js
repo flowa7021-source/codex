@@ -4,408 +4,478 @@ import assert from 'node:assert/strict';
 
 import { Trie, createTrie } from '../../app/modules/trie.js';
 
-// ─── insert / size ────────────────────────────────────────────────────────────
+// ─── insert / search (exact match) ───────────────────────────────────────────
 
-describe('Trie – insert / size', () => {
-  it('starts with size 0', () => {
+describe('Trie – insert / search (exact match)', () => {
+  it('returns false for a word never inserted', () => {
+    const t = new Trie();
+    assert.equal(t.search('hello'), false);
+  });
+
+  it('returns true after inserting a word', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.equal(t.search('hello'), true);
+  });
+
+  it('does not match a prefix as a word', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.equal(t.search('hell'), false);
+  });
+
+  it('does not match a word that extends an inserted word', () => {
+    const t = new Trie();
+    t.insert('hell');
+    assert.equal(t.search('hello'), false);
+  });
+
+  it('supports inserting and searching the empty string', () => {
+    const t = new Trie();
+    t.insert('');
+    assert.equal(t.search(''), true);
+  });
+
+  it('search returns false for empty string when not inserted', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.equal(t.search(''), false);
+  });
+
+  it('is case-sensitive – "Hello" and "hello" are distinct words', () => {
+    const t = new Trie();
+    t.insert('Hello');
+    assert.equal(t.search('Hello'), true);
+    assert.equal(t.search('hello'), false);
+  });
+
+  it('duplicate insert does not increase size', () => {
+    const t = new Trie();
+    t.insert('abc');
+    t.insert('abc');
+    assert.equal(t.size, 1);
+  });
+
+  it('can insert multiple words and search each', () => {
+    const t = new Trie();
+    const words = ['apple', 'app', 'application', 'apply', 'banana'];
+    for (const w of words) t.insert(w);
+    for (const w of words) assert.equal(t.search(w), true);
+  });
+
+  it('single-character words work correctly', () => {
+    const t = new Trie();
+    t.insert('a');
+    assert.equal(t.search('a'), true);
+    assert.equal(t.search('ab'), false);
+  });
+
+  it('unicode characters are handled correctly', () => {
+    const t = new Trie();
+    t.insert('café');
+    assert.equal(t.search('café'), true);
+    assert.equal(t.search('cafe'), false);
+  });
+
+  it('returns false on empty trie', () => {
+    const t = new Trie();
+    assert.equal(t.search('anything'), false);
+  });
+});
+
+// ─── startsWith ───────────────────────────────────────────────────────────────
+
+describe('Trie – startsWith', () => {
+  it('returns true when a stored word starts with the prefix', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.equal(t.startsWith('he'), true);
+  });
+
+  it('returns true for the full word as its own prefix', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.equal(t.startsWith('hello'), true);
+  });
+
+  it('returns false when no word starts with the prefix', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.equal(t.startsWith('world'), false);
+  });
+
+  it('returns false on empty trie', () => {
+    const t = new Trie();
+    assert.equal(t.startsWith('a'), false);
+  });
+
+  it('empty prefix returns true when trie is non-empty', () => {
+    const t = new Trie();
+    t.insert('x');
+    assert.equal(t.startsWith(''), true);
+  });
+
+  it('empty prefix returns false on empty trie', () => {
+    const t = new Trie();
+    assert.equal(t.startsWith(''), false);
+  });
+
+  it('prefix longer than any stored word returns false', () => {
+    const t = new Trie();
+    t.insert('hi');
+    assert.equal(t.startsWith('hiya'), false);
+  });
+
+  it('single character prefix returns true when words share it', () => {
+    const t = new Trie();
+    t.insert('apple');
+    t.insert('avocado');
+    assert.equal(t.startsWith('a'), true);
+  });
+});
+
+// ─── delete ───────────────────────────────────────────────────────────────────
+
+describe('Trie – delete', () => {
+  it('returns true when the word exists and is removed', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.equal(t.delete('hello'), true);
+    assert.equal(t.search('hello'), false);
+  });
+
+  it('returns false when the word does not exist', () => {
+    const t = new Trie();
+    assert.equal(t.delete('missing'), false);
+  });
+
+  it('decrements size on successful delete', () => {
+    const t = new Trie();
+    t.insert('a');
+    t.insert('b');
+    t.delete('a');
+    assert.equal(t.size, 1);
+  });
+
+  it('does not affect other words sharing a prefix', () => {
+    const t = new Trie();
+    t.insert('app');
+    t.insert('apple');
+    t.delete('app');
+    assert.equal(t.search('app'), false);
+    assert.equal(t.search('apple'), true);
+  });
+
+  it('deleting a word that is a prefix of another keeps the longer word', () => {
+    const t = new Trie();
+    t.insert('hello');
+    t.insert('hell');
+    t.delete('hell');
+    assert.equal(t.search('hell'), false);
+    assert.equal(t.search('hello'), true);
+  });
+
+  it('deleting the only word empties the trie', () => {
+    const t = new Trie();
+    t.insert('solo');
+    t.delete('solo');
+    assert.equal(t.size, 0);
+    assert.equal(t.startsWith('s'), false);
+  });
+
+  it('double delete returns false the second time', () => {
+    const t = new Trie();
+    t.insert('word');
+    assert.equal(t.delete('word'), true);
+    assert.equal(t.delete('word'), false);
+  });
+
+  it('deleting a non-word prefix returns false', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.equal(t.delete('hell'), false);
+  });
+
+  it('size does not change on a failed delete', () => {
+    const t = new Trie();
+    t.insert('x');
+    t.delete('nothere');
+    assert.equal(t.size, 1);
+  });
+});
+
+// ─── wordsWithPrefix / autocomplete ──────────────────────────────────────────
+
+describe('Trie – wordsWithPrefix', () => {
+  it('returns all words with a given prefix', () => {
+    const t = new Trie();
+    ['apple', 'app', 'application', 'apply', 'banana'].forEach(w => t.insert(w));
+    const result = t.wordsWithPrefix('app');
+    assert.deepEqual(result, ['app', 'apple', 'application', 'apply']);
+  });
+
+  it('returns results in lexicographic order', () => {
+    const t = new Trie();
+    ['cb', 'ca', 'cc', 'a'].forEach(w => t.insert(w));
+    const result = t.wordsWithPrefix('c');
+    assert.deepEqual(result, ['ca', 'cb', 'cc']);
+  });
+
+  it('returns empty array when no word matches prefix', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.deepEqual(t.wordsWithPrefix('world'), []);
+  });
+
+  it('empty prefix returns all words in lexicographic order', () => {
+    const t = new Trie();
+    ['zebra', 'ant', 'monkey'].forEach(w => t.insert(w));
+    assert.deepEqual(t.wordsWithPrefix(''), ['ant', 'monkey', 'zebra']);
+  });
+
+  it('returns a single-element array when only one word matches', () => {
+    const t = new Trie();
+    t.insert('unique');
+    assert.deepEqual(t.wordsWithPrefix('uni'), ['unique']);
+  });
+
+  it('includes the prefix word itself when it is a stored word', () => {
+    const t = new Trie();
+    t.insert('he');
+    t.insert('hello');
+    const result = t.wordsWithPrefix('he');
+    assert.ok(result.includes('he'));
+    assert.ok(result.includes('hello'));
+  });
+
+  it('returns empty array on empty trie', () => {
+    const t = new Trie();
+    assert.deepEqual(t.wordsWithPrefix('any'), []);
+  });
+});
+
+describe('Trie – autocomplete', () => {
+  it('without maxResults returns all matches', () => {
+    const t = new Trie();
+    ['cat', 'car', 'card', 'care'].forEach(w => t.insert(w));
+    const result = t.autocomplete('ca');
+    assert.deepEqual(result, ['car', 'card', 'care', 'cat']);
+  });
+
+  it('limits results to maxResults', () => {
+    const t = new Trie();
+    ['cat', 'car', 'card', 'care', 'carpenter'].forEach(w => t.insert(w));
+    const result = t.autocomplete('ca', 2);
+    assert.equal(result.length, 2);
+    assert.deepEqual(result, ['car', 'card']);
+  });
+
+  it('maxResults larger than matches returns all matches', () => {
+    const t = new Trie();
+    ['fox', 'fog'].forEach(w => t.insert(w));
+    const result = t.autocomplete('fo', 100);
+    assert.deepEqual(result, ['fog', 'fox']);
+  });
+
+  it('returns empty array when prefix does not match anything', () => {
+    const t = new Trie();
+    t.insert('hello');
+    assert.deepEqual(t.autocomplete('xyz', 5), []);
+  });
+
+  it('maxResults of 0 returns empty array', () => {
+    const t = new Trie();
+    t.insert('test');
+    assert.deepEqual(t.autocomplete('te', 0), []);
+  });
+
+  it('autocomplete with no limit returns same as wordsWithPrefix', () => {
+    const t = new Trie();
+    ['banana', 'apple', 'cherry'].forEach(w => t.insert(w));
+    assert.deepEqual(t.autocomplete(''), t.wordsWithPrefix(''));
+  });
+});
+
+// ─── longestCommonPrefix ─────────────────────────────────────────────────────
+
+describe('Trie – longestCommonPrefix', () => {
+  it('returns empty string for an empty trie', () => {
+    const t = new Trie();
+    assert.equal(t.longestCommonPrefix(), '');
+  });
+
+  it('returns the full word when only one word is stored', () => {
+    const t = new Trie();
+    t.insert('flower');
+    assert.equal(t.longestCommonPrefix(), 'flower');
+  });
+
+  it('returns shared prefix of multiple words', () => {
+    const t = new Trie();
+    ['flower', 'flow', 'flight'].forEach(w => t.insert(w));
+    assert.equal(t.longestCommonPrefix(), 'fl');
+  });
+
+  it('returns empty string when words share no common prefix', () => {
+    const t = new Trie();
+    ['apple', 'banana'].forEach(w => t.insert(w));
+    assert.equal(t.longestCommonPrefix(), '');
+  });
+
+  it('returns the shorter word when one word is a prefix of another', () => {
+    const t = new Trie();
+    ['abc', 'abcdef'].forEach(w => t.insert(w));
+    assert.equal(t.longestCommonPrefix(), 'abc');
+  });
+
+  it('handles all identical words (single unique word)', () => {
+    const t = new Trie();
+    t.insert('same');
+    t.insert('same');
+    assert.equal(t.longestCommonPrefix(), 'same');
+  });
+
+  it('returns empty string when words diverge at the root', () => {
+    const t = new Trie();
+    ['a', 'b', 'c'].forEach(w => t.insert(w));
+    assert.equal(t.longestCommonPrefix(), '');
+  });
+
+  it('returns full common prefix across many words', () => {
+    const t = new Trie();
+    ['interview', 'interact', 'internal', 'international'].forEach(w => t.insert(w));
+    assert.equal(t.longestCommonPrefix(), 'inter');
+  });
+
+  it('returns empty string when the empty string is inserted alongside other words', () => {
+    const t = new Trie();
+    t.insert('');
+    t.insert('apple');
+    assert.equal(t.longestCommonPrefix(), '');
+  });
+});
+
+// ─── size ─────────────────────────────────────────────────────────────────────
+
+describe('Trie – size', () => {
+  it('starts at 0', () => {
     const t = new Trie();
     assert.equal(t.size, 0);
   });
 
-  it('size increments for each unique word', () => {
+  it('increments on each distinct insert', () => {
     const t = new Trie();
-    t.insert('apple');
-    t.insert('banana');
-    t.insert('cherry');
-    assert.equal(t.size, 3);
+    t.insert('a');
+    assert.equal(t.size, 1);
+    t.insert('b');
+    assert.equal(t.size, 2);
   });
 
-  it('duplicate insert does not increase size', () => {
+  it('does not increment for duplicate words', () => {
     const t = new Trie();
     t.insert('hello');
     t.insert('hello');
     assert.equal(t.size, 1);
   });
 
-  it('inserting many words tracks all of them', () => {
+  it('decrements on delete', () => {
+    const t = new Trie();
+    t.insert('x');
+    t.delete('x');
+    assert.equal(t.size, 0);
+  });
+
+  it('does not change on failed delete', () => {
+    const t = new Trie();
+    t.insert('x');
+    t.delete('nothere');
+    assert.equal(t.size, 1);
+  });
+
+  it('tracks many insertions correctly', () => {
     const t = new Trie();
     const words = ['one', 'two', 'three', 'four', 'five'];
     for (const w of words) t.insert(w);
     assert.equal(t.size, 5);
   });
-
-  it('can insert an empty string', () => {
-    const t = new Trie();
-    t.insert('');
-    assert.equal(t.size, 1);
-  });
-
-  it('words sharing a prefix are counted individually', () => {
-    const t = new Trie();
-    t.insert('app');
-    t.insert('apple');
-    t.insert('apply');
-    assert.equal(t.size, 3);
-  });
 });
 
-// ─── has() ────────────────────────────────────────────────────────────────────
+// ─── clear ────────────────────────────────────────────────────────────────────
 
-describe('Trie – has()', () => {
-  it('returns true for an inserted word', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.equal(t.has('hello'), true);
-  });
-
-  it('returns false for a word not inserted', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.equal(t.has('world'), false);
-  });
-
-  it('returns false for a strict prefix of a stored word', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.equal(t.has('hell'), false);
-  });
-
-  it('returns false for a word that extends a stored word', () => {
-    const t = new Trie();
-    t.insert('hell');
-    assert.equal(t.has('hello'), false);
-  });
-
-  it('returns true for the empty string when it was inserted', () => {
-    const t = new Trie();
-    t.insert('');
-    assert.equal(t.has(''), true);
-  });
-
-  it('returns false for the empty string when it was not inserted', () => {
-    const t = new Trie();
-    t.insert('abc');
-    assert.equal(t.has(''), false);
-  });
-
-  it('returns false on an empty trie', () => {
-    const t = new Trie();
-    assert.equal(t.has('anything'), false);
-  });
-});
-
-// ─── hasPrefix() ──────────────────────────────────────────────────────────────
-
-describe('Trie – hasPrefix()', () => {
-  it('returns true for a proper prefix of a stored word', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.equal(t.hasPrefix('hel'), true);
-  });
-
-  it('returns true when the prefix equals a stored word', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.equal(t.hasPrefix('hello'), true);
-  });
-
-  it('returns false for a prefix not present', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.equal(t.hasPrefix('world'), false);
-  });
-
-  it('returns true for an empty-string prefix when words exist', () => {
-    const t = new Trie();
-    t.insert('abc');
-    assert.equal(t.hasPrefix(''), true);
-  });
-
-  it('returns false on an empty trie', () => {
-    const t = new Trie();
-    assert.equal(t.hasPrefix(''), false);
-    assert.equal(t.hasPrefix('a'), false);
-  });
-
-  it('returns false when prefix overshoots a stored word', () => {
-    const t = new Trie();
-    t.insert('hi');
-    assert.equal(t.hasPrefix('hint'), false);
-  });
-});
-
-// ─── delete() ─────────────────────────────────────────────────────────────────
-
-describe('Trie – delete()', () => {
-  it('returns true and removes the word', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.equal(t.delete('hello'), true);
-    assert.equal(t.has('hello'), false);
-  });
-
-  it('returns false for a word that was never inserted', () => {
-    const t = new Trie();
-    assert.equal(t.delete('missing'), false);
-  });
-
-  it('decrements size after deletion', () => {
-    const t = new Trie();
-    t.insert('foo');
-    t.insert('bar');
-    t.delete('foo');
-    assert.equal(t.size, 1);
-  });
-
-  it('does not affect sibling words sharing a prefix', () => {
-    const t = new Trie();
-    t.insert('apple');
-    t.insert('app');
-    t.delete('app');
-    assert.equal(t.has('apple'), true);
-    assert.equal(t.has('app'), false);
-  });
-
-  it('keeps the prefix intact when only the full word is deleted', () => {
-    const t = new Trie();
-    t.insert('hello');
-    t.insert('hell');
-    t.delete('hello');
-    assert.equal(t.has('hell'), true);
-    assert.equal(t.hasPrefix('hell'), true);
-  });
-
-  it('deleting a non-existent word does not change size', () => {
-    const t = new Trie();
-    t.insert('foo');
-    t.delete('bar');
-    assert.equal(t.size, 1);
-  });
-
-  it('returns false when deleting a word twice', () => {
-    const t = new Trie();
-    t.insert('once');
-    t.delete('once');
-    assert.equal(t.delete('once'), false);
-  });
-});
-
-// ─── search() / startsWith() ──────────────────────────────────────────────────
-
-describe('Trie – search() / startsWith()', () => {
-  it('search returns all words with a given prefix, sorted', () => {
-    const t = new Trie();
-    t.insert('apple');
-    t.insert('app');
-    t.insert('apply');
-    t.insert('banana');
-    assert.deepEqual(t.search('app'), ['app', 'apple', 'apply']);
-  });
-
-  it('startsWith is an alias for search', () => {
-    const t = new Trie();
-    t.insert('cat');
-    t.insert('car');
-    t.insert('card');
-    assert.deepEqual(t.startsWith('car'), t.search('car'));
-  });
-
-  it('search with empty prefix returns all words sorted', () => {
-    const t = new Trie();
-    t.insert('zebra');
-    t.insert('ant');
-    t.insert('mango');
-    assert.deepEqual(t.search(''), ['ant', 'mango', 'zebra']);
-  });
-
-  it('search returns empty array for non-existent prefix', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.deepEqual(t.search('xyz'), []);
-  });
-
-  it('search returns single word when prefix matches exactly one word', () => {
-    const t = new Trie();
-    t.insert('cat');
-    t.insert('dog');
-    assert.deepEqual(t.search('dog'), ['dog']);
-  });
-
-  it('search returns empty array on empty trie', () => {
-    const t = new Trie();
-    assert.deepEqual(t.search('a'), []);
-  });
-
-  it('search result includes the prefix word itself when it is stored', () => {
-    const t = new Trie();
-    t.insert('pre');
-    t.insert('prefix');
-    assert.ok(t.search('pre').includes('pre'));
-    assert.ok(t.search('pre').includes('prefix'));
-  });
-});
-
-// ─── autocomplete() ───────────────────────────────────────────────────────────
-
-describe('Trie – autocomplete()', () => {
-  it('returns up to the default limit of 10', () => {
-    const t = new Trie();
-    for (let i = 0; i < 15; i++) t.insert(`word${i}`);
-    const result = t.autocomplete('word');
-    assert.equal(result.length, 10);
-  });
-
-  it('respects a custom limit', () => {
-    const t = new Trie();
-    t.insert('apple');
-    t.insert('apply');
-    t.insert('apt');
-    t.insert('art');
-    assert.equal(t.autocomplete('a', 2).length, 2);
-  });
-
-  it('returns fewer than limit when fewer words match', () => {
-    const t = new Trie();
-    t.insert('cat');
-    t.insert('car');
-    assert.equal(t.autocomplete('ca', 10).length, 2);
-  });
-
-  it('returns results in alphabetical order', () => {
-    const t = new Trie();
-    t.insert('zebra');
-    t.insert('apple');
-    t.insert('mango');
-    const result = t.autocomplete('', 3);
-    assert.deepEqual(result, ['apple', 'mango', 'zebra']);
-  });
-
-  it('returns empty array when prefix does not match', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.deepEqual(t.autocomplete('xyz'), []);
-  });
-
-  it('limit of 0 returns empty array', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.deepEqual(t.autocomplete('h', 0), []);
-  });
-
-  it('autocomplete with limit 1 returns the alphabetically first match', () => {
-    const t = new Trie();
-    t.insert('banana');
-    t.insert('apple');
-    t.insert('cherry');
-    assert.deepEqual(t.autocomplete('', 1), ['apple']);
-  });
-});
-
-// ─── countWithPrefix() ────────────────────────────────────────────────────────
-
-describe('Trie – countWithPrefix()', () => {
-  it('counts all words sharing a prefix', () => {
-    const t = new Trie();
-    t.insert('app');
-    t.insert('apple');
-    t.insert('apply');
-    t.insert('banana');
-    assert.equal(t.countWithPrefix('app'), 3);
-  });
-
-  it('returns 0 for a non-existent prefix', () => {
-    const t = new Trie();
-    t.insert('hello');
-    assert.equal(t.countWithPrefix('xyz'), 0);
-  });
-
-  it('returns 0 on empty trie', () => {
-    const t = new Trie();
-    assert.equal(t.countWithPrefix('a'), 0);
-  });
-
-  it('counts with empty prefix equals total size', () => {
-    const t = new Trie();
-    t.insert('one');
-    t.insert('two');
-    t.insert('three');
-    assert.equal(t.countWithPrefix(''), t.size);
-  });
-
-  it('counts correctly when prefix is an exact stored word', () => {
-    const t = new Trie();
-    t.insert('cat');
-    t.insert('cats');
-    assert.equal(t.countWithPrefix('cat'), 2);
-  });
-
-  it('decreases after deletion', () => {
-    const t = new Trie();
-    t.insert('app');
-    t.insert('apple');
-    t.delete('app');
-    assert.equal(t.countWithPrefix('app'), 1);
-  });
-});
-
-// ─── clear() ──────────────────────────────────────────────────────────────────
-
-describe('Trie – clear()', () => {
+describe('Trie – clear', () => {
   it('resets size to 0', () => {
     const t = new Trie();
-    t.insert('hello');
-    t.insert('world');
+    t.insert('a');
+    t.insert('b');
     t.clear();
     assert.equal(t.size, 0);
   });
 
-  it('removes all words', () => {
+  it('previously inserted words are no longer found', () => {
     const t = new Trie();
-    t.insert('foo');
-    t.insert('bar');
+    t.insert('hello');
     t.clear();
-    assert.equal(t.has('foo'), false);
-    assert.equal(t.has('bar'), false);
+    assert.equal(t.search('hello'), false);
   });
 
-  it('allows insertions after clearing', () => {
+  it('startsWith returns false after clear', () => {
     const t = new Trie();
-    t.insert('old');
+    t.insert('hello');
     t.clear();
-    t.insert('new');
-    assert.equal(t.has('new'), true);
+    assert.equal(t.startsWith('h'), false);
+  });
+
+  it('trie is usable again after clear', () => {
+    const t = new Trie();
+    t.insert('before');
+    t.clear();
+    t.insert('after');
+    assert.equal(t.search('after'), true);
+    assert.equal(t.search('before'), false);
     assert.equal(t.size, 1);
   });
 
   it('toArray returns empty after clear', () => {
     const t = new Trie();
-    t.insert('a');
+    t.insert('foo');
     t.clear();
     assert.deepEqual(t.toArray(), []);
   });
 });
 
-// ─── toArray() ────────────────────────────────────────────────────────────────
+// ─── toArray ─────────────────────────────────────────────────────────────────
 
-describe('Trie – toArray()', () => {
-  it('returns all words in alphabetical order', () => {
-    const t = new Trie();
-    t.insert('mango');
-    t.insert('apple');
-    t.insert('banana');
-    assert.deepEqual(t.toArray(), ['apple', 'banana', 'mango']);
-  });
-
-  it('returns empty array for empty trie', () => {
+describe('Trie – toArray', () => {
+  it('returns empty array on empty trie', () => {
     const t = new Trie();
     assert.deepEqual(t.toArray(), []);
   });
 
-  it('does not return duplicates', () => {
+  it('returns all words in lexicographic order', () => {
     const t = new Trie();
-    t.insert('hello');
-    t.insert('hello');
-    assert.deepEqual(t.toArray(), ['hello']);
+    ['zebra', 'ant', 'cat', 'bear'].forEach(w => t.insert(w));
+    assert.deepEqual(t.toArray(), ['ant', 'bear', 'cat', 'zebra']);
+  });
+
+  it('includes words that are prefixes of other words', () => {
+    const t = new Trie();
+    t.insert('a');
+    t.insert('ab');
+    t.insert('abc');
+    assert.deepEqual(t.toArray(), ['a', 'ab', 'abc']);
+  });
+
+  it('handles a single word', () => {
+    const t = new Trie();
+    t.insert('only');
+    assert.deepEqual(t.toArray(), ['only']);
+  });
+
+  it('reflects deletions', () => {
+    const t = new Trie();
+    ['apple', 'banana', 'cherry'].forEach(w => t.insert(w));
+    t.delete('banana');
+    assert.deepEqual(t.toArray(), ['apple', 'cherry']);
   });
 
   it('length equals size', () => {
@@ -416,57 +486,11 @@ describe('Trie – toArray()', () => {
     assert.equal(t.toArray().length, t.size);
   });
 
-  it('reflects deletions', () => {
-    const t = new Trie();
-    t.insert('cat');
-    t.insert('dog');
-    t.delete('cat');
-    assert.deepEqual(t.toArray(), ['dog']);
-  });
-});
-
-// ─── longestCommonPrefix() ────────────────────────────────────────────────────
-
-describe('Trie – longestCommonPrefix()', () => {
-  it('returns empty string for an empty trie', () => {
-    const t = new Trie();
-    assert.equal(t.longestCommonPrefix(), '');
-  });
-
-  it('returns the whole word when only one word is stored', () => {
+  it('does not return duplicates', () => {
     const t = new Trie();
     t.insert('hello');
-    assert.equal(t.longestCommonPrefix(), 'hello');
-  });
-
-  it('returns the shared prefix of multiple words', () => {
-    const t = new Trie();
-    t.insert('flower');
-    t.insert('flow');
-    t.insert('flight');
-    assert.equal(t.longestCommonPrefix(), 'fl');
-  });
-
-  it('returns empty string when words share no common prefix', () => {
-    const t = new Trie();
-    t.insert('apple');
-    t.insert('banana');
-    assert.equal(t.longestCommonPrefix(), '');
-  });
-
-  it('returns empty string when one of the words is the empty string', () => {
-    const t = new Trie();
-    t.insert('');
-    t.insert('apple');
-    assert.equal(t.longestCommonPrefix(), '');
-  });
-
-  it('returns the common prefix for words with same start', () => {
-    const t = new Trie();
-    t.insert('interview');
-    t.insert('interact');
-    t.insert('internal');
-    assert.equal(t.longestCommonPrefix(), 'inter');
+    t.insert('hello');
+    assert.deepEqual(t.toArray(), ['hello']);
   });
 });
 
@@ -478,34 +502,50 @@ describe('createTrie factory', () => {
     assert.ok(t instanceof Trie);
   });
 
-  it('creates an empty trie when no words are provided', () => {
+  it('creates an empty trie when called with no arguments', () => {
     const t = createTrie();
     assert.equal(t.size, 0);
   });
 
-  it('pre-populates with the given words', () => {
-    const t = createTrie(['apple', 'banana', 'cherry']);
-    assert.equal(t.size, 3);
-    assert.equal(t.has('apple'), true);
-    assert.equal(t.has('banana'), true);
-    assert.equal(t.has('cherry'), true);
+  it('creates an empty trie when called with undefined', () => {
+    const t = createTrie(undefined);
+    assert.equal(t.size, 0);
   });
 
-  it('deduplicates words passed to the factory', () => {
-    const t = createTrie(['foo', 'foo', 'bar']);
+  it('pre-populates words from the array argument', () => {
+    const t = createTrie(['hello', 'world']);
+    assert.equal(t.search('hello'), true);
+    assert.equal(t.search('world'), true);
     assert.equal(t.size, 2);
   });
 
-  it('supports all Trie methods on the created instance', () => {
-    const t = createTrie(['prefix', 'pre', 'prelude']);
-    assert.deepEqual(t.search('pre'), ['pre', 'prefix', 'prelude']);
-    assert.equal(t.countWithPrefix('pre'), 3);
-    assert.equal(t.longestCommonPrefix(), 'pre');
-  });
-
-  it('works with an empty array argument', () => {
+  it('handles an empty array argument', () => {
     const t = createTrie([]);
     assert.equal(t.size, 0);
-    assert.deepEqual(t.toArray(), []);
+  });
+
+  it('deduplicates words in the initial array', () => {
+    const t = createTrie(['a', 'a', 'b']);
+    assert.equal(t.size, 2);
+  });
+
+  it('resulting trie supports all operations', () => {
+    const t = createTrie(['foo', 'bar', 'baz']);
+    assert.equal(t.startsWith('ba'), true);
+    assert.deepEqual(t.wordsWithPrefix('ba'), ['bar', 'baz']);
+    assert.deepEqual(t.toArray(), ['bar', 'baz', 'foo']);
+    t.delete('bar');
+    assert.equal(t.size, 2);
+  });
+
+  it('pre-populated trie has correct longestCommonPrefix', () => {
+    const t = createTrie(['interview', 'interact', 'internal']);
+    assert.equal(t.longestCommonPrefix(), 'inter');
+  });
+
+  it('search works correctly on factory-created trie', () => {
+    const t = createTrie(['cat', 'car', 'card']);
+    assert.equal(t.search('cat'), true);
+    assert.equal(t.search('ca'), false);
   });
 });

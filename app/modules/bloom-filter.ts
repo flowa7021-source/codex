@@ -1,214 +1,238 @@
 // @ts-check
-// ─── Bloom Filter ────────────────────────────────────────────────────────────
-// A probabilistic data structure for membership testing.
+// ─── Bloom Filter Probabilistic Data Structure ───────────────────────────────
+// A space-efficient probabilistic data structure for membership testing.
 // May return false positives, but never false negatives.
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Hash Helper ─────────────────────────────────────────────────────────────
 
 /**
- * FNV-1a 32-bit hash variant with a seed offset mixed into the basis.
- * Returns a non-negative 32-bit integer.
+ * FNV-1a 32-bit hash with a seed mixed into the offset basis so each value of
+ * `seed` produces an independent hash function. Returns a non-negative integer.
  */
 function fnv1a(str: string, seed: number): number {
-  // Mix seed into the FNV-1a offset basis (2166136261 = 0x811c9dc5).
+  // Mix seed into FNV offset basis (2166136261 = 0x811c9dc5).
   let h = (2166136261 ^ (seed * 0x9e3779b9)) >>> 0;
   for (let i = 0; i < str.length; i++) {
     h ^= str.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
+    h = Math.imul(h, 16777619) >>> 0; // FNV prime
   }
   return h >>> 0;
 }
 
 /**
- * Compute optimal bit-array size from expected item count and desired FP rate.
- * Formula: m = -n * ln(p) / (ln 2)^2
+ * Return `hashCount` bit-positions for `item` in a bit array of `size` bits.
  */
-function optimalSize(expectedItems: number, falsePositiveRate: number): number {
-  const ln2 = Math.LN2;
-  return Math.ceil((-expectedItems * Math.log(falsePositiveRate)) / (ln2 * ln2));
+function positions(item: string, size: number, hashCount: number): number[] {
+  const result: number[] = [];
+  for (let i = 0; i < hashCount; i++) {
+    result.push(fnv1a(item, i) % size);
+  }
+  return result;
 }
 
-/**
- * Compute optimal number of hash functions.
- * Formula: k = (m / n) * ln 2
- */
-function optimalHashCount(size: number, expectedItems: number): number {
-  return Math.max(1, Math.round((size / expectedItems) * Math.LN2));
-}
-
-// ─── BloomFilter ──────────────────────────────────────────────────────────────
+// ─── BloomFilter ─────────────────────────────────────────────────────────────
 
 /**
- * Classic Bloom filter backed by a flat Uint8Array of 0/1 entries.
+ * Classic Bloom filter backed by a packed Uint8Array bit vector.
  *
- * Never produces false negatives; may produce false positives.
- * The false-positive rate depends on `size`, `hashCount`, and the number of
- * items added.
+ * - Never produces false negatives.
+ * - May produce false positives at a rate that depends on size, hashCount, and
+ *   the number of items added.
  */
 export class BloomFilter {
-  /** Flat bit array (one byte per logical bit for easy serialization). */
+  /** Packed bit vector: bit `pos` lives in byte `pos >>> 3`, bit `pos & 7`. */
   #bits: Uint8Array;
   /** Number of logical bits in the filter. */
   #size: number;
   /** Number of independent hash functions. */
   #hashCount: number;
-  /** Number of bits currently set to 1. */
-  #bitCount: number;
+  /** Total number of `add()` calls (used for FPR estimation). */
+  #itemCount: number;
 
-  constructor(options?: { size?: number; hashFunctions?: number }) {
-    this.#size = options?.size ?? 1024;
-    this.#hashCount = options?.hashFunctions ?? 3;
-    if (this.#size < 1) throw new RangeError('size must be >= 1');
-    if (this.#hashCount < 1) throw new RangeError('hashFunctions must be >= 1');
-    this.#bits = new Uint8Array(this.#size);
-    this.#bitCount = 0;
+  /**
+   * @param size      Bit-array size (default 1024).
+   * @param hashCount Number of hash functions (default 3).
+   */
+  constructor(size: number = 1024, hashCount: number = 3) {
+    if (size < 1) throw new RangeError('size must be >= 1');
+    if (hashCount < 1) throw new RangeError('hashCount must be >= 1');
+    this.#size = size;
+    this.#hashCount = hashCount;
+    this.#bits = new Uint8Array(Math.ceil(size / 8));
+    this.#itemCount = 0;
   }
 
-  // ── Public getters ──────────────────────────────────────────────────────────
+  // ── Public API ──────────────────────────────────────────────────────────────
 
-  /** Bit array size. */
+  /** Insert `item` into the filter. */
+  add(item: string): void {
+    for (const pos of positions(item, this.#size, this.#hashCount)) {
+      this.#bits[pos >>> 3] |= 1 << (pos & 7);
+    }
+    this.#itemCount++;
+  }
+
+  /**
+   * Test membership.
+   * Returns `false` → item is definitely NOT in the filter.
+   * Returns `true`  → item is probably in the filter (false positive possible).
+   */
+  has(item: string): boolean {
+    for (const pos of positions(item, this.#size, this.#hashCount)) {
+      if ((this.#bits[pos >>> 3] & (1 << (pos & 7))) === 0) return false;
+    }
+    return true;
+  }
+
+  /** The bit-array size. */
   get size(): number {
     return this.#size;
   }
 
-  /** Number of hash functions. */
+  /** The number of hash functions. */
   get hashCount(): number {
     return this.#hashCount;
   }
 
-  /** Number of bits currently set to 1. */
-  get bitCount(): number {
-    return this.#bitCount;
-  }
-
-  /** Approximate fill ratio: bitCount / size. */
+  /** Fraction of bits that are set (0..1). */
   get fillRatio(): number {
-    return this.#bitCount / this.#size;
-  }
-
-  // ── Core operations ─────────────────────────────────────────────────────────
-
-  /** Add an item to the filter. */
-  add(item: string): void {
-    for (let i = 0; i < this.#hashCount; i++) {
-      const index = fnv1a(item, i) % this.#size;
-      if (this.#bits[index] === 0) {
-        this.#bits[index] = 1;
-        this.#bitCount++;
+    let setBits = 0;
+    for (const byte of this.#bits) {
+      let b = byte;
+      while (b > 0) {
+        b &= b - 1; // Kernighan's bit-count trick
+        setBits++;
       }
     }
-  }
-
-  /**
-   * Test whether an item may be in the filter.
-   * Returns `false`  → item is definitely NOT in the filter.
-   * Returns `true`   → item is probably in the filter (false positive possible).
-   */
-  has(item: string): boolean {
-    for (let i = 0; i < this.#hashCount; i++) {
-      const index = fnv1a(item, i) % this.#size;
-      if (this.#bits[index] === 0) return false;
-    }
-    return true;
+    return setBits / this.#size;
   }
 
   /** Reset the filter to an empty state. */
   clear(): void {
     this.#bits.fill(0);
-    this.#bitCount = 0;
+    this.#itemCount = 0;
   }
 
-  // ── Estimation ──────────────────────────────────────────────────────────────
-
   /**
-   * Estimate the current false-positive probability.
-   *
-   * We first estimate the number of inserted items from the observed fill
-   * ratio using the formula:  n̂ ≈ -(m / k) · ln(1 - bitCount / m)
-   * then plug n̂ back into the standard FP formula: (1 - e^(-k·n̂/m))^k
+   * Estimate the current false-positive probability using the standard formula:
+   *   FPR = (1 - e^(-k * n / m))^k
+   * where k = hashCount, n = items added, m = size.
    */
-  estimateFalsePositiveRate(): number {
-    if (this.#bitCount === 0) return 0;
+  estimatedFalsePositiveRate(): number {
+    if (this.#itemCount === 0) return 0;
     const k = this.#hashCount;
+    const n = this.#itemCount;
     const m = this.#size;
-    const ratio = this.#bitCount / m;
-    if (ratio >= 1) return 1;
-    const estimatedN = (-m / k) * Math.log(1 - ratio);
-    const inner = 1 - Math.exp((-k * estimatedN) / m);
-    return Math.pow(inner, k);
+    return Math.pow(1 - Math.exp((-k * n) / m), k);
   }
+}
 
-  // ── Merge ────────────────────────────────────────────────────────────────────
+// ─── CountingBloomFilter ──────────────────────────────────────────────────────
+
+/**
+ * Counting Bloom filter: each slot holds a small counter instead of a single
+ * bit, which allows element removal (best-effort).
+ *
+ * Counters saturate at 255 to avoid overflow; removal of items added more than
+ * 255 times may be silently skipped.
+ */
+export class CountingBloomFilter {
+  /** One byte per slot (counter, saturates at 255). */
+  #counters: Uint8Array;
+  /** Number of counter slots. */
+  #size: number;
+  /** Number of independent hash functions. */
+  #hashCount: number;
 
   /**
-   * Merge another BloomFilter into this one via bitwise OR.
-   * Both filters must have identical size and hashCount.
-   * Throws a `RangeError` if the parameters differ.
+   * @param size      Number of counter slots (default 1024).
+   * @param hashCount Number of hash functions (default 3).
    */
-  merge(other: BloomFilter): void {
-    if (other.#size !== this.#size || other.#hashCount !== this.#hashCount) {
-      throw new RangeError(
-        `Cannot merge filters with different parameters: ` +
-          `this(size=${this.#size}, hashCount=${this.#hashCount}) vs ` +
-          `other(size=${other.#size}, hashCount=${other.#hashCount})`,
-      );
-    }
-    for (let i = 0; i < this.#size; i++) {
-      if (other.#bits[i] === 1 && this.#bits[i] === 0) {
-        this.#bits[i] = 1;
-        this.#bitCount++;
+  constructor(size: number = 1024, hashCount: number = 3) {
+    if (size < 1) throw new RangeError('size must be >= 1');
+    if (hashCount < 1) throw new RangeError('hashCount must be >= 1');
+    this.#size = size;
+    this.#hashCount = hashCount;
+    this.#counters = new Uint8Array(size);
+  }
+
+  // ── Public API ──────────────────────────────────────────────────────────────
+
+  /** Insert `item`, incrementing each relevant counter. */
+  add(item: string): void {
+    for (const pos of positions(item, this.#size, this.#hashCount)) {
+      if (this.#counters[pos] < 255) {
+        this.#counters[pos]++;
       }
     }
   }
 
-  // ── Serialization ────────────────────────────────────────────────────────────
-
-  /** Serialize the filter to a plain array of 0/1 numbers. */
-  toBitArray(): number[] {
-    return Array.from(this.#bits);
+  /**
+   * Test membership.
+   * Returns `false` → item is definitely NOT in the filter.
+   * Returns `true`  → item is probably in the filter (false positive possible).
+   */
+  has(item: string): boolean {
+    for (const pos of positions(item, this.#size, this.#hashCount)) {
+      if (this.#counters[pos] === 0) return false;
+    }
+    return true;
   }
 
   /**
-   * Restore a BloomFilter from a serialized bit array.
-   * The array length becomes the filter's `size`.
-   *
-   * @param bits          Array of 0/1 values (non-zero treated as 1).
-   * @param hashFunctions Number of hash functions to use (default 3).
+   * Remove `item` from the filter by decrementing its counters.
+   * Returns `false` (best-effort) if the item does not appear to be present.
    */
-  static fromBitArray(bits: number[], hashFunctions?: number): BloomFilter {
-    const filter = new BloomFilter({ size: bits.length, hashFunctions });
-    let count = 0;
-    for (let i = 0; i < bits.length; i++) {
-      const bit = bits[i] ? 1 : 0;
-      filter.#bits[i] = bit;
-      if (bit === 1) count++;
+  remove(item: string): boolean {
+    const slots = positions(item, this.#size, this.#hashCount);
+    // Check first: if any counter is 0 the item is definitely not here.
+    for (const pos of slots) {
+      if (this.#counters[pos] === 0) return false;
     }
-    filter.#bitCount = count;
-    return filter;
+    for (const pos of slots) {
+      this.#counters[pos]--;
+    }
+    return true;
+  }
+
+  /** The number of counter slots. */
+  get size(): number {
+    return this.#size;
+  }
+
+  /** The number of hash functions. */
+  get hashCount(): number {
+    return this.#hashCount;
+  }
+
+  /** Reset the filter to an empty state. */
+  clear(): void {
+    this.#counters.fill(0);
   }
 }
 
-// ─── Factory ──────────────────────────────────────────────────────────────────
+// ─── Factory ─────────────────────────────────────────────────────────────────
 
 /**
- * Create a BloomFilter with size and hashCount computed to satisfy the given
- * `expectedItems` count and `falsePositiveRate` target.
+ * Create a `BloomFilter` sized to satisfy the given expected item count and
+ * target false-positive rate.
  *
- * Optimal size:       m = -n · ln(p) / (ln 2)²
+ * Optimal bit count:  m = -n · ln(p) / (ln 2)²
  * Optimal hash count: k = (m / n) · ln 2
  *
- * @param expectedItems     Expected number of distinct items to store (default 100).
- * @param falsePositiveRate Desired false-positive probability, e.g. 0.01 (default).
+ * @param expectedItems     Number of items to be inserted.
+ * @param falsePositiveRate Target false-positive rate (default 0.01 = 1 %).
  */
 export function createBloomFilter(
-  expectedItems: number = 100,
+  expectedItems: number,
   falsePositiveRate: number = 0.01,
 ): BloomFilter {
   if (expectedItems < 1) throw new RangeError('expectedItems must be >= 1');
   if (falsePositiveRate <= 0 || falsePositiveRate >= 1) {
     throw new RangeError('falsePositiveRate must be strictly between 0 and 1');
   }
-  const size = optimalSize(expectedItems, falsePositiveRate);
-  const hashFunctions = optimalHashCount(size, expectedItems);
-  return new BloomFilter({ size, hashFunctions });
+  const ln2 = Math.LN2;
+  const m = Math.ceil((-expectedItems * Math.log(falsePositiveRate)) / (ln2 * ln2));
+  const k = Math.max(1, Math.round((m / expectedItems) * ln2));
+  return new BloomFilter(m, k);
 }

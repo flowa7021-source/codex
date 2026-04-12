@@ -1,47 +1,46 @@
 // @ts-check
-// ─── CSV Parser & Formatter ──────────────────────────────────────────────────
-// A zero-dependency CSV parsing and formatting library that handles RFC 4180
-// features: quoted fields, embedded commas, embedded newlines, escaped quotes.
+// ─── CSV Parser & Serializer ─────────────────────────────────────────────────
+// RFC 4180-compatible CSV parser and serializer with support for custom
+// delimiters, quoting, escaping, header rows, and stream-like line parsing.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/** Options controlling how a CSV string is parsed. */
 export interface ParseOptions {
-  /** Field delimiter character. Default: `','` */
-  delimiter?: string;
-  /** Quote character used to wrap fields with special characters. Default: `'"'` */
-  quote?: string;
-  /** Escape character inside quoted fields (doubling). Default: `'"'` */
-  escape?: string;
-  /** Treat the first row as column headers. Default: `true` */
-  header?: boolean;
-  /** Skip rows that are entirely empty. Default: `true` */
-  skipEmpty?: boolean;
-  /** Trim leading/trailing whitespace from each field value. Default: `false` */
-  trim?: boolean;
-}
-
-/** Options controlling how data is serialised to a CSV string. */
-export interface StringifyOptions {
-  /** Field delimiter character. Default: `','` */
+  /** Field delimiter. Default: `','` */
   delimiter?: string;
   /** Quote character. Default: `'"'` */
   quote?: string;
-  /** Include a header row derived from object keys. Default: `true` */
-  header?: boolean;
+  /** Escape character for quotes inside quoted fields. Default: `'"'` (doubled-quote) */
+  escape?: string;
+  /** Treat the first row as column headers. Default: `true` */
+  hasHeader?: boolean;
+  /** Skip blank lines. Default: `true` */
+  skipEmptyLines?: boolean;
+  /** Trim whitespace from unquoted field values. Default: `false` */
+  trimValues?: boolean;
+}
+
+export interface SerializeOptions {
+  /** Field delimiter. Default: `','` */
+  delimiter?: string;
+  /** Quote character. Default: `'"'` */
+  quote?: string;
+  /** Column headers to use when serializing an array of objects. */
+  headers?: string[];
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
 /**
  * Core tokeniser: parse a CSV string into a 2-D array of raw string fields.
- * Handles quoted fields with embedded commas, newlines and escaped quotes.
- * Supports both CRLF and LF line endings and configurable delimiter/quote.
+ * Handles quoted fields with embedded commas, newlines, and escaped quotes.
+ * Supports both CRLF and LF line endings and configurable delimiter/quote/escape.
  */
 function tokenise(
   input: string,
   delimiter: string,
   quote: string,
+  escape: string,
   trimFields: boolean,
   skipEmpty: boolean,
 ): string[][] {
@@ -49,45 +48,57 @@ function tokenise(
   let row: string[] = [];
   let field = '';
   let inQuotes = false;
+  let fieldWasQuoted = false;
   let i = 0;
+
+  const pushField = (): void => {
+    // Only trim unquoted fields when trimFields is true
+    row.push(trimFields && !fieldWasQuoted ? field.trim() : field);
+    field = '';
+    fieldWasQuoted = false;
+  };
 
   while (i < input.length) {
     const ch = input[i];
 
     if (inQuotes) {
-      if (ch === quote) {
-        if (input[i + 1] === quote) {
-          // RFC 4180 doubled-quote escape
-          field += quote;
-          i += 2;
-        } else {
-          // Closing quote
-          inQuotes = false;
-          i++;
-        }
+      // Inside a quoted field — check for escape sequences or closing quote
+      if (ch === escape && escape === quote && input[i + 1] === quote) {
+        // Doubled-quote escape: "" → "
+        field += quote;
+        i += 2;
+      } else if (ch === escape && escape !== quote && input[i + 1] === quote) {
+        // Backslash-style escape: \" → "
+        field += quote;
+        i += 2;
+      } else if (ch === quote) {
+        // Closing quote
+        inQuotes = false;
+        i++;
       } else {
         field += ch;
         i++;
       }
     } else {
+      // Outside a quoted field
       if (ch === quote) {
         inQuotes = true;
+        fieldWasQuoted = true;
         i++;
       } else if (input.startsWith(delimiter, i)) {
-        row.push(trimFields ? field.trim() : field);
-        field = '';
+        pushField();
         i += delimiter.length;
       } else if (ch === '\r' && input[i + 1] === '\n') {
-        row.push(trimFields ? field.trim() : field);
+        // CRLF line ending
+        pushField();
         rows.push(row);
         row = [];
-        field = '';
         i += 2;
       } else if (ch === '\n') {
-        row.push(trimFields ? field.trim() : field);
+        // LF line ending
+        pushField();
         rows.push(row);
         row = [];
-        field = '';
         i++;
       } else {
         field += ch;
@@ -97,7 +108,7 @@ function tokenise(
   }
 
   // Push the final field / row
-  row.push(trimFields ? field.trim() : field);
+  pushField();
   if (row.length > 1 || row[0] !== '' || rows.length === 0) {
     rows.push(row);
   }
@@ -109,11 +120,7 @@ function tokenise(
 }
 
 /** Quote a single field value if it contains special characters. */
-function quoteField(
-  value: string,
-  delimiter: string,
-  quote: string,
-): string {
+function quoteField(value: string, delimiter: string, quote: string): string {
   const needsQuoting =
     value.includes(delimiter) ||
     value.includes(quote) ||
@@ -127,39 +134,56 @@ function quoteField(
   return `${quote}${escaped}${quote}`;
 }
 
-// ─── parse ────────────────────────────────────────────────────────────────────
+/** Resolve full parse options with defaults applied. */
+function resolveParseOpts(options?: ParseOptions): Required<ParseOptions> {
+  return {
+    delimiter: options?.delimiter ?? ',',
+    quote: options?.quote ?? '"',
+    escape: options?.escape ?? '"',
+    hasHeader: options?.hasHeader ?? true,
+    skipEmptyLines: options?.skipEmptyLines ?? true,
+    trimValues: options?.trimValues ?? false,
+  };
+}
+
+/** Resolve full serialize options with defaults applied. */
+function resolveSerializeOpts(options?: SerializeOptions): Required<SerializeOptions> {
+  return {
+    delimiter: options?.delimiter ?? ',',
+    quote: options?.quote ?? '"',
+    headers: options?.headers ?? [],
+  };
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Parse a CSV string into an array of objects keyed by the header row.
- *
- * When `options.header` is `false` the function still returns
- * `Record<string, string>[]` for API consistency — the objects will have
- * numeric-string keys (`"0"`, `"1"`, …).
+ * Parse CSV string → array of row arrays (raw, no header handling).
  */
-export function parse(
-  csv: string,
-  options?: ParseOptions,
-): Record<string, string>[] {
+export function parseRaw(csv: string, options?: ParseOptions): string[][] {
   if (csv === '') return [];
 
-  const delimiter = options?.delimiter ?? ',';
-  const quote = options?.quote ?? '"';
-  const header = options?.header ?? true;
-  const skipEmpty = options?.skipEmpty ?? true;
-  const trim = options?.trim ?? false;
+  const opts = resolveParseOpts(options);
+  return tokenise(
+    csv,
+    opts.delimiter,
+    opts.quote,
+    opts.escape,
+    opts.trimValues,
+    opts.skipEmptyLines,
+  );
+}
 
-  const rows = tokenise(csv, delimiter, quote, trim, skipEmpty);
+/**
+ * Parse CSV string → array of objects (using first row as keys).
+ */
+export function parse(csv: string, options?: ParseOptions): Record<string, string>[] {
+  if (csv === '') return [];
+
+  const opts = resolveParseOpts(options);
+  const rows = parseRaw(csv, opts);
+
   if (rows.length === 0) return [];
-
-  if (!header) {
-    return rows.map((row) => {
-      const obj: Record<string, string> = {};
-      row.forEach((val, idx) => {
-        obj[String(idx)] = val;
-      });
-      return obj;
-    });
-  }
 
   const headers = rows[0];
   const result: Record<string, string>[] = [];
@@ -176,158 +200,85 @@ export function parse(
   return result;
 }
 
-// ─── parseRows ────────────────────────────────────────────────────────────────
-
 /**
- * Parse a CSV string into a 2-D array of strings.  Every row (including the
- * first) is returned as-is — no header processing is performed.
+ * Parse CSV string → `{ headers: string[], rows: string[][] }`.
+ * The first row becomes `headers`; subsequent rows become `rows`.
  */
-export function parseRows(
+export function parseWithHeaders(
   csv: string,
-  options?: Omit<ParseOptions, 'header'>,
-): string[][] {
-  if (csv === '') return [];
+  options?: ParseOptions,
+): { headers: string[]; rows: string[][] } {
+  if (csv === '') return { headers: [], rows: [] };
 
-  const delimiter = options?.delimiter ?? ',';
-  const quote = options?.quote ?? '"';
-  const skipEmpty = options?.skipEmpty ?? true;
-  const trim = options?.trim ?? false;
+  const rows = parseRaw(csv, options);
 
-  return tokenise(csv, delimiter, quote, trim, skipEmpty);
+  if (rows.length === 0) return { headers: [], rows: [] };
+
+  const [headers, ...dataRows] = rows;
+  return { headers, rows: dataRows };
 }
 
-// ─── stringify ────────────────────────────────────────────────────────────────
+/**
+ * Serialize array of string arrays → CSV string.
+ */
+export function serializeRaw(data: string[][], options?: SerializeOptions): string {
+  const opts = resolveSerializeOpts(options);
+  const { delimiter, quote } = opts;
+
+  return data
+    .map((row) =>
+      row.map((field) => quoteField(field, delimiter, quote)).join(delimiter),
+    )
+    .join('\n');
+}
 
 /**
- * Serialise an array of objects to a CSV string.
- * Column order is determined by the keys of the first object.
+ * Serialize array of objects → CSV string (infers headers from first object).
+ * If `options.headers` is provided, those column names are used (and in that order).
  */
-export function stringify(
+export function serialize(
   data: Record<string, unknown>[],
-  options?: StringifyOptions,
+  options?: SerializeOptions,
 ): string {
-  const delimiter = options?.delimiter ?? ',';
-  const quote = options?.quote ?? '"';
-  const includeHeader = options?.header ?? true;
-
   if (data.length === 0) return '';
 
-  const headers = Object.keys(data[0]);
-  const lines: string[] = [];
+  const opts = resolveSerializeOpts(options);
+  const headers = opts.headers.length > 0 ? opts.headers : Object.keys(data[0]);
 
-  if (includeHeader) {
-    lines.push(
-      headers
-        .map((h) => quoteField(String(h), delimiter, quote))
-        .join(delimiter),
-    );
-  }
+  const rows: string[][] = [
+    headers,
+    ...data.map((obj) => headers.map((h) => (obj[h] == null ? '' : String(obj[h])))),
+  ];
 
-  for (const obj of data) {
-    const row = headers.map((h) =>
-      quoteField(obj[h] == null ? '' : String(obj[h]), delimiter, quote),
-    );
-    lines.push(row.join(delimiter));
-  }
-
-  return lines.join('\n');
+  return serializeRaw(rows, { delimiter: opts.delimiter, quote: opts.quote });
 }
 
-// ─── stringifyRows ────────────────────────────────────────────────────────────
-
 /**
- * Serialise a 2-D array of values (and an optional header row) to a CSV string.
+ * Stream-like: parse CSV line by line.
+ * Each element of `lines` is treated as a separate pre-split line.
+ * Embedded newlines are not supported (use `parseRaw` for that).
  */
-export function stringifyRows(
-  rows: unknown[][],
-  headers?: string[],
-  options?: Omit<StringifyOptions, 'header'>,
-): string {
-  const delimiter = options?.delimiter ?? ',';
-  const quote = options?.quote ?? '"';
+export function parseLines(lines: string[], options?: ParseOptions): string[][] {
+  const opts = resolveParseOpts(options);
+  const rows: string[][] = [];
 
-  const lines: string[] = [];
-
-  if (headers && headers.length > 0) {
-    lines.push(
-      headers
-        .map((h) => quoteField(String(h), delimiter, quote))
-        .join(delimiter),
+  for (const line of lines) {
+    if (opts.skipEmptyLines && line.trim() === '') {
+      continue;
+    }
+    // Tokenise each line individually; result is always a single row
+    const parsed = tokenise(
+      line,
+      opts.delimiter,
+      opts.quote,
+      opts.escape,
+      opts.trimValues,
+      false, // skipEmpty handled above
     );
-  }
-
-  for (const row of rows) {
-    const serialised = row.map((cell) =>
-      quoteField(cell == null ? '' : String(cell), delimiter, quote),
-    );
-    lines.push(serialised.join(delimiter));
-  }
-
-  return lines.join('\n');
-}
-
-// ─── detectDelimiter ─────────────────────────────────────────────────────────
-
-/**
- * Heuristically detect the delimiter used in a CSV string.
- * Inspects only the first non-empty line and counts occurrences of each
- * candidate character outside of quoted sections.
- *
- * Returns one of `','`, `';'`, `'\t'`, or `'|'`.  Falls back to `','` if
- * no candidate is found.
- */
-export function detectDelimiter(csv: string): string {
-  const candidates = [',', ';', '\t', '|'] as const;
-
-  // Take the first meaningful line for analysis
-  const firstLine = csv.split(/\r?\n/).find((l) => l.trim() !== '') ?? '';
-
-  const counts: Record<string, number> = { ',': 0, ';': 0, '\t': 0, '|': 0 };
-  let inQuote = false;
-
-  for (let i = 0; i < firstLine.length; i++) {
-    const ch = firstLine[i];
-    if (ch === '"') {
-      inQuote = !inQuote;
-    } else if (!inQuote) {
-      if (ch in counts) counts[ch]++;
+    if (parsed.length > 0) {
+      rows.push(parsed[0]);
     }
   }
 
-  let best: string = ',';
-  let bestCount = -1;
-  for (const c of candidates) {
-    if (counts[c] > bestCount) {
-      bestCount = counts[c];
-      best = c;
-    }
-  }
-
-  return best;
-}
-
-// ─── countRows ────────────────────────────────────────────────────────────────
-
-/**
- * Count the number of data rows in a CSV string without fully parsing every
- * field.  When `options.header` is `true` (the default) the header row is
- * excluded from the count.
- */
-export function countRows(csv: string, options?: ParseOptions): number {
-  if (csv === '') return 0;
-
-  const quote = options?.quote ?? '"';
-  const header = options?.header ?? true;
-  const skipEmpty = options?.skipEmpty ?? true;
-
-  // We only need row boundaries — use the tokeniser and count
-  const delimiter = options?.delimiter ?? ',';
-  const rows = tokenise(csv, delimiter, quote, false, skipEmpty);
-
-  let count = rows.length;
-
-  // Subtract the header row if applicable
-  if (header && count > 0) count--;
-
-  return count;
+  return rows;
 }

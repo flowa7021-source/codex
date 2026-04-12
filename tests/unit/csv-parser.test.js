@@ -3,411 +3,567 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  parseRaw,
   parse,
-  parseRows,
-  stringify,
-  stringifyRows,
-  detectDelimiter,
-  countRows,
+  parseWithHeaders,
+  serializeRaw,
+  serialize,
+  parseLines,
 } from '../../app/modules/csv-parser.js';
 
-// ─── parse() basic ────────────────────────────────────────────────────────────
+// ─── parseRaw: basic ──────────────────────────────────────────────────────────
 
-describe('parse() - basic with headers', () => {
-  it('parses a simple CSV with header row', () => {
-    const result = parse('name,age,city\nAlice,30,NYC\nBob,25,LA');
+describe('parseRaw - basic', () => {
+  it('parses a simple two-row CSV into arrays', () => {
+    const rows = parseRaw('a,b,c\n1,2,3');
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows[0], ['a', 'b', 'c']);
+    assert.deepEqual(rows[1], ['1', '2', '3']);
+  });
+
+  it('returns an empty array for an empty string', () => {
+    assert.deepEqual(parseRaw(''), []);
+  });
+
+  it('handles a single row with no newline', () => {
+    assert.deepEqual(parseRaw('x,y,z'), [['x', 'y', 'z']]);
+  });
+
+  it('handles CRLF line endings', () => {
+    const rows = parseRaw('a,b\r\n1,2\r\n3,4');
+    assert.equal(rows.length, 3);
+    assert.deepEqual(rows[2], ['3', '4']);
+  });
+
+  it('skips empty lines by default', () => {
+    const rows = parseRaw('a,b\n\n1,2\n\n3,4');
+    assert.equal(rows.length, 3);
+  });
+
+  it('includes empty lines when skipEmptyLines is false', () => {
+    const rows = parseRaw('a,b\n\n1,2', { skipEmptyLines: false });
+    assert.equal(rows.length, 3);
+    assert.deepEqual(rows[1], ['']);
+  });
+
+  it('handles a single-column CSV', () => {
+    const rows = parseRaw('hello\nworld');
+    assert.deepEqual(rows, [['hello'], ['world']]);
+  });
+
+  it('handles many rows', () => {
+    const input = Array.from({ length: 10 }, (_, i) => `${i},${i * 2}`).join('\n');
+    const rows = parseRaw(input);
+    assert.equal(rows.length, 10);
+    assert.deepEqual(rows[9], ['9', '18']);
+  });
+});
+
+// ─── parseRaw: quoted fields ──────────────────────────────────────────────────
+
+describe('parseRaw - quoted fields', () => {
+  it('parses a quoted field as a single field', () => {
+    const rows = parseRaw('"hello","world"');
+    assert.deepEqual(rows[0], ['hello', 'world']);
+  });
+
+  it('handles an empty quoted field', () => {
+    const rows = parseRaw('"",hello');
+    assert.deepEqual(rows[0], ['', 'hello']);
+  });
+
+  it('handles a quoted field that contains only spaces', () => {
+    const rows = parseRaw('"   ",b');
+    assert.deepEqual(rows[0], ['   ', 'b']);
+  });
+});
+
+// ─── parseRaw: embedded commas ────────────────────────────────────────────────
+
+describe('parseRaw - embedded commas', () => {
+  it('parses a quoted field with an embedded comma', () => {
+    const rows = parseRaw('"hello, world",plain');
+    assert.deepEqual(rows[0], ['hello, world', 'plain']);
+  });
+
+  it('parses multiple quoted fields with embedded commas on same row', () => {
+    const rows = parseRaw('"a,b","c,d"');
+    assert.deepEqual(rows[0], ['a,b', 'c,d']);
+  });
+
+  it('does not split on commas inside quotes mid-row', () => {
+    const rows = parseRaw('first,"one,two,three",last');
+    assert.equal(rows[0][1], 'one,two,three');
+    assert.equal(rows[0].length, 3);
+  });
+});
+
+// ─── parseRaw: embedded newlines in quotes ────────────────────────────────────
+
+describe('parseRaw - embedded newlines in quotes', () => {
+  it('parses a quoted field with an embedded LF', () => {
+    const rows = parseRaw('id,text\n1,"line1\nline2"');
+    assert.equal(rows.length, 2);
+    assert.equal(rows[1][1], 'line1\nline2');
+  });
+
+  it('parses a quoted field with an embedded CRLF', () => {
+    const rows = parseRaw('a,b\n"multi\r\nline",end');
+    assert.equal(rows[1][0], 'multi\r\nline');
+    assert.equal(rows[1][1], 'end');
+  });
+
+  it('row count is based on logical rows not raw newlines', () => {
+    // The CSV has 3 raw newlines but only 2 logical rows
+    const rows = parseRaw('a,b\n1,"two\nlines"');
+    assert.equal(rows.length, 2);
+  });
+});
+
+// ─── parseRaw: escaped quotes ─────────────────────────────────────────────────
+
+describe('parseRaw - escaped quotes', () => {
+  it('unescapes doubled quotes inside a quoted field', () => {
+    const rows = parseRaw('"say ""hello"""');
+    assert.equal(rows[0][0], 'say "hello"');
+  });
+
+  it('handles multiple doubled-quote escapes in one field', () => {
+    const rows = parseRaw('"a""b""c"');
+    assert.equal(rows[0][0], 'a"b"c');
+  });
+
+  it('unescapes quotes when mixed with other content', () => {
+    const rows = parseRaw('a,"He said ""hi""",c');
+    assert.equal(rows[0][1], 'He said "hi"');
+  });
+});
+
+// ─── parseRaw: empty fields ───────────────────────────────────────────────────
+
+describe('parseRaw - empty fields', () => {
+  it('handles a row of all empty fields', () => {
+    const rows = parseRaw(',,', { skipEmptyLines: false });
+    assert.deepEqual(rows[0], ['', '', '']);
+  });
+
+  it('handles leading empty field', () => {
+    const rows = parseRaw(',b,c');
+    assert.deepEqual(rows[0], ['', 'b', 'c']);
+  });
+
+  it('handles trailing comma (trailing empty field)', () => {
+    const rows = parseRaw('a,b,');
+    assert.deepEqual(rows[0], ['a', 'b', '']);
+  });
+
+  it('handles field in the middle that is empty', () => {
+    const rows = parseRaw('a,,c');
+    assert.deepEqual(rows[0], ['a', '', 'c']);
+  });
+});
+
+// ─── parseRaw: custom delimiter ───────────────────────────────────────────────
+
+describe('parseRaw - custom delimiter', () => {
+  it('parses tab-separated values', () => {
+    const rows = parseRaw('a\tb\tc\n1\t2\t3', { delimiter: '\t' });
+    assert.deepEqual(rows[0], ['a', 'b', 'c']);
+    assert.deepEqual(rows[1], ['1', '2', '3']);
+  });
+
+  it('parses pipe-separated values', () => {
+    const rows = parseRaw('a|b|c\n1|2|3', { delimiter: '|' });
+    assert.deepEqual(rows[0], ['a', 'b', 'c']);
+  });
+
+  it('parses semicolon-separated values', () => {
+    const rows = parseRaw('x;y\nhello;world', { delimiter: ';' });
+    assert.deepEqual(rows[1], ['hello', 'world']);
+  });
+
+  it('treats comma as a literal character when delimiter is semicolon', () => {
+    const rows = parseRaw('a,b;c,d', { delimiter: ';' });
+    assert.deepEqual(rows[0], ['a,b', 'c,d']);
+  });
+});
+
+// ─── parseRaw: trimValues ─────────────────────────────────────────────────────
+
+describe('parseRaw - trimValues', () => {
+  it('trims whitespace from unquoted fields when trimValues is true', () => {
+    const rows = parseRaw('  hello  ,  world  ', { trimValues: true });
+    assert.deepEqual(rows[0], ['hello', 'world']);
+  });
+
+  it('does not trim whitespace by default', () => {
+    const rows = parseRaw(' hello , world ');
+    assert.deepEqual(rows[0], [' hello ', ' world ']);
+  });
+
+  it('does not trim quoted fields even when trimValues is true', () => {
+    // Quoted fields preserve all inner whitespace
+    const rows = parseRaw('"  hello  ",world', { trimValues: true });
+    assert.equal(rows[0][0], '  hello  ');
+    assert.equal(rows[0][1], 'world');
+  });
+});
+
+// ─── parse: with headers ──────────────────────────────────────────────────────
+
+describe('parse - with headers', () => {
+  it('uses the first row as object keys', () => {
+    const result = parse('name,age\nAlice,30\nBob,25');
     assert.equal(result.length, 2);
     assert.equal(result[0].name, 'Alice');
     assert.equal(result[0].age, '30');
-    assert.equal(result[0].city, 'NYC');
     assert.equal(result[1].name, 'Bob');
+    assert.equal(result[1].age, '25');
   });
 
   it('returns empty array for empty string', () => {
     assert.deepEqual(parse(''), []);
   });
 
-  it('returns empty array when only header row present', () => {
-    const result = parse('name,age');
-    assert.deepEqual(result, []);
+  it('returns empty array when only header row is present', () => {
+    assert.deepEqual(parse('name,age'), []);
   });
 
-  it('handles a single data column', () => {
-    const result = parse('value\nhello\nworld');
-    assert.equal(result.length, 2);
-    assert.equal(result[0].value, 'hello');
-    assert.equal(result[1].value, 'world');
-  });
-
-  it('handles missing trailing fields (fills with empty string)', () => {
+  it('fills missing fields with empty string', () => {
     const result = parse('a,b,c\n1,2');
     assert.equal(result[0].c, '');
-  });
-
-  it('parses header: false — returns objects with numeric string keys', () => {
-    const result = parse('1,2,3\n4,5,6', { header: false });
-    assert.equal(result.length, 2);
-    assert.equal(result[0]['0'], '1');
-    assert.equal(result[0]['1'], '2');
-    assert.equal(result[1]['2'], '6');
   });
 
   it('handles CRLF line endings', () => {
     const result = parse('a,b\r\n1,2\r\n3,4');
     assert.equal(result.length, 2);
-    assert.equal(result[0].a, '1');
-    assert.equal(result[1].b, '4');
+    assert.equal(result[1].a, '3');
   });
 
-  it('skips empty rows by default', () => {
+  it('skips empty lines by default', () => {
     const result = parse('name,age\n\nAlice,30\n\nBob,25');
     assert.equal(result.length, 2);
   });
-
-  it('includes empty rows when skipEmpty is false', () => {
-    const result = parse('name,age\n\nAlice,30', { skipEmpty: false });
-    assert.equal(result.length, 2);
-  });
 });
 
-// ─── parse() with quoted fields ──────────────────────────────────────────────
+// ─── parse: object keys from header row ──────────────────────────────────────
 
-describe('parse() - quoted fields', () => {
-  it('parses quoted field containing a comma', () => {
-    const result = parse('name,address\n"Smith, John","123 Main St"');
-    assert.equal(result[0].name, 'Smith, John');
-    assert.equal(result[0].address, '123 Main St');
+describe('parse - object keys from header row', () => {
+  it('preserves exact header casing as object keys', () => {
+    const result = parse('Name,Age,CityName\nAlice,30,NYC');
+    assert.ok('Name' in result[0]);
+    assert.ok('Age' in result[0]);
+    assert.ok('CityName' in result[0]);
   });
 
-  it('parses quoted field containing a newline', () => {
-    const csv = 'id,text\n1,"line1\nline2"';
-    const result = parse(csv);
-    assert.equal(result[0].text, 'line1\nline2');
+  it('handles header with spaces (not trimmed by default)', () => {
+    const result = parse(' name ,age\nAlice,30');
+    assert.ok(' name ' in result[0]);
   });
 
-  it('parses doubled quotes (escaped) inside a quoted field', () => {
-    const result = parse('a,b\n"say ""hello""",plain');
-    assert.equal(result[0].a, 'say "hello"');
-    assert.equal(result[0].b, 'plain');
-  });
-
-  it('parses empty quoted field', () => {
-    const result = parse('x,y\n"",hello');
-    assert.equal(result[0].x, '');
-    assert.equal(result[0].y, 'hello');
-  });
-
-  it('parses a quoted field with embedded CRLF', () => {
-    const result = parse('a,b\n"multi\r\nline",end');
-    assert.equal(result[0].a, 'multi\r\nline');
-  });
-
-  it('parses a field that starts with a quote midway through row', () => {
-    const result = parse('a,b,c\n1,"two,2",3');
-    assert.equal(result[0].b, 'two,2');
-    assert.equal(result[0].c, '3');
-  });
-});
-
-// ─── parse() options ─────────────────────────────────────────────────────────
-
-describe('parse() - options', () => {
-  it('uses custom delimiter (semicolon)', () => {
-    const result = parse('name;age\nAlice;30', { delimiter: ';' });
-    assert.equal(result[0].name, 'Alice');
-    assert.equal(result[0].age, '30');
-  });
-
-  it('uses custom delimiter (tab)', () => {
+  it('uses custom delimiter with headers', () => {
     const result = parse('x\ty\n1\t2', { delimiter: '\t' });
     assert.equal(result[0].x, '1');
     assert.equal(result[0].y, '2');
   });
 
-  it('uses custom delimiter (pipe)', () => {
-    const result = parse('a|b\n1|2', { delimiter: '|' });
-    assert.equal(result[0].a, '1');
-    assert.equal(result[0].b, '2');
-  });
-
-  it('trims whitespace from fields when trim:true', () => {
-    const result = parse('name , age\n  Alice  ,  30  ', { trim: true });
-    assert.equal(result[0].name, 'Alice');
-    assert.equal(result[0].age, '30');
-  });
-
-  it('does not trim whitespace by default', () => {
-    const result = parse('name,age\n Alice ,30');
-    assert.equal(result[0].name, ' Alice ');
-  });
-
-  it('uses custom quote character', () => {
-    const result = parse("name,value\n'hello, world','test'", { quote: "'" });
-    assert.equal(result[0].name, 'hello, world');
-    assert.equal(result[0].value, 'test');
+  it('handles quoted header values', () => {
+    const result = parse('"first name","last name"\nJohn,Doe');
+    assert.equal(result[0]['first name'], 'John');
+    assert.equal(result[0]['last name'], 'Doe');
   });
 });
 
-// ─── parseRows() ─────────────────────────────────────────────────────────────
+// ─── parseWithHeaders ─────────────────────────────────────────────────────────
 
-describe('parseRows()', () => {
-  it('returns all rows including first as data (no header processing)', () => {
-    const rows = parseRows('a,b\n1,2\n3,4');
-    assert.equal(rows.length, 3);
-    assert.deepEqual(rows[0], ['a', 'b']);
-    assert.deepEqual(rows[1], ['1', '2']);
-    assert.deepEqual(rows[2], ['3', '4']);
-  });
-
-  it('returns empty array for empty string', () => {
-    assert.deepEqual(parseRows(''), []);
-  });
-
-  it('handles quoted fields with embedded commas', () => {
-    const rows = parseRows('"a,b",c\n"d,e",f');
-    assert.deepEqual(rows[0], ['a,b', 'c']);
-    assert.deepEqual(rows[1], ['d,e', 'f']);
-  });
-
-  it('handles quoted fields with embedded newlines', () => {
-    const rows = parseRows('"line1\nline2",end');
-    assert.equal(rows[0][0], 'line1\nline2');
-    assert.equal(rows[0][1], 'end');
-  });
-
-  it('respects custom delimiter', () => {
-    const rows = parseRows('a;b;c\n1;2;3', { delimiter: ';' });
-    assert.deepEqual(rows[0], ['a', 'b', 'c']);
-    assert.deepEqual(rows[1], ['1', '2', '3']);
-  });
-
-  it('skips empty rows by default', () => {
-    const rows = parseRows('a,b\n\n1,2');
+describe('parseWithHeaders', () => {
+  it('returns headers and rows separately', () => {
+    const { headers, rows } = parseWithHeaders('a,b,c\n1,2,3\n4,5,6');
+    assert.deepEqual(headers, ['a', 'b', 'c']);
     assert.equal(rows.length, 2);
+    assert.deepEqual(rows[0], ['1', '2', '3']);
+    assert.deepEqual(rows[1], ['4', '5', '6']);
   });
 
-  it('includes empty rows when skipEmpty:false', () => {
-    const rows = parseRows('a,b\n\n1,2', { skipEmpty: false });
-    assert.equal(rows.length, 3);
-    assert.deepEqual(rows[1], ['']);
+  it('returns empty headers and rows for empty string', () => {
+    const result = parseWithHeaders('');
+    assert.deepEqual(result.headers, []);
+    assert.deepEqual(result.rows, []);
   });
 
-  it('trims fields when trim:true', () => {
-    const rows = parseRows('  hello  ,  world  ', { trim: true });
-    assert.deepEqual(rows[0], ['hello', 'world']);
+  it('returns headers and empty rows when only header row is present', () => {
+    const { headers, rows } = parseWithHeaders('x,y,z');
+    assert.deepEqual(headers, ['x', 'y', 'z']);
+    assert.deepEqual(rows, []);
+  });
+
+  it('works with custom delimiter', () => {
+    const { headers, rows } = parseWithHeaders('a;b\n1;2', { delimiter: ';' });
+    assert.deepEqual(headers, ['a', 'b']);
+    assert.deepEqual(rows[0], ['1', '2']);
+  });
+
+  it('works with quoted fields in headers', () => {
+    const { headers } = parseWithHeaders('"col one","col two"\n1,2');
+    assert.deepEqual(headers, ['col one', 'col two']);
+  });
+
+  it('works with embedded newlines in data', () => {
+    const { rows } = parseWithHeaders('a,b\n1,"multi\nline"');
+    assert.equal(rows[0][1], 'multi\nline');
   });
 });
 
-// ─── stringify() round-trip ───────────────────────────────────────────────────
+// ─── serializeRaw: basic ──────────────────────────────────────────────────────
 
-describe('stringify() - round-trip', () => {
-  it('produces CSV that round-trips through parse()', () => {
-    const data = [
-      { name: 'Alice', age: '30', city: 'NYC' },
-      { name: 'Bob', age: '25', city: 'LA' },
-    ];
-    const csv = stringify(data);
-    const back = parse(csv);
-    assert.deepEqual(back, data);
+describe('serializeRaw - basic', () => {
+  it('serializes a 2D array to CSV', () => {
+    const csv = serializeRaw([['a', 'b', 'c'], ['1', '2', '3']]);
+    assert.equal(csv, 'a,b,c\n1,2,3');
   });
 
   it('returns empty string for empty array', () => {
-    assert.equal(stringify([]), '');
+    assert.equal(serializeRaw([]), '');
   });
 
-  it('includes a header row by default', () => {
-    const csv = stringify([{ x: '1', y: '2' }]);
-    const lines = csv.split('\n');
-    assert.equal(lines[0], 'x,y');
+  it('handles a single row', () => {
+    assert.equal(serializeRaw([['x', 'y']]), 'x,y');
   });
 
-  it('omits header row when header:false', () => {
-    const csv = stringify([{ x: '1', y: '2' }], { header: false });
+  it('handles empty string fields', () => {
+    const csv = serializeRaw([['', 'b', '']]);
+    assert.equal(csv, ',b,');
+  });
+});
+
+// ─── serializeRaw: values needing quoting ─────────────────────────────────────
+
+describe('serializeRaw - values needing quoting', () => {
+  it('quotes fields that contain the delimiter', () => {
+    const csv = serializeRaw([['hello, world', 'plain']]);
+    assert.ok(csv.startsWith('"hello, world"'));
+  });
+
+  it('quotes fields that contain a double-quote, doubling it', () => {
+    const csv = serializeRaw([['say "hi"']]);
+    assert.ok(csv.includes('"say ""hi"""'));
+  });
+
+  it('quotes fields that contain a newline', () => {
+    const csv = serializeRaw([['line1\nline2']]);
+    assert.ok(csv.includes('"line1\nline2"'));
+  });
+
+  it('quotes fields that contain a carriage return', () => {
+    const csv = serializeRaw([['a\rb']]);
+    assert.ok(csv.includes('"a\rb"'));
+  });
+
+  it('does not quote plain fields unnecessarily', () => {
+    const csv = serializeRaw([['hello', 'world']]);
+    assert.equal(csv, 'hello,world');
+  });
+});
+
+// ─── serializeRaw: custom delimiter ───────────────────────────────────────────
+
+describe('serializeRaw - custom delimiter', () => {
+  it('uses a custom tab delimiter', () => {
+    const csv = serializeRaw([['a', 'b', 'c']], { delimiter: '\t' });
+    assert.equal(csv, 'a\tb\tc');
+  });
+
+  it('uses a pipe delimiter', () => {
+    const csv = serializeRaw([['x', 'y']], { delimiter: '|' });
+    assert.equal(csv, 'x|y');
+  });
+
+  it('quotes fields containing the custom delimiter', () => {
+    const csv = serializeRaw([['a|b', 'c']], { delimiter: '|' });
+    assert.ok(csv.startsWith('"a|b"'));
+  });
+});
+
+// ─── serialize: from objects ──────────────────────────────────────────────────
+
+describe('serialize - from objects', () => {
+  it('serializes an array of objects with auto-detected headers', () => {
+    const data = [{ name: 'Alice', age: '30' }, { name: 'Bob', age: '25' }];
+    const csv = serialize(data);
     const lines = csv.split('\n');
-    assert.equal(lines.length, 1);
-    assert.equal(lines[0], '1,2');
+    assert.equal(lines[0], 'name,age');
+    assert.equal(lines[1], 'Alice,30');
+    assert.equal(lines[2], 'Bob,25');
+  });
+
+  it('returns empty string for empty array', () => {
+    assert.equal(serialize([]), '');
+  });
+
+  it('converts non-string values to strings', () => {
+    const csv = serialize([{ n: 42, flag: true }]);
+    assert.ok(csv.includes('42'));
+    assert.ok(csv.includes('true'));
+  });
+
+  it('converts null/undefined values to empty string', () => {
+    const csv = serialize([{ a: null, b: undefined, c: 'ok' }]);
+    const rows = parseRaw(csv);
+    // Second row: data values
+    assert.equal(rows[1][0], '');
+    assert.equal(rows[1][1], '');
+    assert.equal(rows[1][2], 'ok');
   });
 
   it('uses custom delimiter', () => {
-    const csv = stringify([{ a: '1', b: '2' }], { delimiter: ';' });
+    const csv = serialize([{ a: '1', b: '2' }], { delimiter: ';' });
     assert.ok(csv.includes('a;b'));
     assert.ok(csv.includes('1;2'));
   });
 
-  it('preserves column order from first object keys', () => {
-    const data = [{ z: '3', a: '1', m: '2' }];
-    const csv = stringify(data);
-    const lines = csv.split('\n');
-    assert.equal(lines[0], 'z,a,m');
-    assert.equal(lines[1], '3,1,2');
-  });
-
-  it('converts null/undefined values to empty string', () => {
-    const data = [{ a: null, b: undefined, c: 'ok' }];
-    const csv = stringify(data);
-    assert.ok(csv.includes(',,ok') || csv.includes(',ok'));
-    const back = parse(csv);
-    assert.equal(back[0].a, '');
-    assert.equal(back[0].b, '');
-  });
-});
-
-// ─── stringify() with special characters ─────────────────────────────────────
-
-describe('stringify() - special characters get quoted', () => {
-  it('quotes fields containing the delimiter', () => {
-    const csv = stringify([{ name: 'Smith, John' }]);
+  it('quotes values that contain the delimiter', () => {
+    const csv = serialize([{ name: 'Smith, John' }]);
     assert.ok(csv.includes('"Smith, John"'));
   });
+});
 
-  it('quotes fields containing a double-quote, escaping it by doubling', () => {
-    const csv = stringify([{ val: 'say "hi"' }]);
-    assert.ok(csv.includes('"say ""hi"""'));
+// ─── serialize: custom headers ────────────────────────────────────────────────
+
+describe('serialize - custom headers', () => {
+  it('uses provided headers instead of object keys', () => {
+    const data = [{ a: '1', b: '2', c: '3' }];
+    const csv = serialize(data, { headers: ['c', 'a'] });
+    const lines = csv.split('\n');
+    assert.equal(lines[0], 'c,a');
+    assert.equal(lines[1], '3,1');
   });
 
-  it('quotes fields containing a newline', () => {
-    const csv = stringify([{ text: 'line1\nline2' }]);
-    assert.ok(csv.includes('"line1\nline2"'));
+  it('only includes columns listed in custom headers', () => {
+    const data = [{ x: 'X', y: 'Y', z: 'Z' }];
+    const csv = serialize(data, { headers: ['x', 'z'] });
+    assert.ok(!csv.includes('y') && !csv.includes('Y'));
   });
 
-  it('quotes fields containing a carriage-return', () => {
-    const csv = stringify([{ text: 'a\rb' }]);
-    assert.ok(csv.includes('"a\rb"'));
+  it('fills missing columns with empty string when header key absent', () => {
+    const data = [{ a: '1' }];
+    const csv = serialize(data, { headers: ['a', 'b'] });
+    const rows = parseRaw(csv);
+    assert.equal(rows[1][1], '');
+  });
+});
+
+// ─── parseLines ───────────────────────────────────────────────────────────────
+
+describe('parseLines', () => {
+  it('parses an array of pre-split lines', () => {
+    const rows = parseLines(['a,b,c', '1,2,3', '4,5,6']);
+    assert.equal(rows.length, 3);
+    assert.deepEqual(rows[0], ['a', 'b', 'c']);
+    assert.deepEqual(rows[2], ['4', '5', '6']);
   });
 
-  it('round-trips a field containing all special characters', () => {
-    const data = [{ crazy: 'a,b\n"c"\rd' }];
-    const csv = stringify(data);
+  it('returns empty array for empty input', () => {
+    assert.deepEqual(parseLines([]), []);
+  });
+
+  it('skips empty lines by default', () => {
+    const rows = parseLines(['a,b', '', '1,2', '']);
+    assert.equal(rows.length, 2);
+  });
+
+  it('includes blank lines when skipEmptyLines is false', () => {
+    const rows = parseLines(['a,b', '', '1,2'], { skipEmptyLines: false });
+    assert.equal(rows.length, 3);
+  });
+
+  it('parses quoted fields within lines', () => {
+    const rows = parseLines(['"hello, world",plain']);
+    assert.deepEqual(rows[0], ['hello, world', 'plain']);
+  });
+
+  it('respects custom delimiter', () => {
+    const rows = parseLines(['a\tb\tc', '1\t2\t3'], { delimiter: '\t' });
+    assert.deepEqual(rows[0], ['a', 'b', 'c']);
+    assert.deepEqual(rows[1], ['1', '2', '3']);
+  });
+
+  it('trims values when trimValues is true', () => {
+    const rows = parseLines(['  a  ,  b  '], { trimValues: true });
+    assert.deepEqual(rows[0], ['a', 'b']);
+  });
+
+  it('handles escaped quotes within lines', () => {
+    const rows = parseLines(['"say ""hello"""']);
+    assert.equal(rows[0][0], 'say "hello"');
+  });
+});
+
+// ─── Round-trip: parse then serialize produces equivalent output ──────────────
+
+describe('Round-trip', () => {
+  it('parseRaw → serializeRaw → parseRaw produces equivalent data', () => {
+    const original = [
+      ['name', 'age', 'city'],
+      ['Alice', '30', 'New York'],
+      ['Bob', '25', 'Los Angeles'],
+    ];
+    const csv = serializeRaw(original);
+    const back = parseRaw(csv);
+    assert.deepEqual(back, original);
+  });
+
+  it('parse → serialize → parse produces equivalent objects', () => {
+    const data = [
+      { name: 'Alice', age: '30', city: 'NYC' },
+      { name: 'Bob', age: '25', city: 'LA' },
+    ];
+    const csv = serialize(data);
+    const back = parse(csv);
+    assert.deepEqual(back, data);
+  });
+
+  it('round-trips data containing embedded commas', () => {
+    const data = [{ address: '123 Main St, Apt 4', name: 'Alice' }];
+    const csv = serialize(data);
+    const back = parse(csv);
+    assert.equal(back[0].address, '123 Main St, Apt 4');
+  });
+
+  it('round-trips data containing embedded newlines', () => {
+    const data = [{ text: 'line1\nline2', id: '1' }];
+    const csv = serialize(data);
+    const back = parse(csv);
+    assert.equal(back[0].text, 'line1\nline2');
+  });
+
+  it('round-trips data containing embedded double-quotes', () => {
+    const data = [{ quote: 'He said "hello"', id: '2' }];
+    const csv = serialize(data);
+    const back = parse(csv);
+    assert.equal(back[0].quote, 'He said "hello"');
+  });
+
+  it('round-trips data with all special characters combined', () => {
+    const data = [{ crazy: 'a,b\n"c"\rd', normal: 'plain' }];
+    const csv = serialize(data);
     const back = parse(csv);
     assert.equal(back[0].crazy, 'a,b\n"c"\rd');
-  });
-});
-
-// ─── stringifyRows() ─────────────────────────────────────────────────────────
-
-describe('stringifyRows()', () => {
-  it('serialises rows without headers when headers omitted', () => {
-    const csv = stringifyRows([['1', '2'], ['3', '4']]);
-    const lines = csv.split('\n');
-    assert.equal(lines[0], '1,2');
-    assert.equal(lines[1], '3,4');
+    assert.equal(back[0].normal, 'plain');
   });
 
-  it('prepends a header row when headers provided', () => {
-    const csv = stringifyRows([['1', '2'], ['3', '4']], ['a', 'b']);
-    const lines = csv.split('\n');
-    assert.equal(lines[0], 'a,b');
-    assert.equal(lines[1], '1,2');
+  it('round-trips with tab delimiter', () => {
+    const original = [['h1', 'h2'], ['v1', 'v2']];
+    const csv = serializeRaw(original, { delimiter: '\t' });
+    const back = parseRaw(csv, { delimiter: '\t' });
+    assert.deepEqual(back, original);
   });
 
-  it('returns empty string for empty rows array with no headers', () => {
-    assert.equal(stringifyRows([]), '');
-  });
-
-  it('returns just the header line for empty rows array with headers', () => {
-    const csv = stringifyRows([], ['x', 'y']);
-    assert.equal(csv, 'x,y');
-  });
-
-  it('uses custom delimiter', () => {
-    const csv = stringifyRows([['a', 'b']], ['h1', 'h2'], { delimiter: ';' });
-    assert.ok(csv.includes('h1;h2'));
-    assert.ok(csv.includes('a;b'));
-  });
-
-  it('quotes cells that contain the delimiter', () => {
-    const csv = stringifyRows([['val,ue', 'ok']]);
-    assert.ok(csv.includes('"val,ue"'));
-  });
-
-  it('quotes cells that contain newlines', () => {
-    const csv = stringifyRows([['line1\nline2']]);
-    assert.ok(csv.includes('"line1\nline2"'));
-  });
-
-  it('converts null/undefined cells to empty string', () => {
-    const csv = stringifyRows([[null, undefined, 'x']]);
-    assert.ok(csv.startsWith(',,x') || csv.includes(',,x'));
-  });
-
-  it('round-trips through parseRows', () => {
-    const original = [['Alice', '30', 'NYC'], ['Bob', '25', 'LA']];
-    const headers = ['name', 'age', 'city'];
-    const csv = stringifyRows(original, headers);
-    const back = parseRows(csv);
-    assert.deepEqual(back[0], headers);
-    assert.deepEqual(back[1], original[0]);
-    assert.deepEqual(back[2], original[1]);
-  });
-});
-
-// ─── detectDelimiter ─────────────────────────────────────────────────────────
-
-describe('detectDelimiter()', () => {
-  it('detects comma delimiter', () => {
-    assert.equal(detectDelimiter('a,b,c\n1,2,3'), ',');
-  });
-
-  it('detects semicolon delimiter', () => {
-    assert.equal(detectDelimiter('a;b;c\n1;2;3'), ';');
-  });
-
-  it('detects tab delimiter', () => {
-    assert.equal(detectDelimiter('a\tb\tc\n1\t2\t3'), '\t');
-  });
-
-  it('detects pipe delimiter', () => {
-    assert.equal(detectDelimiter('a|b|c\n1|2|3'), '|');
-  });
-
-  it('defaults to comma when no candidate found', () => {
-    assert.equal(detectDelimiter('hello world'), ',');
-  });
-
-  it('ignores delimiters inside quoted fields', () => {
-    // First line has commas only inside quotes, but 2 semicolons outside
-    assert.equal(detectDelimiter('"a,b";c;d'), ';');
-  });
-
-  it('picks the most frequent candidate', () => {
-    // 3 tabs vs 1 comma → tab wins
-    assert.equal(detectDelimiter('a\tb\tc\td'), '\t');
-  });
-});
-
-// ─── countRows() ─────────────────────────────────────────────────────────────
-
-describe('countRows()', () => {
-  it('counts data rows, excluding the header row by default', () => {
-    assert.equal(countRows('name,age\nAlice,30\nBob,25'), 2);
-  });
-
-  it('returns 0 for empty string', () => {
-    assert.equal(countRows(''), 0);
-  });
-
-  it('returns 0 when only a header row is present', () => {
-    assert.equal(countRows('name,age'), 0);
-  });
-
-  it('counts all rows when header:false', () => {
-    assert.equal(countRows('1,2\n3,4\n5,6', { header: false }), 3);
-  });
-
-  it('skips empty rows by default', () => {
-    assert.equal(countRows('name,age\n\nAlice,30\n\nBob,25'), 2);
-  });
-
-  it('includes empty rows when skipEmpty:false', () => {
-    assert.equal(countRows('name,age\n\nAlice,30', { skipEmpty: false }), 2);
-  });
-
-  it('counts correctly with quoted fields spanning multiple lines', () => {
-    const csv = 'id,text\n1,"line1\nline2"\n2,plain';
-    assert.equal(countRows(csv), 2);
-  });
-
-  it('counts correctly with CRLF line endings', () => {
-    assert.equal(countRows('a,b\r\n1,2\r\n3,4'), 2);
+  it('parseWithHeaders round-trips via serializeRaw', () => {
+    const csv = 'col1,col2\nfoo,bar\nbaz,qux';
+    const { headers, rows } = parseWithHeaders(csv);
+    const rebuilt = serializeRaw([headers, ...rows]);
+    const { headers: h2, rows: r2 } = parseWithHeaders(rebuilt);
+    assert.deepEqual(h2, headers);
+    assert.deepEqual(r2, rows);
   });
 });
