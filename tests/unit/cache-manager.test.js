@@ -1,8 +1,8 @@
-// ─── Unit Tests: CacheManager ─────────────────────────────────────────────────
+// ─── Unit Tests: Cache Manager ────────────────────────────────────────────────
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { LRUCache, TTLCache, CacheManager } from '../../app/modules/cache-manager.js';
+import { Cache, LRUCache, TTLCache, CacheManager, createCache, createLRUCache, createLFUCache, createTTLCache } from '../../app/modules/cache-manager.js';
 
 // ─── LRUCache ─────────────────────────────────────────────────────────────────
 
