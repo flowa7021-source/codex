@@ -174,9 +174,9 @@ export function onFrame(fn: (timestamp: number) => void): () => void {
   let handle: number | ReturnType<typeof setTimeout> | null = null;
 
   if (typeof requestAnimationFrame === 'function') {
-    const loop = (ts: number): void => {
+    const loop = (ts?: number): void => {
       if (cancelled) return;
-      fn(ts);
+      fn(ts ?? Date.now());
       handle = requestAnimationFrame(loop);
     };
     handle = requestAnimationFrame(loop);

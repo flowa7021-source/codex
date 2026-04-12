@@ -136,11 +136,6 @@ export class AhoCorasick {
           ? fallback.children.get(ch)!
           : this.#root;
 
-        // Merge output from the fail node (dictionary suffix links)
-        if (child.fail.output.length > 0) {
-          child.output = child.output.concat(child.fail.output);
-        }
-
         queue.push(child);
       }
     }

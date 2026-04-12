@@ -107,7 +107,14 @@ export function bellmanFord<T>(
   for (const v of verts) dist.set(v, Infinity);
   dist.set(start, 0);
 
-  const allEdges = graph.edges();
+  let allEdges = graph.edges();
+  // For undirected graphs, include reverse direction of each edge
+  if (!graph.isDirected()) {
+    allEdges = [
+      ...allEdges,
+      ...allEdges.map(({ from, to, weight }) => ({ from: to, to: from, weight })),
+    ];
+  }
   const n = verts.length;
 
   for (let i = 0; i < n - 1; i++) {
@@ -157,7 +164,16 @@ export function floydWarshall<T>(graph: Graph<T>): Map<T, Map<T, number>> {
     dist.set(u, row);
   }
 
-  for (const { from, to, weight } of graph.edges()) {
+  let allEdges = graph.edges();
+  // For undirected graphs, include reverse direction of each edge
+  if (!graph.isDirected()) {
+    allEdges = [
+      ...allEdges,
+      ...allEdges.map(({ from, to, weight }) => ({ from: to, to: from, weight })),
+    ];
+  }
+
+  for (const { from, to, weight } of allEdges) {
     const row = dist.get(from)!;
     if (weight < (row.get(to) ?? Infinity)) {
       row.set(to, weight);

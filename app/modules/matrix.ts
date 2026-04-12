@@ -13,21 +13,46 @@ export class Matrix {
   #data: Float64Array;
 
   /**
-   * Create a matrix with the given dimensions, optionally filled with `fill`.
-   * @param rows - Number of rows (must be a positive integer)
-   * @param cols - Number of columns (must be a positive integer)
-   * @param fill - Value to fill every element with (default 0)
+   * Create a matrix from dimensions with optional fill value, or from a 2D array.
+   * Usage: `new Matrix(rows, cols, fill?)` or `new Matrix([[1,2],[3,4]])`
    */
-  constructor(rows: number, cols: number, fill: number = 0) {
-    if (!Number.isInteger(rows) || rows < 1) {
-      throw new RangeError(`Matrix: rows must be a positive integer, got ${rows}`);
+  constructor(rowsOrData: number | number[][], cols?: number, fill: number = 0) {
+    // Detect if first arg is a 2D array (matrix-algebra.test.js usage)
+    if (Array.isArray(rowsOrData)) {
+      const data = rowsOrData;
+      if (data.length === 0) {
+        throw new RangeError('Matrix: data must have at least one row');
+      }
+      const numCols = data[0].length;
+      if (numCols === 0) {
+        throw new RangeError('Matrix: rows must have at least one column');
+      }
+      this.#rows = data.length;
+      this.#cols = numCols;
+      this.#data = new Float64Array(this.#rows * numCols);
+      for (let r = 0; r < data.length; r++) {
+        if (data[r].length !== numCols) {
+          throw new RangeError(
+            `Matrix: row ${r} has ${data[r].length} elements, expected ${numCols}`,
+          );
+        }
+        for (let c = 0; c < numCols; c++) {
+          this.#data[r * numCols + c] = data[r][c];
+        }
+      }
+    } else {
+      // Dimensions-based usage (matrix.test.js usage)
+      const rows = rowsOrData;
+      if (!cols || !Number.isInteger(rows) || rows < 1) {
+        throw new RangeError(`Matrix: rows must be a positive integer, got ${rows}`);
+      }
+      if (!Number.isInteger(cols) || cols < 1) {
+        throw new RangeError(`Matrix: cols must be a positive integer, got ${cols}`);
+      }
+      this.#rows = rows;
+      this.#cols = cols;
+      this.#data = new Float64Array(rows * cols).fill(fill);
     }
-    if (!Number.isInteger(cols) || cols < 1) {
-      throw new RangeError(`Matrix: cols must be a positive integer, got ${cols}`);
-    }
-    this.#rows = rows;
-    this.#cols = cols;
-    this.#data = new Float64Array(rows * cols).fill(fill);
   }
 
   // ─── Static Factories ──────────────────────────────────────────────────────

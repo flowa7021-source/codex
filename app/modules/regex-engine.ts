@@ -56,7 +56,7 @@ export class RegexEngine {
   /** Find the first match anywhere in the input. */
   search(input: string): { match: string; index: number } | null {
     for (let i = 0; i <= input.length; i++) {
-      for (let j = i; j <= input.length; j++) {
+      for (let j = input.length; j >= i; j--) {
         const sub = input.slice(i, j);
         if (this.test(sub)) {
           return { match: sub, index: i };

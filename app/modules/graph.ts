@@ -18,10 +18,19 @@ export class Graph<T = unknown> {
   #vertices: Map<string, Vertex<T>>;
   #edgeCount: number;
 
-  constructor(options?: { directed?: boolean }) {
-    this.#directed = options?.directed ?? false;
+  constructor(options?: boolean | { directed?: boolean }) {
+    if (typeof options === 'boolean') {
+      this.#directed = options;
+    } else {
+      this.#directed = options?.directed ?? false;
+    }
     this.#vertices = new Map();
     this.#edgeCount = 0;
+  }
+
+  /** Returns true if the graph is directed, false if undirected. */
+  isDirected(): boolean {
+    return this.#directed;
   }
 
   // ── Vertices ──────────────────────────────────────────────────────────────────
@@ -159,6 +168,17 @@ export class Graph<T = unknown> {
     const vertex = this.#vertices.get(id);
     if (!vertex) return [];
     return [...vertex.edges.keys()];
+  }
+
+  /** Return neighbours of `id` as objects with {to, weight} properties. */
+  neighbors(id: string): Array<{ to: string; weight: number }> {
+    const vertex = this.#vertices.get(id);
+    if (!vertex) return [];
+    const result: Array<{ to: string; weight: number }> = [];
+    for (const [to, weight] of vertex.edges) {
+      result.push({ to, weight });
+    }
+    return result;
   }
 
   // ── Traversals ────────────────────────────────────────────────────────────────
