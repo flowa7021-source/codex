@@ -1,8 +1,7 @@
 // @ts-check
 // ─── Finite State Machine ─────────────────────────────────────────────────────
-// A lightweight, typed finite state machine (FSM) with guards, actions,
-// onEnter/onExit lifecycle hooks, transition listeners, and a convenience
-// factory function.
+// A lightweight, type-safe finite state machine with guards, actions,
+// enter/exit hooks, history tracking, and event subscription.
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,73 +30,59 @@ export interface Transition<S extends string, E extends string> {
   action?: (context: unknown) => void;
 }
 
-/**
- * Full configuration for a StateMachine instance.
- *
- * @template S - Union of valid state strings
- * @template E - Union of valid event strings
- */
-export interface StateMachineConfig<S extends string, E extends string> {
-  /** The state the machine starts in and resets to. */
-  initial: S;
-  /** All valid transitions for this machine. */
-  transitions: Transition<S, E>[];
-  /**
-   * Optional map of state → callback invoked when that state is entered.
-   * Called after the transition action fires.
-   */
-  onEnter?: Partial<Record<S, (context: unknown) => void>>;
-  /**
-   * Optional map of state → callback invoked just before leaving that state.
-   * Called after the guard passes, before the action.
-   */
-  onExit?: Partial<Record<S, (context: unknown) => void>>;
-}
-
-/** Signature for a listener registered via {@link StateMachine.onTransition}. */
-export type TransitionListener<S extends string, E extends string> = (
+/** Handler called whenever a transition completes successfully. */
+export type TransitionHandler<S extends string, E extends string> = (
   from: S,
-  event: E,
   to: S,
+  event: E,
 ) => void;
 
 // ─── StateMachine ─────────────────────────────────────────────────────────────
 
 /**
- * Typed finite state machine with guards, actions, and lifecycle hooks.
+ * Typed finite state machine with guards, actions, lifecycle hooks, and
+ * full state history.
  *
  * @template S - Union of valid state strings
  * @template E - Union of valid event strings
  *
  * @example
- *   type States = 'idle' | 'loading' | 'done';
- *   type Events = 'fetch' | 'resolve';
+ *   type States = 'idle' | 'running' | 'done';
+ *   type Events = 'start' | 'finish';
  *
- *   const machine = createStateMachine<States, Events>({
+ *   const machine = createMachine<States, Events>({
  *     initial: 'idle',
  *     transitions: [
- *       { from: 'idle',    event: 'fetch',   to: 'loading' },
- *       { from: 'loading', event: 'resolve', to: 'done'    },
+ *       { from: 'idle',    event: 'start',  to: 'running' },
+ *       { from: 'running', event: 'finish', to: 'done'    },
  *     ],
  *   });
  *
- *   machine.send('fetch');   // true
- *   machine.state;           // 'loading'
+ *   machine.send('start');  // true
+ *   machine.state;          // 'running'
  */
 export class StateMachine<S extends string, E extends string> {
   #current: S;
-  #config: StateMachineConfig<S, E>;
-  #context: unknown;
-  #listeners: Set<TransitionListener<S, E>> = new Set();
+  #initial: S;
+  #transitions: Transition<S, E>[];
+  #onEnter: Partial<Record<S, (context: unknown) => void>>;
+  #onExit: Partial<Record<S, (context: unknown) => void>>;
+  #history: S[];
+  #listeners: Set<TransitionHandler<S, E>>;
 
-  /**
-   * @param config  - Machine configuration (initial state + transitions)
-   * @param context - Optional arbitrary context passed to guards / actions / hooks
-   */
-  constructor(config: StateMachineConfig<S, E>, context: unknown = undefined) {
-    this.#config = config;
+  constructor(config: {
+    initial: S;
+    transitions: Transition<S, E>[];
+    onEnter?: Partial<Record<S, (context: unknown) => void>>;
+    onExit?: Partial<Record<S, (context: unknown) => void>>;
+  }) {
+    this.#initial = config.initial;
     this.#current = config.initial;
-    this.#context = context;
+    this.#transitions = config.transitions;
+    this.#onEnter = config.onEnter ?? {};
+    this.#onExit = config.onExit ?? {};
+    this.#history = [config.initial];
+    this.#listeners = new Set();
   }
 
   // ─── Getters ─────────────────────────────────────────────────────────────
@@ -107,9 +92,12 @@ export class StateMachine<S extends string, E extends string> {
     return this.#current;
   }
 
-  /** Returns the context object supplied at construction time. */
-  get context(): unknown {
-    return this.#context;
+  /**
+   * Returns a snapshot of all states visited (including the initial state).
+   * Mutating the returned array has no effect on the machine.
+   */
+  get history(): S[] {
+    return [...this.#history];
   }
 
   // ─── send ─────────────────────────────────────────────────────────────────
@@ -121,35 +109,37 @@ export class StateMachine<S extends string, E extends string> {
    * whose guard (if any) returns true, then:
    *   1. Calls `onExit` for the current state (if defined).
    *   2. Calls `action` on the transition (if defined).
-   *   3. Moves to the target state.
+   *   3. Moves to the target state and records it in history.
    *   4. Calls `onEnter` for the new state (if defined).
-   *   5. Notifies all `onTransition` listeners.
+   *   5. Notifies all `on('transition', …)` listeners.
    *
-   * @param event - The event to send
+   * @param event   - The event to send
+   * @param context - Optional value forwarded to guards, actions and hooks
    * @returns `true` if a transition occurred, `false` otherwise
    */
-  send(event: E): boolean {
-    const transition = this.#findTransition(event);
+  send(event: E, context: unknown = undefined): boolean {
+    const transition = this.#findTransition(event, context);
     if (!transition) return false;
 
     const from = this.#current;
     const to = transition.to;
 
-    // onExit for the state being left
-    this.#config.onExit?.[from]?.(this.#context);
+    // Exit hook for the state being left
+    this.#onExit[from]?.(context);
 
-    // Transition action
-    transition.action?.(this.#context);
+    // Transition side-effect
+    transition.action?.(context);
 
-    // Move to new state
+    // Advance state and record in history
     this.#current = to;
+    this.#history.push(to);
 
-    // onEnter for the state just entered
-    this.#config.onEnter?.[to]?.(this.#context);
+    // Enter hook for the new state
+    this.#onEnter[to]?.(context);
 
-    // Notify listeners
-    for (const listener of this.#listeners) {
-      listener(from, event, to);
+    // Notify transition listeners
+    for (const handler of this.#listeners) {
+      handler(from, to, event);
     }
 
     return true;
@@ -161,16 +151,28 @@ export class StateMachine<S extends string, E extends string> {
    * Returns `true` if the given event can trigger a transition from the
    * current state (a matching, guard-passing transition exists).
    *
-   * @param event - The event to test
+   * @param event   - The event to test
+   * @param context - Optional context forwarded to the guard
    */
-  can(event: E): boolean {
-    return this.#findTransition(event) !== null;
+  can(event: E, context: unknown = undefined): boolean {
+    return this.#findTransition(event, context) !== null;
+  }
+
+  // ─── reset ────────────────────────────────────────────────────────────────
+
+  /**
+   * Resets the machine back to its initial state and clears the history.
+   * No hooks, actions or listeners are invoked.
+   */
+  reset(): void {
+    this.#current = this.#initial;
+    this.#history = [this.#initial];
   }
 
   // ─── matches ──────────────────────────────────────────────────────────────
 
   /**
-   * Returns `true` if the machine is currently in the given state.
+   * Returns `true` if the machine is currently in `state`.
    *
    * @param state - State to compare against
    */
@@ -178,44 +180,39 @@ export class StateMachine<S extends string, E extends string> {
     return this.#current === state;
   }
 
-  // ─── onTransition ─────────────────────────────────────────────────────────
+  // ─── on ───────────────────────────────────────────────────────────────────
 
   /**
-   * Register a listener that is called after every successful transition.
+   * Subscribe to machine events.  Currently only `'transition'` is supported.
    *
-   * @param listener - Called with (from, event, to) on each transition
-   * @returns An unsubscribe function — call it to remove this listener
+   * The handler receives `(from, to, event)` after every successful
+   * transition.
+   *
+   * @returns An unsubscribe function — call it to remove this listener.
    */
-  onTransition(listener: TransitionListener<S, E>): () => void {
-    this.#listeners.add(listener);
+  on(
+    event: 'transition',
+    handler: TransitionHandler<S, E>,
+  ): () => void {
+    this.#listeners.add(handler);
     return () => {
-      this.#listeners.delete(listener);
+      this.#listeners.delete(handler);
     };
-  }
-
-  // ─── reset ────────────────────────────────────────────────────────────────
-
-  /**
-   * Resets the machine to its initial state without firing any hooks,
-   * actions, or transition listeners.
-   */
-  reset(): void {
-    this.#current = this.#config.initial;
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   /**
    * Find the first eligible transition for the given event from the current
-   * state. Returns `null` if no matching guard-passing transition exists.
+   * state.  Returns `null` when no matching, guard-passing transition exists.
    */
-  #findTransition(event: E): Transition<S, E> | null {
-    for (const t of this.#config.transitions) {
-      const froms = Array.isArray(t.from) ? t.from : [t.from];
+  #findTransition(event: E, context: unknown): Transition<S, E> | null {
+    for (const t of this.#transitions) {
+      const sources = Array.isArray(t.from) ? t.from : [t.from];
       if (t.event !== event) continue;
-      if (!froms.includes(this.#current)) continue;
-      // Absent guard is treated as always-true
-      if (t.guard && !t.guard(this.#context)) continue;
+      if (!sources.includes(this.#current)) continue;
+      // An absent guard is treated as always-true
+      if (t.guard && !t.guard(context)) continue;
       return t;
     }
     return null;
@@ -225,18 +222,19 @@ export class StateMachine<S extends string, E extends string> {
 // ─── Factory ──────────────────────────────────────────────────────────────────
 
 /**
- * Convenience factory — equivalent to `new StateMachine(config, context)`.
+ * Convenience factory — equivalent to `new StateMachine(config)`.
  *
  * @template S - Union of valid state strings
  * @template E - Union of valid event strings
  *
- * @param config  - Machine configuration
- * @param context - Optional context object
- * @returns A new {@link StateMachine} instance
+ * @example
+ *   const m = createMachine({ initial: 'idle', transitions: [...] });
  */
-export function createStateMachine<S extends string, E extends string>(
-  config: StateMachineConfig<S, E>,
-  context: unknown = undefined,
-): StateMachine<S, E> {
-  return new StateMachine(config, context);
+export function createMachine<S extends string, E extends string>(config: {
+  initial: S;
+  transitions: Transition<S, E>[];
+  onEnter?: Partial<Record<S, (context: unknown) => void>>;
+  onExit?: Partial<Record<S, (context: unknown) => void>>;
+}): StateMachine<S, E> {
+  return new StateMachine(config);
 }

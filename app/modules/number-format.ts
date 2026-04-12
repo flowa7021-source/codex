@@ -1,27 +1,44 @@
 // @ts-check
-// ─── Number Formatting & Parsing Utilities ────────────────────────────────────
-// Pure functions — no DOM, no browser APIs, no Intl.NumberFormat.
+// ─── Number Formatting & Parsing Library ─────────────────────────────────────
+// Pure functions for formatting numbers, currencies, percentages, bytes,
+// ordinals, durations, and scientific notation, plus parsing and math utilities.
 
-// ─── formatDecimal ───────────────────────────────────────────────────────────
+// ─── formatNumber ────────────────────────────────────────────────────────────
 
 /**
- * Format a number to a fixed number of decimal places.
+ * Formats a number with configurable decimal places and separators.
  * @param n - The number to format.
- * @param decimals - Number of decimal places (default 2).
+ * @param options - Optional formatting options.
+ * @param options.decimals - Number of decimal places (default 2).
+ * @param options.decimalSep - Decimal separator character (default '.').
+ * @param options.thousandsSep - Thousands separator character (default ',').
  */
-export function formatDecimal(n: number, decimals = 2): string {
-  return n.toFixed(decimals);
+export function formatNumber(
+  n: number,
+  options?: { decimals?: number; decimalSep?: string; thousandsSep?: string },
+): string {
+  const decimals = options?.decimals ?? 2;
+  const decimalSep = options?.decimalSep ?? '.';
+  const thousandsSep = options?.thousandsSep ?? ',';
+
+  const fixed = Math.abs(n).toFixed(decimals);
+  const dotIndex = fixed.indexOf('.');
+  const intPart = dotIndex === -1 ? fixed : fixed.slice(0, dotIndex);
+  const fracPart = dotIndex === -1 ? '' : fixed.slice(dotIndex + 1);
+
+  const intFormatted = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSep);
+
+  const sign = n < 0 ? '-' : '';
+  if (fracPart.length > 0) {
+    return `${sign}${intFormatted}${decimalSep}${fracPart}`;
+  }
+  return `${sign}${intFormatted}`;
 }
 
-// ─── formatThousands ─────────────────────────────────────────────────────────
+// ─── formatThousands (internal helper) ───────────────────────────────────────
 
-/**
- * Format a number with a thousands separator.
- * Handles negative numbers and decimals correctly.
- * @param n - The number to format.
- * @param separator - Thousands separator character (default ',').
- */
-export function formatThousands(n: number, separator = ','): string {
+/** Internal helper: adds thousands separators to integer n. */
+function formatThousands(n: number, separator = ','): string {
   const str = String(n);
   const dotIndex = str.indexOf('.');
   const intPart = dotIndex === -1 ? str : str.slice(0, dotIndex);
@@ -45,47 +62,28 @@ export function formatThousands(n: number, separator = ','): string {
 // ─── formatCurrency ──────────────────────────────────────────────────────────
 
 /**
- * Format a number as a currency string.
- * Pure string formatting — does NOT use Intl.NumberFormat.
- * @param n - The number to format.
- * @param currency - ISO currency code (default 'USD').
- * @param locale - Locale hint for symbol selection (default 'en-US').
+ * Formats a number as a currency string using Intl.NumberFormat.
+ * @param amount - The monetary amount to format.
+ * @param currency - ISO 4217 currency code (default 'USD').
+ * @param options - Optional options.
+ * @param options.decimals - Number of decimal places (default 2).
+ * @param options.locale - BCP 47 locale string (default 'en-US').
  */
-export function formatCurrency(n: number, currency = 'USD', locale = 'en-US'): string {
-  const symbols: Record<string, string> = {
-    USD: '$',
-    EUR: '€',
-    GBP: '£',
-    JPY: '¥',
-    CNY: '¥',
-    KRW: '₩',
-    INR: '₹',
-    BRL: 'R$',
-    CAD: 'CA$',
-    AUD: 'A$',
-    CHF: 'CHF',
-    RUB: '₽',
-    MXN: 'MX$',
-  };
+export function formatCurrency(
+  amount: number,
+  currency?: string,
+  options?: { decimals?: number; locale?: string },
+): string {
+  const cur = currency ?? 'USD';
+  const decimals = options?.decimals ?? 2;
+  const locale = options?.locale ?? 'en-US';
 
-  // JPY and KRW have no decimal places by convention
-  const noDecimalCurrencies = new Set(['JPY', 'KRW']);
-  const decimals = noDecimalCurrencies.has(currency) ? 0 : 2;
-
-  const symbol = symbols[currency] ?? currency;
-  const abs = Math.abs(n);
-  // toFixed produces the correctly-rounded string with the right decimal places,
-  // e.g. (1234.5).toFixed(2) → "1234.50". We then apply thousands-grouping to
-  // only the integer portion so that trailing zeros are never stripped.
-  const absFixed = abs.toFixed(decimals); // e.g. "1234.50"
-  const dotIndex = absFixed.indexOf('.');
-  const intPart = dotIndex === -1 ? absFixed : absFixed.slice(0, dotIndex);
-  const decPart = dotIndex === -1 ? '' : absFixed.slice(dotIndex); // includes '.'
-  const valueStr = formatThousands(Number(intPart)) + decPart;
-
-  // Some locales put symbol after value; keep it simple — symbol before for all
-  void locale; // locale parameter reserved for future extension
-  return (n < 0 ? '-' : '') + symbol + valueStr;
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: cur,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(amount);
 }
 
 // ─── formatPercent ───────────────────────────────────────────────────────────
@@ -103,26 +101,31 @@ export function formatPercent(n: number, decimals = 2): string {
 // ─── formatScientific ────────────────────────────────────────────────────────
 
 /**
- * Format a number in scientific notation.
- * e.g. 12345 → '1.23e+4'
+ * Formats a number in scientific notation.
+ * e.g. 1234.5 → '1.23e+3'
  * @param n - The number to format.
  * @param decimals - Number of decimal places in the mantissa (default 2).
  */
 export function formatScientific(n: number, decimals = 2): string {
-  return n.toExponential(decimals);
+  if (n === 0) return `0.${'0'.repeat(decimals)}e+0`;
+  const exp = Math.floor(Math.log10(Math.abs(n)));
+  const mantissa = n / Math.pow(10, exp);
+  const sign = exp < 0 ? '-' : '+';
+  const absExp = Math.abs(exp);
+  return `${mantissa.toFixed(decimals)}e${sign}${absExp}`;
 }
 
 // ─── formatBytes ─────────────────────────────────────────────────────────────
 
 /**
- * Format a byte count as a human-readable string using base-1024 units.
- * Units: B, KB, MB, GB, TB
- * @param bytes - Number of bytes (non-negative).
+ * Formats a byte count as a human-readable string using base-1024 units.
+ * Units: Bytes, KB, MB, GB, TB
+ * @param bytes - Number of bytes.
  * @param decimals - Number of decimal places (default 2).
  */
 export function formatBytes(bytes: number, decimals = 2): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  if (bytes === 0) return '0 B';
+  const units = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB'];
+  if (bytes === 0) return '0 Bytes';
   const absBytes = Math.abs(bytes);
   const index = Math.min(Math.floor(Math.log(absBytes) / Math.log(1024)), units.length - 1);
   const value = absBytes / Math.pow(1024, index);
@@ -132,27 +135,38 @@ export function formatBytes(bytes: number, decimals = 2): string {
 // ─── formatDuration ──────────────────────────────────────────────────────────
 
 /**
- * Format a duration in milliseconds as a human-readable string.
- * Omits zero-valued leading units (days and hours), but always shows seconds.
- * e.g. 5025000 → '1h 23m 45s', 61000 → '1m 1s', 500 → '0s'
+ * Formats a duration in milliseconds as a human-readable string.
+ * Examples: '2h 30m', '45s', '1m 30s', '500ms'
+ * Sub-second durations are shown as 'Xms'.
+ * Hours: shows hours and optionally minutes (omits seconds).
+ * Minutes: shows minutes and optionally seconds.
+ * Seconds: shows only seconds.
  * @param ms - Duration in milliseconds.
  */
 export function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(Math.abs(ms) / 1000);
+  const absMs = Math.abs(ms);
+  const sign = ms < 0 ? '-' : '';
+
+  if (absMs < 1000) {
+    return `${sign}${Math.round(absMs)}ms`;
+  }
+
+  const totalSeconds = Math.floor(absMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const minutes = totalMinutes % 60;
-  const totalHours = Math.floor(totalMinutes / 60);
-  const hours = totalHours % 24;
-  const days = Math.floor(totalHours / 24);
 
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0 || days > 0) parts.push(`${hours}h`);
-  if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes}m`);
-  parts.push(`${seconds}s`);
-
-  return (ms < 0 ? '-' : '') + parts.join(' ');
+  if (hours > 0) {
+    const parts = [`${hours}h`];
+    if (minutes > 0) parts.push(`${minutes}m`);
+    return sign + parts.join(' ');
+  }
+  if (minutes > 0) {
+    const parts = [`${minutes}m`];
+    if (seconds > 0) parts.push(`${seconds}s`);
+    return sign + parts.join(' ');
+  }
+  return `${sign}${seconds}s`;
 }
 
 // ─── formatOrdinal ───────────────────────────────────────────────────────────
@@ -186,14 +200,34 @@ export function formatOrdinal(n: number): string {
 // ─── parseNumber ─────────────────────────────────────────────────────────────
 
 /**
- * Parse a string containing a number, stripping commas and percent signs.
- * e.g. '1,234.56' → 1234.56, '12.5%' → 12.5
- * Returns NaN if the string cannot be parsed.
+ * Parses a formatted number string (e.g. '1,234.56') into a number.
+ * Strips thousands separators (commas) before parsing.
+ * Throws if the result is NaN.
  * @param str - The string to parse.
  */
 export function parseNumber(str: string): number {
-  const cleaned = str.replace(/,/g, '').replace(/%/g, '').trim();
-  return Number(cleaned);
+  const cleaned = str.replace(/,/g, '').trim();
+  const result = Number(cleaned);
+  if (Number.isNaN(result)) {
+    throw new Error(`parseNumber: invalid number string "${str}"`);
+  }
+  return result;
+}
+
+// ─── parsePercent ────────────────────────────────────────────────────────────
+
+/**
+ * Parses a percentage string (e.g. '12.34%') into a fractional number.
+ * '12.34%' → 0.1234
+ * @param str - The percentage string to parse.
+ */
+export function parsePercent(str: string): number {
+  const cleaned = str.replace(/%/g, '').trim();
+  const result = Number(cleaned);
+  if (Number.isNaN(result)) {
+    throw new Error(`parsePercent: invalid percent string "${str}"`);
+  }
+  return result / 100;
 }
 
 // ─── clamp ───────────────────────────────────────────────────────────────────
@@ -295,3 +329,142 @@ export function inRange(value: number, min: number, max: number, inclusive = tru
     ? value >= min && value <= max
     : value > min && value < max;
 }
+
+// ─── toFixed ─────────────────────────────────────────────────────────────────
+
+/**
+ * Behaves identically to Number.prototype.toFixed.
+ * @param n - The number to format.
+ * @param decimals - Number of decimal places.
+ */
+export function toFixed(n: number, decimals: number): string {
+  return n.toFixed(decimals);
+}
+
+// ─── isPrime ─────────────────────────────────────────────────────────────────
+
+/**
+ * Returns true if n is a prime number.
+ * Returns false for n < 2 and for non-integers.
+ * @param n - The integer to test.
+ */
+export function isPrime(n: number): boolean {
+  if (!Number.isInteger(n) || n < 2) return false;
+  if (n === 2) return true;
+  if (n % 2 === 0) return false;
+  const limit = Math.sqrt(n);
+  for (let i = 3; i <= limit; i += 2) {
+    if (n % i === 0) return false;
+  }
+  return true;
+}
+
+// ─── gcd ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns the greatest common divisor of two integers using the Euclidean
+ * algorithm. Always returns a non-negative value.
+ * @param a - First integer.
+ * @param b - Second integer.
+ */
+export function gcd(a: number, b: number): number {
+  a = Math.abs(Math.round(a));
+  b = Math.abs(Math.round(b));
+  while (b !== 0) {
+    const t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
+}
+
+// ─── lcm ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns the least common multiple of two integers.
+ * Returns 0 if either operand is 0.
+ * @param a - First integer.
+ * @param b - Second integer.
+ */
+export function lcm(a: number, b: number): number {
+  if (a === 0 || b === 0) return 0;
+  return Math.abs(Math.round(a) * Math.round(b)) / gcd(a, b);
+}
+
+// ─── factorial ───────────────────────────────────────────────────────────────
+
+/**
+ * Returns the factorial of a non-negative integer n.
+ * Throws for negative n or n > 20 (to avoid unsafe integer overflow).
+ * @param n - The non-negative integer.
+ */
+export function factorial(n: number): number {
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`factorial: n must be a non-negative integer, got ${n}`);
+  }
+  if (n > 20) {
+    throw new Error(`factorial: n must be ≤ 20, got ${n}`);
+  }
+  let result = 1;
+  for (let i = 2; i <= n; i++) {
+    result *= i;
+  }
+  return result;
+}
+
+// ─── fibonacci ───────────────────────────────────────────────────────────────
+
+/**
+ * Returns the nth Fibonacci number (0-indexed).
+ * fib(0) = 0, fib(1) = 1, fib(2) = 1, fib(3) = 2, ...
+ * @param n - The index (non-negative integer).
+ */
+export function fibonacci(n: number): number {
+  if (!Number.isInteger(n) || n < 0) {
+    throw new Error(`fibonacci: n must be a non-negative integer, got ${n}`);
+  }
+  if (n === 0) return 0;
+  if (n === 1) return 1;
+  let a = 0;
+  let b = 1;
+  for (let i = 2; i <= n; i++) {
+    const next = a + b;
+    a = b;
+    b = next;
+  }
+  return b;
+}
+
+// ─── randomInt ───────────────────────────────────────────────────────────────
+
+/**
+ * Returns a random integer in the inclusive range [min, max].
+ * @param min - Minimum value (inclusive).
+ * @param max - Maximum value (inclusive).
+ */
+export function randomInt(min: number, max: number): number {
+  min = Math.ceil(min);
+  max = Math.floor(max);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// ─── randomFloat ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns a random float in the range [min, max).
+ * @param min - Minimum value (inclusive).
+ * @param max - Maximum value (exclusive).
+ */
+export function randomFloat(min: number, max: number): number {
+  return Math.random() * (max - min) + min;
+}
+
+
+// ─── Additional exports ───────────────────────────────────────────────────────
+
+/** Format a number to a fixed number of decimal places (default 2). */
+export function formatDecimal(n: number, decimals = 2): string {
+  return n.toFixed(decimals);
+}
+
+export { formatThousands };

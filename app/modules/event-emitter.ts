@@ -1,157 +1,202 @@
-// ─── Typed Event Emitter ─────────────────────────────────────────────────────
-// A typed event emitter supporting on, once, off, and emit.
-// Generic over a TEvents map so callers get full argument type-checking.
-
 // @ts-check
+// ─── Event Emitter ───────────────────────────────────────────────────────────
+// Typed publish-subscribe / event emitter library with full listener lifecycle
+// management, once-semantics, max-listener warnings, and a factory helper.
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+/** Default map type: any string event → any argument array. */
+type DefaultEvents = Record<string, unknown[]>;
+
+// ─── EventEmitter ─────────────────────────────────────────────────────────────
 
 /**
- * A typed event emitter supporting 'on', 'once', 'off', 'emit'.
+ * Strongly-typed publish-subscribe event emitter.
  *
  * @example
- *   type MyEvents = { data: [string, number]; done: [] };
+ *   interface MyEvents { data: [string, number]; done: [] }
  *   const emitter = new EventEmitter<MyEvents>();
- *   emitter.on('data', (msg, count) => console.log(msg, count));
+ *   const off = emitter.on('data', (s, n) => console.log(s, n));
  *   emitter.emit('data', 'hello', 42);
+ *   off(); // unsubscribe
  */
-export class EventEmitter<TEvents extends Record<string, any[]> = Record<string, any[]>> {
-  private _listeners: Map<string, Array<(...args: any[]) => void>>;
-  private _maxListeners: number = 10;
-
-  constructor() {
-    this._listeners = new Map();
-  }
+export class EventEmitter<Events extends Record<string, unknown[]> = DefaultEvents> {
+  #listeners: Map<keyof Events, Array<(...args: unknown[]) => void>> = new Map();
+  #maxListeners: number = 10;
 
   /**
-   * Register a listener for an event. Returns `this` for chaining.
+   * Register a listener for the given event.
+   * @returns An unsubscribe function that removes this specific listener.
    */
-  on<K extends keyof TEvents>(event: K, listener: (...args: TEvents[K]) => void): this {
-    const key = event as string;
-    let arr = this._listeners.get(key);
-    if (!arr) {
-      arr = [];
-      this._listeners.set(key, arr);
+  on<K extends keyof Events>(event: K, listener: (...args: Events[K]) => void): () => void {
+    let bucket = this.#listeners.get(event);
+    if (bucket === undefined) {
+      bucket = [];
+      this.#listeners.set(event, bucket);
     }
-    arr.push(listener as (...args: any[]) => void);
-    if (this._maxListeners !== 0 && arr.length > this._maxListeners) {
-      // Mirror Node.js behaviour: warn but do not throw
+    bucket.push(listener as (...args: unknown[]) => void);
+
+    if (this.#maxListeners !== 0 && bucket.length > this.#maxListeners) {
       console.warn(
-        `MaxListenersExceededWarning: Possible EventEmitter memory leak detected. ` +
-        `${arr.length} ${key} listeners added. ` +
-        `Use emitter.setMaxListeners() to increase limit.`,
+        `EventEmitter: possible memory leak — "${String(event)}" has ${bucket.length} listeners ` +
+        `(max ${this.#maxListeners}). Use setMaxListeners() to raise the limit.`,
       );
     }
-    return this;
+
+    return () => this.off(event, listener);
   }
 
   /**
-   * Register a one-shot listener (auto-removed after first call). Returns `this`.
+   * Register a one-time listener. The listener is automatically removed after
+   * the first time the event fires.
+   * @returns An unsubscribe function that removes this listener early.
    */
-  once<K extends keyof TEvents>(event: K, listener: (...args: TEvents[K]) => void): this {
-    const wrapper = (...args: TEvents[K]) => {
-      this.off(event, wrapper as (...args: TEvents[K]) => void);
-      listener(...args);
+  once<K extends keyof Events>(event: K, listener: (...args: Events[K]) => void): () => void {
+    let called = false;
+    const wrapper = (...args: unknown[]): void => {
+      if (called) return;
+      called = true;
+      this.off(event, wrapper as (...args: Events[K]) => void);
+      (listener as (...args: unknown[]) => void)(...args);
     };
-    // Tag so off() and listeners() can resolve the original function
-    (wrapper as { __original?: unknown }).__original = listener;
-    return this.on(event, wrapper as (...args: TEvents[K]) => void);
+    return this.on(event, wrapper as (...args: Events[K]) => void);
   }
 
   /**
-   * Remove a specific listener for an event.
+   * Remove a specific listener from an event.
+   * No-op if the listener was not registered.
    */
-  off<K extends keyof TEvents>(event: K, listener: (...args: TEvents[K]) => void): this {
-    const key = event as string;
-    const arr = this._listeners.get(key);
-    if (!arr) return this;
+  off<K extends keyof Events>(event: K, listener: (...args: Events[K]) => void): void {
+    const bucket = this.#listeners.get(event);
+    if (bucket === undefined) return;
 
-    // Match by direct reference OR by __original (handles once() wrappers)
-    const idx = arr.findIndex(
-      (fn) =>
-        fn === (listener as (...args: any[]) => void) ||
-        (fn as { __original?: unknown }).__original === listener,
-    );
+    const idx = bucket.indexOf(listener as (...args: unknown[]) => void);
     if (idx !== -1) {
-      arr.splice(idx, 1);
+      bucket.splice(idx, 1);
     }
-    if (arr.length === 0) {
-      this._listeners.delete(key);
+
+    if (bucket.length === 0) {
+      this.#listeners.delete(event);
     }
-    return this;
   }
 
   /**
-   * Emit an event with arguments. Returns true if any listeners were called.
+   * Emit an event, calling all registered listeners synchronously.
+   * @returns `true` if at least one listener was called, `false` otherwise.
    */
-  emit<K extends keyof TEvents>(event: K, ...args: TEvents[K]): boolean {
-    const key = event as string;
-    const arr = this._listeners.get(key);
-    if (!arr || arr.length === 0) return false;
+  emit<K extends keyof Events>(event: K, ...args: Events[K]): boolean {
+    const bucket = this.#listeners.get(event);
+    if (bucket === undefined || bucket.length === 0) return false;
 
-    // Snapshot to avoid mutation issues if a listener calls off()
-    for (const listener of arr.slice()) {
-      listener(...args);
+    // Snapshot so that listeners removed during iteration are safe.
+    const snapshot = bucket.slice();
+    for (const listener of snapshot) {
+      listener(...(args as unknown[]));
     }
     return true;
   }
 
   /**
-   * Remove all listeners for a specific event, or all events if no event given.
+   * Remove all listeners, or all listeners for a specific event.
    */
-  removeAllListeners(event?: keyof TEvents): this {
+  removeAllListeners(event?: keyof Events): void {
     if (event === undefined) {
-      this._listeners.clear();
+      this.#listeners.clear();
     } else {
-      this._listeners.delete(event as string);
+      this.#listeners.delete(event);
     }
-    return this;
   }
 
   /**
-   * Get the number of listeners for a specific event.
+   * Return the number of listeners registered for an event.
    */
-  listenerCount(event: keyof TEvents): number {
-    return this._listeners.get(event as string)?.length ?? 0;
+  listenerCount(event: keyof Events): number {
+    return this.#listeners.get(event)?.length ?? 0;
   }
 
   /**
-   * Get all event names that have listeners.
+   * Return all event names that currently have listeners.
    */
-  eventNames(): (keyof TEvents)[] {
-    return Array.from(this._listeners.keys()) as (keyof TEvents)[];
-  }
-
-  /**
-   * Get a copy of the listeners array for an event.
-   * For once() listeners the original (unwrapped) function is returned.
-   */
-  listeners<K extends keyof TEvents>(event: K): ((...args: TEvents[K]) => void)[] {
-    const key = event as string;
-    const arr = this._listeners.get(key);
-    if (!arr) return [];
-    return arr.map((fn) => {
-      const wrapped = fn as { __original?: (...args: TEvents[K]) => void };
-      return (wrapped.__original ?? fn) as (...args: TEvents[K]) => void;
-    });
+  eventNames(): (keyof Events)[] {
+    return Array.from(this.#listeners.keys());
   }
 
   /**
    * Set the maximum number of listeners per event before a warning is emitted.
-   * Pass 0 for unlimited. Default is 10.
+   * Default is 10. Set to 0 for unlimited (no warning).
    */
-  setMaxListeners(n: number): this {
-    this._maxListeners = n;
-    return this;
+  setMaxListeners(n: number): void {
+    this.#maxListeners = n;
   }
 
-  /** Get the current max-listeners limit. */
+  /**
+   * Return the current max-listeners threshold.
+   */
   getMaxListeners(): number {
-    return this._maxListeners;
+    return this.#maxListeners;
   }
 }
 
+// ─── SimpleEmitter ────────────────────────────────────────────────────────────
+
 /**
- * Create a new EventEmitter instance.
+ * A simpler emitter with plain string events and `unknown[]` payloads.
+ * Convenient when full generic typing is unnecessary.
+ *
+ * @example
+ *   const bus = new SimpleEmitter();
+ *   bus.on('change', (value) => console.log(value));
+ *   bus.emit('change', 42);
  */
-export function createEventEmitter<T extends Record<string, any[]>>(): EventEmitter<T> {
-  return new EventEmitter<T>();
+export class SimpleEmitter {
+  #inner: EventEmitter<Record<string, unknown[]>> = new EventEmitter();
+
+  /** Register a listener. Returns an unsubscribe function. */
+  on(event: string, listener: (...args: unknown[]) => void): () => void {
+    return this.#inner.on(event, listener);
+  }
+
+  /** Register a one-time listener. Returns an unsubscribe function. */
+  once(event: string, listener: (...args: unknown[]) => void): () => void {
+    return this.#inner.once(event, listener);
+  }
+
+  /** Remove a specific listener. */
+  off(event: string, listener: (...args: unknown[]) => void): void {
+    this.#inner.off(event, listener);
+  }
+
+  /** Emit an event. Returns `true` if any listener was called. */
+  emit(event: string, ...args: unknown[]): boolean {
+    return this.#inner.emit(event, ...args);
+  }
+
+  /** Remove all listeners, or all for a specific event. */
+  removeAllListeners(event?: string): void {
+    this.#inner.removeAllListeners(event);
+  }
+
+  /** Number of listeners for an event. */
+  listenerCount(event: string): number {
+    return this.#inner.listenerCount(event);
+  }
+
+  /** All event names that have listeners. */
+  eventNames(): string[] {
+    return this.#inner.eventNames() as string[];
+  }
+}
+
+// ─── Factory ──────────────────────────────────────────────────────────────────
+
+/**
+ * Create a new typed EventEmitter instance.
+ *
+ * @example
+ *   const emitter = createEmitter<{ tick: [number] }>();
+ *   emitter.on('tick', (n) => console.log(n));
+ *   emitter.emit('tick', 1);
+ */
+export function createEmitter<Events extends Record<string, unknown[]>>(): EventEmitter<Events> {
+  return new EventEmitter<Events>();
 }

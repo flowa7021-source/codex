@@ -4,24 +4,34 @@ import assert from 'node:assert/strict';
 
 import {
   camelCase,
+  pascalCase,
   snakeCase,
   kebabCase,
-  pascalCase,
   titleCase,
-  padLeft,
-  padRight,
+  constantCase,
+  trim,
+  trimStart,
+  trimEnd,
+  padStart,
+  padEnd,
   truncate,
+  truncateWords,
+  startsWith,
+  endsWith,
+  includes,
+  isBlank,
   isPalindrome,
-  isAnagram,
-  countOccurrences,
   reverse,
-  capitalize,
+  repeat,
+  replaceAll,
+  countOccurrences,
   words,
-  wrap,
-  stripDiacritics,
+  slugify,
+  escapeHtml,
+  unescapeHtml,
+  stripHtml,
+  wrapAt,
   interpolate,
-  hammingDistance,
-  longestCommonPrefix,
 } from '../../app/modules/string-utils.js';
 
 // ─── camelCase ────────────────────────────────────────────────────────────────
@@ -53,6 +63,34 @@ describe('camelCase', () => {
 
   it('handles multiple words', () => {
     assert.equal(camelCase('the quick brown fox'), 'theQuickBrownFox');
+  });
+});
+
+// ─── pascalCase ───────────────────────────────────────────────────────────────
+
+describe('pascalCase', () => {
+  it('converts space-separated words', () => {
+    assert.equal(pascalCase('hello world'), 'HelloWorld');
+  });
+
+  it('converts camelCase', () => {
+    assert.equal(pascalCase('helloWorld'), 'HelloWorld');
+  });
+
+  it('converts snake_case', () => {
+    assert.equal(pascalCase('hello_world'), 'HelloWorld');
+  });
+
+  it('converts kebab-case', () => {
+    assert.equal(pascalCase('hello-world'), 'HelloWorld');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(pascalCase(''), '');
+  });
+
+  it('handles single word', () => {
+    assert.equal(pascalCase('hello'), 'Hello');
   });
 });
 
@@ -112,34 +150,6 @@ describe('kebabCase', () => {
   });
 });
 
-// ─── pascalCase ───────────────────────────────────────────────────────────────
-
-describe('pascalCase', () => {
-  it('converts space-separated words', () => {
-    assert.equal(pascalCase('hello world'), 'HelloWorld');
-  });
-
-  it('converts camelCase', () => {
-    assert.equal(pascalCase('helloWorld'), 'HelloWorld');
-  });
-
-  it('converts snake_case', () => {
-    assert.equal(pascalCase('hello_world'), 'HelloWorld');
-  });
-
-  it('converts kebab-case', () => {
-    assert.equal(pascalCase('hello-world'), 'HelloWorld');
-  });
-
-  it('handles empty string', () => {
-    assert.equal(pascalCase(''), '');
-  });
-
-  it('handles single word', () => {
-    assert.equal(pascalCase('hello'), 'Hello');
-  });
-});
-
 // ─── titleCase ────────────────────────────────────────────────────────────────
 
 describe('titleCase', () => {
@@ -168,70 +178,154 @@ describe('titleCase', () => {
   });
 });
 
-// ─── padLeft ──────────────────────────────────────────────────────────────────
+// ─── constantCase ─────────────────────────────────────────────────────────────
 
-describe('padLeft', () => {
-  it('pads with zeros', () => {
-    assert.equal(padLeft('5', 3, '0'), '005');
+describe('constantCase', () => {
+  it('converts camelCase to CONSTANT_CASE', () => {
+    assert.equal(constantCase('helloWorld'), 'HELLO_WORLD');
   });
 
-  it('returns string unchanged when at target length', () => {
-    assert.equal(padLeft('hello', 5), 'hello');
+  it('converts space-separated words', () => {
+    assert.equal(constantCase('hello world'), 'HELLO_WORLD');
   });
 
-  it('returns string unchanged when longer than target', () => {
-    assert.equal(padLeft('toolong', 3), 'toolong');
+  it('converts kebab-case', () => {
+    assert.equal(constantCase('hello-world'), 'HELLO_WORLD');
   });
 
-  it('uses space as default pad character', () => {
-    assert.equal(padLeft('hi', 4), '  hi');
+  it('converts snake_case', () => {
+    assert.equal(constantCase('hello_world'), 'HELLO_WORLD');
   });
 
-  it('handles zero-length target', () => {
-    assert.equal(padLeft('hi', 0), 'hi');
+  it('handles empty string', () => {
+    assert.equal(constantCase(''), '');
   });
 
-  it('pads with custom character', () => {
-    assert.equal(padLeft('42', 6, '*'), '****42');
-  });
-
-  it('handles empty source string', () => {
-    assert.equal(padLeft('', 3, '-'), '---');
+  it('handles single word', () => {
+    assert.equal(constantCase('hello'), 'HELLO');
   });
 });
 
-// ─── padRight ─────────────────────────────────────────────────────────────────
+// ─── trim ─────────────────────────────────────────────────────────────────────
 
-describe('padRight', () => {
-  it('pads on the right with custom character', () => {
-    assert.equal(padRight('hi', 5, '-'), 'hi---');
+describe('trim', () => {
+  it('trims whitespace by default', () => {
+    assert.equal(trim('  hello  '), 'hello');
+  });
+
+  it('trims custom chars from both ends', () => {
+    assert.equal(trim('***hello***', '*'), 'hello');
+  });
+
+  it('handles string with nothing to trim', () => {
+    assert.equal(trim('hello'), 'hello');
+  });
+
+  it('returns empty string when everything is trimmed', () => {
+    assert.equal(trim('   ', ' '), '');
+  });
+
+  it('trims multiple different custom chars', () => {
+    assert.equal(trim('--**hello**--', '-*'), 'hello');
+  });
+});
+
+// ─── trimStart ────────────────────────────────────────────────────────────────
+
+describe('trimStart', () => {
+  it('trims leading whitespace by default', () => {
+    assert.equal(trimStart('  hello  '), 'hello  ');
+  });
+
+  it('trims custom chars from the start only', () => {
+    assert.equal(trimStart('***hello***', '*'), 'hello***');
+  });
+
+  it('handles string with nothing to trim at start', () => {
+    assert.equal(trimStart('hello  '), 'hello  ');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(trimStart(''), '');
+  });
+});
+
+// ─── trimEnd ──────────────────────────────────────────────────────────────────
+
+describe('trimEnd', () => {
+  it('trims trailing whitespace by default', () => {
+    assert.equal(trimEnd('  hello  '), '  hello');
+  });
+
+  it('trims custom chars from the end only', () => {
+    assert.equal(trimEnd('***hello***', '*'), '***hello');
+  });
+
+  it('handles string with nothing to trim at end', () => {
+    assert.equal(trimEnd('  hello'), '  hello');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(trimEnd(''), '');
+  });
+});
+
+// ─── padStart ─────────────────────────────────────────────────────────────────
+
+describe('padStart', () => {
+  it('pads with zeros', () => {
+    assert.equal(padStart('5', 3, '0'), '005');
   });
 
   it('returns string unchanged when at target length', () => {
-    assert.equal(padRight('hello', 5), 'hello');
+    assert.equal(padStart('hello', 5), 'hello');
   });
 
   it('returns string unchanged when longer than target', () => {
-    assert.equal(padRight('toolong', 3), 'toolong');
+    assert.equal(padStart('toolong', 3), 'toolong');
   });
 
   it('uses space as default pad character', () => {
-    assert.equal(padRight('hi', 4), 'hi  ');
+    assert.equal(padStart('hi', 4), '  hi');
   });
 
-  it('handles zero-length target', () => {
-    assert.equal(padRight('hi', 0), 'hi');
+  it('pads with custom character', () => {
+    assert.equal(padStart('42', 6, '*'), '****42');
   });
 
   it('handles empty source string', () => {
-    assert.equal(padRight('', 3, '.'), '...');
+    assert.equal(padStart('', 3, '-'), '---');
+  });
+});
+
+// ─── padEnd ───────────────────────────────────────────────────────────────────
+
+describe('padEnd', () => {
+  it('pads on the right with custom character', () => {
+    assert.equal(padEnd('hi', 5, '-'), 'hi---');
+  });
+
+  it('returns string unchanged when at target length', () => {
+    assert.equal(padEnd('hello', 5), 'hello');
+  });
+
+  it('returns string unchanged when longer than target', () => {
+    assert.equal(padEnd('toolong', 3), 'toolong');
+  });
+
+  it('uses space as default pad character', () => {
+    assert.equal(padEnd('hi', 4), 'hi  ');
+  });
+
+  it('handles empty source string', () => {
+    assert.equal(padEnd('', 3, '.'), '...');
   });
 });
 
 // ─── truncate ─────────────────────────────────────────────────────────────────
 
 describe('truncate', () => {
-  it('truncates a long string with default ellipsis', () => {
+  it('truncates a long string with default suffix', () => {
     assert.equal(truncate('Hello, World!', 8), 'Hello...');
   });
 
@@ -239,28 +333,132 @@ describe('truncate', () => {
     assert.equal(truncate('Hello', 5), 'Hello');
   });
 
-  it('returns original string when shorter than maxLength', () => {
+  it('returns original string when shorter than maxLen', () => {
     assert.equal(truncate('Hi', 10), 'Hi');
   });
 
-  it('uses a custom ellipsis', () => {
+  it('uses a custom suffix', () => {
     assert.equal(truncate('Hello, World!', 9, '…'), 'Hello, W…');
   });
 
-  it('handles maxLength equal to ellipsis length', () => {
+  it('handles maxLen equal to suffix length', () => {
     assert.equal(truncate('Hello, World!', 3), '...');
-  });
-
-  it('handles maxLength shorter than ellipsis', () => {
-    assert.equal(truncate('Hello, World!', 2), '..');
   });
 
   it('handles empty source string', () => {
     assert.equal(truncate('', 5), '');
   });
 
-  it('handles empty ellipsis', () => {
+  it('handles empty suffix', () => {
     assert.equal(truncate('Hello World', 5, ''), 'Hello');
+  });
+});
+
+// ─── truncateWords ────────────────────────────────────────────────────────────
+
+describe('truncateWords', () => {
+  it('truncates to given word count with default suffix', () => {
+    assert.equal(truncateWords('one two three four', 2), 'one two...');
+  });
+
+  it('returns string unchanged when word count fits', () => {
+    assert.equal(truncateWords('hello world', 5), 'hello world');
+  });
+
+  it('uses a custom suffix', () => {
+    assert.equal(truncateWords('one two three', 2, ' [more]'), 'one two [more]');
+  });
+
+  it('handles single-word string within limit', () => {
+    assert.equal(truncateWords('hello', 1), 'hello');
+  });
+
+  it('handles exact word count match', () => {
+    assert.equal(truncateWords('one two three', 3), 'one two three');
+  });
+});
+
+// ─── startsWith ───────────────────────────────────────────────────────────────
+
+describe('startsWith', () => {
+  it('returns true when prefix matches', () => {
+    assert.equal(startsWith('hello world', 'hello'), true);
+  });
+
+  it('returns false when prefix does not match', () => {
+    assert.equal(startsWith('hello world', 'world'), false);
+  });
+
+  it('returns true for empty prefix', () => {
+    assert.equal(startsWith('hello', ''), true);
+  });
+
+  it('returns true when string equals prefix', () => {
+    assert.equal(startsWith('hello', 'hello'), true);
+  });
+});
+
+// ─── endsWith ─────────────────────────────────────────────────────────────────
+
+describe('endsWith', () => {
+  it('returns true when suffix matches', () => {
+    assert.equal(endsWith('hello world', 'world'), true);
+  });
+
+  it('returns false when suffix does not match', () => {
+    assert.equal(endsWith('hello world', 'hello'), false);
+  });
+
+  it('returns true for empty suffix', () => {
+    assert.equal(endsWith('hello', ''), true);
+  });
+
+  it('returns true when string equals suffix', () => {
+    assert.equal(endsWith('hello', 'hello'), true);
+  });
+});
+
+// ─── includes ─────────────────────────────────────────────────────────────────
+
+describe('includes', () => {
+  it('returns true when substring is found', () => {
+    assert.equal(includes('hello world', 'world'), true);
+  });
+
+  it('returns false when substring is not found', () => {
+    assert.equal(includes('hello world', 'xyz'), false);
+  });
+
+  it('returns true for empty substring', () => {
+    assert.equal(includes('hello', ''), true);
+  });
+
+  it('returns false for empty string with non-empty substr', () => {
+    assert.equal(includes('', 'a'), false);
+  });
+});
+
+// ─── isBlank ──────────────────────────────────────────────────────────────────
+
+describe('isBlank', () => {
+  it('returns true for empty string', () => {
+    assert.equal(isBlank(''), true);
+  });
+
+  it('returns true for whitespace-only string', () => {
+    assert.equal(isBlank('   '), true);
+  });
+
+  it('returns true for tab and newline only', () => {
+    assert.equal(isBlank('\t\n'), true);
+  });
+
+  it('returns false for non-blank string', () => {
+    assert.equal(isBlank('hello'), false);
+  });
+
+  it('returns false for string with leading/trailing whitespace but content', () => {
+    assert.equal(isBlank('  hi  '), false);
   });
 });
 
@@ -296,39 +494,79 @@ describe('isPalindrome', () => {
   });
 });
 
-// ─── isAnagram ────────────────────────────────────────────────────────────────
+// ─── reverse ──────────────────────────────────────────────────────────────────
 
-describe('isAnagram', () => {
-  it('returns true for valid anagram', () => {
-    assert.equal(isAnagram('listen', 'silent'), true);
+describe('reverse', () => {
+  it('reverses a simple string', () => {
+    assert.equal(reverse('hello'), 'olleh');
   });
 
-  it('returns false for non-anagram', () => {
-    assert.equal(isAnagram('hello', 'world'), false);
+  it('returns empty string unchanged', () => {
+    assert.equal(reverse(''), '');
   });
 
-  it('is case-insensitive', () => {
-    assert.equal(isAnagram('Listen', 'Silent'), true);
+  it('returns single character unchanged', () => {
+    assert.equal(reverse('a'), 'a');
   });
 
-  it('ignores non-alphabetic characters', () => {
-    assert.equal(isAnagram('a b c', 'c b a'), true);
+  it('reverses a palindrome to itself', () => {
+    assert.equal(reverse('racecar'), 'racecar');
   });
 
-  it('returns true for identical strings', () => {
-    assert.equal(isAnagram('abc', 'abc'), true);
-  });
-
-  it('returns false when one string has extra letters', () => {
-    assert.equal(isAnagram('abc', 'abcd'), false);
-  });
-
-  it('returns true for two empty strings', () => {
-    assert.equal(isAnagram('', ''), true);
+  it('handles numeric characters', () => {
+    assert.equal(reverse('12345'), '54321');
   });
 });
 
-// ─── countOccurrences ────────────────────────────────────────────────────────
+// ─── repeat ───────────────────────────────────────────────────────────────────
+
+describe('repeat', () => {
+  it('repeats a string n times', () => {
+    assert.equal(repeat('ab', 3), 'ababab');
+  });
+
+  it('returns empty string for n=0', () => {
+    assert.equal(repeat('hello', 0), '');
+  });
+
+  it('returns empty string for negative n', () => {
+    assert.equal(repeat('hello', -1), '');
+  });
+
+  it('returns the string itself for n=1', () => {
+    assert.equal(repeat('hello', 1), 'hello');
+  });
+
+  it('handles empty string input', () => {
+    assert.equal(repeat('', 5), '');
+  });
+});
+
+// ─── replaceAll ───────────────────────────────────────────────────────────────
+
+describe('replaceAll', () => {
+  it('replaces all occurrences', () => {
+    assert.equal(replaceAll('aabbaa', 'aa', 'x'), 'xbbx');
+  });
+
+  it('returns original string when search not found', () => {
+    assert.equal(replaceAll('hello world', 'xyz', 'z'), 'hello world');
+  });
+
+  it('handles empty search string (returns original)', () => {
+    assert.equal(replaceAll('hello', '', 'x'), 'hello');
+  });
+
+  it('can replace with empty string (deletion)', () => {
+    assert.equal(replaceAll('h-e-l-l-o', '-', ''), 'hello');
+  });
+
+  it('handles empty source string', () => {
+    assert.equal(replaceAll('', 'a', 'b'), '');
+  });
+});
+
+// ─── countOccurrences ─────────────────────────────────────────────────────────
 
 describe('countOccurrences', () => {
   it('counts non-overlapping occurrences', () => {
@@ -356,54 +594,6 @@ describe('countOccurrences', () => {
   });
 });
 
-// ─── reverse ──────────────────────────────────────────────────────────────────
-
-describe('reverse', () => {
-  it('reverses a simple string', () => {
-    assert.equal(reverse('hello'), 'olleh');
-  });
-
-  it('returns empty string unchanged', () => {
-    assert.equal(reverse(''), '');
-  });
-
-  it('returns single character unchanged', () => {
-    assert.equal(reverse('a'), 'a');
-  });
-
-  it('reverses a palindrome to itself', () => {
-    assert.equal(reverse('racecar'), 'racecar');
-  });
-
-  it('handles numeric characters', () => {
-    assert.equal(reverse('12345'), '54321');
-  });
-});
-
-// ─── capitalize ───────────────────────────────────────────────────────────────
-
-describe('capitalize', () => {
-  it('capitalizes first letter', () => {
-    assert.equal(capitalize('hello'), 'Hello');
-  });
-
-  it('returns empty string unchanged', () => {
-    assert.equal(capitalize(''), '');
-  });
-
-  it('handles already-capitalized string', () => {
-    assert.equal(capitalize('Hello'), 'Hello');
-  });
-
-  it('handles single character', () => {
-    assert.equal(capitalize('a'), 'A');
-  });
-
-  it('does not alter the rest of the string', () => {
-    assert.equal(capitalize('hELLO'), 'HELLO');
-  });
-});
-
 // ─── words ────────────────────────────────────────────────────────────────────
 
 describe('words', () => {
@@ -411,8 +601,16 @@ describe('words', () => {
     assert.deepEqual(words('hello world'), ['hello', 'world']);
   });
 
-  it('splits on punctuation', () => {
-    assert.deepEqual(words('hello, world!'), ['hello', 'world']);
+  it('splits camelCase', () => {
+    assert.deepEqual(words('helloWorld'), ['hello', 'World']);
+  });
+
+  it('splits on dashes', () => {
+    assert.deepEqual(words('hello-world'), ['hello', 'world']);
+  });
+
+  it('splits on underscores', () => {
+    assert.deepEqual(words('hello_world'), ['hello', 'world']);
   });
 
   it('handles multiple spaces', () => {
@@ -423,80 +621,161 @@ describe('words', () => {
     assert.deepEqual(words(''), []);
   });
 
-  it('handles leading and trailing spaces', () => {
+  it('handles leading and trailing delimiters', () => {
     assert.deepEqual(words('  hello world  '), ['hello', 'world']);
-  });
-
-  it('handles mixed punctuation separators', () => {
-    assert.deepEqual(words('one.two,three'), ['one', 'two', 'three']);
   });
 });
 
-// ─── wrap ─────────────────────────────────────────────────────────────────────
+// ─── slugify ──────────────────────────────────────────────────────────────────
 
-describe('wrap', () => {
+describe('slugify', () => {
+  it('converts basic phrase to slug', () => {
+    assert.equal(slugify('Hello World!'), 'hello-world');
+  });
+
+  it('strips special characters', () => {
+    assert.equal(slugify('foo & bar'), 'foo-bar');
+  });
+
+  it('collapses multiple spaces into one hyphen', () => {
+    assert.equal(slugify('hello   world'), 'hello-world');
+  });
+
+  it('strips diacritics', () => {
+    assert.equal(slugify('café'), 'cafe');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(slugify(''), '');
+  });
+
+  it('handles already-slugified string', () => {
+    assert.equal(slugify('hello-world'), 'hello-world');
+  });
+
+  it('strips leading and trailing whitespace', () => {
+    assert.equal(slugify('  hello world  '), 'hello-world');
+  });
+});
+
+// ─── escapeHtml ───────────────────────────────────────────────────────────────
+
+describe('escapeHtml', () => {
+  it('escapes ampersand', () => {
+    assert.equal(escapeHtml('a & b'), 'a &amp; b');
+  });
+
+  it('escapes less-than', () => {
+    assert.equal(escapeHtml('<div>'), '&lt;div&gt;');
+  });
+
+  it('escapes double quote', () => {
+    assert.equal(escapeHtml('"hello"'), '&quot;hello&quot;');
+  });
+
+  it('escapes single quote', () => {
+    assert.equal(escapeHtml("it's"), 'it&#39;s');
+  });
+
+  it('handles string with no special characters', () => {
+    assert.equal(escapeHtml('hello world'), 'hello world');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(escapeHtml(''), '');
+  });
+
+  it('escapes all special characters together', () => {
+    assert.equal(escapeHtml('& < > " \''), '&amp; &lt; &gt; &quot; &#39;');
+  });
+});
+
+// ─── unescapeHtml ─────────────────────────────────────────────────────────────
+
+describe('unescapeHtml', () => {
+  it('unescapes &amp;', () => {
+    assert.equal(unescapeHtml('a &amp; b'), 'a & b');
+  });
+
+  it('unescapes &lt; and &gt;', () => {
+    assert.equal(unescapeHtml('&lt;div&gt;'), '<div>');
+  });
+
+  it('unescapes &quot;', () => {
+    assert.equal(unescapeHtml('&quot;hello&quot;'), '"hello"');
+  });
+
+  it('unescapes &#39;', () => {
+    assert.equal(unescapeHtml('it&#39;s'), "it's");
+  });
+
+  it('is inverse of escapeHtml', () => {
+    const original = 'Hello <World> & "friends" \'here\'';
+    assert.equal(unescapeHtml(escapeHtml(original)), original);
+  });
+
+  it('handles empty string', () => {
+    assert.equal(unescapeHtml(''), '');
+  });
+});
+
+// ─── stripHtml ────────────────────────────────────────────────────────────────
+
+describe('stripHtml', () => {
+  it('strips a simple tag', () => {
+    assert.equal(stripHtml('<b>hello</b>'), 'hello');
+  });
+
+  it('strips nested tags', () => {
+    assert.equal(stripHtml('<div><p>text</p></div>'), 'text');
+  });
+
+  it('strips self-closing tags', () => {
+    assert.equal(stripHtml('hello<br/>world'), 'helloworld');
+  });
+
+  it('returns plain text unchanged', () => {
+    assert.equal(stripHtml('hello world'), 'hello world');
+  });
+
+  it('handles empty string', () => {
+    assert.equal(stripHtml(''), '');
+  });
+
+  it('strips tags with attributes', () => {
+    assert.equal(stripHtml('<a href="http://example.com">link</a>'), 'link');
+  });
+});
+
+// ─── wrapAt ───────────────────────────────────────────────────────────────────
+
+describe('wrapAt', () => {
   it('wraps at the correct column width', () => {
-    assert.equal(wrap('The quick brown fox', 10), 'The quick\nbrown fox');
+    assert.equal(wrapAt('The quick brown fox', 10), 'The quick\nbrown fox');
   });
 
   it('does not wrap short strings', () => {
-    assert.equal(wrap('Hello', 20), 'Hello');
+    assert.equal(wrapAt('Hello', 20), 'Hello');
   });
 
   it('wraps each word on its own line if width is very small', () => {
-    assert.equal(wrap('one two three', 3), 'one\ntwo\nthree');
+    assert.equal(wrapAt('one two three', 3), 'one\ntwo\nthree');
   });
 
   it('handles empty string', () => {
-    assert.equal(wrap('', 10), '');
+    assert.equal(wrapAt('', 10), '');
   });
 
   it('fits exactly at width boundary', () => {
-    assert.equal(wrap('ab cd ef', 5), 'ab cd\nef');
+    assert.equal(wrapAt('ab cd ef', 5), 'ab cd\nef');
   });
 
   it('handles multiple spaces between words', () => {
-    assert.equal(wrap('hello   world', 20), 'hello world');
-  });
-
-  it('uses custom newline separator', () => {
-    assert.equal(wrap('hello world', 5, '<br>'), 'hello<br>world');
+    assert.equal(wrapAt('hello   world', 20), 'hello world');
   });
 });
 
-// ─── stripDiacritics ──────────────────────────────────────────────────────────
-
-describe('stripDiacritics', () => {
-  it('strips accents from é', () => {
-    assert.equal(stripDiacritics('café'), 'cafe');
-  });
-
-  it('strips accents from multiple characters', () => {
-    assert.equal(stripDiacritics('résumé'), 'resume');
-  });
-
-  it('strips umlaut from ü', () => {
-    assert.equal(stripDiacritics('über'), 'uber');
-  });
-
-  it('handles string with no diacritics unchanged', () => {
-    assert.equal(stripDiacritics('hello'), 'hello');
-  });
-
-  it('handles empty string', () => {
-    assert.equal(stripDiacritics(''), '');
-  });
-
-  it('strips cedilla from ç', () => {
-    assert.equal(stripDiacritics('façade'), 'facade');
-  });
-
-  it('handles Spanish characters', () => {
-    assert.equal(stripDiacritics('España'), 'Espana');
-  });
-});
-
-// ─── interpolate ─────────────────────────────────────────────────────────────
+// ─── interpolate ──────────────────────────────────────────────────────────────
 
 describe('interpolate', () => {
   it('replaces a single placeholder', () => {
@@ -529,88 +808,8 @@ describe('interpolate', () => {
   it('handles repeated placeholder', () => {
     assert.equal(interpolate('{x} + {x} = {y}', { x: 1, y: 2 }), '1 + 1 = 2');
   });
-});
 
-// ─── hammingDistance ──────────────────────────────────────────────────────────
-
-describe('hammingDistance', () => {
-  it('returns 0 for identical strings', () => {
-    assert.equal(hammingDistance('abc', 'abc'), 0);
-  });
-
-  it('returns correct distance for known example', () => {
-    // 'karolin' vs 'kathrin': k=k, a=a, r≠t, o≠h, l≠r, i=i, n=n → 3
-    assert.equal(hammingDistance('karolin', 'kathrin'), 3);
-  });
-
-  it('returns the full length when strings are completely different', () => {
-    assert.equal(hammingDistance('abc', 'xyz'), 3);
-  });
-
-  it('returns 0 for two empty strings', () => {
-    assert.equal(hammingDistance('', ''), 0);
-  });
-
-  it('handles single-character strings that match', () => {
-    assert.equal(hammingDistance('a', 'a'), 0);
-  });
-
-  it('handles single-character strings that differ', () => {
-    assert.equal(hammingDistance('a', 'b'), 1);
-  });
-
-  it('throws RangeError for different-length strings', () => {
-    assert.throws(
-      () => hammingDistance('abc', 'ab'),
-      RangeError,
-    );
-  });
-
-  it('throws RangeError with informative message', () => {
-    assert.throws(
-      () => hammingDistance('hello', 'hi'),
-      (err) => {
-        assert.ok(err instanceof RangeError);
-        assert.ok(/** @type {RangeError} */ (err).message.includes('5'));
-        assert.ok(/** @type {RangeError} */ (err).message.includes('2'));
-        return true;
-      },
-    );
-  });
-});
-
-// ─── longestCommonPrefix ──────────────────────────────────────────────────────
-
-describe('longestCommonPrefix', () => {
-  it('finds common prefix for standard example', () => {
-    assert.equal(longestCommonPrefix(['flower', 'flow', 'flight']), 'fl');
-  });
-
-  it('returns empty string when there is no common prefix', () => {
-    assert.equal(longestCommonPrefix(['dog', 'racecar', 'car']), '');
-  });
-
-  it('returns empty string for empty array', () => {
-    assert.equal(longestCommonPrefix([]), '');
-  });
-
-  it('returns the string itself for a single-element array', () => {
-    assert.equal(longestCommonPrefix(['hello']), 'hello');
-  });
-
-  it('returns the entire string when all strings are identical', () => {
-    assert.equal(longestCommonPrefix(['abc', 'abc', 'abc']), 'abc');
-  });
-
-  it('returns empty string when one element is empty', () => {
-    assert.equal(longestCommonPrefix(['abc', '', 'abcd']), '');
-  });
-
-  it('handles two-element array', () => {
-    assert.equal(longestCommonPrefix(['interview', 'interact']), 'inter');
-  });
-
-  it('returns full common prefix when one string is prefix of another', () => {
-    assert.equal(longestCommonPrefix(['prefix', 'pre', 'prefix-long']), 'pre');
+  it('converts boolean values to string', () => {
+    assert.equal(interpolate('active: {val}', { val: false }), 'active: false');
   });
 });
