@@ -407,8 +407,8 @@ export class BTree<K, V> {
  * Uses < / > operators so it behaves like Array.prototype.sort's default.
  */
 function defaultCmp<K>(a: K, b: K): number {
-  if ((a as unknown) < (b as unknown)) return -1;
-  if ((a as unknown) > (b as unknown)) return 1;
+  if ((a as unknown as number) < (b as unknown as number)) return -1;
+  if ((a as unknown as number) > (b as unknown as number)) return 1;
   return 0;
 }
 

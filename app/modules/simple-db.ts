@@ -227,7 +227,7 @@ export class SimpleDB {
 
   collection<T extends { id: string | number }>(name: string): Collection<T> {
     if (!this.#collections.has(name)) {
-      this.#collections.set(name, new CollectionImpl<T>() as CollectionImpl<{ id: string | number }>);
+      this.#collections.set(name, new CollectionImpl<T>() as unknown as CollectionImpl<{ id: string | number }>);
     }
     return this.#collections.get(name) as unknown as Collection<T>;
   }

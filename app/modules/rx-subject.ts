@@ -43,7 +43,7 @@ export class RxSubject<T> extends RxObservable<T> {
       const record: SubRecord<T> = {
         observer,
         sub: {
-          get closed() { return record._closed ?? false; },
+          get closed() { return (record as unknown as { _closed?: boolean })._closed ?? false; },
           unsubscribe: () => {
             (record as unknown as { _closed: boolean })._closed = true;
             const idx = this._observers.indexOf(record);
