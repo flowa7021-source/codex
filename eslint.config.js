@@ -69,6 +69,7 @@ export default [
         TransformStream: 'readonly',
         CompressionStream: 'readonly',
         DecompressionStream: 'readonly',
+        URLSearchParams: 'readonly',
         // Node.js globals (for build scripts/tests)
         process: 'readonly',
         __dirname: 'readonly',

@@ -1,103 +1,221 @@
-// ─── Unit Tests: Event Bus ──────────────────────────────────────────────────
+// ─── Unit Tests: EventBus ────────────────────────────────────────────────────
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  emit,
-  on,
-  once,
-  subscribe,
-  removeAllListeners,
+  EventBus,
+  createEventBus,
+  globalBus,
 } from '../../app/modules/event-bus.js';
 
-beforeEach(() => {
-  removeAllListeners();
-});
+// ─── on: handler called with payload ─────────────────────────────────────────
 
-describe('emit / on', () => {
-  it('calls listener when event is emitted', () => {
-    let called = false;
-    on('test:fire', () => { called = true; });
-    emit('test:fire');
-    assert.equal(called, true);
-  });
-
-  it('passes detail payload to listener', () => {
-    let received = null;
-    on('test:data', (detail) => { received = detail; });
-    emit('test:data', { foo: 'bar' });
-    assert.deepEqual(received, { foo: 'bar' });
-  });
-
-  it('supports multiple listeners on same event', () => {
-    let count = 0;
-    on('test:multi', () => { count++; });
-    on('test:multi', () => { count++; });
-    emit('test:multi');
-    assert.equal(count, 2);
-  });
-
-  it('does not call listener for different event', () => {
-    let called = false;
-    on('test:a', () => { called = true; });
-    emit('test:b');
-    assert.equal(called, false);
-  });
-});
-
-describe('on – unsubscribe', () => {
-  it('returns unsubscribe function that removes listener', () => {
-    let count = 0;
-    const unsub = on('test:unsub', () => { count++; });
-    emit('test:unsub');
-    assert.equal(count, 1);
-    unsub();
-    emit('test:unsub');
-    assert.equal(count, 1);
-  });
-});
-
-describe('once', () => {
-  it('fires handler only once', () => {
-    let count = 0;
-    once('test:once', () => { count++; });
-    emit('test:once');
-    emit('test:once');
-    assert.equal(count, 1);
-  });
-
-  it('passes detail to once handler', () => {
-    let received = null;
-    once('test:once-data', (detail) => { received = detail; });
-    emit('test:once-data', 42);
+describe('on', () => {
+  it('calls handler with emitted payload', () => {
+    const bus = new EventBus();
+    let received;
+    bus.on('test', (val) => { received = val; });
+    bus.emit('test', 42);
     assert.equal(received, 42);
   });
+
+  it('calls multiple handlers for the same event', () => {
+    const bus = new EventBus();
+    const results = [];
+    bus.on('multi', (v) => results.push('a:' + v));
+    bus.on('multi', (v) => results.push('b:' + v));
+    bus.emit('multi', 1);
+    assert.deepEqual(results, ['a:1', 'b:1']);
+  });
 });
 
-describe('subscribe / removeAllListeners', () => {
-  it('subscribe works like on', () => {
-    let called = false;
-    subscribe('test:sub', () => { called = true; });
-    emit('test:sub');
-    assert.equal(called, true);
-  });
+// ─── once: handler called once then removed ───────────────────────────────────
 
-  it('subscribe returns unsubscribe function', () => {
+describe('once', () => {
+  it('calls handler only once', () => {
+    const bus = new EventBus();
     let count = 0;
-    const unsub = subscribe('test:sub-unsub', () => { count++; });
-    emit('test:sub-unsub');
-    unsub();
-    emit('test:sub-unsub');
+    bus.once('ping', () => { count++; });
+    bus.emit('ping', undefined);
+    bus.emit('ping', undefined);
     assert.equal(count, 1);
   });
 
-  it('removeAllListeners removes all tracked subscriptions', () => {
+  it('passes payload on the single call', () => {
+    const bus = new EventBus();
+    let received;
+    bus.once('val', (v) => { received = v; });
+    bus.emit('val', 'hello');
+    assert.equal(received, 'hello');
+  });
+});
+
+// ─── emit: multiple handlers called ──────────────────────────────────────────
+
+describe('emit', () => {
+  it('does nothing when no handlers registered', () => {
+    const bus = new EventBus();
+    assert.doesNotThrow(() => bus.emit('nothing', null));
+  });
+
+  it('passes object payload to all handlers', () => {
+    const bus = new EventBus();
+    const calls = [];
+    bus.on('data', (d) => calls.push(d));
+    bus.on('data', (d) => calls.push(d));
+    bus.emit('data', { x: 1 });
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[0], { x: 1 });
+  });
+});
+
+// ─── off with event: removes handlers for that event ─────────────────────────
+
+describe('off with event', () => {
+  it('removes all handlers for the specified event', () => {
+    const bus = new EventBus();
     let count = 0;
-    subscribe('test:rem1', () => { count++; });
-    subscribe('test:rem2', () => { count++; });
-    removeAllListeners();
-    emit('test:rem1');
-    emit('test:rem2');
+    bus.on('remove-me', () => count++);
+    bus.on('remove-me', () => count++);
+    bus.off('remove-me');
+    bus.emit('remove-me', undefined);
     assert.equal(count, 0);
+  });
+
+  it('does not affect handlers for other events', () => {
+    const bus = new EventBus();
+    let aCount = 0;
+    let bCount = 0;
+    bus.on('a', () => aCount++);
+    bus.on('b', () => bCount++);
+    bus.off('a');
+    bus.emit('a', undefined);
+    bus.emit('b', undefined);
+    assert.equal(aCount, 0);
+    assert.equal(bCount, 1);
+  });
+});
+
+// ─── off without event: removes all handlers ─────────────────────────────────
+
+describe('off without event', () => {
+  it('removes all handlers when called with no argument', () => {
+    const bus = new EventBus();
+    let count = 0;
+    bus.on('x', () => count++);
+    bus.on('y', () => count++);
+    bus.off();
+    bus.emit('x', undefined);
+    bus.emit('y', undefined);
+    assert.equal(count, 0);
+  });
+});
+
+// ─── listenerCount ───────────────────────────────────────────────────────────
+
+describe('listenerCount', () => {
+  it('returns 0 for an event with no handlers', () => {
+    const bus = new EventBus();
+    assert.equal(bus.listenerCount('nothing'), 0);
+  });
+
+  it('returns correct count per event', () => {
+    const bus = new EventBus();
+    bus.on('ev', () => {});
+    bus.on('ev', () => {});
+    assert.equal(bus.listenerCount('ev'), 2);
+  });
+
+  it('returns total count across all events when called with no argument', () => {
+    const bus = new EventBus();
+    bus.on('a', () => {});
+    bus.on('b', () => {});
+    bus.on('b', () => {});
+    assert.equal(bus.listenerCount(), 3);
+  });
+});
+
+// ─── eventNames ──────────────────────────────────────────────────────────────
+
+describe('eventNames', () => {
+  it('returns empty array when no handlers registered', () => {
+    const bus = new EventBus();
+    assert.deepEqual(bus.eventNames(), []);
+  });
+
+  it('returns event names that have handlers', () => {
+    const bus = new EventBus();
+    bus.on('alpha', () => {});
+    bus.on('beta', () => {});
+    const names = bus.eventNames().sort();
+    assert.deepEqual(names, ['alpha', 'beta']);
+  });
+
+  it('excludes events whose handlers were removed via off', () => {
+    const bus = new EventBus();
+    bus.on('gone', () => {});
+    bus.on('stay', () => {});
+    bus.off('gone');
+    assert.deepEqual(bus.eventNames(), ['stay']);
+  });
+});
+
+// ─── globalBus: accessible and functional ────────────────────────────────────
+
+describe('globalBus', () => {
+  it('is an EventBus instance', () => {
+    assert.ok(globalBus instanceof EventBus);
+  });
+
+  it('can emit and receive events', () => {
+    let received;
+    const unsub = globalBus.on('global:test', (v) => { received = v; });
+    globalBus.emit('global:test', 'world');
+    unsub();
+    assert.equal(received, 'world');
+  });
+});
+
+// ─── createEventBus factory ──────────────────────────────────────────────────
+
+describe('createEventBus', () => {
+  it('returns a new EventBus instance', () => {
+    const bus = createEventBus();
+    assert.ok(bus instanceof EventBus);
+  });
+
+  it('instances are independent', () => {
+    const busA = createEventBus();
+    const busB = createEventBus();
+    let aCount = 0;
+    let bCount = 0;
+    busA.on('ev', () => aCount++);
+    busB.on('ev', () => bCount++);
+    busA.emit('ev', undefined);
+    assert.equal(aCount, 1);
+    assert.equal(bCount, 0);
+  });
+});
+
+// ─── unsubscribe function: removes individual handler ────────────────────────
+
+describe('unsubscribe', () => {
+  it('returned function removes only that specific handler', () => {
+    const bus = new EventBus();
+    let aCount = 0;
+    let bCount = 0;
+    const unsub = bus.on('shared', () => aCount++);
+    bus.on('shared', () => bCount++);
+    unsub();
+    bus.emit('shared', undefined);
+    assert.equal(aCount, 0);
+    assert.equal(bCount, 1);
+  });
+
+  it('calling unsubscribe twice is safe', () => {
+    const bus = new EventBus();
+    const unsub = bus.on('safe', () => {});
+    unsub();
+    assert.doesNotThrow(() => unsub());
   });
 });

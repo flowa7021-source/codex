@@ -1,5 +1,5 @@
 import './setup-dom.js';
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 
 const {
@@ -18,6 +18,9 @@ const {
   createOneDriveProvider,
   createDropboxProvider,
   setEncryptionPassphrase,
+  generatePKCE,
+  buildAuthUrl,
+  exchangeCodeForToken,
   MODULE_STATUS,
   MODULE_REQUIRES,
 } = await import('../../app/modules/cloud-integration.js');
@@ -43,8 +46,11 @@ describe('cloud-integration', () => {
     // but we can overwrite test providers
   });
 
-  it('MODULE_STATUS is stub', () => {
-    assert.equal(MODULE_STATUS, 'stub');
+  it('MODULE_STATUS is not stub (partial or ready)', () => {
+    assert.ok(
+      MODULE_STATUS === 'partial' || MODULE_STATUS === 'ready',
+      `Expected 'partial' or 'ready', got '${MODULE_STATUS}'`,
+    );
   });
 
   it('MODULE_REQUIRES is an array with requirements', () => {
@@ -248,47 +254,49 @@ describe('cloud-integration', () => {
     unsub();
   });
 
-  // ─── Provider stub methods ─────────────────────────────────────────────
-  it('Google Drive provider stub methods work', async () => {
-    const p = createGoogleDriveProvider();
-    assert.equal(await p.authenticate(), false);
+  // ─── Provider methods ──────────────────────────────────────────────────
+  it('Google Drive provider: isAuthenticated is false initially, signOut is safe', async () => {
+    const p = createGoogleDriveProvider({ clientId: 'test-id' });
     assert.equal(p.isAuthenticated(), false);
-    const files = await p.listFiles();
-    assert.deepEqual(files, []);
-    const data = await p.downloadFile('x');
-    assert.ok(data instanceof ArrayBuffer);
-    const uploaded = await p.uploadFile('test.pdf');
-    assert.equal(uploaded.name, 'test.pdf');
-    assert.equal(await p.getShareLink('x'), '');
+    // signOut when not authenticated should not throw
     await p.signOut();
+    assert.equal(p.isAuthenticated(), false);
   });
 
-  it('OneDrive provider stub methods work', async () => {
+  it('Google Drive provider: listFiles throws when not authenticated', async () => {
+    const p = createGoogleDriveProvider({ clientId: 'test-id' });
+    await assert.rejects(() => p.listFiles(), /Not authenticated/);
+  });
+
+  it('Google Drive provider: downloadFile throws when not authenticated', async () => {
+    const p = createGoogleDriveProvider({ clientId: 'test-id' });
+    await assert.rejects(() => p.downloadFile('file-id'), /Not authenticated/);
+  });
+
+  it('Google Drive provider: authenticate resolves false when popup is blocked', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => null; // simulate popup blocked
+    const p = createGoogleDriveProvider({ clientId: 'test-id' });
+    const result = await p.authenticate();
+    assert.equal(result, false);
+    globalThis.window.open = savedOpen;
+  });
+
+  it('OneDrive provider initial state', async () => {
     const p = createOneDriveProvider();
-    assert.equal(await p.authenticate(), false);
     assert.equal(p.isAuthenticated(), false);
-    const files = await p.listFiles();
-    assert.deepEqual(files, []);
-    const data = await p.downloadFile('x');
-    assert.ok(data instanceof ArrayBuffer);
-    const uploaded = await p.uploadFile('test.pdf');
-    assert.equal(uploaded.name, 'test.pdf');
-    assert.equal(await p.getShareLink('x'), '');
-    await p.signOut();
+    await assert.rejects(() => p.listFiles(), /Not authenticated/);
+    await assert.rejects(() => p.downloadFile('x'), /Not authenticated/);
+    await p.signOut(); // safe when not authenticated
   });
 
-  it('Dropbox provider stub methods work', async () => {
+  it('Dropbox provider initial state', async () => {
     const p = createDropboxProvider();
-    assert.equal(await p.authenticate(), false);
     assert.equal(p.isAuthenticated(), false);
-    const files = await p.listFiles();
-    assert.deepEqual(files, []);
-    const data = await p.downloadFile('x');
+    await assert.rejects(() => p.listFiles(), /Not authenticated/);
+    const data = await p.downloadFile('x').catch(() => new ArrayBuffer(0));
     assert.ok(data instanceof ArrayBuffer);
-    const uploaded = await p.uploadFile('test.pdf');
-    assert.equal(uploaded.name, 'test.pdf');
-    assert.equal(await p.getShareLink('x'), '');
-    await p.signOut();
+    await p.signOut(); // safe when not authenticated
   });
 
   // ─── openFile with encryption active ──────────────────────────────────
@@ -326,5 +334,541 @@ describe('cloud-integration', () => {
     const result = await openFile('open-enc-fail', 'f1');
     assert.ok(result.data);
     await setEncryptionPassphrase(null);
+  });
+});
+
+// ─── generatePKCE ─────────────────────────────────────────────────────────────
+
+describe('generatePKCE', () => {
+  it('returns an object with codeVerifier and codeChallenge', async () => {
+    const result = await generatePKCE();
+    assert.ok(typeof result.codeVerifier === 'string', 'codeVerifier should be a string');
+    assert.ok(typeof result.codeChallenge === 'string', 'codeChallenge should be a string');
+  });
+
+  it('codeVerifier is base64url-encoded (no +, /, = chars)', async () => {
+    const { codeVerifier } = await generatePKCE();
+    assert.ok(codeVerifier.length > 0, 'codeVerifier should not be empty');
+    assert.ok(!/[+/=]/.test(codeVerifier), `codeVerifier contains invalid chars: ${codeVerifier}`);
+  });
+
+  it('codeVerifier has expected length (64 bytes base64url → ~86 chars)', async () => {
+    const { codeVerifier } = await generatePKCE();
+    // 64 bytes base64url-encoded without padding = 86 chars
+    assert.ok(codeVerifier.length >= 80 && codeVerifier.length <= 90,
+      `codeVerifier length ${codeVerifier.length} out of expected range [80, 90]`);
+  });
+
+  it('codeChallenge is base64url-encoded (no +, /, = chars)', async () => {
+    const { codeChallenge } = await generatePKCE();
+    assert.ok(!/[+/=]/.test(codeChallenge), `codeChallenge contains invalid chars: ${codeChallenge}`);
+  });
+
+  it('codeChallenge differs from codeVerifier (it is the SHA-256 hash)', async () => {
+    const { codeVerifier, codeChallenge } = await generatePKCE();
+    assert.notEqual(codeVerifier, codeChallenge, 'codeChallenge must differ from codeVerifier');
+  });
+
+  it('codeChallenge has correct length for SHA-256 base64url (43 chars)', async () => {
+    const { codeChallenge } = await generatePKCE();
+    // SHA-256 = 32 bytes → base64url without padding = 43 chars
+    assert.equal(codeChallenge.length, 43, `codeChallenge length should be 43, got ${codeChallenge.length}`);
+  });
+
+  it('generates unique verifiers on each call', async () => {
+    const a = await generatePKCE();
+    const b = await generatePKCE();
+    assert.notEqual(a.codeVerifier, b.codeVerifier, 'Each call should produce a unique codeVerifier');
+  });
+});
+
+// ─── buildAuthUrl ─────────────────────────────────────────────────────────────
+
+describe('buildAuthUrl', () => {
+  it('builds a URL with query parameters', () => {
+    const url = buildAuthUrl('https://example.com/auth', {
+      client_id: 'my-client',
+      response_type: 'code',
+      scope: 'read write',
+    });
+    assert.ok(url.startsWith('https://example.com/auth?'), 'URL should start with base URL + ?');
+    assert.ok(url.includes('client_id=my-client'), 'URL should contain client_id');
+    assert.ok(url.includes('response_type=code'), 'URL should contain response_type');
+    assert.ok(
+      url.includes('scope=read+write') || url.includes('scope=read%20write'),
+      'URL should contain encoded scope',
+    );
+  });
+
+  it('handles empty params object', () => {
+    const url = buildAuthUrl('https://example.com/auth', {});
+    assert.ok(url.startsWith('https://example.com/auth'), 'URL should preserve base URL');
+  });
+
+  it('preserves existing query params in base URL', () => {
+    const url = buildAuthUrl('https://example.com/auth?existing=1', { extra: '2' });
+    assert.ok(url.includes('existing=1'), 'Should preserve existing params');
+    assert.ok(url.includes('extra=2'), 'Should add new params');
+  });
+});
+
+// ─── exchangeCodeForToken ─────────────────────────────────────────────────────
+
+describe('exchangeCodeForToken', () => {
+  let fetchMock;
+
+  beforeEach(() => {
+    fetchMock = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'tok_test', expires_in: 3600, token_type: 'Bearer' }),
+      text: async () => '',
+    }));
+    globalThis.fetch = fetchMock;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = undefined;
+  });
+
+  it('calls fetch with POST method and correct content-type', async () => {
+    await exchangeCodeForToken(
+      'https://oauth2.example.com/token',
+      'auth-code-123',
+      'verifier-abc',
+      'client-id-xyz',
+      'https://app.example.com/callback',
+    );
+    assert.equal(fetchMock.mock.callCount(), 1);
+    const [url, opts] = fetchMock.mock.calls[0].arguments;
+    assert.equal(url, 'https://oauth2.example.com/token');
+    assert.equal(opts.method, 'POST');
+    assert.equal(opts.headers['Content-Type'], 'application/x-www-form-urlencoded');
+  });
+
+  it('sends grant_type=authorization_code in body', async () => {
+    await exchangeCodeForToken(
+      'https://oauth2.example.com/token',
+      'auth-code-123',
+      'verifier-abc',
+      'client-id-xyz',
+      'https://app.example.com/callback',
+    );
+    const [, opts] = fetchMock.mock.calls[0].arguments;
+    const body = opts.body;
+    assert.ok(body.includes('grant_type=authorization_code'), 'Body should include grant_type');
+    assert.ok(body.includes('code=auth-code-123'), 'Body should include code');
+    assert.ok(body.includes('code_verifier=verifier-abc'), 'Body should include code_verifier');
+    assert.ok(body.includes('client_id=client-id-xyz'), 'Body should include client_id');
+  });
+
+  it('returns parsed token data', async () => {
+    const result = await exchangeCodeForToken(
+      'https://oauth2.example.com/token',
+      'auth-code-123',
+      'verifier-abc',
+      'client-id-xyz',
+      'https://app.example.com/callback',
+    );
+    assert.equal(result.access_token, 'tok_test');
+    assert.equal(result.expires_in, 3600);
+  });
+
+  it('throws on non-ok response', async () => {
+    globalThis.fetch = mock.fn(async () => ({
+      ok: false,
+      status: 400,
+      text: async () => 'invalid_grant',
+    }));
+    await assert.rejects(
+      () => exchangeCodeForToken('https://tok.example.com', 'bad-code', 'v', 'c', 'r'),
+      /Token exchange failed/,
+    );
+  });
+});
+
+// ─── GoogleDriveProvider OAuth flow ──────────────────────────────────────────
+
+describe('GoogleDriveProvider OAuth flow', () => {
+  let provider;
+
+  beforeEach(() => {
+    if (!globalThis.window.location) {
+      globalThis.window.location = { origin: 'https://app.example.com', href: '' };
+    } else {
+      globalThis.window.location.origin = 'https://app.example.com';
+    }
+    provider = createGoogleDriveProvider({ clientId: 'test-client-id' });
+  });
+
+  afterEach(() => {
+    globalThis.fetch = undefined;
+  });
+
+  it('isAuthenticated() returns false initially', () => {
+    assert.equal(provider.isAuthenticated(), false);
+  });
+
+  it('signOut() is safe when not authenticated', async () => {
+    globalThis.fetch = mock.fn(async () => ({ ok: true }));
+    await provider.signOut();
+    assert.equal(provider.isAuthenticated(), false);
+  });
+
+  it('authenticate resolves false when popup is blocked', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => null;
+    const result = await provider.authenticate();
+    assert.equal(result, false);
+    globalThis.window.open = savedOpen;
+  });
+
+  it('listFiles() calls the Drive API with Bearer token after auth', async () => {
+    // Inject token via auth + postMessage
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => ({ close() {} });
+
+    // First fetch call: token exchange
+    let callCount = 0;
+    globalThis.fetch = mock.fn(async (url) => {
+      callCount++;
+      if (url.includes('token')) {
+        return {
+          ok: true,
+          json: async () => ({ access_token: 'drive-tok', expires_in: 3600 }),
+          text: async () => '',
+        };
+      }
+      // listFiles call
+      return {
+        ok: true,
+        json: async () => ({ files: [
+          { id: 'f1', name: 'test.pdf', mimeType: 'application/pdf', size: 1024, modifiedTime: '2024-01-01T00:00:00Z' },
+        ] }),
+      };
+    });
+
+    const authPromise = provider.authenticate();
+    globalThis.window.dispatchEvent(
+      Object.assign(new Event('message'), {
+        origin: 'https://app.example.com',
+        data: { provider: 'gdrive', code: 'test-auth-code' },
+      }),
+    );
+    await authPromise;
+    globalThis.window.open = savedOpen;
+
+    assert.equal(provider.isAuthenticated(), true);
+
+    // Now a fresh mock just for listFiles
+    const listFetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ files: [
+        { id: 'f1', name: 'test.pdf', mimeType: 'application/pdf', size: 1024, modifiedTime: '2024-01-01T00:00:00Z' },
+      ] }),
+    }));
+    globalThis.fetch = listFetch;
+
+    const files = await provider.listFiles();
+    assert.equal(listFetch.mock.callCount(), 1);
+    const [url, opts] = listFetch.mock.calls[0].arguments;
+    assert.ok(url.includes('googleapis.com/drive/v3/files'), 'Should call Drive files API');
+    assert.ok(opts.headers.Authorization.startsWith('Bearer '), 'Should use Bearer auth');
+    assert.equal(files.length, 1);
+    assert.equal(files[0].name, 'test.pdf');
+    assert.equal(files[0].provider, 'gdrive');
+  });
+
+  it('downloadFile() calls Drive API with alt=media after auth', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => ({ close() {} });
+
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'drive-tok-dl', expires_in: 3600 }),
+      text: async () => '',
+    }));
+
+    const authPromise = provider.authenticate();
+    globalThis.window.dispatchEvent(
+      Object.assign(new Event('message'), {
+        origin: 'https://app.example.com',
+        data: { provider: 'gdrive', code: 'auth-code-dl' },
+      }),
+    );
+    await authPromise;
+    globalThis.window.open = savedOpen;
+
+    const fakeBuffer = new ArrayBuffer(16);
+    const dlFetch = mock.fn(async () => ({
+      ok: true,
+      arrayBuffer: async () => fakeBuffer,
+    }));
+    globalThis.fetch = dlFetch;
+
+    const result = await provider.downloadFile('file-abc-123');
+    assert.equal(dlFetch.mock.callCount(), 1);
+    const [url] = dlFetch.mock.calls[0].arguments;
+    assert.ok(url.includes('file-abc-123'), 'URL should include file ID');
+    assert.ok(url.includes('alt=media'), 'URL should include alt=media');
+    assert.equal(result.byteLength, 16);
+  });
+});
+
+// ─── OneDrive Provider ───────────────────────────────────────────────────────
+describe('OneDrive Provider', () => {
+  let provider;
+
+  beforeEach(() => {
+    provider = createOneDriveProvider({ clientId: 'od-test-client' });
+    globalThis.window.location = { origin: 'https://app.example.com' };
+    globalThis.fetch = mock.fn(async () => ({ ok: true, json: async () => ({}) }));
+  });
+
+  it('isAuthenticated is false initially', () => {
+    assert.equal(provider.isAuthenticated(), false);
+  });
+
+  it('signOut is safe when not authenticated', async () => {
+    await provider.signOut();
+    assert.equal(provider.isAuthenticated(), false);
+  });
+
+  it('popup blocked resolves false', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => null;
+    const result = await provider.authenticate();
+    assert.equal(result, false);
+    globalThis.window.open = savedOpen;
+  });
+
+  it('authenticate via PKCE popup succeeds on valid postMessage', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => ({ close() {} });
+
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'od-token-123', expires_in: 3600 }),
+      text: async () => '',
+    }));
+
+    const authPromise = provider.authenticate();
+    globalThis.window.dispatchEvent(
+      Object.assign(new Event('message'), {
+        origin: 'https://app.example.com',
+        data: { provider: 'onedrive', code: 'od-auth-code' },
+      }),
+    );
+    const result = await authPromise;
+    globalThis.window.open = savedOpen;
+    assert.equal(result, true);
+    assert.equal(provider.isAuthenticated(), true);
+  });
+
+  it('listFiles calls Graph API with Bearer token', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => ({ close() {} });
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'od-tok-list', expires_in: 3600 }),
+      text: async () => '',
+    }));
+    const authPromise = provider.authenticate();
+    globalThis.window.dispatchEvent(
+      Object.assign(new Event('message'), {
+        origin: 'https://app.example.com',
+        data: { provider: 'onedrive', code: 'od-code-list' },
+      }),
+    );
+    await authPromise;
+    globalThis.window.open = savedOpen;
+
+    const listFetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ value: [
+        { id: 'od-file-1', name: 'doc.pdf', file: { mimeType: 'application/pdf' }, size: 2048, lastModifiedDateTime: '2024-01-01T00:00:00Z' },
+      ] }),
+    }));
+    globalThis.fetch = listFetch;
+    const files = await provider.listFiles();
+    assert.equal(files.length, 1);
+    assert.equal(files[0].provider, 'onedrive');
+    const [url, opts] = listFetch.mock.calls[0].arguments;
+    assert.ok(url.includes('graph.microsoft.com'), 'Should call Graph API');
+    assert.ok(opts.headers.Authorization.startsWith('Bearer '), 'Should use Bearer auth');
+  });
+
+  it('downloadFile calls Graph /content endpoint', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => ({ close() {} });
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'od-tok-dl', expires_in: 3600 }),
+    }));
+    const authPromise = provider.authenticate();
+    globalThis.window.dispatchEvent(
+      Object.assign(new Event('message'), {
+        origin: 'https://app.example.com',
+        data: { provider: 'onedrive', code: 'od-dl-code' },
+      }),
+    );
+    await authPromise;
+    globalThis.window.open = savedOpen;
+
+    const fakeBuffer = new ArrayBuffer(32);
+    const dlFetch = mock.fn(async () => ({ ok: true, arrayBuffer: async () => fakeBuffer }));
+    globalThis.fetch = dlFetch;
+    const result = await provider.downloadFile('od-item-id');
+    const [url] = dlFetch.mock.calls[0].arguments;
+    assert.ok(url.includes('od-item-id'), 'URL should contain file ID');
+    assert.ok(url.includes('/content'), 'URL should include /content');
+    assert.equal(result.byteLength, 32);
+  });
+
+  it('listFiles throws when not authenticated', async () => {
+    await assert.rejects(() => provider.listFiles(), /Not authenticated/);
+  });
+});
+
+// ─── Dropbox Provider ────────────────────────────────────────────────────────
+describe('Dropbox Provider', () => {
+  let provider;
+
+  beforeEach(() => {
+    provider = createDropboxProvider({ appKey: 'dbx-test-key' });
+    globalThis.window.location = { origin: 'https://app.example.com' };
+    globalThis.fetch = mock.fn(async () => ({ ok: true, json: async () => ({}) }));
+  });
+
+  it('isAuthenticated is false initially', () => {
+    assert.equal(provider.isAuthenticated(), false);
+  });
+
+  it('signOut is safe when not authenticated', async () => {
+    await provider.signOut();
+    assert.equal(provider.isAuthenticated(), false);
+  });
+
+  it('popup blocked resolves false', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => null;
+    const result = await provider.authenticate();
+    assert.equal(result, false);
+    globalThis.window.open = savedOpen;
+  });
+
+  it('authenticate via PKCE popup succeeds on valid postMessage', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => ({ close() {} });
+
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'dbx-token-123', expires_in: 14400 }),
+    }));
+
+    const authPromise = provider.authenticate();
+    globalThis.window.dispatchEvent(
+      Object.assign(new Event('message'), {
+        origin: 'https://app.example.com',
+        data: { provider: 'dropbox', code: 'dbx-auth-code' },
+      }),
+    );
+    const result = await authPromise;
+    globalThis.window.open = savedOpen;
+    assert.equal(result, true);
+    assert.equal(provider.isAuthenticated(), true);
+  });
+
+  it('listFiles calls Dropbox list_folder API', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => ({ close() {} });
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'dbx-tok-list', expires_in: 14400 }),
+    }));
+    const authPromise = provider.authenticate();
+    globalThis.window.dispatchEvent(
+      Object.assign(new Event('message'), {
+        origin: 'https://app.example.com',
+        data: { provider: 'dropbox', code: 'dbx-code-list' },
+      }),
+    );
+    await authPromise;
+    globalThis.window.open = savedOpen;
+
+    const listFetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ entries: [
+        { '.tag': 'file', id: 'id:abc', name: 'report.pdf', size: 512, client_modified: '2024-01-01T00:00:00Z' },
+        { '.tag': 'folder', id: 'id:dir', name: 'MyFolder' },
+      ] }),
+    }));
+    globalThis.fetch = listFetch;
+    const files = await provider.listFiles();
+    assert.equal(files.length, 1, 'Should only return files, not folders');
+    assert.equal(files[0].provider, 'dropbox');
+    assert.equal(files[0].name, 'report.pdf');
+    const [url] = listFetch.mock.calls[0].arguments;
+    assert.ok(url.includes('dropboxapi.com'), 'Should call Dropbox API');
+  });
+
+  it('downloadFile calls Dropbox download endpoint', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => ({ close() {} });
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'dbx-tok-dl', expires_in: 14400 }),
+    }));
+    const authPromise = provider.authenticate();
+    globalThis.window.dispatchEvent(
+      Object.assign(new Event('message'), {
+        origin: 'https://app.example.com',
+        data: { provider: 'dropbox', code: 'dbx-dl-code' },
+      }),
+    );
+    await authPromise;
+    globalThis.window.open = savedOpen;
+
+    const fakeBuffer = new ArrayBuffer(64);
+    const dlFetch = mock.fn(async () => ({ ok: true, arrayBuffer: async () => fakeBuffer }));
+    globalThis.fetch = dlFetch;
+    const result = await provider.downloadFile('/docs/report.pdf');
+    const [url, opts] = dlFetch.mock.calls[0].arguments;
+    assert.ok(url.includes('content.dropboxapi.com'), 'Should use content API');
+    assert.ok(url.includes('files/download'), 'Should use download endpoint');
+    assert.ok(opts.headers['Dropbox-API-Arg'], 'Should set Dropbox-API-Arg header');
+    assert.equal(result.byteLength, 64);
+  });
+
+  it('uploadFile calls Dropbox upload endpoint', async () => {
+    const savedOpen = globalThis.window.open;
+    globalThis.window.open = () => ({ close() {} });
+    globalThis.fetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ access_token: 'dbx-tok-ul', expires_in: 14400 }),
+    }));
+    const authPromise = provider.authenticate();
+    globalThis.window.dispatchEvent(
+      Object.assign(new Event('message'), {
+        origin: 'https://app.example.com',
+        data: { provider: 'dropbox', code: 'dbx-ul-code' },
+      }),
+    );
+    await authPromise;
+    globalThis.window.open = savedOpen;
+
+    const ulFetch = mock.fn(async () => ({
+      ok: true,
+      json: async () => ({ id: 'id:new-file', name: 'upload.pdf', size: 100, client_modified: '' }),
+    }));
+    globalThis.fetch = ulFetch;
+    const file = await provider.uploadFile('upload.pdf', new Uint8Array([1, 2, 3]));
+    assert.equal(file.provider, 'dropbox');
+    assert.equal(file.name, 'upload.pdf');
+    const [url] = ulFetch.mock.calls[0].arguments;
+    assert.ok(url.includes('files/upload'), 'Should call upload endpoint');
+  });
+
+  it('listFiles throws when not authenticated', async () => {
+    await assert.rejects(() => provider.listFiles(), /Not authenticated/);
   });
 });

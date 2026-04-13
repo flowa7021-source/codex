@@ -1,5 +1,6 @@
 /* global self, caches, fetch, URL, Response */
 // NovaReader Service Worker — handles offline access and cache management
+// Also handles Background Sync for offline cloud operations.
 //
 // Strategy:
 //   Navigation (HTML)  → network-first (always get fresh HTML after rebuild)
@@ -92,4 +93,27 @@ self.addEventListener('fetch', (event) => {
       });
     })
   );
+});
+
+// ── Background Sync: cloud-sync ───────────────────────────────────────────────
+self.addEventListener('sync', (event) => {
+  if (event.tag === 'cloud-sync') {
+    // Notify all clients to process the sync queue
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window' }).then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'PROCESS_SYNC_QUEUE' }));
+      })
+    );
+  }
+});
+
+// ── Periodic Background Sync ──────────────────────────────────────────────────
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'cloud-periodic-sync') {
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window' }).then(clients => {
+        clients.forEach(client => client.postMessage({ type: 'PROCESS_SYNC_QUEUE' }));
+      })
+    );
+  }
 });

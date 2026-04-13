@@ -6,7 +6,7 @@
     "allowJs": true,
     "checkJs": false,
     "noEmit": true,
-    "strict": false,
+    "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -15,9 +15,18 @@
     "ignoreDeprecations": "5.0",
     "baseUrl": ".",
     "paths": {
-      "@modules/*": ["app/modules/*"]
+      "@modules/*": [
+        "app/modules/*"
+      ]
     }
   },
-  "include": ["app/**/*.js", "app/**/*.ts", "app/**/*.d.ts"],
-  "exclude": ["node_modules", "dist", "app/vendor"]
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "app/vendor"
+  ]
 }
