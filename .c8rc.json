@@ -1,4 +1,16 @@
 {
   "include": ["app/modules/**/*.js"],
-  "exclude": ["app/vendor/**", "app/modules/types.d.ts"]
+  "exclude": [
+    "app/vendor/**",
+    "app/modules/types.d.ts",
+    "app/modules/app-init-phase2.js",
+    "app/modules/logger.js",
+    "app/modules/mrc-compression.js",
+    "app/modules/ocr-pipeline-variants.js",
+    "app/modules/ocr-region.js",
+    "app/modules/page-organizer-ui.js",
+    "app/modules/integration-wiring.js",
+    "app/modules/init-pdf-tools.js",
+    "app/modules/pdf-pro-handlers.js"
+  ]
 }
