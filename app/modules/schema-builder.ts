@@ -66,7 +66,7 @@ class OptionalSchema<T> extends BaseSchema<T | undefined> {
   }
   protected _coerce(value: unknown): unknown {
     if (value === undefined) return undefined;
-    return (this.#inner as BaseSchema<T>)._coerce(value);
+    return (this.#inner as unknown as { _coerce(value: unknown): unknown })._coerce(value);
   }
 }
 
@@ -82,7 +82,7 @@ class NullableSchema<T> extends BaseSchema<T | null> {
   }
   protected _coerce(value: unknown): unknown {
     if (value === null) return null;
-    return (this.#inner as BaseSchema<T>)._coerce(value);
+    return (this.#inner as unknown as { _coerce(value: unknown): unknown })._coerce(value);
   }
 }
 
@@ -100,7 +100,7 @@ class DefaultSchema<T> extends BaseSchema<T> {
   }
   protected _coerce(value: unknown): unknown {
     const effective = value === undefined ? this.#defaultVal : value;
-    return (this.#inner as BaseSchema<T>)._coerce(effective);
+    return (this.#inner as unknown as { _coerce(value: unknown): unknown })._coerce(effective);
   }
 }
 
@@ -299,7 +299,7 @@ export class ObjectSchema<T extends SchemaMap> extends BaseSchema<InferObject<T>
     const obj = value as Record<string, unknown>;
     const result: Record<string, unknown> = {};
     for (const [key, schema] of Object.entries(this.#shape)) {
-      result[key] = (schema as BaseSchema<unknown>)._coerce(obj[key]);
+      result[key] = (schema as unknown as { _coerce(value: unknown): unknown })._coerce(obj[key]);
     }
     return result;
   }
@@ -360,7 +360,7 @@ export class ArraySchema<T> extends BaseSchema<T[]> {
 
   protected _coerce(value: unknown): unknown {
     const arr = value as unknown[];
-    return arr.map((item) => (this.#item as BaseSchema<T>)._coerce(item));
+    return arr.map((item) => (this.#item as unknown as { _coerce(value: unknown): unknown })._coerce(item));
   }
 
   /** Require minimum array length. */

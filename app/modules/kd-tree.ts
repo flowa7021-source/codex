@@ -144,7 +144,7 @@ export class KDTree {
   insert(point: KDPoint): void {
     if (this._k === 0) {
       // Tree was constructed empty without k — infer from first insert.
-      (this as { _k: number })._k = point.coords.length;
+      (this as unknown as { _k: number })._k = point.coords.length;
     }
     this.root = this._insertNode(this.root, point, 0);
     this._size++;

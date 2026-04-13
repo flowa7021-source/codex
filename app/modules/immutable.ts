@@ -211,7 +211,7 @@ export function deepClone<T>(value: T): T {
  * otherwise the source value wins.
  */
 export function deepMerge<T extends object>(target: T, source: Partial<T>): T {
-  const result: Record<string, unknown> = { ...target };
+  const result: Record<string, unknown> = { ...(target as Record<string, unknown>) };
   for (const key of Object.keys(source) as (keyof T)[]) {
     const srcVal = source[key];
     const tgtVal = result[key as string];

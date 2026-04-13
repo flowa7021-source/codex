@@ -6,16 +6,16 @@ import type { Graph } from './graph.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export interface PathResult<T> {
+export interface PathResult {
   distance: number;
-  path: T[];
+  path: string[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Reconstruct path from `cameFrom` back-pointer map. */
-function reconstructPath<T>(cameFrom: Map<T, T>, end: T): T[] {
-  const path: T[] = [end];
+function reconstructPath(cameFrom: Map<string, string>, end: string): string[] {
+  const path: string[] = [end];
   let node = end;
   while (cameFrom.has(node)) {
     node = cameFrom.get(node)!;
@@ -37,21 +37,21 @@ function reconstructPath<T>(cameFrom: Map<T, T>, end: T): T[] {
  *   const results = dijkstra(graph, 'A');
  *   results.get('C'); // { distance: 5, path: ['A', 'B', 'C'] }
  */
-export function dijkstra<T>(
-  graph: Graph<T>,
-  start: T,
-  end?: T,
-): Map<T, PathResult<T>> {
-  const dist = new Map<T, number>();
-  const cameFrom = new Map<T, T>();
-  const settled = new Set<T>();
+export function dijkstra(
+  graph: Graph<unknown>,
+  start: string,
+  end?: string,
+): Map<string, PathResult> {
+  const dist = new Map<string, number>();
+  const cameFrom = new Map<string, string>();
+  const settled = new Set<string>();
 
   for (const v of graph.vertices()) {
     dist.set(v, Infinity);
   }
   dist.set(start, 0);
 
-  const pq: Array<{ v: T; d: number }> = [{ v: start, d: 0 }];
+  const pq: Array<{ v: string; d: number }> = [{ v: start, d: 0 }];
 
   while (pq.length > 0) {
     let minIdx = 0;
@@ -77,7 +77,7 @@ export function dijkstra<T>(
     }
   }
 
-  const result = new Map<T, PathResult<T>>();
+  const result = new Map<string, PathResult>();
   for (const [v, d] of dist) {
     if (d !== Infinity) {
       result.set(v, {
@@ -98,12 +98,12 @@ export function dijkstra<T>(
  * @returns `{ distances, hasNegativeCycle }` where `distances` maps each
  *   vertex to its shortest distance from `start` (or `Infinity` if unreachable).
  */
-export function bellmanFord<T>(
-  graph: Graph<T>,
-  start: T,
-): { distances: Map<T, number>; hasNegativeCycle: boolean } {
+export function bellmanFord(
+  graph: Graph<unknown>,
+  start: string,
+): { distances: Map<string, number>; hasNegativeCycle: boolean } {
   const verts = graph.vertices();
-  const dist = new Map<T, number>();
+  const dist = new Map<string, number>();
   for (const v of verts) dist.set(v, Infinity);
   dist.set(start, 0);
 
@@ -152,12 +152,12 @@ export function bellmanFord<T>(
  * Returns a Map of Maps: `result.get(u)?.get(v)` is the shortest distance
  * from `u` to `v`, or `Infinity` if no path exists.
  */
-export function floydWarshall<T>(graph: Graph<T>): Map<T, Map<T, number>> {
+export function floydWarshall(graph: Graph<unknown>): Map<string, Map<string, number>> {
   const verts = graph.vertices();
 
-  const dist = new Map<T, Map<T, number>>();
+  const dist = new Map<string, Map<string, number>>();
   for (const u of verts) {
-    const row = new Map<T, number>();
+    const row = new Map<string, number>();
     for (const v of verts) {
       row.set(v, u === v ? 0 : Infinity);
     }
@@ -212,26 +212,26 @@ export function floydWarshall<T>(graph: Graph<T>): Map<T, Map<T, number>> {
  *   const result = astar(graph, 'A', 'D', () => 0);
  *   result?.path; // ['A', 'B', 'D']
  */
-export function astar<T>(
-  graph: Graph<T>,
-  start: T,
-  end: T,
-  heuristic: (from: T, to: T) => number,
-): PathResult<T> | null {
+export function astar(
+  graph: Graph<unknown>,
+  start: string,
+  end: string,
+  heuristic: (from: string, to: string) => number,
+): PathResult | null {
   if (!graph.hasVertex(start) || !graph.hasVertex(end)) return null;
 
-  const gScore = new Map<T, number>();
-  const fScore = new Map<T, number>();
-  const cameFrom = new Map<T, T>();
-  const closed = new Set<T>();
+  const gScore = new Map<string, number>();
+  const fScore = new Map<string, number>();
+  const cameFrom = new Map<string, string>();
+  const closed = new Set<string>();
 
   gScore.set(start, 0);
   fScore.set(start, heuristic(start, end));
 
-  const open = new Set<T>([start]);
+  const open = new Set<string>([start]);
 
   while (open.size > 0) {
-    let current: T | null = null;
+    let current: string | null = null;
     let bestF = Infinity;
     for (const node of open) {
       const f = fScore.get(node) ?? Infinity;

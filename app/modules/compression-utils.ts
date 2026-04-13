@@ -45,7 +45,7 @@ export async function compress(
   }
   const stream = new CompressionStream(format);
   const writer = stream.writable.getWriter();
-  writer.write(data);
+  writer.write(data as unknown as BufferSource);
   writer.close();
   return collectStream(stream.readable);
 }
@@ -60,7 +60,7 @@ export async function decompress(
   }
   const stream = new DecompressionStream(format);
   const writer = stream.writable.getWriter();
-  writer.write(data);
+  writer.write(data as unknown as BufferSource);
   writer.close();
   return collectStream(stream.readable);
 }

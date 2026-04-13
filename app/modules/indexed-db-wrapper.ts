@@ -103,7 +103,7 @@ export class IDBWrapper<Schema extends DBSchema> {
   ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const tx = this.#db!.transaction(storeNames, mode);
-      fn(tx).then(resolve).catch(reject);
+      fn(tx).then(() => resolve()).catch(reject);
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(new Error('IDB transaction aborted'));
     });
@@ -210,7 +210,7 @@ export class IDBWrapper<Schema extends DBSchema> {
     return this.#idbTransaction(storeName, 'readonly', async (tx) => {
       const objectStore = tx.objectStore(storeName);
       return this.#idbRequest<Schema[S]['value'][]>(objectStore.getAll());
-    }) as Promise<Schema[S]['value'][]>;
+    }) as unknown as Promise<Schema[S]['value'][]>;
   }
 
   /** Clear all records in a store. */
@@ -241,7 +241,7 @@ export class IDBWrapper<Schema extends DBSchema> {
     return this.#idbTransaction(storeName, 'readonly', async (tx) => {
       const objectStore = tx.objectStore(storeName);
       return this.#idbRequest<number>(objectStore.count());
-    }) as Promise<number>;
+    }) as unknown as Promise<number>;
   }
 
   /** Close the database connection. */

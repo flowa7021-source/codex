@@ -117,7 +117,7 @@ export class UrlBuilder {
     result += this.#path || (this.#host ? '/' : '');
 
     if (this.#params.size > 0) {
-      const qs = new URLSearchParams(this.#params).toString();
+      const qs = new URLSearchParams([...this.#params.entries()]).toString();
       result += `?${qs}`;
     }
 

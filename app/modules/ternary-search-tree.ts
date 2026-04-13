@@ -86,7 +86,7 @@ export class TernarySearchTree<V> {
     if (query.length === 0 || this.#root === null) return null;
 
     let longest: string | null = null;
-    let node = this.#root;
+    let node: TSTNode<V> | null = this.#root;
     let depth = 0;
 
     while (node !== null && depth < query.length) {

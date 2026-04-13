@@ -25,19 +25,23 @@ export function isNode(): boolean {
 
 /** Detect if running in a Web Worker. */
 export function isWebWorker(): boolean {
+  const g = globalThis as Record<string, unknown>;
+  const WorkerScope = g.WorkerGlobalScope as (new (...args: unknown[]) => object) | undefined;
   return (
-    typeof WorkerGlobalScope !== 'undefined' &&
+    typeof WorkerScope !== 'undefined' &&
     typeof self !== 'undefined' &&
-    self instanceof WorkerGlobalScope
+    self instanceof WorkerScope
   );
 }
 
 /** Detect if running in a Service Worker. */
 export function isServiceWorker(): boolean {
+  const g = globalThis as Record<string, unknown>;
+  const SWScope = g.ServiceWorkerGlobalScope as (new (...args: unknown[]) => object) | undefined;
   return (
-    typeof ServiceWorkerGlobalScope !== 'undefined' &&
+    typeof SWScope !== 'undefined' &&
     typeof self !== 'undefined' &&
-    self instanceof ServiceWorkerGlobalScope
+    self instanceof SWScope
   );
 }
 

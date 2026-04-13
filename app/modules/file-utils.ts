@@ -49,7 +49,7 @@ export function textToBlob(text: string, mimeType = 'text/plain'): Blob {
 
 /** Create a Blob from Uint8Array. */
 export function bytesToBlob(bytes: Uint8Array, mimeType = 'application/octet-stream'): Blob {
-  return new Blob([bytes], { type: mimeType });
+  return new Blob([bytes as unknown as BlobPart], { type: mimeType });
 }
 
 /** Download a Blob as a file in the browser. */

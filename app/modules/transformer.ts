@@ -10,7 +10,7 @@
  * the already-cloned reference.
  */
 export function deepClone<T>(obj: T): T {
-  return _cloneWithSeen(obj, new Map());
+  return _cloneWithSeen(obj, new Map()) as T;
 }
 
 function _cloneWithSeen(obj: unknown, seen: Map<unknown, unknown>): unknown {
@@ -167,8 +167,8 @@ export function sortBy<T>(arr: T[], ...keys: Array<keyof T | ((item: T) => unkno
   return [...arr].sort((a, b) => {
     for (const key of keys) {
       const getVal = typeof key === 'function' ? key : (item: T) => item[key];
-      const av = getVal(a);
-      const bv = getVal(b);
+      const av = getVal(a) as number | string;
+      const bv = getVal(b) as number | string;
       if (av < bv) return -1;
       if (av > bv) return 1;
     }
